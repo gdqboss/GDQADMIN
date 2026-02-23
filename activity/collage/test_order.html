@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>拼团订单测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select, button {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            padding: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        .error {
+            color: red;
+        }
+        .success {
+            color: green;
+        }
+    </style>
+</head>
+<body>
+    <h1>拼团订单创建测试</h1>
+    
+    <div class="form-group">
+        <label for="proid">产品ID (proid)</label>
+        <input type="text" id="proid" value="1" placeholder="请输入产品ID">
+    </div>
+    
+    <div class="form-group">
+        <label for="ggid">规格ID (ggid)</label>
+        <input type="text" id="ggid" value="1" placeholder="请输入规格ID">
+    </div>
+    
+    <div class="form-group">
+        <label for="num">数量 (num)</label>
+        <input type="number" id="num" value="1" min="1">
+    </div>
+    
+    <div class="form-group">
+        <label for="buytype">购买类型 (buytype)</label>
+        <select id="buytype">
+            <option value="1">加入团队</option>
+            <option value="2">创建团队</option>
+        </select>
+    </div>
+    
+    <div class="form-group">
+        <label for="teamid">团队ID (teamid)</label>
+        <input type="text" id="teamid" value="0" placeholder="如果是加入团队，请输入团队ID">
+    </div>
+    
+    <div class="form-group">
+        <label for="teampid">拼团ID (teampid)</label>
+        <input type="text" id="teampid" value="1" placeholder="输入拼团ID进行测试">
+    </div>
+    
+    <div class="form-group">
+        <label for="addressid">地址ID (addressid)</label>
+        <input type="text" id="addressid" value="1" placeholder="请输入地址ID">
+    </div>
+    
+    <div class="form-group">
+        <label for="freightid">运费ID (freightid)</label>
+        <input type="text" id="freightid" value="1" placeholder="请输入运费ID">
+    </div>
+    
+    <button id="testApi">测试订单创建API</button>
+    <button id="testBuyApi">测试购买API</button>
+    
+    <h2>响应结果：</h2>
+    <div id="response" class="response">等待测试...</div>
+    
+    <script>
+        // 简单的HTTP请求函数
+        function request(url, method, data, callback) {
+            const xhr = new XMLHttpRequest();
+            xhr.open(method, url, true);
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    let response;
+                    try {
+                        response = JSON.parse(xhr.responseText);
+                    } catch (e) {
+                        response = {
+                            status: 0,
+                            msg: '响应格式错误',
+                            rawResponse: xhr.responseText
+                        };
+                    }
+                    callback(response);
+                }
+            };
+            
+            // 将对象转换为URL编码的字符串
+            const params = Object.keys(data).map(key => 
+                encodeURIComponent(key) + '=' + encodeURIComponent(data[key])
+            ).join('&');
+            
+            xhr.send(params);
+        }
+        
+        // 显示响应结果
+        function showResponse(response) {
+            const responseDiv = document.getElementById('response');
+            responseDiv.textContent = JSON.stringify(response, null, 2);
+            
+            if (response.status === 1) {
+                responseDiv.className = 'response success';
+            } else {
+                responseDiv.className = 'response error';
+            }
+        }
+        
+        // 测试创建订单API
+        document.getElementById('testApi').addEventListener('click', function() {
+            const data = {
+                proid: document.getElementById('proid').value,
+                ggid: document.getElementById('ggid').value,
+                num: document.getElementById('num').value,
+                buytype: document.getElementById('buytype').value,
+                teamid: document.getElementById('teamid').value,
+                teampid: document.getElementById('teampid').value,
+                addressid: document.getElementById('addressid').value,
+                freightid: document.getElementById('freightid').value,
+                linkman: '测试用户',
+                tel: '13800138000'
+            };
+            
+            showResponse({status: 0, msg: '正在发送请求...'});
+            
+            request('/ApiCollage1/createOrder', 'POST', data, function(response) {
+                showResponse(response);
+            });
+        });
+        
+        // 测试购买API
+        document.getElementById('testBuyApi').addEventListener('click', function() {
+            const data = {
+                proid: document.getElementById('proid').value,
+                ggid: document.getElementById('ggid').value,
+                num: document.getElementById('num').value,
+                buytype: document.getElementById('buytype').value,
+                teampid: document.getElementById('teampid').value
+            };
+            
+            showResponse({status: 0, msg: '正在发送请求...'});
+            
+            request('/ApiCollage1/buy', 'GET', data, function(response) {
+                showResponse(response);
+            });
+        });
+    </script>
+</body>
+</html>

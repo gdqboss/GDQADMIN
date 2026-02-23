@@ -1,0 +1,1052 @@
+<!DOCTYPE html><!--custom_file(hotel)-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>房型管理</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+  <style>
+	/* .priceWeeks上下有一些间距 */
+	  .priceWeeks{ margin-top: 10px; margin-bottom: 10px;}
+	.layui-border-blue{border-color:#28a745; color:#28a745}
+	.layui-border-dark{ border-color: #343a40; color:#343a40}
+	.layui-border-red{color: #ff0000;border-color: #ff0000;}
+	.layui-border-orange { color:#ffc107; border-color:#ffc107}
+	thead{ background: #fafafa;  }
+    table{ width: 100%; margin-bottom: 20px;  text-align: center;  border: 1px solid #f0f0f0; }
+
+	.layui-table-view .layui-table th{ text-align:center}
+	.layui-table tbody tr:hover{ background:#fff}
+	.layui-table tbody tr td:hover{ background:#f2f2f2;  cursor:pointer}
+	.layui-table-view .layui-table  td{ padding: 0; color: #555;}
+	.roombox{height:60px;}
+	.roombox.red{  background:#ff9999;}
+	.roombox.huise{  background:#d5d5d5;}
+
+	.roomTypeTable th, td { border: 1px dashed #f0f0f0;text-align: center; height:62px;padding:0 30px}
+	.sucwebk-pl{ display: flex; }
+    .colos{ color: #5b95ff;}
+    .delP{ width: 20px; height: 20px; border: 1px solid red;  border-radius: 11px; position: relative;  margin-left: 10px;}
+    .delC{ position: absolute;left: 5px; top: -2px;  color: red;   font-size: 19px;cursor: pointer;}
+    .suc-week{   padding-left: 104px;  padding-bottom: 10px; }
+	.price-rmb {font-weight: 600;font-size:14px;line-height: 28px;}
+  </style>
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+        <div class="layui-card layui-col-md12">
+          <div class="layui-card-header">房态房价</div>
+          <div class="layui-card-body" pad15>
+				<div class="layui-col-md4" style="padding-bottom:10px">
+					<button class="layui-btn layui-btn-primary layuiadmin-btn-list"  onclick="batchSetRoom(0)">批量设置房态</button>
+					<button class="layui-btn layui-btn-primary layuiadmin-btn-list" onclick="setRoomNum(0)">批量设置房量</button>
+					<button class="layui-btn layui-btn-primary layuiadmin-btn-list" onclick="setRoomPrice(0)">批量设置房价</button>
+				</div>
+				<div class=" layui-col-md8 layui-form-search">
+					<div class="layui-btn-container">
+					  <button class="layui-btn layui-btn-primary layui-border-blue">在售</button>
+					  <button class="layui-btn layui-btn-primary layui-border-dark">售空</button>
+					  <button class="layui-btn layui-btn-primary layui-border-red">关房</button>
+					  <button class="layui-btn layui-btn-primary layui-border-orange">需确认</button>
+					</div>
+				</div>
+
+				<div class="layui-form layui-col-md9 layui-form-search">
+					{if $showtype==2}
+					<div class="layui-inline" style="text-align:left;width: 130px">
+						<div class="layui-input-block" style="margin-left: 0">
+							<select name="hotelid" lay-search>
+								<option value="">请选择{$text['酒店']}</option>
+								{foreach $hotellist as $k=>$v}
+								<option value="{$v.id}" {if $v['id']==$hotelid}selected{/if}>{$v.name}</option>
+								{/foreach}
+							</select>
+						</div>
+					</div>
+					{/if}
+					<div class="layui-inline layuiadmin-input-useradmin">
+						<label class="layui-form-label">房型名称</label>
+						<div class="layui-input-inline">
+							<input type="text" name="name" value="{$name}" autocomplete="off" class="layui-input">
+						</div>
+					</div>
+					<div class="layui-inline">
+						<label class="layui-form-label">状态</label>
+						<div class="layui-input-inline">
+							<select name="status">
+								<option value="" {if $status==''}selected{/if}>全部</option>
+								<option value="1" {if $status==1}selected{/if}>已上架</option>
+								<option value="0" {if $status===0}selected{/if}>未上架</option>
+							</select>
+						</div>
+					</div>
+					<div class="layui-inline">
+						<button class="layui-btn layuiadmin-btn-replys" lay-submit="" lay-filter="LAY-app-forumreply-search">
+							<i class="layui-icon layui-icon-search layuiadmin-button-btn"></i>
+						</button>
+					</div>
+				</div>
+				
+				<div class="layui-form layui-col-md3 layui-form-search">
+					<button type="button" class="layui-btn layui-btn-sm" onclick="beforeTen(1)"><i class="layui-icon"></i>前10天</button>
+					<div class="layui-inline" >
+						<input type="text" name="date" class="layui-input" value="{$date}" id="date" autocomplete="off">
+					</div>
+					<button type="button" class="layui-btn layui-btn-sm" onclick="afterTen(2)"><i class="layui-icon"></i>后10天</button>
+				</div>
+			
+				<div class="layui-col-md12">
+					<table id="tabledata" lay-filter="tabledata" class='table'>
+						
+					</table>
+				</div>
+          </div>
+        </div>
+    </div>
+	<!---设置房态begin--->
+	<div id="batchSetRoomModel" style="width:700px;display:none;margin-top:30px">
+		<div class="layui-form" lay-filter="">
+			<input type="hidden" name="roomids" id="roomids"/>
+			<div class="layui-form-item">
+				<label class="layui-form-label">选择日期</label>
+				<div class="layui-input-inline" style="margin-top: 4px;">
+					<input type="text" class="layui-input" id="ctime1" name='ctime1' placeholder="开始日期 - 结束日期">
+				</div>
+				<div class="layui-form-mid layui-word-aux"></div>
+			</div>
+			<div class="layui-form-item" pane="">
+				<label class="layui-form-label">有效星期</label>
+				<div class="layui-input-inline" style="width:550px">
+					{foreach $weeks as $k=>$week}
+					<input type="checkbox" name="weeks" value="{$week}" title="{$week}" >
+					{/foreach}
+					<div style="display: flex;line-height: 40px;cursor: pointer">
+						<span style="color: #5b95ff;" onclick="allChoose('weeks')">全选</span>
+					    <p style="color:#5b95ff">/</p>
+					    <span style="color:#5b95ff" onclick="reChoose('weeks')">反选</span>
+					</div>
+				</div>
+			</div>
+			<div class="layui-inline">
+				<label class="layui-form-label">房型状态</label>
+				<div class="controls layui-input-block">
+					<input type="radio" name="status" value="1"  class="layui-input"  title="可售">
+					<label class="radio">
+					<input type="radio" name="status" value="0" class="layui-input" title="关房">
+				</div>
+			</div>
+
+			<div class="layui-form-item" style="margin-top:30px">
+				<div class="layui-input-block">
+					<button class="layui-btn layui-btn-normal" lay-submit lay-filter="SetRoomsubmit">确定</button>
+				</div>
+			</div>
+		</div>
+	</div>
+	<!---设置房态end--->
+
+
+	<!---设置房量begin--->
+	<div id="setRoomNumModel" style="width:700px;display:none;margin-top:30px">
+		<div class="layui-form" lay-filter="">
+			<input type="hidden" name="roomidsnum" id="roomidsnum"/>
+			<div class="layui-form-item">
+				<label class="layui-form-label">选择日期</label>
+				<div class="layui-input-inline" style="margin-top: 4px;">
+					<input type="text" class="layui-input" id="ctime2" name='ctime2' placeholder="开始日期 - 结束日期">
+				</div>
+				<div class="layui-form-mid layui-word-aux"></div>
+			</div>
+			<div class="layui-form-item" pane="">
+				<label class="layui-form-label">有效星期</label>
+				<div class="layui-input-inline" style="width:550px">
+					{foreach $weeks as $k=>$week}
+					<input type="checkbox" name="numweeks" value="{$week}" title="{$week}" >
+					{/foreach}
+					<div style="display: flex;line-height: 40px;cursor: pointer">
+						<span style="color: #5b95ff;" onclick="allChoose('numweeks')">全选</span>
+					    <p style="color:#5b95ff">/</p>
+					    <span style="color:#5b95ff" onclick="reChoose('numweeks')">反选</span>
+					</div>
+				</div>
+			</div>
+			<div class="layui-form-item">
+				<label class="layui-form-label">房型数量</label>
+				<div class="layui-input-inline ">
+					<input type="num" name="num" required lay-verify="required" placeholder="" autocomplete="off" class="layui-input">
+				</div>
+			</div>	
+			<!--<div class="layui-form-item">
+				<label class="layui-form-label">确认方式</label>
+				<div class="layui-input-inline " style="width:400px">
+					<input type="radio" name="qrtype" value="1"  class="layui-input"  title="即时确认">
+					<label class="radio">
+					<input type="radio" name="qrtype" value="2" class="layui-input" title="手动确认">
+				</div>
+			</div>
+			-->
+			<div class="layui-form-item" style="margin-top:30px">
+				<div class="layui-input-block">
+					<button class="layui-btn layui-btn-normal" lay-submit lay-filter="setRoomNumsubmit">确定</button>
+				</div>
+			</div>
+		</div>
+	</div>
+	<!---设置房量end--->
+
+	<!--批量设置房价开始-->
+	<div id="setRoomPriceModel" style="display:none;margin-top:30px">
+		<div class="layui-form" lay-filter="">
+			<input type="hidden" name="roomidsprice" id="roomidsprice"/>
+			<div class="layui-form-item">
+				<label class="layui-form-label">选择日期</label>
+				<div class="layui-input-inline" style="margin-top: 4px;">
+					<input type="text" class="layui-input" id="ctime3" name='ctime3' placeholder="开始日期 - 结束日期">
+				</div>
+				<div class="layui-form-mid layui-word-aux"></div>
+			</div>
+			<div class="layui-form-item" pane="">
+				<label class="layui-form-label">有效星期</label>
+				<div class="layui-input-inline" style="width:550px;display:flex;flex-wrap:wrap">
+					{foreach $weeks as $k=>$week}
+					 <div class="checkbox" data-week="{$week}" >
+						<input type="checkbox" name="priceWeeks" value="{$week}" title="{$week}" >
+					</div>
+					{/foreach}
+					<div style="display: flex;line-height: 40px;cursor: pointer" id="addWeek">
+						<span style="color: #5b95ff;" onclick="addApplyWeek()">添加适用星期</span>
+						<!-- 开启会员价格 -->
+
+					</div>
+				</div>
+			</div>
+			<div class="priceweeks">
+
+			</div>
+		   <div class="layui-form-item tablesPrice" style="margin: 35px;display: none;">
+				<table class="roomTypeTable">
+						<thead>
+						  <tr class="theadTbale">
+							<th>房型</th>
+						  </tr>
+						</thead>
+						<tbody id="roomprice">
+							
+						</tbody>
+				  </table>
+			</div>
+			<div class="layui-form-item" style="margin-top:30px">
+				<div class="layui-input-block">
+					<button class="layui-btn layui-btn-normal" lay-submit lay-filter="SetRoomPricesubmit">确定</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!--详情--->
+	<div id="modalDetail" style="width:600px;display:none;margin-top:30px">
+		<div class="layui-form" lay-filter="">
+			<div class="layui-form-item" style="padding-left: 20px">
+				<p id="room_name"></p>
+				<input type="hidden" id="room_id"  value=''>
+			</div>
+
+			<input type="hidden" name="roomidsnum" id="roomidsnum"/>
+			<div class="layui-form-item">
+				<label class="layui-form-label">当前日期</label>
+				<div class="layui-input-inline" style="margin-top: 4px;">
+					<input type="text" class="layui-input" id="ctime4" name='ctime4' placeholder="开始日期 - 结束日期">
+				</div>
+				<div class="layui-form-mid layui-word-aux"></div>
+			</div>
+			<div class="layui-form-item">
+				<label class="layui-form-label">房型状态</label>
+				<div class="layui-input-inline " style="width:400px">
+					<input type="radio" name="room_status" value="1"  class="layui-input"  title="可售">
+					<label class="radio">
+					<input type="radio" name="room_status" value="0" class="layui-input" title="关房">
+				</div>
+			</div>
+			<div class="layui-form-item">
+				<label class="layui-form-label">房型数量</label>
+				<div class="layui-input-inline layui-module-itemL">
+					<input type="num" name="stock" required lay-verify="required" placeholder="" autocomplete="off" class="layui-input" style="margin-right: 0;width:200px">
+					<div>{$text['间']}/每日</div>
+				</div>
+			</div>	
+			<!--<div class="layui-form-item">
+				<label class="layui-form-label">确认方式</label>
+				<div class="layui-input-inline " style="width:400px">
+					<input type="radio" name="qrtype" value="1"  class="layui-input"  title="即时确认">
+					<label class="radio">
+					<input type="radio" name="qrtype" value="2" class="layui-input" title="手动确认">
+				</div>
+			</div>-->
+ 
+			<div class="layui-form-item lvpriceput">
+			 <button type="button" class="layui-btn layui-btn-sm layui-btn-primary" style="margin-top: 3px;" onclick="lvpriceset()" id="lvpricebtn"> </button> 
+				<label class="layui-form-label">房间价格</label>
+				<input type="hidden" name="lvprice" id="lvprice" >
+				<div class="layui-input-inline layui-module-itemL">
+					<input type="text" name="sell_price" required lay-verify="required" placeholder="" autocomplete="off" class="layui-input" style="margin-right: 0;width:200px">
+					<div>元/每日</div>
+				</div>
+			</div>	
+		 
+			{foreach $levellist as $key=>$level}		 
+			 <div class="layui-form-item lvpriceset">
+				{if $key == 0}
+				<button type="button" class="layui-btn layui-btn-sm layui-btn-primary"  style="margin-top: 3px;" onclick="lvpriceset()" id="lvpricebtn">关闭会员价</button> 
+				{/if}
+ 				   <label class="layui-form-label">{$level.name}价格</label>
+				   <div class="layui-input-inline layui-module-itemL">
+					   <input type="text" name="level_price[{$level.id}]" id="level_price_{$level.id}" required lay-verify="required" level_id="{$level.id}" placeholder="" autocomplete="off" class="layui-input level_price_sell" style="margin-right: 0;width:200px">
+					   <div>元/每日</div>
+				   </div>
+		    </div>	
+			{/foreach}
+			 
+			<div class="layui-form-item" id="daymoney">
+				<label class="layui-form-label">{:t("余额")}定价</label>
+				<div class="layui-input-inline layui-module-itemL">
+					<input type="text" name="daymoney" required lay-verify="required" placeholder="" autocomplete="off" class="layui-input" style="margin-right: 0;width:200px">
+					<div>{$moneyunit}</div>
+				</div>
+			</div>	
+					
+
+		</div>
+	</div>
+
+	<!--详情结束-->
+
+  </div>
+	{include file="public/js"/}
+	<script>
+  	layui.laydate.render({
+		elem: '#date',
+		type: 'date',
+		format:'yyyy-MM-dd',
+		trigger: 'click'
+	});
+
+	//日期范围选择
+	layui.laydate.render({ 
+		elem: '#ctime1',
+		trigger: 'click',
+		type:'date',
+		range: '~' //或 range: '~' 来自定义分割字符
+	});
+	//日期范围选择
+	layui.laydate.render({ 
+		elem: '#ctime2',
+		trigger: 'click',
+		type:'date',
+		range: '~' //或 range: '~' 来自定义分割字符
+	});
+	//日期范围选择
+	layui.laydate.render({ 
+		elem: '#ctime3',
+		trigger: 'click',
+		type:'date',
+		range: '~' //或 range: '~' 来自定义分割字符
+	});
+	//日期范围选择
+	layui.laydate.render({ 
+		elem: '#ctime4',
+		trigger: 'click',
+		type:'date',
+		range: '~', //或 range: '~' 来自定义分割字符
+		value:'',
+	});
+
+ 
+	var table = layui.table;
+	var datawhere = {};
+
+	var tableIns = table.render({
+		elem: '#tabledata'
+		,url: "{$Request.url}" //数据接口
+		,page: true //开启分页
+		,limits:[10,20,50,100,200]
+		,cols: [[ //表头
+		  {type:"checkbox"},
+		  {field: 'id', title: 'ID',  sort: true,width:80},
+		  {if input('param.showtype')==2}
+		  {field: 'hotel_name', title:"所属{$text['酒店']}",width:160},
+		  {/if}
+		  {field: 'name', title: '房型名称'},
+		  {foreach $datelist as $k=>$date}
+		  {field: 'date', title: "{$date['days']}({$date['week']})",templet:function(d){
+				var html='';
+				var length = d.room_prices.length;
+				var key = '{$k}';
+				if(length>0){
+					var rooms = d.room_prices[{$k}];
+					if(rooms){
+						if(rooms.status==1){
+							if(rooms.stock<1){
+								html+='<div class="roombox huise" onclick="setroomDetail(this)"  room-name="'+d.name+'" room-id="'+rooms.id+'" >';
+							}else{
+								html+='<div class="roombox"   onclick="setroomDetail(this)"  room-name="'+d.name+'" room-id="'+rooms.id+'" >';	
+							}
+						}else if(rooms.status==0){
+							html+='<div class="roombox red"  onclick="setroomDetail(this)" room-name="'+d.name+'" room-id="'+rooms.id+'" >';
+						}
+						html+='<input type="hidden" name="" class="layui-date roomid" id ="roomid" value="'+rooms.roomid+'">';
+						html+='<input type="hidden" name="" class="layui-date qj" value="'+rooms.datetime+'">';
+						html+='<input type="hidden" name="" class="layui-date lvprice" value="'+rooms.lvprice+'">';
+						html+='<input type="hidden" name="" class="layui-date lvprice_data" value='+rooms.lvprice_data+'>';
+						html+='<div class="divs-data"  style="display: inline-flex;position: relative;top: 7px;" room_num="'+rooms.stock+'" sell_price="'+rooms.sell_price+'" room_lvprice="'+d.lvprice+'" room_status="'+rooms.status+'" order_qrtype="'+rooms.qrtype+'"  isdaymoney="'+d.isdaymoney+'"  daymoney="'+rooms.daymoney+'" distribution="1" vip_price="2">';
+						html+='	<div class="price-rmb">￥ </div>';
+						html+='	<span style="line-height: 28px;">'+rooms.sell_price+'</span>';
+						html+='</div>';
+						if(d.isdaymoney==1){
+							html+='	<div class="price-rmb"></div>';
+							html+='	<span style="line-height: 28px;">{:t("余额")}:'+rooms.daymoney+''+'</span>';
+							html+='</div>';
+						}
+						html+='<div style="width: 100%;">';
+						html+='	<p>总: <font style="color:#5b95ff">'+rooms.stock+'</font>/已售: <font style="color:#5b95ff">'+rooms.sales+'</font></p>';
+						html+='</div> <div class="triangle-topright"></div>';
+						html+='</div>';
+					}
+				}
+				return html;
+			}},
+		 {/foreach}
+
+		]],
+		// 监听表格的数据更新
+		done: function(res, curr, count){
+			if(document.documentElement.scrollTop >= 300){
+				document.documentElement.scrollTop = document.documentElement.scrollTop - 5
+			}else{
+				document.documentElement.scrollTop = document.documentElement.scrollTop + 5 
+				$(".layui-table-body .table-imgbox").each(function(){
+					 var src = $(this).find('img').attr('lay-src');
+					 $(this).find('img').attr('src',src)
+				})
+			}
+		}
+	  });
+
+	function lvpriceset(){
+	  var lvprice = $("#lvprice").val();
+		  
+		if(lvprice == 0){
+			$('#lvprice').val('1');
+			$('#lvpricebtn').text('关闭会员价');
+			$('.lvpriceset').show();
+			$('.lvpriceput').hide();
+		
+		 
+			//layui.form.render();
+		}else{
+			$('#lvprice').val('0');
+			$('#lvpricebtn').text('开启会员价');
+			$('.lvpriceset').hide();
+			$('.lvpriceput').show();
+ 
+		}
+	}
+
+	//+d.name+','+room.id+','+room.qrtype+','+room.sell_price+','+room.status+
+	function setroomDetail(obj){
+	 
+		var room_name = $(obj).attr('room-name');
+		var room_id = $(obj).attr('room-id')
+		var level_price = $(obj).find('.lvprice_data').val() // 会员价数据
+		 
+		// 解析jsonlevel_price
+		  var level_price = JSON.parse(level_price)
+		// 循环(level_price)
+		console.log(level_price)
+		    
+		var roomid = $(obj).find('#roomid').val() // 房型ID
+		var theDate = $(obj).find('.qj').val() + ' ~ ' + $(obj).find('.qj').val() // 日期区间
+	    var room_num = $(obj).find('.divs-data').attr('room_num') // 房型数量
+        var sell_price = $(obj).find('.divs-data').attr('sell_price') // 房间价格
+		var lvprice = $(obj).find('.lvprice').val() // 会员价
+        var room_status = $(obj).find('.divs-data').attr('room_status') // 房型状态 1-可售 2-关房
+       // var order_qrtype = $(obj).find('.divs-data').attr('order_qrtype') // 1-即时确认 2-手动确认
+		var isdaymoney = $(obj).find('.divs-data').attr('isdaymoney') //是否开启余额定价
+		var room_lvprice = $(obj).find('.divs-data').attr('room_lvprice') // 房间会员价
+
+        //var distribution = $(obj).find('.divs-data').attr('distribution') // 分销 1-开启 2-关闭
+        //var vip_price = $(obj).find('.divs-data').attr('vip_price') // 会员价 1-开启 2-关闭
+
+		layer.open({
+            type: 1,
+            title: ['编辑详情', 'font-size:14px;font-weight:600'],
+            content:$('#modalDetail'),
+            area:['620px','440px'],
+            btn:['确定','取消'],
+            btnAlign: 'c',
+            success:function(){
+	 
+				// 遍历所有level_price_*设置默认值
+				$(".level_price_sell").each(function(){
+					this.value = '';
+				})
+				     
+				$.each(level_price,function(index,item){					 
+					 var level_id = 'level_price_'+index
+					 $("#"+level_id).val(item)
+				})
+			 
+                $('#room_name').text(room_name)
+                $('#room_id').val(room_id)
+				$('#roomid').val(roomid)
+				$('#lvprice').val(lvprice)
+                $('#ctime4').val(theDate)
+                $('input[name="sell_price"]').val('')
+                if(room_num){
+                    $('input[name="stock"]').val(room_num)
+                }
+                if(sell_price){
+                    $('input[name="sell_price"]').val(sell_price)
+                }
+				if(isdaymoney==1){
+					$('#daymoney').show()
+					var daymoney = $(obj).find('.divs-data').attr('daymoney') //是否开启余额定价
+					$('input[name="daymoney"]').val(daymoney)	
+				}else{
+					$('#daymoney').hide()
+					$('input[name="daymoney"]').val(0)	
+				}
+				$('input[name="room_status"]').each(function(){
+					if($(this).val() == room_status){
+						$(this).prop('checked',true)
+						$(this).parent().addClass('checked')
+					}else{
+						$(this).prop('checked',false)
+						$(this).parent().removeClass('checked')
+					}
+					
+				})
+				// alert(room_lvprice)
+				if(room_lvprice == 0){
+					$('.lvpriceset').hide();
+					$('.lvpriceput').show();
+					$("#lvpricebtn").hide();
+				}else if(lvprice == 1){
+					$("#lvpricebtn").show();
+					$('#lvpricebtn').text('关闭会员价');
+					$('.lvpriceset').show();
+					$('.lvpriceput').hide();
+				
+					//layui.form.render();
+				}else{
+					$("#lvpricebtn").show();
+					$('#lvpricebtn').text('开启会员价');
+					$('.lvpriceset').hide();
+					$('.lvpriceput').show();
+		
+				}
+				
+                /*if (order_qrtype) {
+                    $('input[name="qrtype"]').each(function(){
+                        if($(this).val() == order_qrtype){
+                            $(this).prop('checked',true)
+                            $(this).parent().addClass('checked')
+                        }else{
+                            $(this).prop('checked',false)
+                            $(this).parent().removeClass('checked')
+                        }
+                    })
+                }*/
+				layui.form.render();
+            },
+            yes:function(index){
+                let thatDate = ($('#ctime4').val()).split(' - ')
+                if(thatDate[0] > thatDate[1]){
+                    layer.alert('开始日期超出了结束日期建议重新选择',{title:'提示'})
+                    return false
+                }
+                if ($.trim($('input[name="sell_price"]').val()) == ''){
+                    layer.alert('房价未设置完整',{title:'提示'})
+                }else{
+                    if(thatDate[1] > thatDate[0]){
+                        layer.alert('当前设置包含多天的设置，保存后会覆盖已选择日期原来的设置数据，房量数量小于已售数量将发生超售，如果发生超售，超售客房自动售罄。',{title:'提示'},function(){
+                            saveSuccess(index)
+                        })
+                        return false
+                    }
+                    saveSuccess(index)
+                }
+            }
+        });
+
+	}
+
+
+    function saveSuccess(index){
+        let time = $('#ctime4').val()
+		 
+        let room_status = $('input[name="room_status"]:checked').val()
+        let stock = $('input[name="stock"]').val()
+		let lvprice = $('#lvprice').val()
+        //let qrtype = $('input[name="qrtype"]:checked').val()
+        let sell_price = $('input[name="sell_price"]').val()
+	    let daymoney = $('input[name="daymoney"]').val()
+		// 获取会员价格id为key，价格为value
+		var level_price_arr = {}
+		$(".level_price_sell").each(function(){
+			console.log(1);
+			var level_id = $(this).attr('level_id')
+			var level_price = $(this).val()
+			 if(level_price ){
+			  level_price_arr[level_id] = level_price
+			 }
+			 
+			
+		})
+ 
+		// 转json
+		level_price_arr = JSON.stringify(level_price_arr)
+		 
+		console.log(level_price_arr);
+	 
+        $.ajax({
+            url:"{:url('setRoomDetail')}",
+            type:'post',
+            data:{
+                'time':time,
+				'roomid':$('#roomid').val(),
+                'status':room_status,
+				'lvprice':lvprice,
+                'stock':stock,
+			   'lvprice_data': level_price_arr,
+			 
+                //'qrtype':qrtype,
+                'sell_price':sell_price,
+				'daymoney':daymoney
+            },
+            dataType:'json',
+            success:function(e){
+                if(e.status == '1'){
+                    layer.alert('保存成功',{title:'提示'},function(index2){
+                        layer.close(index)
+                        layer.close(index2)
+                        setTimeout(()=>{
+                            location.reload()
+                        },1000)
+                    })
+                }
+                else{
+                    layer.alert('保存失败',{title:'提示'})
+                }
+            }
+        })
+
+    }
+	/*-------设置房态begin-----*/
+	var batchSetRoomlayer
+	function batchSetRoom(id){
+		var ids = [];
+		if(id==0){
+			var checkStatus = table.checkStatus('tabledata')
+			var checkData = checkStatus.data; //得到选中的数据
+			if(checkData.length === 0){
+				 return layer.msg('请选择要设置的房型');
+			}
+			var ids = [];
+			for(var i=0;i<checkData.length;i++){
+				ids.push(checkData[i]['id']);
+			}
+		}else{
+			ids.push(id)
+		}
+		$('#roomids').val(ids);
+		batchSetRoomlayer = layer.open({type:1,area: ['700px', '400px'],title:'批量设置房态',content:$('#batchSetRoomModel'),shadeClose:true})
+	 }
+	 layui.form.on('submit(SetRoomsubmit)', function(obj){
+		 	if(!obj.field.ctime1){
+				 return layer.msg('请选择日期');
+			}
+			var weeks = [];
+			$('input[name="weeks"]:checked').each(function(i){
+				weeks[i] = $(this).val();
+			});
+			if(weeks.length==0){
+				 return layer.msg('请选择有效星期');
+			}
+			obj.field.weeks = weeks
+			var index= layer.load();
+			$.post("{:url('setRoomStatus')}",obj.field,function(data){
+				layer.close(index);
+				dialog(data.msg,data.status,data.url);
+				if(data.status==1){
+					tableIns.reload({
+						where: datawhere
+					});
+				}
+				layer.close(batchSetRoomlayer);
+			})
+	  });
+	  /*-------设置房态end-----*/
+
+
+	/*-------批量设置房型价格begin-----*/
+	var setRoomPricelayer
+	function setRoomPrice(id){
+		var ids = [];
+		if(id==0){
+			var checkStatus = table.checkStatus('tabledata')
+			var checkData = checkStatus.data; //得到选中的数据
+			if(checkData.length === 0){
+				 return layer.msg('请选择要设置的房型');
+			}
+			var ids = [];
+			for(var i=0;i<checkData.length;i++){
+				ids.push(checkData[i]['id']);
+			}
+		}else{
+			ids.push(id)
+		}
+		$('#roomidsprice').val(ids);
+		$('.roomTypeTable>tbody').html('');
+		$.post("{:url('getrooms')}",{ids:ids},function(data){
+			if(data.status==1){
+				var datalist = data.datas;
+		 
+				$('.tablesPrice').css('display','block');
+				var html='';
+				for(var i=0;i<datalist.length;i++){
+					var button ='';
+					if(datalist[i]['lvprice'] == 1){
+						var button ='<button type="button" style="margin-left:5px;display:none" class="layui-btn batch_switch_status layui-btn-sm layui-btn-primary batch_switch_'+i+'"   onclick="lvpricebtnBtach('+i+')">开启会员价</button>'
+
+					}
+					$('.roomTypeTable>tbody').append('<tr data-daymoney='+datalist[i]['isdaymoney']+'><td>'+datalist[i]['name']+button+'</td></tr>')
+				}
+			}
+		})
+		setRoomPricelayer = layer.open({type:1,area: ['800px', '608px'],title:'批量设置房态',content:$('#setRoomPriceModel'),shadeClose:true})
+
+	}
+    function lvpricebtnBtach(i){
+	 
+	var status = $(".lvprice_"+i).val();
+	console.log(status);
+
+	 if(status==1){
+		 $(".lvprice_"+i).val(0);
+		//  $('.batch_switch_'+i).removeClass('layui-btn-primary');
+		 $('.batch_switch_'+i).html('开启会员价');
+		 $('.price_week_piliang_'+i).show()
+		 $('.level_week_piliang_'+i).hide()
+		
+	 }else{
+		 $(".lvprice_"+i).val(1);
+		 $('.price_week_piliang_'+i).hide()
+		 $('.level_week_piliang_'+i).show()
+		//  $('.batch_switch_'+i).addClass('layui-btn-primary');
+		 $('.batch_switch_'+i).html('关闭会员价');
+	 }
+
+	 
+		 
+	}
+	function addApplyWeek(){
+        if($('input[name="priceWeeks"]:checked').length < 1){
+            layer.alert('请选择星期',{title:'提示'})
+            return false
+        }
+	 
+		$(".batch_switch_status").show();
+		 
+		console.log($('.suc-week').length);
+        if($('.suc-week').length == 1){
+            $('#addWeek').css('display','none')
+        }
+        var weekStr = ''
+        $('input[name="priceWeeks"]:checked').each(function(){
+            weekStr += '  ' + $(this).val() + '  '
+        })
+        var weekNum = [];
+        $('input[name="priceWeeks"]:checked').each(function(){
+            $(this).parent().css('display','none')
+            $(this).prop('checked',false)
+            //weekNum += $(this).val()+',';
+			weekNum.push($(this).val());
+        })
+        $('.priceweeks').append('<div class="suc-week">'+
+                                '<div class="sucwebk-pl">适用星期:'+
+                                    '<font class="colos" data-numm="'+weekNum+'">'+weekStr+'</font>'+
+                                        '<div class="delP">'+
+                                            '<span class="delC">x</span>'+
+                                        '</div>'+
+                                '</div>'+
+                            '</div>')
+        $('.theadTbale').html('<th>房型</th>')
+
+        $('.colos').each(function(){
+            $('.theadTbale').append('<th data-ddd="'+$(this).text()+'">适用日期('+$(this).text()+')</th>')
+        })
+        $('.roomTypeTable>tbody>tr').each(function(index){
+			console.log('--------------');
+
+		
+            $(this).find('td').eq(0).nextAll().remove()
+			var isdaymoney = $(this).data('daymoney');
+            for(var i = 0;i < $('.colos').length;i++){
+                var thatis = $(this)
+				var html='';
+
+				html+='<td >';
+					
+				html+='<input type="text"  placeholder="请输入房费" class="priceWeeks layui-input price_week_piliang_'+index+'" name="price['+i+'][]">';
+				html+='<input type="hidden" name="lvprice['+i+']" class="priceWeeks layui-input lvprice_'+index+'" value="0">';
+
+				{foreach $levellist as $level}
+
+			 
+				html+='<input type="text" style="display:none" placeholder="请输入{$level.name}房费" class="priceWeeks layui-input level_week_piliang_'+index+'" name="lvprice_data[{$level.id}]['+i+'][]">';
+
+				{/foreach}
+				// 循环等级价格
+				 
+				if(isdaymoney==1){
+					html+='<input type="text"  placeholder="请输入天数" class="priceWeeks layui-input" name="daymoney['+i+'][]">';
+				}
+				html+='</td >';
+                $(thatis).append(html);
+            }
+
+			var status = $(".lvprice_"+index).val();
+
+		if(status==1){
+			$('.price_week_piliang_'+index).hide()
+			$('.level_week_piliang_'+index).show()
+	   //  $('.batch_switch_'+index).removeClass('layui-btn-primary');
+		   $('.batch_switch_'+index).html('关闭会员价');
+		  
+	   
+	   }else{
+		$('.price_week_piliang_'+index).show()
+		$('.level_week_piliang_'+index).hide()
+		
+	   //  $('.batch_switch_'+index).addClass('layui-btn-primary');
+		   $('.batch_switch_'+index).html('开启会员价');
+    	}
+        })
+        $('.delP').click(function(){
+            $(this).parent().parent().remove()
+            var that = $(this)
+            $('.theadTbale>th').each(function(){
+                if($(this).attr('data-ddd') == that.prev().text()){
+                    $(this).remove()
+                }
+            })
+            let weekVal = that.prev().attr('data-numm')
+            $('.checkbox').each(function(){
+                if(weekVal.indexOf($(this).attr('data-week')) != -1){
+                    $(this).css('display','block')
+                }
+
+            })
+         
+            if($('.suc-week').length == 1){
+                $('#addWeek').css('display','block')
+            }
+
+            $('.roomTypeTable>tbody>tr').each(function(index){		
+                $(this).find('td').eq(0).nextAll().remove()
+                for(var i = 0;i < $('.colos').length;i++){
+                    var thatis = $(this)
+                    $(thatis).append('<td><input type="text"  placeholder="请输入房费"  class="layui-input" name="price['+i+'][]" class="priceWeeks">'+	
+						 '<input type="hidden" name="lvprice['+i+']" class="priceWeeks layui-input lvprice_'+index+'" value="0">'+
+						 {foreach $levellist as $level}
+					
+						 '<input type="text" style="display:none" placeholder="请输入{$level.name}房费" class="priceWeeks layui-input level_week_piliang_'+index+'" name="lvprice_data[{$level.id}]['+i+'][]">'+
+
+						{/foreach}
+				 
+						'<input type="text" class="layui-input" placeholder="请输入天数" class="priceWeeks" name="daymoney['+i+'][]">'+'</td>')	 
+                }
+				var status = $(".lvprice_"+index).val();
+
+				if(status==1){
+					$(".lvprice_"+index).val(1);
+					$('.price_week_piliang_'+index).hide()
+					$('.level_week_piliang_'+index).show()
+				//  $('.batch_switch_'+index).removeClass('layui-btn-primary');
+			    	$('.batch_switch_'+index).html('关闭会员价');
+
+				}else{
+					$(".lvprice_"+index).val(0);
+					$('.price_week_piliang_'+index).show()
+					$('.level_week_piliang_'+index).hide()
+
+					//  $('.batch_switch_'+index).addClass('layui-btn-primary');
+					$('.batch_switch_'+index).html('开启会员价');
+				}
+
+            })
+			layui.form.render();
+        })
+    }
+
+	 layui.form.on('submit(SetRoomPricesubmit)', function(obj){
+		 
+		    let effective_week = []
+			$('.colos').each(function(){
+				effective_week.push($(this).attr('data-numm'))
+			})
+			obj.field.weeks= effective_week
+			if(!obj.field.ctime3){
+				 return layer.msg('请选择日期');
+			}
+			var index= layer.load();
+			$.post("{:url('setRoomPrice')}",obj.field,function(data){
+				layer.close(index);
+				if(data.status==1){
+					dialog(data.msg,data.status,data.url);
+					setTimeout(function(){
+						location.reload()
+					},1000)
+				}
+				layer.close(setRoomPricelayer);
+			})
+	  });
+
+	/*---------批量设置房型价格-------------end**/
+
+
+
+	/*---------批量设置房量开始----------*/
+	var setRoomNumlayer
+	function setRoomNum(id){
+		var ids = [];
+		if(id==0){
+			var checkStatus = table.checkStatus('tabledata')
+			var checkData = checkStatus.data; //得到选中的数据
+			if(checkData.length === 0){
+				 return layer.msg('请选择要设置的房型');
+			}
+			var ids = [];
+			for(var i=0;i<checkData.length;i++){
+				ids.push(checkData[i]['id']);
+			}
+		}else{
+			ids.push(id)
+		}
+		$('#roomidsnum').val(ids);
+		setRoomNumlayer = layer.open({type:1,area: ['700px', '500px'],title:'批量设置价',content:$('#setRoomNumModel'),shadeClose:true})
+	}
+	  //设置房量
+	  layui.form.on('submit(setRoomNumsubmit)', function(obj){
+		  	if(!obj.field.ctime2){
+				 return layer.msg('请选择日期');
+			}
+			var weeks = [];
+			$('input[name="numweeks"]:checked').each(function(i){
+				weeks[i] = $(this).val();
+			});
+			if(weeks.length==0){
+				 return layer.msg('请选择有效星期');
+			}
+
+			obj.field.numweeks = weeks
+			var index= layer.load();
+			$.post("{:url('setRoomNum')}",obj.field,function(data){
+				layer.close(index);
+				dialog(data.msg,data.status,data.url);
+				if(data.status==1){
+					tableIns.reload({
+						where: datawhere
+					});
+				}
+				layer.close(setRoomNumlayer);
+			})
+	  });
+	 /*----------批量设置房量结束----------*/
+
+	
+
+
+
+	 function allChoose(names){
+		var form = layui.form;
+        $("input[name='"+names+"']").prop("checked", true);
+		layui.form.render('checkbox');
+    }
+	
+    function reChoose(names)
+    {	
+		var form = layui.form;
+        $("input[name='"+names+"']").prop("checked", false);
+		layui.form.render('checkbox');
+    }
+
+    // 前10天
+    function beforeTen(type)
+    {
+		let thatTime = new Date($('#date').val())
+		console.log(thatTime);
+        var time = dates(10,thatTime,1);
+        var day = ("0" + time.getDate()).slice(-2);
+        var month = ("0" + (time.getMonth() + 1)).slice(-2);
+
+        var today = time.getFullYear() + "-" + (month) + "-" + (day);
+        $('#date').val(today);
+
+	    var name = datawhere.name;
+		if(!name)  name = '{$name}';
+		var hotelid = datawhere.hotelid;
+		if(!hotelid) hotelid='{$hotelid}';
+		var status = datawhere.status;
+		if(!status)	status='{$status}';
+        location.href = "{:url('index')}/showtype/{$showtype}/today/"+today+'/name/'+name+'/hotelid/'+hotelid+'/status/'+status;
+    }
+	 // 后10天
+    function afterTen()
+    {
+        let thatTime = new Date($('#date').val())
+        var time = dates(10,thatTime,2);
+        var day = ("0" + time.getDate()).slice(-2);
+        var month = ("0" + (time.getMonth() + 1)).slice(-2);
+
+        var today = time.getFullYear() + "-" + (month) + "-" + (day);
+        $('#date').val(today);
+	    var name = datawhere.name;
+		if(!name)  name = '{$name}';
+		var hotelid = datawhere.hotelid;
+		if(!hotelid) hotelid='{$hotelid}';
+		var status = datawhere.status;
+		if(!status)	status='{$status}';
+        location.href = "{:url('index')}/showtype/{$showtype}/today/"+today+'/name/'+name+'/hotelid/'+hotelid+'/status/'+status;
+    }
+    // 按钮切换时间公共方法
+    function dates(n,thatTime,status){
+        var now = thatTime;
+        if (status == 1){
+            now.setDate(now.getDate() - n);
+        } else {
+            now.setDate(now.getDate() + n);
+        }
+        return now;
+    }
+
+	//检索
+	layui.form.on('submit(LAY-app-forumreply-search)', function(obj){
+		var field = obj.field
+		var olddatawhere = datawhere
+		datawhere = field
+		datawhere.field = olddatawhere.field
+		datawhere.order = olddatawhere.order
+		tableIns.reload({
+			where: datawhere,
+			page: {curr: 1}
+		});
+	})
+
+	</script>
+	{include file="public/copyright"/}
+</body>
+</html>

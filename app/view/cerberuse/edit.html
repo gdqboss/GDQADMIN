@@ -1,0 +1,351 @@
+<!DOCTYPE html><!--custom_file(lot_cerberuse)-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>添加设备</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+  <style>
+  .product{width:500px; padding:5px;background: #FFF;margin-top:5px;border:1px solid #f1f1f1}
+  .product .content{display:flex;position:relative;width: 100%; padding:15px 10px;border-bottom: 1px #e5e5e5 dashed;position:relative;box-sizing:border-box;}
+  .product .content:last-child{ border-bottom: 0; }
+  .product .content img{ width: 70px; height: 70px;}
+  .product .content .detail{display:flex;flex-direction:column;margin-left:7px;flex:1}
+  .product .content .detail .t1{height: 30px;line-height: 15px;color: #000;}
+  .product .content .detail .t2{height: 23px;line-height: 23px;color: #999;overflow: hidden;font-size:13px;}
+  .product .content .detail .t3{display:flex;height:15px;line-height:15px;color: #ff4246;}
+  .product .content .detail .x1{ flex:1}
+  .product .content .detail .x2{ width:50px;font-size:16px;text-align:right;margin-right:4px}
+  .product .content .comment{position:absolute;top:32px;right:5px;border: 1px #ffc702 solid; border-radius:5px;background:#fff; color: #ffc702;  padding: 0 5px; height: 23px; line-height: 23px;}
+  #ggnamediv .layui-input,#ggvaldiv .layui-input{ display:inline;height:30px}
+  </style>
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12">
+        <div class="layui-card-header">
+          {if $info.id}编辑设备{else}添加设备{/if}
+          <i class="layui-icon layui-icon-close" style="font-size:18px;font-weight:bold;cursor:pointer" onclick="closeself()"></i>
+        </div>
+        <div class="layui-card-body" pad15>
+          <div class="layui-form form-label-w6" lay-filter="">
+            <div class="layui-tab" lay-filter="mytab">
+              <ul class="layui-tab-title">
+                <li class="layui-this" lay-id="1">服务信息</li>
+                <li lay-id="2">服务详情</li>
+              </ul>
+              <div class="layui-tab-content">
+                <div class="layui-tab-item layui-show">
+                    <input type="hidden" name="info[id]" value="{$info.id}"/>
+                    <div class="layui-form-item">
+                      <label class="layui-form-label">名称：</label>
+                      <div class="layui-input-inline" style="width:300px">
+                        <input type="text" class="layui-input" name="info[title]" value="{$info.title}" lay-verify="required" lay-verType="tips"/>
+                      </div>
+                    </div>
+                    <div class="layui-form-item">
+                      <label class="layui-form-label">价格：</label>
+                      <div class="layui-input-inline layui-module-itemR">
+                        <input style="width:300px; type="number" class="layui-input" name="info[price]" value="{$info.price}" lay-verify="required" lay-verType="tips" min="0"/>
+						<div>元/小时</div>
+                      </div>
+                    </div>
+                    <div class="layui-form-item">
+                      <label class="layui-form-label">主图：</label>
+                      <input type="hidden" name="info[pic]" id="pic" lay-verType="tips" class="layui-input" value="{$info['pic']}">
+                      <button style="float:left;" type="button" class="layui-btn layui-btn-primary" upload-input="pic" upload-preview="picPreview" onclick="uploader(this)">上传图片</button>
+                      <div class="layui-form-mid layui-word-aux" style="margin-left:10px;">建议尺寸：640×640像素</div>
+                      <div id="picPreview" class="picsList-class-padding">
+                        <div class="layui-imgbox" style="width:100px;"><div class="layui-imgbox-img"><img src="{$info['pic']}"/></div></div>
+                      </div>
+                    </div>
+                    <div class="layui-form-item">
+                      <label class="layui-form-label">图片：</label>
+                      <input type="hidden" name="info[pics]" value="{$info['pics']}" id="pics">
+                      <button style="float:left;" type="button" class="layui-btn layui-btn-primary" onclick="uploader(this,true)" upload-input="pics" upload-preview="picList" >批量上传</button>
+                      <div class="layui-form-mid layui-word-aux" style="margin-left:10px;">建议尺寸：640×640像素</div>
+                      <div id="picList" class="picsList-class-padding">
+                        {if $info['pics']}{php}$pics = explode(',',$info['pics']);{/php}{foreach $pics as $pic}
+                        <div class="layui-imgbox">
+                          <a class="layui-imgbox-close" href="javascript:void(0)" onclick="$(this).parent().remove();getpicsval('pics','picList')" title="删除"><i class="layui-icon layui-icon-close-fill-opaque"></i></a>
+                          <span class="layui-imgbox-img"><img src="{$pic}"></span>
+                        </div>
+                        {/foreach}{/if}
+                      </div>
+                    </div>
+                    
+                    
+<!--                    <div class="layui-form-item"  id="yydatebox2" style="{if $info['rqtype']!=2}display:none{/if}">-->
+<!--                      <label class="layui-form-label">选择日期：</label>-->
+<!--                      <div class="layui-input-inline" style="width:600px">-->
+<!--                        <div class="layui-input-inline" style="width:150px">-->
+<!--                          <input type="text" name="info[starttime]" class="layui-input" value="{$info.starttime}" id="starttime" autocomplete="off">-->
+<!--                        </div>-->
+<!--                        <div class="layui-form-mid">到</div>-->
+<!--                        <div class="layui-input-inline" style="width:150px">-->
+<!--                          <input type="text" name="info[endtime]" class="layui-input" value="{$info.endtime}" id="endtime" autocomplete="off">-->
+<!--                        </div>-->
+<!--                      </div>-->
+<!--                    </div>-->
+<!--                    <div class="layui-form-item">-->
+<!--                        <label class="layui-form-label">设置时间段：</label>-->
+<!--                        <div class="layui-form-mid">早</div>-->
+<!--                        <div class="layui-input-inline" style="width: 100px;">-->
+<!--                            <input type="text" name="info[zaohour]" class="layui-input" value="{$info.zaohour?$info.zaohour:'7'}">-->
+<!--                        </div>-->
+<!--                        <div class="layui-form-mid">时；晚</div>-->
+<!--                        <div class="layui-input-inline" style="width: 100px;">-->
+<!--                            <input type="text" name="info[wanhour]" class="layui-input" value="{$info.wanhour?$info.wanhour:'18'}">-->
+<!--                        </div>-->
+<!--                        <div class="layui-form-mid">时</div>-->
+<!--                    </div>-->
+<!--                    <div class="layui-form-item">-->
+<!--                        <label class="layui-form-label">时间间隔：</label>-->
+<!--                        <div class="layui-input-inline">-->
+<!--                            <input type="text" name="info[timejg]" value="{$info['id']?$info['timejg']:'30'}" class="layui-input">-->
+<!--                        </div>-->
+<!--                        <div class="layui-form-mid layui-word-aux">分钟</div>-->
+<!--                    </div>-->
+                    <div class="layui-form-item">
+                      <label class="layui-form-label">介绍：</label>
+                      <div class="layui-input-inline" style="width:400px">
+                        <input type="text" name="info[sellpoint]" class="layui-input" value="{$info['sellpoint']}">
+                      </div>
+                      <div class="layui-form-mid layui-word-aux">在服务详情页标题下面展示卖点信息，建议60字以内</div>
+                    </div>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">4G插座IMEI：</label>
+                        <div class="layui-input-inline" style="width:300px">
+                            <input type="text" class="layui-input" name="info[imei]" value="{$info.imei}" lay-verify="required" lay-verType="tips"/>
+                        </div>
+                    </div>
+                    <div class="layui-form-item">
+                      <label class="layui-form-label">服务器地址：</label>
+                      <div class="layui-input-inline" style="width:300px">
+                        <input type="text" class="layui-input" name="info[server_ip]" value="{$info.server_ip}" lay-verify="required" lay-verType="tips"/>
+                      </div>
+                    </div>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">设备ID：</label>
+                        <div class="layui-input-inline" style="width:300px">
+                            <input type="text" class="layui-input" name="info[device_id]" value="{$info.device_id}" lay-verify="required" lay-verType="tips"/>
+                        </div>
+                    </div>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">序列号：</label>
+                        <div class="layui-input-inline" style="width:300px">
+                            <input type="text" class="layui-input" name="info[sn]" value="{$info.sn}" lay-verify="required" lay-verType="tips"/>
+                        </div>
+                    </div>
+                    <div class="layui-form-item">
+                      <label class="layui-form-label">区域ID：</label>
+                      <div class="layui-input-inline" style="width:300px">
+                        <input type="text" class="layui-input" name="info[view_id]" value="{$info.view_id}" lay-verify="required" lay-verType="tips"/>
+                      </div>
+                    </div>
+                    <div class="layui-form-item">
+                      <label class="layui-form-label">授权Key：</label>
+                      <div class="layui-input-inline" style="width:300px">
+                        <input type="text" class="layui-input" name="info[u_key]" value="{$info.u_key}" lay-verify="required" lay-verType="tips"/>
+                      </div>
+                    </div>
+                    <div class="layui-form-item">
+                      <label class="layui-form-label">连接超时：</label>
+                      <div class="layui-input-inline" style="width:300px">
+                        <input type="text" class="layui-input" name="info[timeout]" value="{$info.timeout}" lay-verify="required" lay-verType="tips"/>
+                      </div>
+                      <div class="layui-form-mid layui-word-aux">与服务器连接超时，单位毫秒</div>
+                    </div>
+                    
+                    <div class="layui-form-item">
+                      <label class="layui-form-label">继电器开门时间：</label>
+                      <div class="layui-input-inline" style="width:300px">
+                        <input type="text" class="layui-input" name="info[relay1_time]" value="{$info.relay1_time}" lay-verify="required" lay-verType="tips"/>
+                      </div>
+                      <div class="layui-form-mid layui-word-aux">继电器开门时间，单位为毫秒</div>
+                    </div>
+                    <div class="layui-form-item">
+                      <label class="layui-form-label">继电器工作模式：</label>
+                      <div class="layui-input-inline" style="width:300px">
+                        <input type="radio" name="info[relay1_type]" value="0" title="常规" {if $info['id'] && $info['relay1_type']==0}checked{/if}/>
+                        <input type="radio" name="info[relay1_type]" value="1" title="常开" {if !$info['id'] || $info['relay1_type']==1}checked{/if}/>
+                        <input type="radio" name="info[relay1_type]" value="2" title="常闭" {if !$info['id'] || $info['relay1_type']==2}checked{/if}/>
+                      </div>
+                    </div>
+        
+                    <div class="layui-form-item">
+                      <label class="layui-form-label">联网方式：</label>
+                      <div class="layui-input-inline" style="width:400px">
+                        <input type="radio" name="info[net_mode]" lay-filter="net_mode" value="0" title="以太网" {if !$info['id'] || $info['net_mode']==0}checked{/if}/>
+                        <input type="radio" name="info[net_mode]" lay-filter="net_mode" value="1" title="WIFI" {if $info['id'] && $info['net_mode']==1}checked{/if}/>
+                        <input type="radio" name="info[net_mode]" lay-filter="net_mode" value="2" title="自适应" {if $info['id'] && $info['net_mode']==2}checked{/if}/>
+                        <input type="radio" name="info[net_mode]" lay-filter="net_mode" value="3" title="4G" {if $info['id'] && $info['net_mode']==3}checked{/if}/>
+                      </div>
+                    </div>
+                
+                <div id="ytwset" {if  $info['id'] && $info['net_mode'] !=0 }style="display:none"{/if}>
+                    <div class="layui-form-item">
+                      <label class="layui-form-label">是否启用DHCP：</label>
+                      <div class="layui-input-inline" style="width:300px">
+                        <input type="radio" name="info[dhcp]" value="0" title="手动设置IP" lay-filter="dhcp"  {if !$info['id'] || $info['dhcp']==0}checked{/if}  />
+                        <input type="radio" name="info[dhcp]" value="1" title="DHCP" lay-filter="dhcp" {if $info['id'] && $info['dhcp']==1}checked{/if}/>
+                      </div>
+                    </div>
+                  <div id="ipset" {if $info['id'] && $info['dhcp'] == 1}style="display:none"{/if}>
+                      <div class="layui-form-item">
+                          <label class="layui-form-label">以太网IP设置：</label>
+                          <div class="layui-input-inline" style="width:300px">
+                            <input type="text" class="layui-input" name="info[ip]" value="{$info.ip}"  lay-verType="tips"/>
+                          </div>
+                        </div>
+                      <div class="layui-form-item">
+                        <label class="layui-form-label">以太网子网掩码：</label>
+                        <div class="layui-input-inline" style="width:300px">
+                          <input type="text" class="layui-input" name="info[mask]" value="{$info.mask}"  lay-verType="tips"/>
+                        </div>
+                      </div>
+                        <div class="layui-form-item">
+                          <label class="layui-form-label">以太网网关：</label>
+                          <div class="layui-input-inline" style="width:300px">
+                            <input type="text" class="layui-input" name="info[gateway]" value="{$info.gateway}"  lay-verType="tips"/>
+                          </div>
+                        </div>
+                        <div class="layui-form-item">
+                          <label class="layui-form-label">以太网Dns：</label>
+                          <div class="layui-input-inline" style="width:300px">
+                            <input type="text" class="layui-input" name="info[dns]" value="{$info.dns}"  lay-verType="tips"/>
+                          </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="wifiset"  {if $info['net_mode'] !=1}style="display:none"{/if}>
+                  <div class="layui-form-item">
+                    <label class="layui-form-label">WIFI名：</label>
+                    <div class="layui-input-inline" style="width:300px">
+                      <input type="text" class="layui-input" name="info[wifi_ssid]" value="{$info.wifi_ssid}"  lay-verType="tips"/>
+                    </div>
+                  </div>
+                  <div class="layui-form-item">
+                    <label class="layui-form-label">WIFI密码：</label>
+                    <div class="layui-input-inline" style="width:300px">
+                      <input type="text" class="layui-input" name="info[wifi_password]" value="{$info.wifi_password}"  lay-verType="tips"/>
+                    </div>
+                  </div>
+                  <div class="layui-form-item">
+                    <label class="layui-form-label">wifi的DHCP设置：</label>
+                    <div class="layui-input-inline" style="width:400px">
+                      <input type="radio" name="info[wifi_dhcp]"  value="0" title="不启用" {if !$info['id'] || $info['wifi_dhcp']==0}checked{/if}/>
+                      <input type="radio" name="info[wifi_dhcp]"  value="1" title="启用" {if $info['id'] && $info['wifi_dhcp']==1}checked{/if}/>
+                    </div>
+                  </div>
+                </div>
+                  <div class="layui-form-item">
+                      <label class="layui-form-label">状 态：</label>
+                      <div class="layui-input-inline">
+                        <input type="radio" name="info[status]" value="1" title="开启" {if !$info['id'] || $info['status']==1}checked{/if}/>
+                        <input type="radio" name="info[status]" value="0" title="关闭" {if $info['id'] && $info['status']==0}checked{/if}/>
+                      </div>
+                    </div>
+                    <div class="layui-form-item">
+                      <label class="layui-form-label"></label>
+                      <div class="layui-input-block">
+                          <button class="layui-btn layui-btn-normal" onclick="gonext(2)">下一步:编辑服务详情</button>
+                          <button class="layui-btn layui-btn-danger" lay-submit lay-filter="formsubmit">提 交</button>
+                      </div>
+                    </div>
+                  </div>
+                  <!--layui-tab-item--->
+                  <div class="layui-tab-item ">
+                     <div class="layui-form-item">
+                           <label class="layui-form-label">商品详情</label>
+                           <div class="layui-input-inline" style="width:500px">
+                               <script id="content" name="info[content]" type="text/plain" style="width:100%;height:500px">{$info['content']}</script>
+                           </div>
+                       </div>
+                      <div class="layui-form-item">
+                          <label class="layui-form-label"></label>
+                          <div class="layui-input-block">
+                              <button class="layui-btn layui-btn-normal" onclick="gonext(1)">上一步:编辑服务信息</button>
+                              <button class="layui-btn layui-btn-danger" lay-submit lay-filter="formsubmit">提 交</button>
+                          </div>
+                      </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {include file="public/js"/}
+  <script>
+    var ueditor = UE.getEditor('content');
+    layui.laydate.render({
+      elem: '#starttime',
+      type: 'date',
+      trigger: 'click'
+    });
+    layui.laydate.render({
+      elem: '#endtime',
+      type: 'date',
+      trigger: 'click'
+    });
+    layui.form.on('radio(rqtype)', function(data){
+        if(data.value == '1'){
+            $('#yydatebox2').hide();
+            $('#yydatebox1').show();
+        }else if(data.value == '2'){
+            $('#yydatebox2').show();
+            $('#yydatebox1').hide();
+        }
+    })
+    layui.form.on('radio(dhcp)', function(data){
+      if(data.value == '1'){
+        $('#ipset').hide();
+      }else{
+        $('#ipset').show();
+      }
+    })
+    layui.form.on('radio(net_mode)', function(data){
+      if(data.value == '0'){
+        $('#wifiset').hide();
+        $('#ytwset').show();
+      }else if (data.value == '1'){
+        $('#wifiset').show();
+        $('#ytwset').hide();
+      }else if (data.value == '2' || data.value == '3' ){
+        $('#wifiset').hide();
+        $('#ytwset').hide();
+      }
+    })
+    
+    layui.form.on('radio(query_cmd)', function(data){
+      if(data.value == '1'){
+        $('#query_cmd').show();
+      }else{
+        $('#query_cmd').hide();
+      }
+    })
+    layui.form.on('submit(formsubmit)', function(obj){
+    var field = obj.field
+    field['info[content]'] = ueditor.getContent();
+    var index = layer.load();
+    $.post("{:url('save')}",field,function(data){
+      layer.close(index);
+      dialog(data.msg,data.status);
+      if(data.status == 1){
+        setTimeout(function(){
+          parent.layer.closeAll();
+          parent.tableIns.reload()
+        },1000)
+      }
+    })
+  })
+  </script>
+  {include file="public/copyright"/}
+</body>
+</html>

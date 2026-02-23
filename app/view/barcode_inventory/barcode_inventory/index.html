@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>{$cfg['title']} - {$menuname}</title>
+    {include file="public/css"/}
+</head>
+<body class="gray-bg">
+    <!-- 页面内容 -->
+    <div class="wrapper wrapper-content animated fadeInRight">
+        <div class="row">
+            <div class="col-sm-12">
+                <div class="ibox float-e-margins">
+                    <div class="ibox-title">
+                        <h5>{$menuname}</h5>
+                        <div class="ibox-tools">
+                            <a href="{:url('BarcodeInventory/edit')}" class="btn btn-primary btn-xs">
+                                <i class="fa fa-plus"></i> {:t('添加商品')}
+                            </a>
+                            <a href="{:url('BarcodeInventory/inbound')}" class="btn btn-primary btn-xs">
+                                <i class="fa fa-plus"></i> {:t('入库')}
+                            </a>
+                            <a href="{:url('BarcodeInventory/outbound')}" class="btn btn-success btn-xs">
+                                <i class="fa fa-minus"></i> {:t('出库')}
+                            </a>
+                        </div>
+                    </div>
+                    <div class="ibox-content">
+                        <!-- 搜索框 -->
+                        <div class="row m-b-sm m-t-sm">
+                            <div class="col-sm-12">
+                                <div class="input-group">
+                                    <input type="text" id="proname" placeholder="{:t('请输入商品名称')}" class="input-sm form-control">
+                                    <span class="input-group-btn">
+                                        <button type="button" id="searchBtn" class="btn btn-sm btn-primary">{:t('搜索')}</button>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 库存列表 -->
+                        <div class="table-responsive">
+                            <table class="layui-hide" id="inventoryTable" lay-filter="inventoryTable"></table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部脚本 -->
+    {include file="public/js"/}
+    
+    <script>
+        layui.use(['table', 'layer'], function() {
+            var table = layui.table;
+            var layer = layui.layer;
+            
+            // 渲染表格
+            var tableIns = table.render({
+                elem: '#inventoryTable',
+                url: '{:url("BarcodeInventory/index")}',
+                page: true,
+                limit: 10,
+                limits: [10, 20, 30, 50],
+                cols: [[
+                    {field: 'id', title: 'ID', width: 80, sort: true},
+                    {field: 'name', title: '{:t('商品名称')}', width: 200},
+                    {field: 'pic', title: '{:t('商品图片')}', width: 100, templet: function(d) {
+                        return d.pic ? '<img src="' + d.pic + '" width="50" height="50">' : '{:t('无图片')}';
+                    }},
+                    {field: 'stock', title: '{:t('总库存')}', width: 100, sort: true},
+                    {field: 'sales', title: '{:t('已销售')}', width: 100, sort: true},
+                    {field: 'price', title: '{:t('价格')}', width: 100},
+                    {field: 'guige', title: '{:t('规格库存')}', templet: function(d) {
+                        var html = '';
+                        if (d.guige && d.guige.length > 0) {
+                            $.each(d.guige, function(index, item) {
+                                html += item.name + ': ' + item.stock + '{:t('件')}<br>';
+                            });
+                        }
+                        return html;
+                    }},
+                    {title: '{:t('操作')}', width: 200, align: 'center', templet: function(d) {
+                        return '<a href="{:url('BarcodeInventory/edit')}?id=' + d.id + '" class="btn btn-warning btn-xs">{:t('编辑')}</a> ' +
+                               '<a href="{:url('BarcodeInventory/inbound')}?proid=' + d.id + '" class="btn btn-primary btn-xs">{:t('入库')}</a> ' +
+                               '<a href="{:url('BarcodeInventory/outbound')}?proid=' + d.id + '" class="btn btn-success btn-xs">{:t('出库')}</a>';
+                    }}
+                ]],
+                done: function(res, curr, count) {
+                    // 表格渲染完成后的回调
+                }
+            });
+            
+            // 搜索功能
+            $('#searchBtn').click(function() {
+                var proname = $('#proname').val();
+                tableIns.reload({
+                    where: {
+                        proname: proname
+                    },
+                    page: {
+                        curr: 1 // 重新从第1页开始
+                    }
+                });
+            });
+            
+            // 回车键搜索
+            $('#proname').keypress(function(e) {
+                if (e.which == 13) {
+                    $('#searchBtn').click();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

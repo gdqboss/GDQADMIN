@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>批量团购</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12">
+        <div class="layui-card-header">批量团购（查询后选择再操作）</div>
+        <div class="layui-card-body" pad15>
+          <div class="layui-form layui-form-search">
+            <div class="layui-inline">
+              <button type="button" class="layui-btn layui-btn-primary" onclick="showChooseProduct()">选择商城商品</button>
+            </div>
+          </div>
+
+          <div id="opbar" class="layui-col-md12" style="margin-top:10px;display:none">
+            <button class="layui-btn layui-btn-primary" onclick="selectAll()">全选</button>
+            <button class="layui-btn layui-btn-primary" onclick="cancelAll()">全取消</button>
+            <button class="layui-btn" onclick="openAddDialog()">确认操作</button>
+            <button class="layui-btn layui-btn-danger" onclick="batchDelete()">批量删除</button>
+          </div>
+
+          <div id="chosen" class="layui-col-md12" style="margin-top:10px"></div>
+
+          <div id="list" class="layui-col-md12" style="margin-top:10px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {include file="public/js"/}
+  <script>
+    var layer = layui.layer;
+    var $ = layui.$;
+    var selectedIds = [];
+    var hasSearched = false;
+    var cids = [];
+    var collageCate = {$collageCate|raw};
+    var isSysAdmin = ('{$bid}'==0);
+    var chosenProducts = [];
+
+
+
+    function loadData(){
+      var keyword = $('#keyword').val();
+      var supplier_id = $('#supplier_id').val();
+      var postData = { st:'all', keyword:keyword, pagenum:1, cids:cids, supplier_id:supplier_id };
+      var idx = layer.load();
+      $.post('{:url("ApiAdminProduct/index")}', postData, function(res){
+        layer.close(idx);
+        $('#list').empty(); selectedIds = []; hasSearched = true; $('#opbar').show();
+        var datalist = res.datalist || res.data || [];
+        if(datalist.length==0){ $('#list').html('<div style="color:#999;text-align:center;margin-top:30px">暂无数据</div>'); return; }
+        var html = '<table class="layui-table"><thead><tr><th style="width:40px"></th><th>商品</th><th>供货商ID</th></tr></thead><tbody>';
+        for(var i=0;i<datalist.length;i++){
+          var d = datalist[i];
+          html += '<tr>'
+            +'<td><input type="checkbox" class="prochk" data-id="'+d.id+'" onchange="toggleSelect('+d.id+',this)"></td>'
+            +'<td><img src="'+(d.pic||'')+'" style="max-width:40px;vertical-align:middle;margin-right:6px">'+(d.name||'')+'</td>'
+            +'<td>'+(d.supplier_id||'')+'</td>'
+            +'</tr>';
+        }
+        html += '</tbody></table>';
+        $('#list').html(html);
+        selectedIds = chosenProducts.map(function(p){ return p.id; });
+        $('.prochk').each(function(){ var id = parseInt($(this).attr('data-id')); if(selectedIds.indexOf(id)>=0){ $(this).prop('checked', true); } });
+      });
+    }
+
+    function selectAll(){
+      selectedIds = []; $('.prochk').each(function(){ $(this).prop('checked',true); selectedIds.push(parseInt($(this).attr('data-id'))); });
+    }
+    function cancelAll(){ selectedIds = []; $('.prochk').each(function(){ $(this).prop('checked',false); }); }
+    function toggleSelect(id, el){ var idx = selectedIds.indexOf(id); if($(el).is(':checked')){ if(idx<0) selectedIds.push(id); } else { if(idx>=0) selectedIds.splice(idx,1); } }
+
+    function openAddDialog(){
+      if(!isSysAdmin){ return layer.msg('仅系统管理员可操作'); }
+      if(selectedIds.length==0){ return layer.msg('请先选择商品'); }
+      var html = '';
+      html += '<div style="padding:15px">';
+      html += '<div class="layui-form-item"><label class="layui-form-label" style="width:120px">拼团分类</label><div class="layui-input-inline" style="width:300px"><input type="text" id="collage_cname" readonly placeholder="请选择拼团分类" class="layui-input" onclick="openCollageCateDialog()"><input type="hidden" id="collage_cid"></div></div>';
+      html += '<div class="layui-form-item"><label class="layui-form-label" style="width:120px">成团人数</label><div class="layui-input-inline"><input type="number" id="teamnum" value="2" class="layui-input"></div></div>';
+      html += '<div class="layui-form-item"><label class="layui-form-label" style="width:120px">每人限购</label><div class="layui-input-inline"><input type="number" id="buymax" value="0" class="layui-input"></div></div>';
+      html += '<div class="layui-form-item"><label class="layui-form-label" style="width:120px">成团时限(小时)</label><div class="layui-input-inline"><input type="number" id="teamhour" value="24" class="layui-input"></div></div>';
+      html += '<div class="layui-form-item"><label class="layui-form-label" style="width:120px">团长奖励(元)</label><div class="layui-input-inline"><input type="number" id="leadermoney" value="0" class="layui-input"></div></div>';
+      html += '<div class="layui-form-item"><label class="layui-form-label" style="width:120px">团长奖励(积分)</label><div class="layui-input-inline"><input type="number" id="leaderscore" value="0" class="layui-input"></div></div>';
+      html += '<div class="layui-form-item"><label class="layui-form-label" style="width:120px">上架状态</label><div class="layui-input-inline"><select id="status" class="layui-input"><option value="0">下架</option><option value="1">上架</option></select></div></div>';
+      html += '<div class="layui-form-item"><label class="layui-form-label" style="width:120px">团长价比率</label><div class="layui-input-inline"><input type="number" step="0.01" id="leader_price_ratio" value="1.0" class="layui-input"></div></div>';
+      html += '<div class="layui-form-item"><label class="layui-form-label" style="width:120px">团长佣金比例(%)</label><div class="layui-input-inline"><input type="number" step="0.01" id="leader_commission_rate" value="0" class="layui-input"></div></div>';
+      html += '</div>';
+      layer.open({ type:1, title:'填写拼团参数', area:['560px','640px'], content:html, btn:['提交','取消'],
+        yes:function(index){
+          var params = {
+            cid: parseInt($('#collage_cid').val()||0),
+            teamnum: parseInt($('#teamnum').val()||2),
+            buymax: parseInt($('#buymax').val()||0),
+            teamhour: parseInt($('#teamhour').val()||24),
+            leadermoney: parseFloat($('#leadermoney').val()||0),
+            leaderscore: parseInt($('#leaderscore').val()||0),
+            status: parseInt($('#status').val()||0),
+            commissionset: '0'
+          };
+          if(!params.cid){ layer.msg('请选择拼团分类'); return; }
+          if(!params.teamnum || params.teamnum<=0){ layer.msg('请填写成团人数'); return; }
+          if(!params.teamhour || params.teamhour<=0){ layer.msg('请填写成团时限'); return; }
+          var leader_price_ratio = $('#leader_price_ratio').val();
+          var leader_commission_rate = $('#leader_commission_rate').val();
+          var supplier_id = $('#supplier_id').val();
+          var idx = layer.load();
+          $.post('{:url("ApiAdminProduct/batchAddCollage")}', {
+            proids: selectedIds,
+            supplier_id: supplier_id,
+            cids: cids,
+            collage: params,
+            leader_price_ratio: leader_price_ratio,
+            leader_commission_rate: leader_commission_rate
+          }, function(res){
+            layer.close(idx);
+            dialog(res.msg, res.status==1?1:0);
+            if(res.status==1){ layer.close(index); }
+          });
+        }
+      });
+    }
+
+    function openCollageCateDialog(){
+      var html = '<div style="padding:10px;max-height:400px;overflow:auto">';
+      for(var i=0;i<collageCate.length;i++){
+        html += '<div style="line-height:28px"><a href="javascript:void(0)" onclick="chooseCollageCate('+collageCate[i].id+',\''+collageCate[i].name+'\')">'+collageCate[i].name+'</a></div>';
+        var child = collageCate[i].child||[];
+        for(var j=0;j<child.length;j++){
+          html += '<div style="padding-left:20px;line-height:28px"><a href="javascript:void(0)" onclick="chooseCollageCate('+child[j].id+',\''+child[j].name+'\')">'+child[j].name+'</a></div>';
+        }
+      }
+      html += '</div>';
+      layer.open({ type:1, title:'请选择拼团分类', area:['420px','420px'], content:html, shadeClose:true });
+    }
+    function chooseCollageCate(id,name){ $('#collage_cid').val(id); $('#collage_cname').val(name); layer.closeAll('page'); }
+
+    function batchDelete(){
+      if(!isSysAdmin){ return layer.msg('仅系统管理员可操作'); }
+      var supplier_id = $('#supplier_id').val();
+      layer.confirm('确定要删除对应的拼团商品吗?', {icon: 7, title:'操作确认'}, function(index){
+        layer.close(index);
+        var idx = layer.load();
+        $.post('{:url("ApiAdminProduct/batchDeleteCollage")}', { proids: selectedIds, supplier_id: supplier_id, cids: cids }, function(res){
+          layer.close(idx);
+          dialog(res.msg, res.status==1?1:0);
+        });
+      });
+    }
+    function showChooseProduct(){
+      layer.open({type:2,title:'选择商品',content:"{:url('ShopProduct/chooseproduct')}/showallbusiness/true",area:['1000px','600px'],shadeClose:true});
+    }
+    function renderChosen(){
+      if(chosenProducts.length==0){ $('#chosen').html(''); return; }
+      var html = '<table class="layui-table"><thead><tr><th>商品</th><th>供货商ID</th><th>操作</th></tr></thead><tbody>';
+      for(var i=0;i<chosenProducts.length;i++){
+        var p = chosenProducts[i];
+        html += '<tr>'
+          +'<td><img src="'+(p.pic||'')+'" style="max-width:40px;vertical-align:middle;margin-right:6px">'+(p.name||'')+'</td>'
+          +'<td>'+(p.supplier_id||'')+'</td>'
+          +'<td><button class="layui-btn layui-btn-primary layui-btn-sm" onclick="removeChosen('+p.id+')">删除</button></td>'
+          +'</tr>';
+      }
+      html += '</tbody></table>';
+      $('#chosen').html(html);
+      $('#opbar').show();
+    }
+    function choosepro(data){
+      var p = data.product;
+      for(var i=0;i<chosenProducts.length;i++){ if(chosenProducts[i].id==p.id) return; }
+      chosenProducts.push({id:p.id,name:p.name,pic:p.pic,supplier_id:p.supplier_id});
+      selectedIds = chosenProducts.map(function(x){ return x.id; });
+      renderChosen();
+    }
+    function removeChosen(id){
+      chosenProducts = chosenProducts.filter(function(x){ return x.id!=id; });
+      selectedIds = chosenProducts.map(function(x){ return x.id; });
+      renderChosen();
+    }
+
+  </script>
+  {include file="public/copyright"/}
+</body>
+</html>

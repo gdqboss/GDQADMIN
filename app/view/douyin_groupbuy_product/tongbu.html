@@ -1,0 +1,463 @@
+<!DOCTYPE html><!--custom_file(douyin_groupbuy)-->
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>抖音团购商品-创建管理</title>
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    {include file="public/css"/}
+    <style>
+        .layui-imgbox .layui-imgbox-close{z-index: 6;}
+        .form-label-w6 .layui-form-item .layui-form-label{width: 150px;}
+    </style>
+</head>
+<body>
+<div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+        <div class="layui-card layui-col-md12">
+            <div class="layui-card-header">
+                <i class="fa fa-pencil"></i> 创建抖音团购商品
+                <i class="layui-icon layui-icon-close" style="font-size:18px;font-weight:bold;cursor:pointer" onclick="closeself()"></i>
+            </div>
+            <div class="layui-card-body" pad15>
+                <blockquote class="layui-elem-quote" style="color: red;">注意：仅支持创建部分基础信息，其他参数信息请到抖音端完善；且创建一次后不能再次提交，防止把抖音设置给覆盖掉</blockquote>
+                <div class="layui-form form-label-w6">
+                    <div class="layui-tab" lay-filter="mytab">
+                        <div class="layui-tab-content">
+                            <div class="layui-tab-item layui-show">
+                                <fieldset class="layui-elem-field layui-field-title" >
+                                    <legend>系统商品</legend>
+                                </fieldset>
+                                <input type="hidden" name="id" value="{$info['proid']}"/>
+                                <input type="hidden" name="info[id]" value="{$info['id']}"/>
+                                {if input('param.bid')}<input type="hidden" name="info[bid]" value="{$Request.param.bid}"/>{/if}
+                                <div class="layui-form-item" >
+                                    <label class="layui-form-label">系统商品名称：</label>
+                                    <div class="layui-input-inline">
+                                        <input type="text" disabled="true" class="layui-input" value="{$name}">
+                                    </div>
+                                </div>
+                                <div class="layui-form-item">
+                                    <label class="layui-form-label">系统商品图片：</label>
+                                    <input type="hidden" value="{$info['pics']}" id="pics">
+                                    <div id="picList" class="picsList-class-padding">
+                                        {if $info['pics']}{php}$pics = explode(',',$info['pics']);{/php}
+                                            {foreach $pics as $pic}
+                                            <div class="layui-imgbox">
+                                                <span class="layui-imgbox-img"><img src="{$pic}"></span>
+                                            </div>
+                                            {/foreach}
+                                        {else}
+                                            无
+                                        {/if}
+                                    </div>
+                                </div>
+                                <fieldset class="layui-elem-field layui-field-title" >
+                                    <legend>抖音设置</legend>
+                                </fieldset>
+                                {if $info['dy_product_id']>0}
+                                <div class="layui-form-item" >
+                                    <label class="layui-form-label">抖音端商品id：</label>
+                                    <div class="layui-input-inline">
+                                        <input type="text" disabled="true" class="layui-input" value="$info['dy_product_id']">
+                                    </div>
+                                </div>
+                                {/if}
+                                <div class="layui-form-item" >
+                                    <label class="layui-form-label">选择门店：</label>
+                                    <div class="layui-input-inline" style="width:500px">
+                                        {php} $pois = explode(',',$info['pois']);{/php}
+                                        {foreach $mendians as $mv}
+                                        <input type="checkbox" name="pois[]" value="{$mv['poi_id']}" title="{$mv['name']}" lay-skin="primary" {if in_array($mv['poi_id'],$pois)}checked{/if}>
+                                        {/foreach}
+                                    </div>
+                                    <div class="layui-form-mid layui-word-aux">请确保此门店已关联抖音门店ID</div>
+                                </div>
+                                <div class="layui-form-item">
+                                  <label class="layui-form-label">商品分类：</label>
+                                  <div class="layui-input-inline" style="width:400px">
+                                    <select name="info[dy_category_id]" lay-verify="required" lay-verType="tips" id="cid" xm-select="selectCid" xm-select-max="1" xm-select-search >
+                                      <option value="">--请选择--</option>
+                                      {foreach $categorys as $cats}
+                                        <option disabled="true" value="{$cats['id']}">{$cats['name']}</option>
+                                        {if $cats['child']}
+                                            {foreach $cats['child'] as $child}
+                                                <option  disabled="true" value="{$child['id']}">&nbsp;&nbsp;&nbsp;&nbsp;└ {$child['name']}</option>
+                                                {if $child['child']}
+                                                    {foreach $child['child'] as $child2}
+                                                        <option value="{$child2['id']}" {if $child2['id'] == $info['dy_category_id']}selected{/if}>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└ {$child2['name']}</option>
+                                                    {/foreach}
+                                                {/if}
+                                            {/foreach}
+                                        {/if}
+                                      {/foreach}
+                                    </select>
+                                  </div>
+                                  <div class="layui-form-mid layui-word-aux">请选择一个第三级分类</div>
+                                </div>
+                                <div class="layui-form-item">
+                                    <label class="layui-form-label">商品搭配：</label>
+                                    <div class="layui-input-inline" style="width:auto">
+                                        <table id="ggnamediv"  class="layui-table" style="width:950px">
+                                            <thead>
+                                            <tr>
+                                                <th>商品设置</th>
+                                                <th>单品设置</th>
+                                                <th>操作</th>
+                                            </tr>
+                                            </thead>
+                                            {php} 
+                                                $dy_commodity = $info['dy_commodity']?json_decode($info['dy_commodity'],true):'';
+                                                $dycount = count($dy_commodity)-1;
+                                            {/php}
+                                            {if $dy_commodity}
+                                                {foreach $dy_commodity as $k=>$gg}
+                                                <tr>
+                                                    <td width="350">
+                                                        <div style="margin-top:8px">
+                                                            商品组名称：<input type="text" name="commoditys[group_name][]" value="{$gg.group_name}" class="layui-input"  placeholder="请输入商品组名称">
+                                                        </div>
+                                                        <div style="margin-top:8px">
+                                                            可选商品数量：<input type="text" name="commoditys[option_count][]" value="{$gg.option_count}" class="layui-input"  placeholder="可选商品数量，默认全选">
+                                                        </div>
+                                                    </td>
+                                                    <td width="500">
+                                                        {foreach $gg.item_list as $k2=>$ggitem}
+                                                        <div style="display: flex;line-height: 38px;">
+                                                            <input type="text" class="layui-input" name="commoditys[name][{$k}][]" value="{$ggitem.name}" placeholder="单品名称" style="width:100px"> 
+                                                            <input type="number" class="layui-input" name="commoditys[count][{$k}][]" value="{$ggitem.count}" style="width:90px" />
+                                                            <div style="width:80px">
+                                                                <select name="commoditys[unit][{$k}][]" >
+                                                                    {foreach $units as $uk=>$uv}
+                                                                        <option {if $gg.unit == $uv} selected="selected" {/if} value="{$uv.name}">{$uv.name}</option>
+                                                                    {/foreach}
+                                                                </select>
+                                                            </div>
+                                                            <input type="number" class="layui-input" name="commoditys[price][{$k}][]" value="{$ggitem.price}" style="width:90px" placeholder="单价"/>元
+                                                            {if $k2==0}
+                                                                <button type="button" class="layui-btn layui-btn-sm layui-btn-primary" keynum="{$k}" onclick="addggname(this)" style="margin-top:3px;"><i class="fa fa-plus" style="font-size:14px!important"></i></button>
+                                                            {else}
+                                                                <button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="$(this).parent().remove()" style="margin-top:3px;"><i class="fa fa-remove" style="font-size:14px!important"></i></button>
+                                                            {/if}
+                                                        </div>
+                                                        {/foreach}
+                                                    </td>
+                                                    {if $k==0}
+                                                    <td width="50"><button type="button" class="layui-btn layui-btn-sm layui-btn-primary" keynum="{$dycount}" onclick="addggtype(this)">添加</button></td>
+                                                    {else}
+                                                    <td width="50"><button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="$(this).parent().parent().remove()">删除</button></td>
+                                                    {/if}
+                                                </tr>
+                                                {/foreach}
+                                            {else}
+                                                <tr>
+                                                    <td width="350">
+                                                        <div style="margin-top:8px">
+                                                            商品组名称：<input type="text" name="commoditys[group_name][]" class="layui-input"  placeholder="请输入商品组名称">
+                                                        </div>
+                                                        <div style="margin-top:8px">
+                                                            可选商品数量：<input type="text" name="commoditys[option_count][]" value="" class="layui-input"  placeholder="可选商品数量，默认全选">
+                                                        </div>
+                                                    </td>
+                                                    <td width="500">
+                                                        <div style="display: flex;;line-height: 38px;">
+                                                            <input type="text" class="layui-input" name="commoditys[name][0][]" value="" placeholder="单品名称" style="width:100px"> 
+                                                            <input type="number" class="layui-input" name="commoditys[count][0][]" value="1" style="width:90px" />
+                                                            <div style="width:80px">
+                                                                <select name="commoditys[unit][0][]">
+                                                                    {foreach $units as $uk=>$uv}
+                                                                    <option value="{$uv.name}">{$uv.name}</option>
+                                                                    {/foreach}
+                                                                </select>
+                                                            </div>
+                                                            <input type="number" class="layui-input" name="commoditys[price][0][]" value="" style="width:90px" placeholder="单价"/>元
+                                                            <button type="button" class="layui-btn layui-btn-sm layui-btn-primary" keynum="0" onclick="addggname(this)" style="margin-top:3px;"><i class="fa fa-plus" style="font-size:14px!important"></i></button>
+                                                        </div>
+                                                    </td>
+                                                    <td width="50"><button type="button" class="layui-btn layui-btn-sm layui-btn-primary" keynum="0" onclick="addggtype(this)">添加</button></td>
+                                                </tr>
+                                            {/if}
+                                        </table>
+                                        <div class="layui-word-aux"></div>
+                                    </div>
+                                </div>
+                                <script>
+                                var units_json = {$units_json?$units_json:''};
+                                var ulen = units_json?units_json.length:0;
+                                function addggtype(obj){
+                                    var oldkeynum = parseInt($(obj).attr('keynum'));
+                                    var keynum    = oldkeynum+1;
+                                    $(obj).attr('keynum',keynum);
+                                    var gghtml = '<tr>';
+                                        gghtml += '<td width="350">';
+                                            gghtml += '';
+                                            gghtml += '<div style="margin-top:8px">';
+                                                gghtml += '商品组名称：<input type="text" name="commoditys[group_name][]" value="" class="layui-input"  placeholder="请输入商品组名称">';
+                                            gghtml += '</div>';
+                                            gghtml += '<div style="margin-top:8px">';
+                                                gghtml += '可选商品数量：<input type="text" name="commoditys[option_count][]" value="" class="layui-input"  placeholder="可选商品数量，默认全选">';
+                                            gghtml += '</div>'
+
+                                        gghtml += '</td>';
+
+                                        gghtml += '<td width="500">';
+                                                gghtml += '<div style="display:flex;line-height: 38px;">';
+                                                gghtml += '<input type="text" class="layui-input" name="commoditys[name]['+keynum+'][]" value="" placeholder="单品名称" style="width:100px"> ';
+                                                gghtml += '<input type="number" class="layui-input" name="commoditys[count]['+keynum+'][]" value="1" style="width:90px" />';
+                                                gghtml += '<div style="width:80px"><select name="commoditys[unit]['+keynum+'][]">';
+                                                    if(ulen>0){
+                                                        for(var i=0;i<ulen;i++){
+                                                            gghtml += '<option  value="'+units_json[i]['name']+'">'+units_json[i]['name']+'</option>';
+                                                        }
+                                                    }
+                                               gghtml += ' </select></div>';
+                                                gghtml += '<input type="number" class="layui-input" name="commoditys[price]['+keynum+'][]" value="" style="width:90px" placeholder="单价"/>元';
+                                                gghtml += '<button type="button" class="layui-btn layui-btn-sm layui-btn-primary" keynum="'+keynum+'" onclick="addggname(this)" style="margin-top:3px;margin-left:4px"><i class="fa fa-plus" style="font-size:14px!important"></i></button>';
+                                                gghtml += '</div>';
+                                        gghtml += '</td>';
+
+                                        gghtml += '<td width="50"><button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="$(this).parent().parent().remove()">删除</button></td>';
+                                    gghtml += '</tr>';
+                                    $('#ggnamediv').append(gghtml);
+                                    layui.form.render('select');
+                                    initcolorpicker();
+                                }
+                                function addggname(obj){
+                                    var keynum = parseInt($(obj).attr('keynum'));
+                                    var html = '';
+                                        html += '<div style="display:flex;line-height: 38px;">';
+                                            html += '<input type="text" class="layui-input" name="commoditys[name]['+keynum+'][]" value="" placeholder="单品名称" style="width:100px">';
+                                            html += '<input type="number" class="layui-input" name="commoditys[count]['+keynum+'][]" value="1" style="width:90px" />';
+                                            html += '<div style="width:80px"><select name="commoditys[unit]['+keynum+'][]" >';
+                                                if(ulen>0){
+                                                    for(var i=0;i<ulen;i++){
+                                                        html += '<option  value="'+units_json[i]['name']+'">'+units_json[i]['name']+'</option>';
+                                                    }
+                                                }
+                                            html += ' </select></div>';
+                                            html += '<input type="number" class="layui-input" name="commoditys[price]['+keynum+'][]" value="" style="width:90px" placeholder="单价"/>元';
+                                            html += '<button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="$(this).parent().remove()" style="margin-top:3px;margin-left:4px"><i class="fa fa-remove" style="font-size:14px!important"></i></button>';
+                                        html += '</div>';
+                                    var ggnameobj = $(obj).parent().parent().append(html);
+                                    layui.form.render('select');
+                                }
+                                </script>
+                                <div id="ruleset_div">
+                                    {php} $ruledata = json_decode($info['dy_Notification'],true);{/php}
+                                    {if $ruledata}
+                                        {foreach $ruledata as $k=>$rule}
+                                        <div class="layui-form-item">
+                                            <label class="layui-form-label">使用规则：</label>
+                                            <div class="layui-form-mid">标题</div>
+                                            <div class="layui-input-inline" style="width:100px"><input type="text" name="title[]" value="{$rule.title}" class="layui-input"></div>
+                                            <div class="layui-form-mid">，内容</div>
+                                            <div class="layui-input-inline" style="width:400px"><input type="text" name="content[]" value="{$rule.content}" class="layui-input"></div>
+                                            {if $k==0}
+                                            <button type="button" class="layui-btn layui-btn-primary" onclick="adddata()">新增</button>
+                                            {else}
+                                            <button type="button" class="layui-btn layui-btn-primary" onclick="deldata(this)">删除</button>
+                                            {/if}
+                                        </div>
+                                        {/foreach}
+                                    {else}
+                                        <div class="layui-form-item">
+                                            <label class="layui-form-label">使用规则：</label>
+                                            <div class="layui-form-mid">标题</div>
+                                            <div class="layui-input-inline" style="width:100px"><input type="text" name="title[]" value="" class="layui-input"></div>
+                                            <div class="layui-form-mid">，内容</div>
+                                            <div class="layui-input-inline" style="width:400px"><input type="text" name="content[]" value="" class="layui-input"></div>
+                                            <button type="button" class="layui-btn layui-btn-primary" onclick="adddata()">新增</button>
+                                        </div>
+                                    {/if}
+                                </div>
+                                <script>
+                                function adddata(){
+                                    var html = '';
+                                    html+='<div class="layui-form-item">';
+                                    html+=' <label class="layui-form-label"></label>';
+                                    html+=' <div class="layui-form-mid">标题</div>';
+                                    html+=' <div class="layui-input-inline" style="width:100px"><input type="text" name="title[]" value="" class="layui-input"></div>';
+                                    html+=' <div class="layui-form-mid">，内容</div>';
+                                    html+=' <div class="layui-input-inline" style="width:400px"><input type="text" name="content[]" value="" class="layui-input"></div>';
+                                    html+=' <button type="button" class="layui-btn layui-btn-primary" onclick="deldata(this)">删除</button>';
+                                    html+='</div>';
+                                    $('#ruleset_div').append(html);
+                                }
+                                function deldata(obj){
+                                    $(obj).parent().remove();
+                                }
+                                </script>
+                                
+                                <div class="layui-form-item" >
+                                    <label class="layui-form-label">使用规则：</label>
+                                    <div class="layui-input-inline">
+                                        <input type="text" name="info[dy_rec_person_num]" lay-verify="required" lay-verType="tips" class="layui-input" value="{$info['dy_rec_person_num']}">
+                                    </div>
+                                </div>
+                                <div class="layui-form-item" >
+                                    <label class="layui-form-label">建议使用人数：</label>
+                                    <div class="layui-input-inline">
+                                        <input type="text" name="info[dy_rec_person_num]" lay-verify="required" lay-verType="tips" class="layui-input" value="{$info['dy_rec_person_num']}">
+                                    </div>
+                                </div>
+                                <div class="layui-form-item" >
+                                    <label class="layui-form-label">最多使用人数：</label>
+                                    <div class="layui-input-inline">
+                                        <input type="text" name="info[dy_rec_person_num_max]" lay-verify="required" lay-verType="tips" class="layui-input" value="{$info['dy_rec_person_num_max']}">
+                                    </div>
+                                </div>
+                                <div class="layui-form-item">
+                                    <label class="layui-form-label">退款政策：</label>
+                                    <div class="layui-input-inline" style="width:600px">
+                                        <input type="radio" name="info[dy_RefundPolicy]" value="1" title="允许退款" {if !$info['id'] || $info['dy_RefundPolicy']==1}checked{/if}/>
+                                        <input type="radio" name="info[dy_RefundPolicy]" value="2" title="不可退款" {if $info['id'] && $info['dy_RefundPolicy']==2}checked{/if}/>
+                                        <input type="radio" name="info[dy_RefundPolicy]" value="3" title="有条件退" {if $info['id'] && $info['dy_RefundPolicy']==3}checked{/if}/>
+                                    </div>
+                                </div>
+                                <div class="layui-form-item">
+                                    <label class="layui-form-label">退款是否需商家审核：</label>
+                                    <div class="layui-input-inline" style="width:600px">
+                                        <input type="radio" name="info[dy_refund_need_merchant_confirm]" value="0" title="否" {if $info['id'] && $info['dy_refund_need_merchant_confirm']==0}checked{/if}/>
+                                        <input type="radio" name="info[dy_refund_need_merchant_confirm]" value="1" title="是" {if !$info['id'] || $info['dy_refund_need_merchant_confirm']==1}checked{/if}/>
+                                    </div>
+                                </div>
+                                <div class="layui-form-item">
+                                    <label class="layui-form-label">享受店内其他优惠：</label>
+                                    <div class="layui-input-inline" style="width:600px">
+                                        <input type="radio" name="info[dy_superimposed_discounts]" value="0" title="不可以" {if $info['id'] && $info['dy_superimposed_discounts']==0}checked{/if}/>
+                                        <input type="radio" name="info[dy_superimposed_discounts]" value="1" title="可以" {if !$info['id'] || $info['dy_superimposed_discounts']==1}checked{/if}/>
+                                    </div>
+                                </div>
+                                <div class="layui-form-item">
+                                    <label class="layui-form-label">可使用时间：</label>
+                                    <div class="layui-input-inline" style="width:150px">
+                                        <input type="text" name="info[dy_use_start_date]" class="layui-input" value="{$info.dy_use_start_date}" id="dy_use_start_date" autocomplete="off">
+                                    </div>
+                                    <div class="layui-form-mid">到</div>
+                                    <div class="layui-input-inline" style="width:150px">
+                                        <input type="text" name="info[dy_use_end_date]" class="layui-input" value="{$info.dy_use_end_date}" id="dy_use_end_date" autocomplete="off">
+                                    </div>
+                                    <div class="layui-form-mid layui-word-aux">券码的可以核销日期，履约核销强依赖</div>
+                                </div>
+                                
+                                <div class="layui-form-item" >
+                                    <label class="layui-form-label">原价：</label>
+                                    <div class="layui-input-inline">
+                                        <input type="text" name="info[dy_origin_amount]" lay-verify="required" lay-verType="tips" class="layui-input" value="{$info['dy_origin_amount']}">
+                                    </div>
+                                    <div class="layui-form-mid layui-word-aux">元</div>
+                                </div>
+                                <div class="layui-form-item" >
+                                    <label class="layui-form-label">实际售价：</label>
+                                    <div class="layui-input-inline">
+                                        <input type="text" name="info[dy_actual_amount]" lay-verify="required" lay-verType="tips" class="layui-input" value="{$info['dy_actual_amount']}">
+                                    </div>
+                                    <div class="layui-form-mid layui-word-aux">元</div>
+                                </div>
+                                <div class="layui-form-item" >
+                                    <label class="layui-form-label">售卖名称：</label>
+                                    <div class="layui-input-inline">
+                                        <input type="text" name="info[dy_sku_name]" lay-verify="required" lay-verType="tips" class="layui-input" value="{$info['dy_sku_name']}">
+                                    </div>
+                                </div>
+                                
+                                <div class="layui-form-item">
+                                    <label class="layui-form-label">库存类型：</label>
+                                    <div class="layui-input-inline">
+                                        <select name="info[dy_limit_type]">
+                                            <option value="1" {if !$info['id'] || $info['dy_limit_type']== 1}selected{/if}>有限库存</option>
+                                            <option value="2" {if $info['id'] && $info['dy_limit_type']== 2}selected{/if}>无限库存</option>
+                                        </select>
+                                    </div>
+                                    <div class="layui-form-mid layui-word-aux">选择无限库存时下方的总库存设置失效，无库存限制</div>
+                                </div>
+                                <div class="layui-form-item" >
+                                    <label class="layui-form-label">总库存：</label>
+                                    <div class="layui-input-inline">
+                                        <input type="text" name="info[dy_stock_qty]" lay-verify="required" lay-verType="tips" class="layui-input" value="{$info['dy_stock_qty']}">
+                                    </div>
+                                </div>
+                                <div class="layui-form-item">
+                                    <label class="layui-form-label">售卖时间：</label>
+                                    <div class="layui-input-inline" style="width:150px">
+                                        <input type="text" name="info[dy_sold_start_time]" class="layui-input" value="{$info.dy_sold_start_time}" id="dy_sold_start_time" autocomplete="off">
+                                    </div>
+                                    <div class="layui-form-mid">到</div>
+                                    <div class="layui-input-inline" style="width:150px">
+                                        <input type="text" name="info[dy_sold_end_time]" class="layui-input" value="{$info.dy_sold_end_time}" id="dy_sold_end_time" autocomplete="off">
+                                    </div>
+                                </div>
+                                <div class="layui-form-item">
+                                    <label class="layui-form-label">是否可外带餐食：</label>
+                                    <div class="layui-input-inline" style="width:600px">
+                                        <input type="radio" name="info[dy_bring_out_meal]" value="0" title="否" {if !$info['id'] || $info['dy_bring_out_meal']==0}checked{/if}/>
+                                        <input type="radio" name="info[dy_bring_out_meal]" value="1" title="是" {if $info['id'] && $info['dy_bring_out_meal']==1}checked{/if}/>
+                                    </div>
+                                </div>
+
+                                <div class="layui-form-item">
+                                    <label class="layui-form-label">是否可以打包：</label>
+                                    <div class="layui-input-inline" style="width:600px">
+                                        <input type="radio" name="info[dy_free_pack]" value="0" title="否" {if !$info['id'] || $info['dy_free_pack']==0}checked{/if}/>
+                                        <input type="radio" name="info[dy_free_pack]" value="1" title="是" {if $info['id'] && $info['dy_free_pack']==1}checked{/if}/>
+                                    </div>
+                                </div>
+                                {if $info['dy_product_id'] == 0}
+                                <div class="layui-form-item">
+                                    <label class="layui-form-label"></label>
+                                    <div class="layui-input-block">
+                                        <button class="layui-btn layui-btn-danger" lay-submit lay-filter="formsubmit">
+                                            确定创建
+                                        </button>
+                                    </div>
+                                </div>
+                                {/if}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{include file="public/js"/}
+<script>
+    layui.laydate.render({
+        elem: '#dy_use_start_date',
+        type: 'date',
+        trigger: 'click'
+    });
+    layui.laydate.render({
+        elem: '#dy_use_end_date',
+        type: 'date',
+        trigger: 'click'
+    });
+    layui.laydate.render({
+        elem: '#dy_sold_start_time',
+        type: 'datetime',
+        trigger: 'click'
+    });
+    layui.laydate.render({
+        elem: '#dy_sold_end_time',
+        type: 'datetime',
+        trigger: 'click'
+    });
+    layui.form.on('submit(formsubmit)', function(obj){
+        var field = obj.field
+        var index = layer.load();
+        $.post("{:url('tongbu')}",field,function(data){
+            layer.close(index);
+            dialog(data.msg,data.status);
+            if(data.status == 1){
+                setTimeout(function(){
+                    parent.layer.closeAll();
+                    parent.tableIns.reload()
+                },1000)
+            }
+        })
+    })
+</script>
+{include file="public/copyright"/}
+</body>
+</html>

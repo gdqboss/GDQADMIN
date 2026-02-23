@@ -1,0 +1,108 @@
+<!DOCTYPE html><!--custom_file(douyin_groupbuy)-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>抖音团购设置</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12">
+        <div class="layui-card-header"><i class="fa fa-cog"></i> 抖音团购设置</div>
+        <div class="layui-card-body" pad15>
+          <div class="layui-form form-label-w8" lay-filter="">
+            <blockquote class="layui-elem-quote">注意：验券需要把服务器IP：{:gethostbyname($_SERVER['HTTP_HOST'])}加入抖音服务商平台应用的开发配置中白名单内，否则会验券失败</blockquote>
+            <input type="hidden" name="info[id]" value="{$info['id']}"/>
+            <div class="layui-form-item">
+              <label class="layui-form-label" >APPID：</label>
+              <div class="layui-input-inline">
+                <input type="text" name="info[client_key]" lay-verify="required" lay-verType="tips" value="{$info['client_key']}" class="layui-input"/>
+              </div>
+              <div class="layui-form-mid layui-word-aux">登录 <a href="https://partner.open-douyin.com/console" target="_blank">抖音服务商平台</a>[控制台]-[代开发服务]-[第三方生活服务商家应用]-基础信息里APPID</div>
+            </div>
+            <div class="layui-form-item">
+              <label class="layui-form-label" >AppSecret：</label>
+              <div class="layui-input-inline" style="width:300px">
+                <input type="text" name="info[client_secret]" value="{$info['client_secret']}" class="layui-input"/>
+                {if $info['client_secret']}<div style="position: absolute;left: 0;top: 0;right: 0;bottom: 0; background: #fff;padding: .35rem .7rem;border: 1px solid rgba(0, 0, 0, .15);border-radius: .15rem;color: #636c72;" onclick="$(this).hide()">已隐藏内容，点击查看或编辑</div>{/if}
+              </div>
+              <div class="layui-form-mid layui-word-aux">登录 <a href="https://partner.open-douyin.com/console" target="_blank">抖音服务商平台</a>[控制台]-[代开发服务]-[第三方生活服务商家应用]-基础信息里AppSecret</div>
+            </div>
+            <div class="layui-form-item" >
+              <label class="layui-form-label" >商家账户ID：</label>
+              <div class="layui-input-inline">
+                <input type="text" name="info[account_id]" lay-verify="required" lay-verType="tips" value="{$info['account_id']}" class="layui-input"/>
+              </div>
+              <div class="layui-form-mid layui-word-aux"></div>
+            </div>
+            <div class="layui-form-item" style="margin-bottom:0">
+              <label class="layui-form-label" >商家账户名称：</label>
+              <div class="layui-input-inline">
+                <input type="text" name="info[account_name]" lay-verify="required" lay-verType="tips" value="{$info['account_name']}" class="layui-input"/>
+              </div>
+              <div class="layui-form-mid layui-word-aux"></div>
+            </div>
+            <div class="layui-form-item">
+              <label class="layui-form-label" ></label>
+              <div class="layui-input-inline layui-word-aux" style="width:600px">
+                商家账户ID可通过如下路径获取：
+                <br>&nbsp;&nbsp;&nbsp;&nbsp;商家：从PC抖音来客右上角获得“账户ID”；从app抖音来客-我-置顶个人信息获得“账户ID”，登录<a href="https://life.douyin.com/p/login" target="_blank">抖音来客</a>
+                <br>&nbsp;&nbsp;&nbsp;&nbsp;服务商：从控制台-应用详情页-授权管理获得已经授权的商家的“账户ID”，登录 <a href="https://partner.open-douyin.com/console" target="_blank">抖音服务商平台</a>
+                <br>抖音服务商平台:<a href="https://partner.open-douyin.com/console" target="_blank">点击登录</a>
+                <br>&nbsp;&nbsp;&nbsp;&nbsp;1、需要开通-第三方应用-第三方生活服务商家应用
+                <br>&nbsp;&nbsp;&nbsp;&nbsp;2、第三方生活服务商家应用需要认证，认证时多选，生活服务商家-代开发必选，其他根据情况选择
+                <br>&nbsp;&nbsp;&nbsp;&nbsp;3、开通流程具体请查看<a href="https://partner.open-douyin.com/docs/resource/zh-CN/thirdparty/guide/livingservice/livingservice" target="_blank">应用文档操作手册</a>
+                <br>门店关联：开通完成后，请到系统-门店管理-添加|编辑-抖音来客门店ID中填写</a>
+              </div>
+            </div>
+
+            <!-- <div class="layui-form-item">
+              <label class="layui-form-label" >抖音门店ID：</label>
+              <div class="layui-input-inline">
+                <input type="text" name="info[poi_id]" lay-verify="required" lay-verType="tips" value="{$info['poi_id']}" class="layui-input"/>
+              </div>
+              <div class="layui-form-mid layui-word-aux">登录<a href="https://life.douyin.com/p/login" target="_blank">抖音来客</a>在店铺管理-门店管理查找</div>
+            </div> -->
+            <div class="layui-form-item">
+              <label class="layui-form-label">配送方式：</label>
+              <div class="layui-input-inline">
+                <input type="radio" name="info[pstype]" value="1" {if $info['pstype']==1}checked{/if} title="核销完成"/>
+                <input type="radio" name="info[pstype]" value="0" {if $info['pstype']==0}checked{/if} title="默认"/>
+              </div>
+              <div class="layui-form-mid layui-word-aux" style="margin-left:10px;">默认则根据商品配送模板，按系统配送方式完成(仅支持到店自动和同城配送方式)；自动完成则支付完成，核销成功后直接完成订单</div>
+            </div>
+            <div class="layui-form-item">
+              <label class="layui-form-label">抖音状态：</label>
+              <div class="layui-input-inline">
+                <input type="radio" name="info[status]" value="1" {if $info['status']==1}checked{/if} title="开启"/>
+                <input type="radio" name="info[status]" value="0" {if $info['status']==0}checked{/if} title="关闭"/>
+              </div>
+              <div class="layui-form-mid layui-word-aux" style="margin-left:10px;"></div>
+            </div>
+            <div class="layui-form-item">
+              <label class="layui-form-label"></label>
+              <div class="layui-input-block">
+                <button class="layui-btn" lay-submit lay-filter="formsubmit">提 交</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {include file="public/js"/}
+  <script>
+  layui.form.on('submit(formsubmit)', function(obj){
+    var field = obj.field
+    $.post("{:url('save')}",field,function(data){
+      dialog(data.msg,data.status,data.url);
+    })
+  })
+  </script>
+  {include file="public/copyright"/}
+</body>
+</html>

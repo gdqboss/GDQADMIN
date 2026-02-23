@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>批量生成二维码</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+  <style>
+    .qrcode-list {
+      display: flex;
+      flex-wrap: wrap;
+      margin-top: 20px;
+    }
+    .qrcode-item {
+      width: 200px;
+      margin: 10px;
+      padding: 15px;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      text-align: center;
+    }
+    .qrcode-item img {
+      max-width: 150px;
+      max-height: 150px;
+    }
+    .qrcode-code {
+      margin-top: 10px;
+      font-size: 12px;
+      word-break: break-all;
+    }
+    .qrcode-actions {
+      margin-top: 10px;
+    }
+    .qrcode-actions a {
+      margin: 0 5px;
+    }
+    .result-section {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+    }
+  </style>
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12">
+        <div class="layui-card-header">
+          批量生成二维码
+          <a href="{:url('ProductQrcode/index')}" class="layui-btn layui-btn-sm layui-btn-primary" style="float: right;">返回列表</a>
+        </div>
+        <div class="layui-card-body" pad15>
+          <form class="layui-form form-label-w8" lay-filter="batchForm">
+            <div class="layui-form-item">
+              <label class="layui-form-label">商品</label>
+              <div class="layui-input-inline" style="width: 300px;">
+                <select name="product_id" lay-verify="required" lay-filter="productSelect">
+                  <option value="">请选择商品</option>
+                  {volist name="products" id="product"}
+                  <option value="{$product.id}">{$product.name}</option>
+                  {/volist}
+                </select>
+              </div>
+            </div>
+            
+            <div class="layui-form-item">
+              <label class="layui-form-label">商品类型</label>
+              <div class="layui-input-inline">
+                <select name="product_type">
+                  <option value="1">普通商品</option>
+                  <option value="2">拼团商品</option>
+                </select>
+              </div>
+            </div>
+            
+            <div class="layui-form-item">
+              <label class="layui-form-label">规格</label>
+              <div class="layui-input-inline" style="width: 300px;">
+                <select name="specs_id" id="specsSelect">
+                  <option value="">请选择规格</option>
+                </select>
+              </div>
+            </div>
+            
+            <div class="layui-form-item">
+              <label class="layui-form-label">生成数量</label>
+              <div class="layui-input-inline" style="width: 150px;">
+                <input type="number" name="count" lay-verify="required|number|min:1|max:1000" placeholder="1-1000" class="layui-input" value="10">
+              </div>
+              <div class="layui-form-mid layui-word-aux">请输入1-1000之间的数字</div>
+            </div>
+            
+            <div class="layui-form-item">
+              <div class="layui-input-block" style="margin-left: 110px;">
+                <button class="layui-btn" lay-submit lay-filter="batchGenerate">批量生成</button>
+                <button type="reset" class="layui-btn layui-btn-primary">重置</button>
+              </div>
+            </div>
+          </form>
+          
+          <!-- 生成结果区域 -->
+          <div id="resultSection" class="result-section" style="display: none;">
+            <h3>生成结果</h3>
+            <div class="layui-btn-group" style="margin-bottom: 15px;">
+              <button id="batchDownloadBtn" class="layui-btn layui-btn-sm">批量下载</button>
+              <button id="viewAllBtn" class="layui-btn layui-btn-sm layui-btn-normal">查看全部</button>
+            </div>
+            <div id="qrcodeList" class="qrcode-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {include file="public/js"/}
+  <script>
+    layui.use(['form', 'layer', 'jquery'], function() {
+      var form = layui.form;
+      var layer = layui.layer;
+      var $ = layui.jquery;
+      
+      // 商品选择事件
+      form.on('select(productSelect)', function(data) {
+        var productId = data.value;
+        if (productId) {
+          // TODO: 根据商品ID获取规格列表
+          console.log('获取商品规格:', productId);
+        } else {
+          $('#specsSelect').html('<option value="">请选择规格</option>');
+          form.render('select');
+        }
+      });
+      
+      // 批量生成表单提交
+      form.on('submit(batchGenerate)', function(data) {
+        layer.load(2);
+        
+        // 发送AJAX请求批量生成二维码
+        $.ajax({
+          url: '{:url("ApiQrcode/batchGenerate")}',
+          type: 'POST',
+          data: data.field,
+          dataType: 'JSON',
+          success: function(res) {
+            layer.closeAll('loading');
+            if (res.status == 1) {
+              layer.msg('二维码批量生成成功', {icon: 1});
+              
+              // 显示生成结果
+              $('#resultSection').show();
+              
+              // 渲染二维码列表
+              var html = '';
+              $.each(res.qrcodes, function(index, qrcode) {
+                html += '<div class="qrcode-item">';
+                html += '<img src="' + qrcode.qrcode_url + '" alt="二维码">';
+                html += '<div class="qrcode-code">' + qrcode.code + '</div>';
+                html += '<div class="qrcode-actions">';
+                html += '<a href="' + qrcode.qrcode_url + '" class="layui-btn layui-btn-xs" download>下载</a>';
+                html += '<a href="{:url("ProductQrcode/detail")}?id=' + qrcode.id + '" class="layui-btn layui-btn-xs layui-btn-normal">详情</a>';
+                html += '</div>';
+                html += '</div>';
+              });
+              $('#qrcodeList').html(html);
+            } else {
+              layer.msg('二维码批量生成失败：' + res.msg, {icon: 2});
+            }
+          },
+          error: function() {
+            layer.closeAll('loading');
+            layer.msg('网络错误', {icon: 2});
+          }
+        });
+        
+        return false;
+      });
+      
+      // 批量下载按钮点击事件
+      $('#batchDownloadBtn').click(function() {
+        layer.msg('批量下载功能开发中', {icon: 6});
+      });
+      
+      // 查看全部按钮点击事件
+      $('#viewAllBtn').click(function() {
+        window.location.href = '{:url("ProductQrcode/index")}';
+      });
+    });
+  </script>
+</body>
+</html>

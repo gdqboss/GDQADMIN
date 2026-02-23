@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>{$cfg['title']} - {$title}</title>
+    {include file="public/css"/}
+</head>
+<body>
+    <div class="layui-fluid">
+        <div class="layui-row layui-col-space15">
+            <div class="layui-card layui-col-md12">
+                <div class="layui-card-header">
+                    <i class="fa fa-list"></i> {$title}
+                    <div class="layui-card-header-tool">
+                        <a href="{:url('BarcodeInventory/create_check')}" class="layui-btn layui-btn-primary layui-btn-sm">
+                            <i class="fa fa-plus"></i> {:t('创建盘点任务')}
+                        </a>
+                    </div>
+                </div>
+                <div class="layui-card-body" pad15>
+                    <!-- 搜索区域 -->
+                    <div class="layui-form" style="margin-bottom: 15px;">
+                        <div class="layui-form-item">
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('盘点名称')}：</label>
+                                <div class="layui-input-inline" style="width: 200px;">
+                                    <input type="text" name="check_name" id="check_name" placeholder="{:t('请输入盘点名称')}" class="layui-input">
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('状态')}：</label>
+                                <div class="layui-input-inline" style="width: 120px;">
+                                    <select name="status" id="status" class="layui-select">
+                                        <option value="-1">{:t('全部')}</option>
+                                        <option value="0">{:t('未完成')}</option>
+                                        <option value="1">{:t('已完成')}</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <button class="layui-btn layui-btn-primary" id="searchBtn">
+                                    <i class="fa fa-search"></i> {:t('搜索')}
+                                </button>
+                                <button class="layui-btn layui-btn-primary" id="resetBtn">
+                                    <i class="fa fa-refresh"></i> {:t('重置')}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 盘点记录列表 -->
+                    <table class="layui-hide" id="checkTable" lay-filter="checkTable"></table>
+                    
+                    <!-- 工具栏 -->
+                    <script type="text/html" id="checkToolbar">
+                        <div class="layui-btn-container">
+                            <a href="{:url('BarcodeInventory/create_check')}" class="layui-btn layui-btn-primary layui-btn-sm">
+                                <i class="fa fa-plus"></i> {:t('创建盘点任务')}
+                            </a>
+                        </div>
+                    </script>
+                    
+                    <!-- 操作列 -->
+                    <script type="text/html" id="checkBar">
+                        {{#  if(d.status == 0){ }}
+                            <a class="layui-btn layui-btn-xs" lay-event="edit">{:t('执行盘点')}</a>
+                        {{#  } else { }}
+                            <a class="layui-btn layui-btn-xs layui-btn-normal" lay-event="analysis">{:t('查看分析')}</a>
+                        {{#  } }}
+                        <a class="layui-btn layui-btn-xs layui-btn-warm" lay-event="detail">{:t('查看详情')}</a>
+                    </script>
+                    
+                    <!-- 状态列 -->
+                    <script type="text/html" id="statusTpl">
+                        {{#  if(d.status == 1){ }}
+                            <span class="layui-badge layui-bg-green">{:t('已完成')}</span>
+                        {{#  } else { }}
+                            <span class="layui-badge layui-bg-orange">{:t('未完成')}</span>
+                        {{#  } }}
+                    </script>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部脚本 -->
+    {include file="public/js"/}
+    
+    <script>
+        layui.use(['table', 'form', 'layer'], function() {
+            var table = layui.table;
+            var form = layui.form;
+            var layer = layui.layer;
+            
+            // 渲染表单
+            form.render();
+            
+            // 渲染表格
+            var tableIns = table.render({
+                elem: '#checkTable',
+                url: '{:url("BarcodeInventory/check")}',
+                toolbar: '#checkToolbar',
+                page: true,
+                limit: 10,
+                limits: [10, 20, 30, 50],
+                cols: [[
+                    {field: 'id', title: 'ID', width: 80, sort: true},
+                    {field: 'check_sn', title: '{:t('盘点单号')}', width: 200},
+                    {field: 'check_name', title: '{:t('盘点名称')}', minWidth: 150},
+                    {field: 'check_time', title: '{:t('盘点时间')}', width: 180},
+                    {field: 'check_user', title: '{:t('盘点人')}', width: 100},
+                    {field: 'total_products', title: '{:t('盘点商品数')}', width: 120, sort: true},
+                    {field: 'total_diff', title: '{:t('差异总数')}', width: 120, sort: true},
+                    {field: 'total_diff_amount', title: '{:t('差异金额')}', width: 120, sort: true, templet: function(d) {
+                        return d.total_diff_amount.toFixed(2);
+                    }},
+                    {field: 'status', title: '{:t('状态')}', width: 100, templet: '#statusTpl'},
+                    {field: 'remark', title: '{:t('备注')}', minWidth: 150},
+                    {field: 'createtime', title: '{:t('创建时间')}', width: 180},
+                    {title: '{:t('操作')}', width: 180, align: 'center', toolbar: '#checkBar'}
+                ]]
+            });
+            
+            // 搜索
+            $('#searchBtn').click(function() {
+                var check_name = $('#check_name').val();
+                var status = $('#status').val();
+                
+                tableIns.reload({
+                    where: {
+                        check_name: check_name,
+                        status: status
+                    },
+                    page: {
+                        curr: 1
+                    }
+                });
+            });
+            
+            // 重置
+            $('#resetBtn').click(function() {
+                $('#check_name').val('');
+                $('#status').val('-1');
+                form.render('select');
+                tableIns.reload({
+                    where: {
+                        check_name: '',
+                        status: -1
+                    },
+                    page: {
+                        curr: 1
+                    }
+                });
+            });
+            
+            // 监听表格操作
+            table.on('tool(checkTable)', function(obj) {
+                var data = obj.data;
+                var layEvent = obj.event;
+                
+                if (layEvent === 'edit') {
+                    // 执行盘点
+                    window.location.href = '{:url('BarcodeInventory/check_detail')}?id=' + data.id;
+                } else if (layEvent === 'analysis') {
+                    // 查看分析
+                    window.location.href = '{:url('BarcodeInventory/check_analysis')}?id=' + data.id;
+                } else if (layEvent === 'detail') {
+                    // 查看详情
+                    window.location.href = '{:url('BarcodeInventory/check_detail')}?id=' + data.id;
+                }
+            });
+        });
+    </script>
+</body>
+</html>

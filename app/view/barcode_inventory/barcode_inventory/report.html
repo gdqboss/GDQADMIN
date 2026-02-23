@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>{$cfg['title']} - {$title}</title>
+    {include file="public/css"/}
+    <style>
+        .report-stats {
+            margin-bottom: 20px;
+        }
+        .report-stats .layui-col-md3 {
+            padding: 15px;
+        }
+        .stat-card {
+            background-color: #f5f7fa;
+            border-radius: 4px;
+            padding: 20px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+        }
+        .chart-container {
+            height: 400px;
+            margin: 20px 0;
+        }
+        .layui-tab-content {
+            padding: 20px 0;
+        }
+        .report-toolbar {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="layui-fluid">
+        <div class="layui-row layui-col-space15">
+            <div class="layui-card layui-col-md12">
+                <div class="layui-card-header">
+                    <i class="fa fa-bar-chart"></i> {$title}
+                    <div class="layui-card-header-tool">
+                        <button class="layui-btn layui-btn-sm layui-btn-primary" id="exportBtn">
+                            <i class="fa fa-download"></i> {:t('导出报表')}
+                        </button>
+                    </div>
+                </div>
+                <div class="layui-card-body" pad15>
+                    <!-- 报表工具栏 -->
+                    <div class="report-toolbar layui-form">
+                        <div class="layui-form-item">
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('报表类型')}：</label>
+                                <div class="layui-input-inline" style="width: 150px;">
+                                    <select name="reportType" id="reportType" lay-filter="reportType" class="layui-select">
+                                        <option value="summary">{:t('库存汇总')}</option>
+                                        <option value="inventory">{:t('库存明细')}</option>
+                                        <option value="movement">{:t('库存变动')}</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('开始日期')}：</label>
+                                <div class="layui-input-inline">
+                                    <input type="date" name="startDate" id="startDate" class="layui-input">
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('结束日期')}：</label>
+                                <div class="layui-input-inline">
+                                    <input type="date" name="endDate" id="endDate" class="layui-input">
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <button class="layui-btn layui-btn-primary" id="searchBtn">
+                                    <i class="fa fa-search"></i> {:t('查询')}
+                                </button>
+                                <button class="layui-btn layui-btn-primary" id="resetBtn">
+                                    <i class="fa fa-refresh"></i> {:t('重置')}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 库存汇总统计 -->
+                    <div id="summaryStats" class="report-stats layui-row">
+                        <!-- 统计数据将通过JS动态生成 -->
+                    </div>
+                    
+                    <!-- 图表区域 -->
+                    <div id="chartContainer" class="chart-container"></div>
+                    
+                    <!-- 数据表格 -->
+                    <table class="layui-hide" id="reportTable" lay-filter="reportTable"></table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部脚本 -->
+    {include file="public/js"/}
+    
+    <!-- ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    
+    <script>
+        layui.use(['form', 'table', 'layer', 'laydate'], function() {
+            var form = layui.form;
+            var table = layui.table;
+            var layer = layui.layer;
+            var laydate = layui.laydate;
+            
+            // 渲染表单
+            form.render();
+            
+            // 初始化ECharts实例
+            var myChart = echarts.init(document.getElementById('chartContainer'));
+            
+            // 当前报表类型
+            var currentReportType = 'summary';
+            
+            // 渲染表格
+            var tableIns = table.render({
+                elem: '#reportTable',
+                url: '{:url("BarcodeInventory/report")}',
+                method: 'POST',
+                where: {
+                    type: currentReportType
+                },
+                page: true,
+                limit: 15,
+                limits: [15, 30, 50, 100],
+                cols: [[
+                    // 默认显示汇总表格，根据报表类型动态切换
+                    {field: 'product_name', title: '{:t('商品名称')}', minWidth: 200},
+                    {field: 'guige_name', title: '{:t('规格')}', minWidth: 150},
+                    {field: 'stock', title: '{:t('库存数量')}', width: 120, sort: true},
+                    {field: 'price', title: '{:t('单价')}', width: 100, templet: function(d) { return d.price.toFixed(2); }},
+                    {field: 'total_amount', title: '{:t('库存金额')}', width: 120, templet: function(d) { return (d.stock * d.price).toFixed(2); }, sort: true},
+                    {field: 'warn_stock', title: '{:t('预警库存')}', width: 120}
+                ]],
+                done: function(res, curr, count) {
+                    // 根据当前报表类型动态调整表格列
+                    if (currentReportType === 'movement') {
+                        tableIns.reload({
+                            cols: [[
+                                {field: 'product_name', title: '{:t('商品名称')}', minWidth: 200},
+                                {field: 'guige_name', title: '{:t('规格')}', minWidth: 150},
+                                {field: 'type', title: '{:t('类型')}', width: 100, templet: function(d) { return d.type == 1 ? '{:t('入库')}' : '{:t('出库')}'; }},
+                                {field: 'num', title: '{:t('数量')}', width: 100},
+                                {field: 'price', title: '{:t('单价')}', width: 100, templet: function(d) { return d.price.toFixed(2); }},
+                                {field: 'createtime', title: '{:t('时间')}', width: 180, templet: function(d) { return new Date(d.createtime * 1000).toLocaleString(); }},
+                                {field: 'remark', title: '{:t('备注')}', minWidth: 150}
+                            ]]
+                        });
+                    }
+                }
+            });
+            
+            // 初始化汇总数据
+            loadSummaryData();
+            
+            // 加载库存汇总数据
+            function loadSummaryData() {
+                $.ajax({
+                    url: '{:url("BarcodeInventory/report")}',
+                    type: 'POST',
+                    data: {
+                        type: 'summary'
+                    },
+                    dataType: 'json',
+                    success: function(res) {
+                        if (res.status == 1) {
+                            renderSummaryStats(res.data);
+                            renderInventoryChart(res.data);
+                        } else {
+                            layer.msg(res.msg, {icon: 2});
+                        }
+                    }
+                });
+            }
+            
+            // 渲染库存汇总统计
+            function renderSummaryStats(data) {
+                var html = '';
+                html += '<div class="layui-col-md3">';
+                html += '<div class="stat-card">';
+                html += '<div class="stat-value">' + data.total_products + '</div>';
+                html += '<div class="stat-label">{:t('总商品数')}</div>';
+                html += '</div>';
+                html += '</div>';
+                
+                html += '<div class="layui-col-md3">';
+                html += '<div class="stat-card">';
+                html += '<div class="stat-value">' + data.total_guiges + '</div>';
+                html += '<div class="stat-label">{:t('总规格数')}</div>';
+                html += '</div>';
+                html += '</div>';
+                
+                html += '<div class="layui-col-md3">';
+                html += '<div class="stat-card">';
+                html += '<div class="stat-value">' + data.total_stock + '</div>';
+                html += '<div class="stat-label">{:t('总库存数量')}</div>';
+                html += '</div>';
+                html += '</div>';
+                
+                html += '<div class="layui-col-md3">';
+                html += '<div class="stat-card">';
+                html += '<div class="stat-value">¥' + data.total_amount + '</div>';
+                html += '<div class="stat-label">{:t('总库存金额')}</div>';
+                html += '</div>';
+                html += '</div>';
+                
+                html += '<div class="layui-col-md3">';
+                html += '<div class="stat-card">';
+                html += '<div class="stat-value" style="color: #f5222d;">' + data.warning_stock + '</div>';
+                html += '<div class="stat-label">{:t('库存预警数')}</div>';
+                html += '</div>';
+                html += '</div>';
+                
+                $('#summaryStats').html(html);
+            }
+            
+            // 渲染库存图表
+            function renderInventoryChart(data) {
+                var option = {
+                    title: {
+                        text: '{:t('库存概况')}',
+                        left: 'center'
+                    },
+                    tooltip: {
+                        trigger: 'item',
+                        formatter: '{b}: {c} ({d}%)'
+                    },
+                    legend: {
+                        orient: 'vertical',
+                        left: 'left',
+                        data: ['{:t('正常库存')}', '{:t('库存预警')}']
+                    },
+                    series: [
+                        {
+                            name: '{:t('库存状态')}',
+                            type: 'pie',
+                            radius: '50%',
+                            data: [
+                                {
+                                    value: data.total_guiges - data.warning_stock,
+                                    name: '{:t('正常库存')}',
+                                    itemStyle: { color: '#52c41a' }
+                                },
+                                {
+                                    value: data.warning_stock,
+                                    name: '{:t('库存预警')}',
+                                    itemStyle: { color: '#f5222d' }
+                                }
+                            ],
+                            emphasis: {
+                                itemStyle: {
+                                    shadowBlur: 10,
+                                    shadowOffsetX: 0,
+                                    shadowColor: 'rgba(0, 0, 0, 0.5)'
+                                }
+                            }
+                        }
+                    ]
+                };
+                
+                myChart.setOption(option);
+            }
+            
+            // 监听报表类型切换
+            form.on('select(reportType)', function(data) {
+                currentReportType = data.value;
+                
+                if (currentReportType === 'summary') {
+                    // 显示汇总统计和图表
+                    $('#summaryStats').show();
+                    $('#chartContainer').show();
+                    loadSummaryData();
+                } else {
+                    // 隐藏汇总统计和图表
+                    $('#summaryStats').hide();
+                    $('#chartContainer').hide();
+                }
+                
+                // 重新加载表格数据
+                tableIns.reload({
+                    where: {
+                        type: currentReportType,
+                        start_date: $('#startDate').val(),
+                        end_date: $('#endDate').val()
+                    },
+                    page: {
+                        curr: 1
+                    }
+                });
+            });
+            
+            // 搜索
+            $('#searchBtn').click(function() {
+                var startDate = $('#startDate').val();
+                var endDate = $('#endDate').val();
+                
+                if (currentReportType === 'summary') {
+                    // 汇总报表不需要日期
+                    loadSummaryData();
+                } else {
+                    // 重新加载表格数据
+                    tableIns.reload({
+                        where: {
+                            type: currentReportType,
+                            start_date: startDate,
+                            end_date: endDate
+                        },
+                        page: {
+                            curr: 1
+                        }
+                    });
+                }
+            });
+            
+            // 重置
+            $('#resetBtn').click(function() {
+                $('#startDate').val('');
+                $('#endDate').val('');
+                $('#reportType').val('summary');
+                form.render('select');
+                
+                currentReportType = 'summary';
+                $('#summaryStats').show();
+                $('#chartContainer').show();
+                
+                // 重新加载汇总数据和表格
+                loadSummaryData();
+                tableIns.reload({
+                    where: {
+                        type: currentReportType,
+                        start_date: '',
+                        end_date: ''
+                    },
+                    page: {
+                        curr: 1
+                    }
+                });
+            });
+            
+            // 导出报表
+            $('#exportBtn').click(function() {
+                var startDate = $('#startDate').val();
+                var endDate = $('#endDate').val();
+                
+                layer.confirm('{:t('确定要导出当前报表吗？')}', {
+                    btn: ['{:t('确定')}', '{:t('取消')}']
+                }, function() {
+                    // 这里可以添加导出逻辑
+                    layer.msg('{:t('导出功能开发中...')}', {icon: 1});
+                });
+            });
+            
+            // 监听窗口大小变化，调整图表大小
+            window.addEventListener('resize', function() {
+                myChart.resize();
+            });
+        });
+    </script>
+</body>
+</html>

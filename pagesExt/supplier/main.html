@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>供应商发货管理系统</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-ui@2.15.7/lib/theme-chalk/index.css">
+    <script src="https://cdn.jsdelivr.net/npm/element-ui@2.15.7/lib/index.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f7fa;
+            color: #303133;
+        }
+        
+        .login-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .login-form {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+        }
+        
+        .login-form h2 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #667eea;
+        }
+        
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        .sidebar {
+            width: 250px;
+            background-color: #304156;
+            color: white;
+            height: 100vh;
+            position: fixed;
+            overflow-y: auto;
+            transition: width 0.3s;
+        }
+        
+        .sidebar.collapsed {
+            width: 64px;
+        }
+        
+        .sidebar-logo {
+            padding: 20px;
+            text-align: center;
+            border-bottom: 1px solid #475669;
+        }
+        
+        .sidebar-logo h1 {
+            font-size: 18px;
+            margin: 0;
+        }
+        
+        .sidebar-logo.collapsed h1 {
+            display: none;
+        }
+        
+        .menu-item {
+            padding: 15px 20px;
+            cursor: pointer;
+            border-bottom: 1px solid #475669;
+            transition: all 0.3s;
+        }
+        
+        .menu-item:hover {
+            background-color: #409EFF;
+        }
+        
+        .menu-item.active {
+            background-color: #409EFF;
+        }
+        
+        .menu-item.collapsed {
+            padding: 15px 0;
+            text-align: center;
+        }
+        
+        .main-content {
+            flex: 1;
+            margin-left: 250px;
+            padding: 20px;
+            transition: margin-left 0.3s;
+        }
+        
+        .main-content.collapsed {
+            margin-left: 64px;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        
+        .header h2 {
+            margin: 0;
+            font-size: 20px;
+        }
+        
+        .header-actions {
+            display: flex;
+            align-items: center;
+        }
+        
+        .toggle-btn {
+            margin-right: 20px;
+            cursor: pointer;
+        }
+        
+        .logout-btn {
+            cursor: pointer;
+            color: #f56c6c;
+        }
+        
+        .content-wrapper {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 64px;
+            }
+            
+            .sidebar.collapsed {
+                width: 0;
+                overflow: hidden;
+            }
+            
+            .main-content {
+                margin-left: 64px;
+            }
+            
+            .main-content.collapsed {
+                margin-left: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- 登录页面 -->
+        <div v-if="!isLoggedIn" class="login-container">
+            <div class="login-form">
+                <h2>供应商发货管理系统</h2>
+                <el-form ref="loginForm" :model="loginForm" :rules="loginRules" label-width="80px">
+                    <el-form-item label="账号" prop="username">
+                        <el-input v-model="loginForm.username" placeholder="请输入账号"></el-input>
+                    </el-form-item>
+                    <el-form-item label="密码" prop="password">
+                        <el-input type="password" v-model="loginForm.password" placeholder="请输入密码"></el-input>
+                    </el-form-item>
+                    <el-form-item>
+                        <el-button type="primary" @click="handleLogin" style="width: 100%;">登录</el-button>
+                    </el-form-item>
+                </el-form>
+            </div>
+        </div>
+        
+        <!-- 主应用页面 -->
+        <div v-else class="app-container">
+            <!-- 侧边栏 -->
+            <div class="sidebar" :class="{ 'collapsed': sidebarCollapsed }">
+                <div class="sidebar-logo" :class="{ 'collapsed': sidebarCollapsed }">
+                    <h1>供应商管理</h1>
+                </div>
+                <div class="menu-item" :class="{ 'active': currentPage === 'orderList', 'collapsed': sidebarCollapsed }" @click="navigateTo('orderList')">
+                    <i class="el-icon-s-order"></i>
+                    <span v-if="!sidebarCollapsed">订单管理</span>
+                </div>
+                <div class="menu-item" :class="{ 'active': currentPage === 'stats', 'collapsed': sidebarCollapsed }" @click="navigateTo('stats')">
+                    <i class="el-icon-data-line"></i>
+                    <span v-if="!sidebarCollapsed">数据统计</span>
+                </div>
+                <div class="menu-item" :class="{ 'active': currentPage === 'profile', 'collapsed': sidebarCollapsed }" @click="navigateTo('profile')">
+                    <i class="el-icon-user"></i>
+                    <span v-if="!sidebarCollapsed">个人中心</span>
+                </div>
+            </div>
+            
+            <!-- 主内容区 -->
+            <div class="main-content" :class="{ 'collapsed': sidebarCollapsed }">
+                <div class="header">
+                    <h2>{{ pageTitle }}</h2>
+                    <div class="header-actions">
+                        <div class="toggle-btn" @click="toggleSidebar">
+                            <i class="el-icon-s-fold" v-if="!sidebarCollapsed"></i>
+                            <i class="el-icon-s-unfold" v-else></i>
+                        </div>
+                        <div class="logout-btn" @click="handleLogout">
+                            <i class="el-icon-switch-button"></i>
+                            <span>退出登录</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 页面内容 -->
+                <div class="content-wrapper">
+                    <!-- 使用iframe加载不同页面 -->
+                    <iframe :src="currentPageUrl" frameborder="0" width="100%" height="calc(100vh - 140px)"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                isLoggedIn: false,
+                loginForm: {
+                    username: '',
+                    password: ''
+                },
+                loginRules: {
+                    username: [
+                        { required: true, message: '请输入账号', trigger: 'blur' }
+                    ],
+                    password: [
+                        { required: true, message: '请输入密码', trigger: 'blur' }
+                    ]
+                },
+                sidebarCollapsed: false,
+                currentPage: 'orderList',
+                pageTitle: '订单管理',
+                supplierInfo: null
+            },
+            mounted() {
+                // 检查登录状态
+                this.checkLoginStatus();
+            },
+            computed: {
+                currentPageUrl() {
+                    return `${this.currentPage}.html`;
+                }
+            },
+            methods: {
+                // 检查登录状态
+                checkLoginStatus() {
+                    const token = localStorage.getItem('supplier_token');
+                    const supplierInfo = localStorage.getItem('supplier_info');
+                    
+                    if (token && supplierInfo) {
+                        this.isLoggedIn = true;
+                        this.supplierInfo = JSON.parse(supplierInfo);
+                        // 初始化页面路由
+                        this.initRouter();
+                    }
+                },
+                
+                // 初始化路由
+                initRouter() {
+                    const path = window.location.pathname;
+                    const page = path.split('/').pop().split('.')[0];
+                    
+                    if (page && ['orderList', 'stats', 'profile'].includes(page)) {
+                        this.navigateTo(page);
+                    }
+                },
+                
+                // 处理登录
+                handleLogin() {
+                    this.$refs.loginForm.validate((valid) => {
+                        if (valid) {
+                            // 发送登录请求
+                            fetch('/api/supplier/login', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify(this.loginForm)
+                            })
+                            .then(response => response.json())
+                            .then(res => {
+                                if (res.status === 1) {
+                                    // 登录成功，保存token和用户信息
+                                    localStorage.setItem('supplier_token', res.data.token);
+                                    localStorage.setItem('supplier_info', JSON.stringify(res.data.user));
+                                    
+                                    this.isLoggedIn = true;
+                                    this.supplierInfo = res.data.user;
+                                    this.$message.success('登录成功');
+                                } else {
+                                    this.$message.error(res.msg || '登录失败');
+                                }
+                            })
+                            .catch(error => {
+                                console.error('登录失败:', error);
+                                this.$message.error('网络错误，请稍后重试');
+                            });
+                        }
+                    });
+                },
+                
+                // 处理退出登录
+                handleLogout() {
+                    this.$confirm('确定要退出登录吗？', '提示', {
+                        confirmButtonText: '确定',
+                        cancelButtonText: '取消',
+                        type: 'warning'
+                    }).then(() => {
+                        // 清除登录信息
+                        localStorage.removeItem('supplier_token');
+                        localStorage.removeItem('supplier_info');
+                        this.isLoggedIn = false;
+                        this.supplierInfo = null;
+                        this.$message.success('已退出登录');
+                    }).catch(() => {
+                        // 取消退出
+                    });
+                },
+                
+                // 切换侧边栏
+                toggleSidebar() {
+                    this.sidebarCollapsed = !this.sidebarCollapsed;
+                },
+                
+                // 导航到指定页面
+                navigateTo(page) {
+                    this.currentPage = page;
+                    
+                    // 更新页面标题
+                    switch (page) {
+                        case 'orderList':
+                            this.pageTitle = '订单管理';
+                            break;
+                        case 'stats':
+                            this.pageTitle = '数据统计';
+                            break;
+                        case 'profile':
+                            this.pageTitle = '个人中心';
+                            break;
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,1432 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>海鲜社工作台</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body { margin: 0; padding: 0; min-height: 100vh; }
+        body { 
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%); 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+        }
+        
+        /* 登录页 */
+        .login-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+        }
+        
+        .login-card {
+            background: rgba(255,255,255,0.98);
+            border-radius: 24px;
+            padding: 40px 30px;
+            width: 100%;
+            max-width: 360px;
+            box-shadow: 0 25px 80px rgba(0,0,0,0.4);
+        }
+        
+        .login-logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .login-logo .icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            margin-bottom: 15px;
+            box-shadow: 0 10px 30px rgba(102,126,234,0.4);
+        }
+        
+        .login-logo h2 {
+            color: #1a1a2e;
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+        
+        .login-logo p {
+            color: #666;
+            font-size: 14px;
+            margin: 0;
+        }
+        
+        .login-form input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #eee;
+            border-radius: 12px;
+            font-size: 15px;
+            margin-bottom: 15px;
+            transition: all 0.3s;
+        }
+        
+        .login-form input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 4px rgba(102,126,234,0.1);
+        }
+        
+        .login-form button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 10px 30px rgba(102,126,234,0.4);
+        }
+        
+        .login-form button:active {
+            transform: scale(0.98);
+        }
+        
+        .dingtalk-btn {
+            width: 100%;
+            padding: 12px;
+            background: #07C160;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            margin-top: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+        
+        .login-footer {
+            text-align: center;
+            margin-top: 25px;
+            font-size: 12px;
+            color: #999;
+        }
+        
+        /* 首页 */
+        .home-container {
+            min-height: 100vh;
+            background: #f5f6fa;
+        }
+        
+        .home-header {
+            background: linear-gradient(135deg, #0f0c29, #302b63);
+            padding: 20px;
+            color: white;
+        }
+        
+        .user-card {
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .user-avatar {
+            width: 56px;
+            height: 56px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+        }
+        
+        .user-info h5 {
+            margin: 0;
+            font-size: 18px;
+        }
+        
+        .user-info p {
+            margin: 4px 0 0;
+            font-size: 13px;
+            opacity: 0.8;
+        }
+        
+        .logout-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            margin-top: 15px;
+        }
+        
+        /* 功能卡片 */
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            padding: 15px;
+        }
+        
+        .menu-card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            transition: all 0.3s;
+            text-decoration: none;
+            display: block;
+        }
+        
+        .menu-card:active {
+            transform: scale(0.98);
+        }
+        
+        .menu-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .menu-card h6 {
+            margin: 0;
+            font-size: 14px;
+            color: #333;
+        }
+        
+        .menu-card p {
+            margin: 4px 0 0;
+            font-size: 11px;
+            color: #999;
+        }
+        
+        .lang-dropdown {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            z-index: 100;
+        }
+        
+        .lang-dropdown select {
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: none;
+            background: rgba(255,255,255,0.9);
+            font-size: 13px;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        /* 弹窗 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal.show { display: flex; }
+        
+        .modal-content {
+            background: white;
+            border-radius: 20px;
+            padding: 25px;
+            width: 90%;
+            max-width: 360px;
+        }
+        
+        .modal h5 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        
+        .modal input, .modal select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+        
+        .modal-btns {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .modal-btns button {
+            flex: 1;
+            padding: 12px;
+            border-radius: 10px;
+            border: none;
+            font-size: 14px;
+        }
+        
+        .btn-cancel { background: #eee; color: #666; }
+        .btn-save { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+        
+        .error-msg {
+            background: #fee;
+            color: #c00;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 13px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- 登录页 -->
+    <div id="loginPage" class="login-container" style="display:none">
+        <div class="login-card">
+            <div class="login-logo">
+                <div class="icon">🦐</div>
+                <h2 id="titleText">海鲜社</h2>
+                <p id="subtitleText">企业工作台</p>
+            </div>
+            
+            <div id="loginError" class="error-msg"></div>
+            
+            <form class="login-form" id="loginForm">
+                <input type="text" id="loginUsername" placeholder="用户名">
+                <input type="password" id="loginPassword" placeholder="密码">
+                <button type="submit" id="loginBtn">登录</button>
+            </form>
+            
+            <button class="dingtalk-btn" onclick="dingtalkLogin()" id="dingtalkBtn">
+                <span>📱</span> 钉钉扫码登录
+            </button>
+            
+            <div class="login-footer" id="contactText">
+                如需开通账号，请联系管理员
+            </div>
+        </div>
+    </div>
+    
+    <!-- 首页 -->
+    <div id="homePage" style="display:none">
+        <div class="home-header">
+            <div class="lang-dropdown">
+                <select id="langSelect" onchange="changeLang(this.value)">
+                    <option value="zh">🇨🇳 中文</option>
+                    <option value="en">🇺🇸 EN</option>
+                    <option value="ja">🇯🇵 JP</option>
+                    <option value="ko">🇰🇷 KR</option>
+                    <option value="id">🇮🇩 ID</option>
+                    <option value="tl">🇵🇭 PH</option>
+                    <option value="vi">🇻🇳 VN</option>
+                </select>
+            </div>
+            
+            <div class="user-card">
+                <div class="user-avatar" id="userAvatar">👤</div>
+                <div class="user-info">
+                    <h5 id="userName">用户</h5>
+                    <p id="userDept">部门</p>
+                    <p id="userCompany">海鲜社</p>
+                </div>
+            </div>
+            
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:15px">
+                <button class="logout-btn" onclick="logout()">退出登录</button>
+                <button class="logout-btn" onclick="showProfile()" style="background:rgba(255,255,255,0.1)">👤 资料</button>
+            </div>
+        </div>
+        
+        <div class="menu-grid">
+            <a href="/commune/chat.html" class="menu-card">
+                <div class="menu-icon" style="background: linear-gradient(135deg, #e8f5e9, #c8e6c9);">💬</div>
+                <h6 id="menuChat1">聊天室</h6>
+                <p>团队沟通</p>
+            </a>
+            
+            <a href="/qrcode_stats.html" class="menu-card">
+                <div class="menu-icon" style="background: linear-gradient(135deg, #e3f2fd, #bbdefb);">🏷️</div>
+                <h6 id="menuQrcode1">一物一码</h6>
+                <p>追溯系统</p>
+            </a>
+            
+            <a href="/inventory_stats.html" class="menu-card">
+                <div class="menu-icon" style="background: linear-gradient(135deg, #fce4ec, #f8bbd9);">📦</div>
+                <h6 id="menuInventory1">进销存</h6>
+                <p>库存管理</p>
+            </a>
+            
+            <a href="/commune/admin.html" class="menu-card" id="adminLink" style="display:none">
+                <div class="menu-icon" style="background: linear-gradient(135deg, #f3e5f5, #e1bee7);">⚙️</div>
+                <h6 id="menuAdmin1">管理后台</h6>
+                <p>系统管理</p>
+            </a>
+        </div>
+        
+        <!-- 签到和日志 -->
+<!-- 签到和日志组件 -->
+<div style="padding:15px">
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+        <div onclick="togglePanel('checkin')" id="checkinTabBtn" style="flex:1;text-align:center;padding:10px;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:8px;color:white;cursor:pointer;font-size:12px">
+            <div style="font-size:18px" id="checkInIcon">📌</div>
+            <div id="checkInText">签到</div>
+        </div>
+        <div onclick="togglePanel('worklog')" id="worklogTabBtn" style="flex:1;text-align:center;padding:10px;background:linear-gradient(135deg,#4caf50,#2e7d32);border-radius:8px;color:white;cursor:pointer;font-size:12px">
+            <div style="font-size:18px">📝</div>
+            <div>日志</div>
+        </div>
+        <div onclick="togglePanel('stats')" id="statsTabBtn" style="flex:1;text-align:center;padding:10px;background:linear-gradient(135deg,#ff9800,#ff5722);border-radius:8px;color:white;cursor:pointer;font-size:12px">
+            <div style="font-size:18px">📊</div>
+            <div>统计</div>
+        </div>
+    </div>
+    
+    <!-- 签到面板 -->
+    <div id="checkinPanel" style="display:none;background:white;border-radius:10px;padding:15px;margin-bottom:10px">
+        <div id="checkinStatusArea" style="text-align:center;padding:15px;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:10px;color:white;margin-bottom:15px">
+            <div id="checkStatusIcon" style="font-size:36px">📌</div>
+            <div id="checkStatusText" style="font-weight:600;margin:8px 0">点击签到</div>
+            <div id="checkTimeText" style="font-size:12px;opacity:0.9"></div>
+        </div>
+        
+        <!-- 签到表单 -->
+        <div id="checkinForm">
+            <div style="text-align:center;padding:15px;background:#e8f5e9;border-radius:10px;margin-bottom:15px">
+                <button onclick="getLocation()" id="getLocationBtn" style="padding:10px 20px;background:#4caf50;color:white;border:none;border-radius:20px;font-size:13px;cursor:pointer">📍 获取当前位置</button>
+                <div id="locationStatus" style="font-size:12px;color:#666;margin-top:8px"></div>
+                <input type="hidden" id="checkLat">
+                <input type="hidden" id="checkLng">
+            </div>
+            <div style="text-align:center;padding:10px;background:#fff3e0;border-radius:8px;margin-bottom:15px;font-size:13px;color:#e65100">
+                📝 <span id="checkinNote">请完成签到</span>
+            </div>
+            <textarea id="checkRemark" placeholder="签到备注 (可选)" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;margin-bottom:10px;font-size:13px;height:50px;resize:none"></textarea>
+            <button onclick="submitCheckIn()" style="width:100%;padding:12px;background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;border-radius:8px;font-size:14px;cursor:pointer">确认签到</button>
+        </div>
+        
+        <div style="margin-top:15px;font-weight:600;font-size:13px;border-top:1px solid #eee;padding-top:10px">📅 签到记录</div>
+        <div id="checkInList" style="font-size:12px;color:#666;margin-top:8px;max-height:120px;overflow-y:auto"></div>
+    </div>
+    
+    <!-- 日志面板 -->
+    <div id="worklogPanel" style="display:none;background:white;border-radius:10px;padding:12px;margin-bottom:10px">
+        <div style="display:flex;gap:5px;margin-bottom:10px;overflow-x:auto" id="logTypeTabs">
+            <button onclick="selectLogType('daily')" class="log-type-btn active" data-type="daily" style="padding:5px 10px;border:1px solid #ddd;background:#4caf50;color:white;border-radius:15px;font-size:11px">日报</button>
+            <button onclick="selectLogType('weekly')" class="log-type-btn" data-type="weekly" style="padding:5px 10px;border:1px solid #ddd;background:white;border-radius:15px;font-size:11px">周报</button>
+            <button onclick="selectLogType('project')" class="log-type-btn" data-type="project" style="padding:5px 10px;border:1px solid #ddd;background:white;border-radius:15px;font-size:11px">项目</button>
+            <button onclick="selectLogType('meeting')" class="log-type-btn" data-type="meeting" style="padding:5px 10px;border:1px solid #ddd;background:white;border-radius:15px;font-size:11px">会议</button>
+        </div>
+        <button onclick="showAddLog()" style="width:100%;padding:10px;background:#4caf50;color:white;border:none;border-radius:8px;font-size:13px;cursor:pointer;margin-bottom:10px">➕ 写日志</button>
+        <div id="workLogList" style="max-height:150px;overflow-y:auto;font-size:12px"></div>
+    </div>
+    
+    <!-- 统计面板 -->
+    <div id="statsPanel" style="display:none;background:white;border-radius:10px;padding:15px;margin-bottom:10px">
+        <div style="font-weight:600;font-size:14px;margin-bottom:15px">📊 签到统计</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px">
+            <div style="text-align:center;padding:12px;background:#f8f9fa;border-radius:8px">
+                <div id="statToday" style="font-size:20px;font-weight:bold;color:#667eea">0</div>
+                <div style="font-size:11px;color:#666">今日</div>
+            </div>
+            <div style="text-align:center;padding:12px;background:#f8f9fa;border-radius:8px">
+                <div id="statWeek" style="font-size:20px;font-weight:bold;color:#4caf50">0</div>
+                <div style="font-size:11px;color:#666">本周</div>
+            </div>
+            <div style="text-align:center;padding:12px;background:#f8f9fa;border-radius:8px">
+                <div id="statMonth" style="font-size:20px;font-weight:bold;color:#ff9800">0</div>
+                <div style="font-size:11px;color:#666">本月</div>
+            </div>
+        </div>
+        <div style="font-weight:600;font-size:14px;margin-bottom:15px">📝 日志统计</div>
+        <div style="text-align:center;padding:15px;background:#f8f9fa;border-radius:8px">
+            <div id="logStatCount" style="font-size:24px;font-weight:bold;color:#4caf50">0</div>
+            <div style="font-size:11px;color:#666">今日日志</div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 全局变量
+var currentLogType = 'daily';
+var currentUser = {id: 1, name: '用户'};
+var currentCheckinLocation = '';
+
+// 初始化
+function initAttendance() {
+    // 获取用户信息
+    try {
+        var stored = localStorage.getItem('commune_user');
+        if (stored) {
+            var user = JSON.parse(stored);
+            currentUser = {id: user.id || 1, name: user.nickname || user.username || '用户'};
+        }
+    } catch(e) {}
+    
+    // 加载签到配置
+    loadCheckinConfig();
+    
+    // 检查今日签到状态
+    checkTodayStatus();
+}
+
+// 加载签到配置
+function loadCheckinConfig() {
+    fetch('/api/commune/attendance.php?action=get_config')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.code === 1) {
+            document.getElementById('checkinPlace').textContent = d.data.checkin_location || '未设置';
+            document.getElementById('checkinNote').textContent = d.data.checkin_remark || '请完成签到';
+            currentCheckinLocation = d.data.checkin_location || '';
+        }
+    });
+}
+
+// 切换面板
+function togglePanel(panel) {
+    // 更新tab样式
+    document.querySelectorAll('[id$="TabBtn"]').forEach(function(btn) {
+        btn.style.opacity = '0.7';
+    });
+    document.getElementById(panel + 'TabBtn').style.opacity = '1';
+    
+    // 显示/隐藏面板
+    document.getElementById('checkinPanel').style.display = panel === 'checkin' ? 'block' : 'none';
+    document.getElementById('worklogPanel').style.display = panel === 'worklog' ? 'block' : 'none';
+    document.getElementById('statsPanel').style.display = panel === 'stats' ? 'block' : 'none';
+    
+    // 加载数据
+    if (panel === 'checkin') loadCheckIn();
+    else if (panel === 'worklog') loadWorkLog();
+    else if (panel === 'stats') loadStats();
+}
+
+// 检查今日签到状态
+function checkTodayStatus() {
+    fetch('/api/commune/attendance.php?action=today_status&user_id=' + currentUser.id + '&user_name=' + encodeURIComponent(currentUser.name))
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.code === 1 && d.data.checked) {
+            document.getElementById('checkInIcon').textContent = '✅';
+            document.getElementById('checkInText').textContent = '已签到';
+        }
+    })
+    .catch(function(e) { console.error(e); });
+}
+
+// 加载签到数据
+function loadCheckIn() {
+    fetch('/api/commune/attendance.php?action=today_status&user_id=' + currentUser.id + '&user_name=' + encodeURIComponent(currentUser.name))
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.code === 1) {
+            if (d.data.checked) {
+                document.getElementById('checkStatusIcon').textContent = '✅';
+                document.getElementById('checkStatusText').textContent = '已签到';
+                document.getElementById('checkTimeText').textContent = d.data.time;
+                document.getElementById('checkinForm').style.display = 'none';
+            } else {
+                document.getElementById('checkStatusIcon').textContent = '📌';
+                document.getElementById('checkStatusText').textContent = '点击签到';
+                document.getElementById('checkTimeText').textContent = '';
+                document.getElementById('checkinForm').style.display = 'block';
+            }
+        }
+    });
+    
+    // 加载签到记录
+    fetch('/api/commune/attendance.php?action=attendance_list&user_id=' + currentUser.id + '&limit=10')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.code === 1) {
+            var html = '';
+            d.data.forEach(function(item) {
+                var loc = item.location ? ' 📍' + item.location : '';
+                var remark = item.remark ? ' - ' + item.remark : '';
+                html += '<div style="padding:6px 8px;background:#f8f9fa;border-radius:4px;margin-bottom:6px"><div style="font-weight:500">' + item.user_name + '</div><div style="font-size:10px;color:#666">' + item.check_date + ' ' + item.check_time + loc + remark + '</div></div>';
+            });
+            document.getElementById('checkInList').innerHTML = html || '<div style="color:#999;text-align:center;padding:10px">暂无记录</div>';
+        }
+    });
+}
+
+// 获取位置 - 优化版
+function getLocation() {
+    var btn = document.getElementById('getLocationBtn');
+    var status = document.getElementById('locationStatus');
+    
+    if (!navigator.geolocation) {
+        status.innerHTML = '❌ 不支持定位';
+        return;
+    }
+    
+    status.innerHTML = '🔄 定位中...';
+    btn.disabled = true;
+    
+    // 优先使用缓存位置（更快）
+    var cachedPos = localStorage.getItem('cached_location');
+    if (cachedPos) {
+        var cached = JSON.parse(cachedPos);
+        // 缓存小于5分钟直接使用
+        if (Date.now() - cached.time < 300000) {
+            document.getElementById('checkLat').value = cached.lat;
+            document.getElementById('checkLng').value = cached.lng;
+            status.innerHTML = '📍 ' + cached.lat.toFixed(4) + ', ' + cached.lng.toFixed(4);
+            btn.innerHTML = '✅ 已定位';
+            btn.style.background = '#4caf50';
+            return;
+        }
+    }
+    
+    // 快速定位选项
+    var options = {
+        enableHighAccuracy: false, // 降低精度要求加快速度
+        timeout: 5000,            // 5秒超时
+        maximumAge: 60000          // 允许1分钟缓存
+    };
+    
+    navigator.geolocation.getCurrentPosition(
+        function(position) {
+            var lat = position.coords.latitude;
+            var lng = position.coords.longitude;
+            document.getElementById('checkLat').value = lat;
+            document.getElementById('checkLng').value = lng;
+            
+            // 缓存位置
+            localStorage.setItem('cached_location', JSON.stringify({lat: lat, lng: lng, time: Date.now()}));
+            
+            // 获取地址名称
+            fetch('/api/commune/attendance.php?action=reverse_geocode&lat=' + lat + '&lng=' + lng)
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.code === 1 && d.data.address) {
+                    status.innerHTML = '📍 ' + d.data.address;
+                    document.getElementById('checkLocation').value = d.data.address;
+                } else {
+                    status.innerHTML = '📍 ' + lat.toFixed(4) + ', ' + lng.toFixed(4);
+                }
+            })
+            .catch(function() {
+                status.innerHTML = '📍 ' + lat.toFixed(4) + ', ' + lng.toFixed(4);
+            });
+            
+            btn.innerHTML = '✅ 已定位';
+            btn.style.background = '#4caf50';
+        },
+        function(error) {
+            // 失败后尝试高精度定位
+            status.innerHTML = '🔄 重试中...';
+            navigator.geolocation.getCurrentPosition(
+                function(pos2) {
+                    var lat = pos2.coords.latitude;
+                    var lng = pos2.coords.longitude;
+                    document.getElementById('checkLat').value = lat;
+                    document.getElementById('checkLng').value = lng;
+                    localStorage.setItem('cached_location', JSON.stringify({lat: lat, lng: lng, time: Date.now()}));
+                    status.innerHTML = '📍 ' + lat.toFixed(4) + ', ' + lng.toFixed(4);
+                    btn.innerHTML = '✅ 已定位';
+                    btn.style.background = '#4caf50';
+                },
+                function(e2) {
+                    var msg = '定位失败';
+                    switch(e2.code) { case 1: msg = '⚠️ 请开启定位权限'; break; case 2: msg = '⚠️ 位置不可用'; break; case 3: msg = '⚠️ 定位超时'; }
+                    status.innerHTML = msg + ' <a href="#" onclick="getLocation()">重试</a>';
+                    btn.disabled = false;
+                    btn.innerHTML = '📍 重新定位';
+                    btn.style.background = '#4caf50';
+                },
+                {enableHighAccuracy: true, timeout: 10000}
+            );
+        },
+        options
+    );
+}
+
+// 提交签到
+function submitCheckIn() {
+    var location = document.getElementById('locationStatus').textContent.replace('✅ 位置: ', '').replace('📍 ', '') || currentCheckinLocation;
+    var remark = document.getElementById('checkRemark').value;
+    
+    var url = '/api/commune/attendance.php?action=check_in&user_id=' + (currentUser.id || 1) + '&user_name=' + encodeURIComponent(currentUser.name || '用户') + '&location=' + encodeURIComponent(location) + '&remark=' + encodeURIComponent(remark);
+    
+    console.log('Checkin URL:', url);
+    
+    fetch(url)
+    .then(function(r) { return r.text(); })
+    .then(function(t) { 
+        console.log('Response:', t); 
+        try {
+            var d = JSON.parse(t);
+            alert(d.msg || '签到' + (d.code === 1 ? '成功' : '失败'));
+            if (d.code === 1) {
+                loadCheckIn();
+                checkTodayStatus();
+            }
+        } catch(e) {
+            alert('签到完成');
+            loadCheckIn();
+            checkTodayStatus();
+        }
+    })
+    .catch(function(e) { 
+        console.error(e); 
+        alert('签到失败: ' + e); 
+    });
+}
+
+// 选择日志类型
+function selectLogType(type) {
+    currentLogType = type;
+    document.querySelectorAll('.log-type-btn').forEach(function(btn) {
+        if (btn.dataset.type === type) {
+            btn.style.background = '#4caf50';
+            btn.style.color = 'white';
+        } else {
+            btn.style.background = 'white';
+            btn.style.color = '#333';
+        }
+    });
+    loadWorkLog();
+}
+
+// 加载日志
+function loadWorkLog() {
+    fetch('/api/commune/attendance.php?action=log_list&user_id=' + currentUser.id + '&log_type=' + currentLogType + '&limit=10')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.code === 1) {
+            var html = '';
+            var icons = {'daily':'📋','weekly':'📅','project':'📁','meeting':'👥','other':'📝'};
+            d.data.forEach(function(item) {
+                var icon = icons[item.log_type] || '📝';
+                html += '<div style="padding:8px;background:#f8f9fa;border-radius:6px;margin-bottom:6px"><div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:10px;color:#666"><span>' + icon + ' ' + item.user_name + '</span><span>' + item.log_date + '</span></div><div style="font-size:12px">' + item.content + '</div></div>';
+            });
+            document.getElementById('workLogList').innerHTML = html || '<div style="color:#999;text-align:center;padding:15px">暂无日志</div>';
+        }
+    });
+}
+
+// 显示添加日志
+
+
+// 加载统计
+function loadStats() {
+    fetch('/api/commune/attendance.php?action=attendance_list&user_id=' + currentUser.id + '&limit=100')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.code === 1 && d.stats) {
+            document.getElementById('statToday').textContent = d.stats.today || 0;
+            document.getElementById('statWeek').textContent = d.stats.week || 0;
+            document.getElementById('statMonth').textContent = d.stats.month || 0;
+        }
+    });
+    
+    fetch('/api/commune/attendance.php?action=stats&user_id=' + currentUser.id)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.code === 1) {
+            document.getElementById('logStatCount').textContent = d.data.today_logs || 0;
+        }
+    });
+}
+
+// 页面加载时初始化
+if (typeof window !== 'undefined') {
+    window.addEventListener('load', initAttendance);
+}
+</script>
+
+</div>
+            <!-- 签到面板 -->
+            <div id="checkInPanel" style="display:none;background:white;border-radius:10px;padding:12px;margin-bottom:10px">
+                <div style="text-align:center;padding:10px">
+                    <div id="checkStatusIcon" style="font-size:28px">📌</div>
+                    <div id="checkStatusText" style="font-weight:600;font-size:14px;margin:5px 0">点击签到</div>
+                    <div id="checkTimeText" style="font-size:11px;color:#999"></div>
+                </div>
+                <button id="mainCheckInBtn" class="btn btn-primary w-100" style="border-radius:6px" onclick="doCheckIn()">✅ 签到</button>
+                <div style="margin-top:10px;font-size:12px;font-weight:600">📅 最近</div>
+                <div id="checkInList" style="font-size:11px;color:#666;margin-top:5px"></div>
+            </div>
+            <!-- 日志面板 -->
+            <div id="workLogPanel" style="display:none;background:white;border-radius:10px;padding:12px;margin-bottom:10px">
+                <button class="btn btn-success w-100" style="border-radius:6px;margin-bottom:8px;font-size:13px" onclick="showAddLog()">➕ 写日志</button>
+                <div id="workLogList" style="max-height:150px;overflow-y:auto;font-size:12px"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 资料弹窗 -->
+    <div id="profileModal" class="modal">
+        <div class="modal-content">
+            <h5>👤 个人资料</h5>
+            <input type="text" id="editNickname" placeholder="昵称">
+            <input type="tel" id="editPhone" placeholder="电话">
+            <input type="text" id="editCompany" placeholder="公司">
+            <input type="text" id="editDept" placeholder="部门">
+            <input type="text" id="editPosition" placeholder="职位">
+            <input type="text" id="editAvatar" placeholder="头像URL">
+            
+            <div style="margin-top:15px;padding-top:15px;border-top:1px solid #eee">
+                <p style="font-size:12px;color:#666;margin-bottom:10px">修改密码(可选)</p>
+                <input type="password" id="oldPassword" placeholder="原密码">
+                <input type="password" id="newPassword" placeholder="新密码">
+            </div>
+            
+            <div class="modal-btns">
+                <button class="btn-cancel" onclick="closeModal()">取消</button>
+                <button class="btn-save" onclick="saveProfile()">保存</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 钉钉扫码弹窗 -->
+    <div id="dingtalkModal" class="modal">
+        <div class="modal-content" style="text-align:center">
+            <h5>📱 钉钉扫码登录</h5>
+            <img id="dingtalkQr" style="width:200px;height:200px;border-radius:10px;margin:15px 0">
+            <p style="font-size:13px;color:#666">请使用钉钉扫码</p>
+            <div class="modal-btns">
+                <button class="btn-cancel" onclick="closeDingtalk()">取消</button>
+                <button class="btn-save" onclick="mockDingtalk()">模拟扫码</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let myUsername = '';
+        let myNickname = '';
+        
+        const i18n = {
+            zh: { title: '海鲜社', subtitle: '企业工作台', username: '用户名', password: '密码', login: '登录', dingtalk: '📱 钉钉扫码登录', contact: '如需开通账号，请联系管理员', chat: '聊天室', qrcode: '一物一码', inventory: '进销存', admin: '管理后台', profile: '个人资料', logout: '退出登录', dept: '部门', company: '海鲜社' },
+            en: { title: 'Haixianshe', subtitle: 'Enterprise', username: 'Username', password: 'Password', login: 'Login', dingtalk: '📱 DingTalk Login', contact: 'Contact admin', chat: 'Chat', qrcode: 'QR Code', inventory: 'Inventory', admin: 'Admin', profile: 'Profile', logout: 'Logout', dept: 'Department', company: 'Haixianshe' },
+            ja: { title: '海鮮社', subtitle: 'ワークスペース', username: 'ユーザー名', password: 'パスワード', login: 'ログイン', dingtalk: '📱 钉钉ログイン', contact: '管理者へ', chat: 'チャット', qrcode: 'QRコード', inventory: '在庫', admin: '管理', profile: 'プロフィール', logout: 'ログアウト', dept: '部門', company: '海鮮社' },
+            ko: { title: '해산사', subtitle: '워크스페이스', username: '사용자', password: '비밀번호', login: '로그인', dingtalk: '📱 钉git登录', contact: '관리자 연락', chat: '채팅', qrcode: 'QR코드', inventory: '재고', admin: '관리자', profile: '프로필', logout: '로그아웃', dept: '부서', company: '해산사' },
+            id: { title: 'Haixianshe', subtitle: 'Workspace', username: 'Username', password: 'Password', login: 'Masuk', dingtalk: '📱 Login DingTalk', contact: 'Hubungi admin', chat: 'Obrolan', qrcode: 'QR Code', inventory: 'Inventaris', admin: 'Admin', profile: 'Profil', logout: 'Keluar', dept: 'Dept', company: 'Haixianshe' },
+            tl: { title: 'Haixianshe', subtitle: 'Workspace', username: 'Username', password: 'Password', login: 'Login', dingtalk: '📱 DingTalk Login', contact: 'Contact admin', chat: 'Chat', qrcode: 'QR Code', inventory: 'Inventory', admin: 'Admin', profile: 'Profile', logout: 'Logout', dept: 'Dept', company: 'Haixianshe' },
+            vi: { title: 'Haixianshe', subtitle: 'Workspace', username: 'Username', password: 'Password', login: 'Đăng nhập', dingtalk: '📱 Đăng nhập DingTalk', contact: 'Liên hệ admin', chat: 'Phòng chat', qrcode: 'Mã QR', inventory: 'Kho hàng', admin: 'Quản trị', profile: 'Hồ sơ', logout: 'Đăng xuất', dept: 'Phòng', company: 'Haixianshe' }
+        };
+        
+        // 智能语言检测
+        function detectLanguage() {
+            // 1. 优先使用保存的语言
+            var saved = localStorage.getItem('lang');
+            if (saved && i18n[saved]) return saved;
+            
+            // 2. 检测浏览器语言
+            var browserLang = navigator.language || navigator.userLanguage;
+            if (browserLang) {
+                browserLang = browserLang.toLowerCase();
+                if (browserLang.startsWith('zh')) return 'zh';
+                if (browserLang.startsWith('en')) return 'en';
+                if (browserLang.startsWith('ja')) return 'ja';
+                if (browserLang.startsWith('ko')) return 'ko';
+                if (browserLang.startsWith('id')) return 'id';
+                if (browserLang.startsWith('vi')) return 'vi';
+                if (browserLang.startsWith('tl')) return 'tl';
+            }
+            
+            // 3. 默认中文
+            return 'zh';
+        }
+        
+        let currentLang = detectLanguage();
+        
+        function changeLang(lang) {
+            currentLang = lang;
+            localStorage.setItem('lang', lang);
+            updateLabels();
+        }
+        
+        function updateLabels() {
+            const t = i18n[currentLang] || i18n.zh;
+            document.getElementById('titleText').textContent = t.title;
+            document.getElementById('subtitleText').textContent = t.subtitle;
+            document.getElementById('loginUsername').placeholder = t.username;
+            document.getElementById('loginPassword').placeholder = t.password;
+            document.getElementById('loginBtn').textContent = t.login;
+            document.getElementById('dingtalkBtn').innerHTML = t.dingtalk;
+            document.getElementById('contactText').textContent = t.contact;
+            document.getElementById('langSelect').value = currentLang;
+            
+            if (myUsername) {
+                document.getElementById('menuChat1').textContent = t.chat;
+                document.getElementById('menuQrcode1').textContent = t.qrcode;
+                document.getElementById('menuInventory1').textContent = t.inventory;
+                document.getElementById('menuAdmin1').textContent = t.admin;
+                document.getElementById('userCompany').textContent = t.company;
+            }
+        }
+        
+        function checkLogin() {
+            const stored = localStorage.getItem('commune_user');
+            if (stored) {
+                try {
+                    const u = JSON.parse(stored);
+                    if (u.username) {
+                        myUsername = u.username;
+                        myNickname = u.nickname || u.username;
+                        showHome(u);
+                        return;
+                    }
+                } catch(e) {}
+            }
+            showLogin();
+        }
+        
+        function showLogin() {
+            document.getElementById('loginPage').style.display = 'flex';
+            document.getElementById('homePage').style.display = 'none';
+        }
+        
+        function showHome(user) {
+            document.getElementById('loginPage').style.display = 'none';
+            document.getElementById('homePage').style.display = 'block';
+            
+            const t = i18n[currentLang] || i18n.zh;
+            document.getElementById('userName').textContent = user.nickname || user.username;
+            document.getElementById('userAvatar').textContent = (user.nickname || user.username).charAt(0);
+            document.getElementById('userDept').textContent = (user.department || t.dept) + ' ' + (user.position || '');
+            document.getElementById('userCompany').textContent = user.company || t.company;
+            document.getElementById('langSelect').value = user.lang || currentLang;
+            
+            if (user.role === 'admin') {
+                document.getElementById('adminLink').style.display = 'block';
+            }
+            
+            localStorage.setItem('commune_user', JSON.stringify(user));
+        }
+        
+        // 登录
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            
+            fetch('/api/commune/user.php?action=login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'username=' + encodeURIComponent(username) + '&password=' + encodeURIComponent(password)
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.code === 1) {
+                    fetch('/api/commune/profile.php?action=profile&username=' + username)
+                    .then(r => r.json())
+                    .then(profile => {
+                        if (profile.code === 1) showHome(profile.data);
+                        else showHome(data.data);
+                    });
+                } else {
+                    document.getElementById('loginError').textContent = data.msg || '登录失败';
+                    document.getElementById('loginError').style.display = 'block';
+                }
+            });
+        });
+        
+        // 钉钉登录
+        function dingtalkLogin() {
+            document.getElementById('dingtalkModal').classList.add('show');
+            fetch('/api/commune/dingtalk.php?action=get_qr')
+            .then(r => r.json())
+            .then(data => {
+                if (data.code === 1) {
+                    document.getElementById('dingtalkQr').src = data.data.qr_image;
+                }
+            });
+        }
+        
+        function mockDingtalk() {
+            const username = prompt('输入模拟用户名:', 'user' + Math.floor(Math.random()*1000));
+            if (!username) return;
+            
+            fetch('/api/commune/dingtalk.php?action=create_demo_user', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'username=' + username + '&nickname=' + username + '&company=测试公司&department=测试部门'
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.code === 1) {
+                    closeDingtalk();
+                    showHome({ username: username, nickname: username, role: 'user', company: '测试公司', department: '测试部门', lang: currentLang });
+                } else {
+                    alert(data.msg);
+                }
+            });
+        }
+        
+        function closeDingtalk() {
+            document.getElementById('dingtalkModal').classList.remove('show');
+        }
+        
+        function logout() {
+            localStorage.removeItem('commune_user');
+            location.reload();
+        }
+        
+        function showProfile() {
+            fetch('/api/commune/profile.php?action=profile&username=' + myUsername)
+            .then(r => r.json())
+            .then(data => {
+                if (data.code === 1) {
+                    const u = data.data;
+                    document.getElementById('editNickname').value = u.nickname || '';
+                    document.getElementById('editPhone').value = u.phone || '';
+                    document.getElementById('editCompany').value = u.company || '';
+                    document.getElementById('editDept').value = u.department || '';
+                    document.getElementById('editPosition').value = u.position || '';
+                    document.getElementById('editAvatar').value = u.avatar_url || '';
+                }
+            });
+            document.getElementById('profileModal').classList.add('show');
+        }
+        
+        function closeModal() {
+            document.getElementById('profileModal').classList.remove('show');
+        }
+        
+        function saveProfile() {
+            const nickname = document.getElementById('editNickname').value;
+            const phone = document.getElementById('editPhone').value;
+            const company = document.getElementById('editCompany').value;
+            const dept = document.getElementById('editDept').value;
+            const position = document.getElementById('editPosition').value;
+            const avatar_url = document.getElementById('editAvatar').value;
+            const old_password = document.getElementById('oldPassword').value;
+            const new_password = document.getElementById('newPassword').value;
+            
+            fetch('/api/commune/profile.php?action=update_my_profile', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'username=' + myUsername + 
+                    '&nickname=' + encodeURIComponent(nickname) + 
+                    '&phone=' + encodeURIComponent(phone) +
+                    '&company=' + encodeURIComponent(company) +
+                    '&department=' + encodeURIComponent(dept) +
+                    '&position=' + encodeURIComponent(position) +
+                    '&avatar_url=' + encodeURIComponent(avatar_url) +
+                    (old_password ? '&old_password=' + old_password : '') +
+                    (new_password ? '&new_password=' + new_password : '')
+            })
+            .then(r => r.json())
+            .then(data => {
+                alert(data.msg);
+                if (data.code === 1) {
+                    closeModal();
+                    myNickname = nickname;
+                    document.getElementById('userName').textContent = nickname;
+                    document.getElementById('userAvatar').textContent = nickname.charAt(0);
+                }
+            });
+        }
+        
+        // 初始化
+        currentLang = localStorage.getItem('lang') || 'zh';
+        checkLogin();
+        updateLabels();
+        
+        // 检查签到状态
+        checkTodayStatus();
+    </script>
+    
+    <script>
+        // ========== 签到和日志 ==========
+        function getUserInfo() {
+            try {
+                const stored = localStorage.getItem('commune_user');
+                if (stored) return JSON.parse(stored);
+            } catch(e) {}
+            return { id: 1, username: '用户', nickname: '用户' };
+        }
+        
+        function toggleQuickAction(type) {
+            if (type === 'checkin') {
+                const p = document.getElementById('checkInPanel');
+                p.style.display = p.style.display === 'none' ? 'block' : 'none';
+                document.getElementById('workLogPanel').style.display = 'none';
+                document.getElementById('statsPanel').style.display = 'none';
+                if (p.style.display === 'block') loadCheckIn();
+            } else if (type === 'worklog') {
+                const p = document.getElementById('workLogPanel');
+                p.style.display = p.style.display === 'none' ? 'block' : 'none';
+                document.getElementById('checkInPanel').style.display = 'none';
+                document.getElementById('statsPanel').style.display = 'none';
+                if (p.style.display === 'block') loadWorkLog();
+            } else if (type === 'stats') {
+                const p = document.getElementById('statsPanel');
+                p.style.display = p.style.display === 'none' ? 'block' : 'none';
+                document.getElementById('checkInPanel').style.display = 'none';
+                document.getElementById('workLogPanel').style.display = 'none';
+                if (p.style.display === 'block') loadStats();
+            }
+        }
+        
+        function checkTodayStatus() {
+            const user = getUserInfo();
+            fetch('/api/commune/attendance.php?action=today_status&user_id=' + (user.id || 1) + '&user_name=' + encodeURIComponent(user.nickname || user.username))
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1 && d.data.checked) {
+                    document.getElementById('checkInIcon').textContent = '✅';
+                    document.getElementById('checkInText').textContent = '已签到';
+                }
+            });
+        }
+        
+        function loadCheckIn() {
+            const user = getUserInfo();
+            fetch('/api/commune/attendance.php?action=today_status&user_id=' + (user.id || 1) + '&user_name=' + encodeURIComponent(user.nickname || user.username))
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1) {
+                    if (d.data.checked) {
+                        document.getElementById('checkStatusIcon').textContent = '✅';
+                        document.getElementById('checkStatusText').textContent = '已签到';
+                        document.getElementById('checkTimeText').textContent = '签到时间: ' + d.data.time;
+                        if (d.data.location) {
+                            document.getElementById('checkLocationText').textContent = '📍 ' + d.data.location;
+                        }
+                        document.getElementById('checkInForm').style.display = 'none';
+                    } else {
+                        document.getElementById('checkStatusIcon').textContent = '📌';
+                        document.getElementById('checkStatusText').textContent = '点击签到';
+                        document.getElementById('checkTimeText').textContent = '';
+                        document.getElementById('checkLocationText').textContent = '';
+                        document.getElementById('checkInForm').style.display = 'block';
+                        // 自动获取位置
+                        if (navigator.geolocation) {
+                            navigator.geolocation.getCurrentPosition(function(pos) {
+                                document.getElementById('checkLocation').placeholder = '📍 位置: ' + pos.coords.latitude.toFixed(4) + ', ' + pos.coords.longitude.toFixed(4);
+                            }, function() {
+                                document.getElementById('checkLocation').placeholder = '📍 点击获取位置';
+                            });
+                        }
+                    }
+                }
+            });
+            loadCheckInList();
+        }
+        
+        function loadCheckInList() {
+            fetch('/api/commune/attendance.php?action=attendance_list&user_id=1&limit=10')
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1) {
+                    let html = '';
+                    d.data.forEach(item => {
+                        let loc = item.location ? ' 📍' + item.location : '';
+                        let remark = item.remark ? ' - ' + item.remark : '';
+                        html += '<div style="padding:6px 8px;background:#f8f9fa;border-radius:4px;margin-bottom:6px"><div style="font-weight:500">' + item.user_name + '</div><div style="font-size:11px;color:#666">' + item.check_date + ' ' + item.check_time + loc + remark + '</div></div>';
+                    });
+                    document.getElementById('checkInList').innerHTML = html || '<div style="color:#999">暂无记录</div>';
+                }
+            });
+        }
+        
+        function doCheckIn() {
+            const user = getUserInfo();
+            const location = document.getElementById('checkLocation').value;
+            const remark = document.getElementById('checkRemark').value;
+            
+            fetch('/api/commune/attendance.php?action=check_in', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'user_id=' + (user.id || 1) + '&user_name=' + encodeURIComponent(user.nickname || user.username) + '&location=' + encodeURIComponent(location) + '&remark=' + encodeURIComponent(remark)
+            })
+            .then(r => r.json())
+            .then(d => {
+                alert(d.msg);
+                if (d.code === 1) {
+                    loadCheckIn();
+                    checkTodayStatus();
+                }
+            });
+        }
+        
+        function loadWorkLog() {
+            fetch('/api/commune/attendance.php?action=log_list&user_id=1')
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1) {
+                    let html = '';
+                    d.data.slice(0, 10).forEach(item => {
+                        html += '<div style="padding:8px;background:#f8f9fa;border-radius:6px;margin-bottom:6px"><div style="font-weight:500;font-size:11px;color:#666">' + item.user_name + ' - ' + item.log_date + '</div><div style="font-size:12px">' + item.content + '</div></div>';
+                    });
+                    document.getElementById('workLogList').innerHTML = html || '<div style="color:#999;text-align:center;padding:15px">暂无日志</div>';
+                }
+            });
+        }
+        
+        function showAddLog() {
+            const user = getUserInfo();
+            const content = prompt('请输入工作日志内容:');
+            if (!content) return;
+            const logType = selectedLogType || 'daily';
+            fetch('/api/commune/attendance.php?action=add_log', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'user_id=' + (user.id || 1) + '&user_name=' + encodeURIComponent(user.nickname || user.username) + '&content=' + encodeURIComponent(content) + '&log_type=' + logType
+            })
+            .then(r => r.json())
+            .then(d => {
+                alert(d.msg);
+                if (d.code === 1) loadWorkLog();
+            });
+        }
+        
+        var selectedLogType = 'daily';
+        
+        function selectLogType(type) {
+            selectedLogType = type;
+            document.querySelectorAll('.log-type-btn').forEach(btn => {
+                if (btn.dataset.type === type) {
+                    btn.style.background = '#667eea';
+                    btn.style.color = 'white';
+                } else {
+                    btn.style.background = 'white';
+                    btn.style.color = '#333';
+                }
+            });
+            loadWorkLog();
+        }
+        
+        function loadWorkLog() {
+            fetch('/api/commune/attendance.php?action=log_list&user_id=1&log_type=' + (selectedLogType || ''))
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1) {
+                    let html = '';
+                    const typeIcons = {'daily':'📋','weekly':'📅','project':'📁','meeting':'👥','other':'📝'};
+                    d.data.forEach(item => {
+                        let icon = typeIcons[item.log_type] || '📝';
+                        html += '<div style="padding:10px;background:#f8f9fa;border-radius:8px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:11px;color:#666"><span>' + icon + ' ' + item.user_name + '</span><span>' + item.log_date + '</span></div><div style="font-size:13px">' + item.content + '</div></div>';
+                    });
+                    document.getElementById('workLogList').innerHTML = html || '<div style="color:#999;text-align:center;padding:20px">暂无日志</div>';
+                }
+            });
+        }
+        
+        function loadStats() {
+            fetch('/api/commune/attendance.php?action=attendance_list&user_id=1&limit=100')
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1 && d.stats) {
+                    document.getElementById('statToday').textContent = d.stats.today || 0;
+                    document.getElementById('statWeek').textContent = d.stats.week || 0;
+                    document.getElementById('statMonth').textContent = d.stats.month || 0;
+                }
+            });
+            fetch('/api/commune/attendance.php?action=stats')
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1) {
+                    document.getElementById('logStatCount').textContent = d.data.today_logs || 0;
+                }
+            });
+        }
+    </script>
+<!-- 钉钉风格日志组件 -->
+<div id="workLogModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:white;border-radius:16px;width:90%;max-width:400px;max-height:85vh;overflow-y:auto">
+        <div style="padding:15px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-weight:600;font-size:16px">📝 写日志</span>
+            <span onclick="closeLogModal()" style="font-size:24px;cursor:pointer">&times;</span>
+        </div>
+        
+        <!-- 日志类型选择 -->
+        <div style="padding:12px;border-bottom:1px solid #eee">
+            <div style="font-size:12px;color:#666;margin-bottom:8px">日志类型</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button onclick="selectLogType('daily')" class="log-type-btn active" data-type="daily" style="padding:8px 12px;border:1px solid #4caf50;background:#4caf50;color:white;border-radius:20px;font-size:12px">📋 日报</button>
+                <button onclick="selectLogType('weekly')" class="log-type-btn" data-type="weekly" style="padding:8px 12px;border:1px solid #2196f3;background:white;color:#2196f3;border-radius:20px;font-size:12px">📅 周报</button>
+                <button onclick="selectLogType('project')" class="log-type-btn" data-type="project" style="padding:8px 12px;border:1px solid #ff9800;background:white;color:#ff9800;border-radius:20px;font-size:12px">📁 项目</button>
+                <button onclick="selectLogType('meeting')" class="log-type-btn" data-type="meeting" style="padding:8px 12px;border:1px solid #9c27b0;background:white;color:#9c27b0;border-radius:20px;font-size:12px">👥 会议</button>
+            </div>
+        </div>
+        
+        <!-- 日报模板 -->
+        <div id="dailyTemplate" style="padding:15px">
+            <div style="margin-bottom:15px">
+                <div style="font-size:13px;color:#666;margin-bottom:5px">📋 今日工作 *</div>
+                <textarea id="logContent1" placeholder="1. 完成了...&#10;2. 参与了...&#10;3. 处理了..." style="width:100%;height:80px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;resize:none"></textarea>
+            </div>
+            <div style="margin-bottom:15px">
+                <div style="font-size:13px;color:#666;margin-bottom:5px">🎯 明日计划</div>
+                <textarea id="logContent2" placeholder="1. 计划...&#10;2. 准备..." style="width:100%;height:60px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;resize:none"></textarea>
+            </div>
+            <div style="margin-bottom:15px">
+                <div style="font-size:13px;color:#666;margin-bottom:5px">⚠️ 问题/建议</div>
+                <textarea id="logContent3" placeholder="遇到的问题或建议..." style="width:100%;height:50px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;resize:none"></textarea>
+            </div>
+        </div>
+        
+        <!-- 周报模板 -->
+        <div id="weeklyTemplate" style="padding:15px;display:none">
+            <div style="margin-bottom:15px">
+                <div style="font-size:13px;color:#666;margin-bottom:5px">📅 本周工作总结 *</div>
+                <textarea id="logWeekly1" placeholder="本周完成的主要工作..." style="width:100%;height:100px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;resize:none"></textarea>
+            </div>
+            <div style="margin-bottom:15px">
+                <div style="font-size:13px;color:#666;margin-bottom:5px">🎯 下周计划</div>
+                <textarea id="logWeekly2" placeholder="下周计划..." style="width:100%;height:80px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;resize:none"></textarea>
+            </div>
+        </div>
+        
+        <!-- 项目模板 -->
+        <div id="projectTemplate" style="padding:15px;display:none">
+            <div style="margin-bottom:15px">
+                <div style="font-size:13px;color:#666;margin-bottom:5px">📁 项目名称</div>
+                <input id="logProjectName" placeholder="项目名称" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px">
+            </div>
+            <div style="margin-bottom:15px">
+                <div style="font-size:13px;color:#666;margin-bottom:5px">📝 进展 *</div>
+                <textarea id="logProject1" placeholder="项目进展说明..." style="width:100%;height:80px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;resize:none"></textarea>
+            </div>
+            <div style="margin-bottom:15px">
+                <div style="font-size:13px;color:#666;margin-bottom:5px">⚠️ 问题和风险</div>
+                <textarea id="logProject2" placeholder="遇到的问题..." style="width:100%;height:50px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;resize:none"></textarea>
+            </div>
+        </div>
+        
+        <!-- 会议模板 -->
+        <div id="meetingTemplate" style="padding:15px;display:none">
+            <div style="margin-bottom:15px">
+                <div style="font-size:13px;color:#666;margin-bottom:5px">👥 会议主题 *</div>
+                <input id="logMeetingTopic" placeholder="会议主题" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px">
+            </div>
+            <div style="margin-bottom:15px">
+                <div style="font-size:13px;color:#666;margin-bottom:5px">📋 会议结论 *</div>
+                <textarea id="logMeeting1" placeholder="会议结论..." style="width:100%;height:80px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;resize:none"></textarea>
+            </div>
+            <div style="margin-bottom:15px">
+                <div style="font-size:13px;color:#666;margin-bottom:5px">📝 待办事项</div>
+                <textarea id="logMeeting2" placeholder="1. ...&#10;2. ..." style="width:100%;height:50px;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:13px;resize:none"></textarea>
+            </div>
+        </div>
+        
+        <!-- 提交按钮 -->
+        <div style="padding:15px;border-top:1px solid #eee;display:flex;gap:10px">
+            <button onclick="closeLogModal()" style="flex:1;padding:12px;background:#f5f5f5;color:#666;border:none;border-radius:8px;font-size:14px">取消</button>
+            <button onclick="submitLog()" style="flex:1;padding:12px;background:#4caf50;color:white;border:none;border-radius:8px;font-size:14px">提交</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// 日志类型选择
+function selectLogType(type) {
+    currentLogType = type;
+    // 更新按钮样式
+    document.querySelectorAll('.log-type-btn').forEach(function(btn) {
+        var colors = {'daily':'#4caf50','weekly':'#2196f3','project':'#ff9800','meeting':'#9c27b0'};
+        if (btn.dataset.type === type) {
+            btn.style.background = colors[type];
+            btn.style.color = 'white';
+        } else {
+            btn.style.background = 'white';
+            btn.style.color = colors[btn.dataset.type];
+        }
+    });
+    // 显示对应模板
+    document.getElementById('dailyTemplate').style.display = type === 'daily' ? 'block' : 'none';
+    document.getElementById('weeklyTemplate').style.display = type === 'weekly' ? 'block' : 'none';
+    document.getElementById('projectTemplate').style.display = type === 'project' ? 'block' : 'none';
+    document.getElementById('meetingTemplate').style.display = type === 'meeting' ? 'block' : 'none';
+}
+
+// 打开日志弹窗
+function showAddLog() {
+    document.getElementById('workLogModal').style.display = 'flex';
+    // 清空表单
+    var inputs = document.querySelectorAll('#workLogModal input, #workLogModal textarea');
+    inputs.forEach(function(input) { input.value = ''; });
+}
+
+// 关闭日志弹窗
+function closeLogModal() {
+    document.getElementById('workLogModal').style.display = 'none';
+}
+
+// 提交日志
+function submitLog() {
+    var content = '';
+    var type = currentLogType || 'daily';
+    
+    if (type === 'daily') {
+        var c1 = document.getElementById('logContent1').value.trim();
+        var c2 = document.getElementById('logContent2').value.trim();
+        var c3 = document.getElementById('logContent3').value.trim();
+        if (!c1) { alert('请填写今日工作'); return; }
+        content = '【今日工作】\n' + c1;
+        if (c2) content += '\n\n【明日计划】\n' + c2;
+        if (c3) content += '\n\n【问题/建议】\n' + c3;
+    } else if (type === 'weekly') {
+        var w1 = document.getElementById('logWeekly1').value.trim();
+        var w2 = document.getElementById('logWeekly2').value.trim();
+        if (!w1) { alert('请填写本周工作总结'); return; }
+        content = '【本周工作总结】\n' + w1;
+        if (w2) content += '\n\n【下周计划】\n' + w2;
+    } else if (type === 'project') {
+        var p1 = document.getElementById('logProjectName').value.trim();
+        var p2 = document.getElementById('logProject1').value.trim();
+        var p3 = document.getElementById('logProject2').value.trim();
+        if (!p1 || !p2) { alert('请填写项目名称和进展'); return; }
+        content = '【项目】' + p1 + '\n\n【进展】\n' + p2;
+        if (p3) content += '\n\n【问题】\n' + p3;
+    } else if (type === 'meeting') {
+        var m1 = document.getElementById('logMeetingTopic').value.trim();
+        var m2 = document.getElementById('logMeeting1').value.trim();
+        var m3 = document.getElementById('logMeeting2').value.trim();
+        if (!m1 || !m2) { alert('请填写会议主题和结论'); return; }
+        content = '【主题】' + m1 + '\n\n【结论】\n' + m2;
+        if (m3) content += '\n\n【待办】\n' + m3;
+    }
+    
+    fetch('/api/commune/attendance.php?action=add_log', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'user_id=' + currentUser.id + '&user_name=' + encodeURIComponent(currentUser.name) + '&content=' + encodeURIComponent(content) + '&log_type=' + type
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        alert(d.msg);
+        if (d.code === 1) {
+            closeLogModal();
+            loadWorkLog();
+        }
+    });
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>{$cfg['title']} - {$title}</title>
+    {include file="public/css"/}
+</head>
+<body>
+    <div class="layui-fluid">
+        <div class="layui-row layui-col-space15">
+            <div class="layui-card layui-col-md12">
+                <div class="layui-card-header">
+                    <i class="fa fa-minus-square-o"></i> {$title}
+                </div>
+                <div class="layui-card-body" pad15>
+                    <form class="layui-form form-label-w6" id="outboundForm" lay-filter="outboundForm">
+                        <div class="layui-form-item">
+                            <label class="layui-form-label"><span class="redstar">*</span>{:t('商品名称')}：</label>
+                            <div class="layui-input-block">
+                                <select class="layui-select" name="proid" id="proid" required lay-filter="proid">
+                                    <option value="">{:t('请选择商品')}</option>
+                                    {volist name="products" id="product"}
+                                    <option value="{$product.id}">{$product.name}</option>
+                                    {/volist}
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="layui-form-item">
+                            <label class="layui-form-label"><span class="redstar">*</span>{:t('商品规格')}：</label>
+                            <div class="layui-input-block">
+                                <select class="layui-select" name="ggid" id="ggid" required>
+                                    <option value="">{:t('请先选择商品')}</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">{:t('当前库存')}：</label>
+                            <div class="layui-input-block">
+                                <input type="text" id="currentStock" placeholder="{:t('当前库存')}" autocomplete="off" class="layui-input" readonly>
+                            </div>
+                        </div>
+                        
+                        <div class="layui-form-item">
+                            <label class="layui-form-label"><span class="redstar">*</span>{:t('出库数量')}：</label>
+                            <div class="layui-input-block">
+                                <input type="number" name="num" id="num" placeholder="{:t('请输入出库数量')}" autocomplete="off" class="layui-input" min="1" required>
+                            </div>
+                        </div>
+                        
+                        <div class="layui-form-item">
+                            <div class="layui-input-block">
+                                <button class="layui-btn" type="submit" lay-submit lay-filter="saveOutbound"><i class="fa fa-check"></i> {:t('确认出库')}</button>
+                                <button class="layui-btn layui-btn-primary" type="reset" id="resetBtn"><i class="fa fa-refresh"></i> {:t('重置')}</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部脚本 -->
+    {include file="public/js"/}
+    
+    <script>
+        layui.use(['form', 'layer'], function() {
+            var form = layui.form;
+            var layer = layui.layer;
+            
+            // 前端缓存：商品规格信息
+            var guigeCache = {};
+            
+            // 自定义验证规则
+            form.verify({
+                num: function(value) {
+                    if (!/^\d+$/.test(value) || parseInt(value) <= 0) {
+                        return '{:t('请输入有效的出库数量')}';
+                    }
+                }
+            });
+            
+            // 初始化表单
+            form.render();
+            
+            // 实时验证：出库数量
+            $('#num').on('input propertychange', function() {
+                var value = $(this).val();
+                var parent = $(this).parent();
+                var stock = parseInt($('#currentStock').val()) || 0;
+                
+                if (value) {
+                    // 验证是否为有效数字
+                    if (!/^\d+$/.test(value) || parseInt(value) <= 0) {
+                        $(this).addClass('layui-form-danger');
+                        parent.find('.layui-form-mid').remove();
+                        parent.append('<div class="layui-form-mid layui-word-aux layui-text-danger">{:t('请输入有效的出库数量')}</div>');
+                    } 
+                    // 验证是否超过库存
+                    else if (parseInt(value) > stock) {
+                        $(this).addClass('layui-form-danger');
+                        parent.find('.layui-form-mid').remove();
+                        parent.append('<div class="layui-form-mid layui-word-aux layui-text-danger">{:t('出库数量不能大于当前库存')}</div>');
+                    } else {
+                        $(this).removeClass('layui-form-danger');
+                        parent.find('.layui-form-mid').remove();
+                    }
+                } else {
+                    $(this).removeClass('layui-form-danger');
+                    parent.find('.layui-form-mid').remove();
+                }
+            });
+            
+            // 商品选择变化时，加载对应的规格
+            form.on('select(proid)', function(data) {
+                var proid = data.value;
+                if (proid) {
+                    // 检查缓存
+                    if (guigeCache[proid]) {
+                        // 使用缓存数据
+                        renderGuigeOptions(guigeCache[proid]);
+                    } else {
+                        // 缓存不存在，发送AJAX请求
+                        $.ajax({
+                            url: '{:url("BarcodeInventory/get_guige")}',
+                            type: 'GET',
+                            data: {proid: proid},
+                            dataType: 'json',
+                            success: function(res) {
+                                if (res.status == 1) {
+                                    // 存入缓存
+                                    guigeCache[proid] = res.data;
+                                    // 渲染规格选项
+                                    renderGuigeOptions(res.data);
+                                } else {
+                                    layer.msg(res.msg, {icon: 2});
+                                }
+                            }
+                        });
+                    }
+                } else {
+                    $('#ggid').empty();
+                    $('#ggid').append('<option value="">{:t('请先选择商品')}</option>');
+                    $('#currentStock').val('');
+                    // 重新渲染表单
+                    form.render('select');
+                    // 清除验证状态
+                    $('#ggid, #num').removeClass('layui-form-danger');
+                    $('#ggid, #num').parent().find('.layui-form-mid').remove();
+                }
+            });
+            
+            // 渲染规格选项
+            function renderGuigeOptions(data) {
+                $('#ggid').empty();
+                $('#ggid').append('<option value="">{:t('请选择规格')}</option>');
+                $.each(data, function(index, item) {
+                    $('#ggid').append('<option value="' + item.id + '" data-stock="' + item.stock + '">' + item.name + '</option>');
+                });
+                // 重新渲染表单
+                form.render('select');
+                // 清除规格相关的验证状态
+                $('#ggid, #num').removeClass('layui-form-danger');
+                $('#ggid, #num').parent().find('.layui-form-mid').remove();
+            }
+            
+            // 规格选择变化时，显示当前库存
+            form.on('select(ggid)', function(data) {
+                var stock = $(this.elem).find('option:selected').data('stock');
+                $('#currentStock').val(stock);
+                // 清除规格验证状态
+                $(this.elem).removeClass('layui-form-danger');
+                $(this.elem).parent().find('.layui-form-mid').remove();
+                
+                // 重新验证出库数量
+                $('#num').trigger('input');
+            });
+            
+            // 重置按钮
+            $('#resetBtn').click(function() {
+                $('#outboundForm')[0].reset();
+                form.render();
+                // 清除所有验证状态
+                $('#proid, #ggid, #num').removeClass('layui-form-danger');
+                $('#proid, #ggid, #num').parent().find('.layui-form-mid').remove();
+            });
+            
+            // 表单提交
+            form.on('submit(saveOutbound)', function(data) {
+                // 验证所有必填项
+                var isValid = true;
+                
+                // 验证商品选择
+                if (!$('#proid').val()) {
+                    $('#proid').addClass('layui-form-danger');
+                    var proidParent = $('#proid').parent();
+                    if (proidParent.find('.layui-form-mid').length === 0) {
+                        proidParent.append('<div class="layui-form-mid layui-word-aux layui-text-danger">{:t('请选择商品')}</div>');
+                    }
+                    isValid = false;
+                }
+                
+                // 验证规格选择
+                if (!$('#ggid').val()) {
+                    $('#ggid').addClass('layui-form-danger');
+                    var ggidParent = $('#ggid').parent();
+                    if (ggidParent.find('.layui-form-mid').length === 0) {
+                        ggidParent.append('<div class="layui-form-mid layui-word-aux layui-text-danger">{:t('请选择规格')}</div>');
+                    }
+                    isValid = false;
+                }
+                
+                // 验证出库数量
+                var num = parseInt($('#num').val()) || 0;
+                var stock = parseInt($('#currentStock').val()) || 0;
+                if (!$('#num').val() || !/^\d+$/.test($('#num').val()) || num <= 0) {
+                    $('#num').addClass('layui-form-danger');
+                    var numParent = $('#num').parent();
+                    if (numParent.find('.layui-form-mid').length === 0) {
+                        numParent.append('<div class="layui-form-mid layui-word-aux layui-text-danger">{:t('请输入有效的出库数量')}</div>');
+                    }
+                    isValid = false;
+                } 
+                // 验证是否超过库存
+                else if (num > stock) {
+                    $('#num').addClass('layui-form-danger');
+                    var numParent = $('#num').parent();
+                    if (numParent.find('.layui-form-mid').length === 0) {
+                        numParent.append('<div class="layui-form-mid layui-word-aux layui-text-danger">{:t('出库数量不能大于当前库存')}</div>');
+                    }
+                    isValid = false;
+                }
+                
+                if (!isValid) {
+                    return false;
+                }
+                
+                $.ajax({
+                    url: '{:url("BarcodeInventory/outbound")}',
+                    type: 'POST',
+                    data: data.field,
+                    dataType: 'json',
+                    success: function(res) {
+                        if (res.status == 1) {
+                            layer.msg(res.msg, {icon: 1, time: 1500}, function() {
+                                window.location.reload();
+                            });
+                        } else {
+                            layer.msg(res.msg, {icon: 2});
+                        }
+                    },
+                    error: function() {
+                        layer.msg('{:t('网络错误，请稍后重试')}', {icon: 2});
+                    }
+                });
+                
+                return false;
+            });
+        });
+    </script>
+</body>
+</html>

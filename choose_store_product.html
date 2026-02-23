@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>选择仓库商品</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+        <div class="layui-card layui-col-md12">
+          <div class="layui-card-body" pad15>
+            
+            <div class="layui-form layui-col-md12 layui-form-search">
+                <div class="layui-inline layuiadmin-input-useradmin">
+                    <label class="layui-form-label">商品名称</label>
+                    <div class="layui-input-inline">
+                        <input type="text" name="name" autocomplete="off" class="layui-input">
+                    </div>
+                </div>
+                <div class="layui-inline">
+                    <button class="layui-btn layuiadmin-btn-replys" lay-submit="" lay-filter="LAY-app-forumreply-search">
+                        <i class="layui-icon layui-icon-search layuiadmin-button-btn"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="layui-col-md12">
+                <table id="tabledata" lay-filter="tabledata"></table>
+            </div>
+          </div>
+        </div>
+    </div>
+  </div>
+	{include file="public/js"/}
+	<script>
+  var table = layui.table;
+  var layer = layui.layer;
+  var form = layui.form;
+  var $ = layui.jquery;
+	var datawhere = {};
+  
+  //数据表
+  var tableIns = table.render({
+    elem: '#tabledata'
+    ,url: "{:url('getStoreProductList')}" //数据接口
+    ,page: true //开启分页
+    ,limit: 10
+    ,limits: [10, 20, 30, 50]
+    ,cols: [[ //表头
+      {field: 'id', title: 'ID',  sort: true,width:80},
+      {field: 'name', title: '商品信息',width:320,templet:function(d){
+        var html = '';
+        if(d.pic){
+          html += '<img src="'+d.pic+'" style="max-width:70px;float:left"/>';
+        }
+        html += '<div style="float: left;width:200px;margin-left: 10px;white-space:normal;line-height:20px;">';
+        html += '	<div style="width:100%;">'+d.name+'</div>';
+        html += '	<div style="padding-top:5px;color:#f60">库存: '+d.stock+'</div></div>';
+        html += '</div>';
+        return html;
+      }},
+      {field: 'stock', title: '总库存', width: 100, align: 'center', sort: true},
+      {field: 'status', title: '状态',templet:function(d){ return d.stock > 0 ? '<span style="color:green">有库存</span>' : '<span style="color:red">无库存</span>'},width:80},
+      {field: 'operation', title: '操作',templet: '<div><button class="table-btn" onclick="choosepro(\'{{d.id}}\')">选择</button></div>',align:'center'}
+    ]]
+  });
+  
+  //排序
+  table.on('sort(tabledata)', function(obj){
+    datawhere.field = obj.field;
+    datawhere.order = obj.type;
+    tableIns.reload({
+      initSort: obj,
+      where: datawhere
+    });
+  });
+  
+  //检索
+  form.on('submit(LAY-app-forumreply-search)', function(obj){
+    var field = obj.field;
+    var olddatawhere = datawhere;
+    datawhere = field;
+    datawhere.field = olddatawhere.field;
+    datawhere.order = olddatawhere.order;
+    tableIns.reload({
+      where: datawhere,
+      page: {curr: 1}
+    });
+  })
+  
+  function choosepro(id){
+    var index = layer.load();
+    $.post("{:url('chooseStoreProduct')}",{proid:id},function(res){
+      layer.close(index);
+      if(res.status == 1){
+        // 直接返回了商品和规格信息，调用父页面的回调函数
+        callParentCallback(res.product, res.guige);
+      } else if(res.status == 2){
+        // 返回了商品信息和规格列表，需要弹出规格选择框
+        showGuigeSelect(res.product, res.guige_list);
+      } else {
+        layer.msg(res.msg);
+      }
+    },'json');
+  }
+  
+  // 显示规格选择框
+  function showGuigeSelect(product, guigeList){
+    // 构建规格选择HTML
+    var html = '<div class="layui-form">';
+    html += '<div style="margin-bottom: 15px;"><h3>' + product.name + '</h3></div>';
+    html += '<div class="layui-form-item">';
+    html += '<label class="layui-form-label">选择规格</label>';
+    html += '<div class="layui-input-block">';
+    
+    guigeList.forEach(function(guige){
+      html += '<button type="button" class="layui-btn layui-btn-primary choose-guige-item" ' +
+        'data-proid="' + product.id + '" ' +
+        'data-ggid="' + guige.id + '" ' +
+        'data-proname="' + product.name + '" ' +
+        'data-ggname="' + guige.name + '" ' +
+        'data-stock="' + guige.stock + '" ' +
+        'data-barcode="' + (guige.barcode || '') + '" ' +
+        'data-pic="' + (product.pic || '') + '" ' +
+        'data-cost_price="' + (guige.cost_price || 0) + '" ' +
+        'data-sell_price="' + (guige.sell_price || 0) + '">' +
+        guige.name + ' (库存: ' + guige.stock + ')'
+      '</button> ';
+    });
+    
+    html += '</div></div></div>';
+    
+    // 弹出规格选择框
+    layer.open({
+      type: 1,
+      title: '选择商品规格',
+      area: ['500px', 'auto'],
+      content: html,
+      btn: ['取消'],
+      success: function(layero, index){
+        // 绑定规格选择事件
+        $(layero).on('click', '.choose-guige-item', function(){
+          var proid = $(this).data('proid');
+          var ggid = $(this).data('ggid');
+          var proname = $(this).data('proname');
+          var ggname = $(this).data('ggname');
+          var stock = $(this).data('stock');
+          var barcode = $(this).data('barcode');
+          var pic = $(this).data('pic');
+          var cost_price = $(this).data('cost_price');
+          var sell_price = $(this).data('sell_price');
+          
+          // 构建商品和规格信息
+          var product = {
+            id: proid,
+            name: proname,
+            pic: pic
+          };
+          var guige = {
+            id: ggid,
+            name: ggname,
+            stock: stock,
+            barcode: barcode,
+            cost_price: cost_price,
+            sell_price: sell_price
+          };
+          
+          // 调用父页面的回调函数
+          callParentCallback(product, guige);
+          
+          // 关闭规格选择框和当前弹窗
+          layer.closeAll();
+        });
+      }
+    });
+  }
+  
+  // 调用父页面的回调函数
+  function callParentCallback(product, guige){
+    var parentWindow = window.parent;
+    if(typeof parentWindow.chooseStoreProduct === 'function'){
+      parentWindow.chooseStoreProduct(product, guige);
+    } else if(typeof top.window.chooseStoreProduct === 'function'){
+      top.window.chooseStoreProduct(product, guige);
+    } else {
+      alert('选择成功，但无法调用回调函数，请手动关闭弹窗');
+      return;
+    }
+    // 关闭当前弹窗
+    parent.layer.closeAll();
+  }
+	</script>
+</body>
+</html>

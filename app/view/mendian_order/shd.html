@@ -1,0 +1,158 @@
+<!DOCTYPE html><!--custom_file(mendian_upgrade)-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>收货单</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+	<style>
+	.table1 th,.table1 td{border:1px solid #666;height:30px;line-height:30px;text-align:center;word-break: break-all}
+	@media print{
+		.page-break{
+			page-break-before: always
+		}
+		.avoid-page-break{
+			page-break-after: avoid;
+		}
+	}
+	.detaillist td{
+		border-left: none;border-right: none;border-top: none;text-align: left;width: 100%
+	}
+	.detaillist tr:first-child td{
+		border-top: none;
+	}
+	.detaillist tr:last-child  td{
+		border-bottom: none;
+	}
+	</style>
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12">
+				<div class="layui-card-header">
+					<i class="layui-icon layui-icon-close" style="font-size:18px;font-weight:bold;cursor:pointer" onclick="closeself()"></i>
+				</div>
+				<div class="layui-card-body" pad15>
+					<div class="layui-form" lay-filter="">
+						<input type="hidden" name="info[id]" value="{$info['id']}">
+						<div class="layui-form-item">
+							<div class="layui-input-inline" style="width:1050px;color:#111;display:flex" id="printcontent">
+								<div style="width:1000px">
+									<!-- <div style="text-align:center;font-weight:bold;font-size:20px">{$bname}</div> -->
+									<div style="text-align:left;font-weight:bold;position:relative;">
+										<span style="font-size:24px">【{:t(门店)}收货单】</span>
+									</div>
+									<div style="text-align:left;position:relative;font-weight:bold;font-size:16px">
+										<span style="padding-right:">{:t(门店)}名称：{$info.name}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{:t(门店)}电话：{$info.tel}
+										<span style="position:absolute;right:0">送货日期：{:date('Y-m-d')}</span>
+									</div>
+		
+									<div style="font-size:16px;display:flex;" >
+										<div style="width:50%">社区名称：{$info.area} {$info.address}</div>
+									</div>
+									<div style="font-size:16px;display:flex;" >
+										<div style="width:50%">总件数：{$info.number} </div>
+									</div>
+									
+									<div style="width:100%;font-size:16px">
+										<table style="width:100%;border-collapse: collapse;border:1px solid #666" class="table1">
+											<tr>
+												<td style="width: 40px;">序号</td>
+												<td>品名</td>
+												<td>规格</td>
+												<td style="min-width: 50px;">数量</td>
+		
+											</tr>
+											{php} $num = count($info.lists)-1;$i=0;{/php}
+											{foreach $info.lists as $k=>$v}
+											{php}$i++;{/php}
+												<tr>
+													<td>{$i}</td>
+													<td style="text-align: left;">
+														{$v.name}
+													</td>
+													<td style="text-align: left;">
+														{$v.ggname}
+													</td>
+													<td>{$v.num}</td>
+		
+												</tr>
+											{/foreach}
+										</table>
+									</div>
+									<div style="text-align:left;font-weight:bold;position:relative;margin-top: 20px;">
+										<span style="font-size:24px">【顾客提货单】</span>
+									</div>
+									<div style="width:100%;font-size:16px">
+										<table style="width:100%;border-collapse: collapse;border:1px solid #666" class="table1">
+											<tr>
+												<td style="width: 40px;">序号</td>
+												<td style="width: 100px;">会员编号<br>手机号</td>
+												<!-- <td>手机号</td> -->
+												<td style="min-width: 50px;">总件数</td>
+												<td>品名及规格</td>
+												<td style="width:100px">备注</td>
+											</tr>
+											{php} $num = count($info.detail)-1;$i=0;{/php}
+											{foreach $info.detail as $k=>$v}
+											{php}$i++;{/php}
+												<tr>
+													<td>{$i}</td>
+													<td>{$v.mid} <br>{$v.tel}</td>
+													<!-- <td>{$v.tel}</td> -->
+													<td><span style="font-size:18px;font-weight:bold;">{$v.num}</span>件</td>
+													<td style="width: 700px;">
+														<table class="detaillist">
+										                    {foreach $v.detaillist as $kk=>$vv}
+																<tr>
+											                        <td style="width: 500px;">{$vv.name}</td>
+											                        <td style="width: 150px;color: #333">{$vv.ggname}</td>
+											                        <td style="width: 50px;"><span style="font-size:18px;font-weight:bold;">{$vv.num}</span>件</td>
+											                    </tr>
+															{/foreach}
+										                </table>
+
+													</td>
+													
+													<td>{$v.remark}</td>
+												</tr>
+											{/foreach}
+										</table>
+									</div>
+									<div style="text-align:left;position:relative;font-size:16px"><span style="padding-right:200px">制单人：</span><span style="padding-right:200px">送货人：</span>收货人：</div>
+								</div>
+						</div>
+						</div>
+
+
+						<div class="layui-form-item printbtn">
+							<div class="layui-input-block" style="margin-left:130px;">
+								<button class="layui-btn" onclick="printbtn()">打 印</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+  </div>
+	{include file="public/js"/}
+	<script src="__STATIC__/admin/js/jQuery.print.js"></script>
+	<script>
+	function printbtn(){
+	    $(".layui-card-header").hide();
+			$(".printbtn").hide();
+			$("#printcontent").print({})
+			$(".layui-card-header").show();
+			$(".printbtn").show();
+	}
+	layui.form.on('submit(formsubmit)', function(obj){
+		$("#printcontent").print({
+		})
+	})
+  </script>
+	{include file="public/copyright"/}
+</body>
+</html>

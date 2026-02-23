@@ -1,0 +1,241 @@
+<!--custom_file(video_spider)-->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>查看申请详情</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+	<style>
+		.layui-form-label{width:130px!important}
+		.alert{
+			position: fixed;
+			height: 100%;
+			width: 100%;
+			top: 0;
+			left: 0;
+			z-index: 5;
+			display: none;
+			background: rgba(0, 0, 0, 0.7);
+		}
+		.alert_container{
+			position: absolute;
+			height: 100%;
+			width: 100%;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+		.alert_module{
+			padding: 15px;
+			border-radius: 5px;
+			background: #fff;
+		}
+		.alert_title{
+			font-size: 18px;
+			color: #303133;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+		}
+		.alert_content{
+			width: 650px;
+			padding: 15px 0;
+			display: flex;
+		}
+		.alert_area{
+			flex: 1;
+			height: 400px;
+			overflow-y: scroll;
+		}
+		.alert_item{
+			font-size: 14px;
+			color: #333;
+			padding: 0 15px;
+			display: flex;
+			cursor: pointer;
+			min-width: 0;
+			align-items: center;
+		}
+		.alert_icon{
+			height: 18px;
+			width: 18px;
+			box-sizing: border-box;
+			border-radius: 4px;
+			border: 1px solid;
+			background: #fff;
+			border-color: #c9c9c9;
+		}
+		.alert_active{
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			background: #1e9fff;
+			border-color: #1e9fff;
+		}
+		.alert_text{
+			flex: 1;
+			padding: 10px;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+			min-width: 0;
+		}
+		.alert_item:hover{
+			background: #ebf5ff;
+		}
+		.alert_close{
+			cursor: pointer;
+		}
+		.alert_close:hover{
+			color: #1e9fff;
+		}
+		.alert_opt{
+			position: relative;
+			display: flex;
+			justify-content: flex-end;
+		}
+		.alert_opt button{
+			margin-left: 10px;
+		}
+		::-webkit-scrollbar {
+			width: 10px;
+			height: 10px;
+			background-color: #fff;
+			border-radius: 5px;
+		}
+		::-webkit-scrollbar-thumb {
+			background-color: silver;
+			border-radius: 5px;
+		}
+		::-webkit-scrollbar-track {
+			background-color: #fff;
+		}
+
+		.area{
+			position: relative;
+			display: flex;
+		}
+		.area_module{
+			padding: 5px 10px;
+			border-width: 1px;
+			border-style: solid;
+			border-color: #e6e6e6;
+			background-color: #fff;
+			border-radius: 2px;
+			display: flex;
+			align-items: center;
+			font-size: 14px;
+			cursor: pointer;
+		}
+		.area_content{
+			min-width: 150px;
+			display: flex;
+			color: #c9c9c9;
+			flex-wrap: wrap;
+		}
+		.area_item{
+			padding: 2px 10px;
+			background: #009688;
+			color: #fff;
+			display: flex;
+			align-items: center;
+			border-radius: 2px;
+			font-size: 14px;
+			margin: 2.5px;
+		}
+		.layui-input-inline{
+			height:38px;
+			line-height: 38px;
+		}
+	</style>
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+			<div class="layui-card layui-col-md12">
+				<div class="layui-card-header"><i class="fa fa-edit"></i> 查看申请详情<i class="layui-icon layui-icon-close" style="font-size:18px;font-weight:bold;cursor:pointer" onclick="closeself()"></i></div>
+        <div class="layui-card-body" pad15>
+					<div class="layui-form" lay-filter="form">
+						<input type="hidden" name="info[id]" value="{$info.id}"/>
+						<div class="layui-tab layui-tab-brief" lay-filter="mytab">
+							<ul class="layui-tab-title">
+								<li class="layui-this" lay-id="1">基本信息</li>
+							</ul>
+							<div class="layui-tab-content">
+						<!--基本信息start-->
+							<div class="layui-form-item">
+								<label class="layui-form-label">会员</label>
+								<div class="layui-input-inline">
+									{$info.mid}({$info.nickname})
+								</div>
+							</div>
+							<div class="layui-form-item">
+								<label class="layui-form-label">原视频</label>
+								<div class="layui-text">
+									<video width="320" height="240" controls>
+										<source src="{$info.url}" type="video/mp4">
+										<source src="{$info.url}" type="video/ogg">
+										<source src="{$info.url}" type="video/webm">
+										<object data="{$info.url}" width="320" height="240">
+											<embed src="{$info.url}" width="320" height="240">
+										</object>
+									</video>
+								</div>
+							</div>
+
+							<div class="layui-form-item">
+								<label class="layui-form-label">视频标题</label>
+								<div class="layui-text">
+									{$info.video_title}
+								</div>
+							</div>
+							<div class="layui-form-item">
+								<label class="layui-form-label">视频封面</label>
+								<div class="layui-text">
+									<img src="{$info.video_cover}" style="max-width: 200px;max-height: 200px;" />
+								</div>
+							</div>
+								<div class="layui-form-item">
+									<label class="layui-form-label">原视频</label>
+									<div class="layui-text">
+										<video width="320" height="240" controls>
+											<source src="{$info.video_url}" type="video/mp4">
+											<source src="{$info.video_url}" type="video/ogg">
+											<source src="{$info.video_url}" type="video/webm">
+											<object data="{$info.video_url}" width="320" height="240">
+												<embed src="{$info.video_url}" width="320" height="240">
+											</object>
+										</video>
+									</div>
+								</div>
+  					</div>
+						</div>
+
+					</div>
+			   </div>
+			</div>
+		</div>
+	</div>
+</div>
+</div>
+  {include file="public/js"/}
+	<script>
+		$(document).on('click', '.img_sp', function(data){
+			var imgSrc=$(this).attr('src');
+			layer.open({
+				type:1
+				,title:false
+				,closeBtn:0
+				,skin:'layui-layer-nobg'
+				,shadeClose:true
+				,content:'<img style="width:100%;height:100%;" class="layui-upload-img" src="'+ imgSrc +'"/>'
+				,scrollbar:false
+			})
+		});
+  </script>
+	{include file="public/copyright"/}
+</body>
+</html>

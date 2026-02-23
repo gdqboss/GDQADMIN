@@ -1,0 +1,107 @@
+<!DOCTYPE html><!--custom_file(yueke)-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>课程设置</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12">
+				<div class="layui-card-header"><i class="fa fa-cog"></i> 课程设置</div>
+				<div class="layui-card-body" pad15>
+					<div class="layui-form form-label-w6" lay-filter="">
+<!--						<div class="layui-form-item">-->
+<!--							<label class="layui-form-label">系统状态：</label>-->
+<!--							<div class="layui-input-inline">-->
+<!--								<input type="radio" name="info[status]" value="1" {if $info['status']==1}checked{/if} title="开启" lay-filter="status"/>-->
+<!--								<input type="radio" name="info[status]" value="0" {if $info['status']==0}checked{/if} title="关闭" lay-filter="status"/>-->
+<!--							</div>-->
+<!--						</div>-->
+						
+						<div class="layui-form-item">
+							<label class="layui-form-label">自动关闭订单：</label>
+							<div class="layui-input-inline">
+								<input type="text" name="info[autoclose]" lay-verify="required" lay-verType="tips" class="layui-input" value="{$info.autoclose}">
+							</div>
+							<div class="layui-form-mid">分钟</div>
+							<div class="layui-form-mid layui-word-aux" style="margin-left:10px;">下单后多久不支付自动关闭订单，释放占用的库存</div>
+						</div>
+						
+						<div class="layui-form-item">
+							<label class="layui-form-label">会员折扣：</label>
+							<div class="layui-input-inline" style="width:350px">
+								<input type="radio" name="info[discount]" value="1" title="开启" {if $info['discount']==1}checked{/if}>
+								<input type="radio" name="info[discount]" value="0" title="关闭" {if $info['discount']==0}checked{/if}>
+							</div>
+							<div class="layui-form-mid layui-word-aux">是否开启会员折扣</div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label">{:t('优惠券')}抵扣：</label>
+							<div class="layui-input-inline" style="width:350px">
+								<input type="radio" name="info[iscoupon]" value="1" title="开启" {if $info['iscoupon']==1}checked{/if}>
+								<input type="radio" name="info[iscoupon]" value="0" title="关闭" {if $info['iscoupon']==0}checked{/if}>
+							</div>
+							<div class="layui-form-mid layui-word-aux">是否开启{:t('优惠券')}抵扣</div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label">评价审核：</label>
+							<div class="layui-input-inline">
+								<input type="radio" name="info[comment_check]" value="1" {if $info['comment_check']==1}checked{/if} title="开启" lay-filter="comment_check"/>
+								<input type="radio" name="info[comment_check]" value="0" {if $info['comment_check']==0}checked{/if} title="关闭" lay-filter="comment_check"/>
+							</div>
+							<div class="layui-form-mid layui-word-aux" style="margin-left:10px;">关闭后用户的评价将直接显示,不需要后台审核</div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label">提现方式：</label>
+							<div class="layui-input-inline" style="width:400px">
+								<input type="checkbox" name="info[withdraw_weixin]" title="微信钱包" value="1" {if $info['withdraw_weixin']==1}checked{/if} lay-skin="primary">
+								<input type="checkbox" name="info[withdraw_aliaccount]" title="支付宝" value="1" {if $info['withdraw_aliaccount']==1}checked{/if} lay-skin="primary"/>
+								<input type="checkbox" name="info[withdraw_bankcard]" title="银行卡" value="1" {if $info['withdraw_bankcard']==1}checked{/if} lay-skin="primary"/>
+							</div>
+							<div class="layui-form-mid layui-word-aux">提现到微信钱包需开通企业付款到零钱功能</div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label">提现最小金额：</label>
+							<div class="layui-input-inline" style="width:120px">
+								<input type="text" name="info[withdrawmin]" value="{$info['withdrawmin']}" class="layui-input"/>
+							</div>
+							<div class="layui-form-mid">元</div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label">提现手续费：</label>
+							<div class="layui-input-inline" style="width:120px">
+								<input type="text" name="info[withdrawfee]" value="{$info['withdrawfee']}" class="layui-input"/>
+							</div>
+							<div class="layui-form-mid">%</div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label"></label>
+							<div class="layui-input-block">
+								<button class="layui-btn" lay-submit lay-filter="formsubmit">提 交</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+    </div>
+  </div>
+	{include file="public/js"/}
+	<script>
+	layui.form.on('submit(formsubmit)', function(obj){
+		var field = obj.field
+		if(!field['info[withdraw_weixin]'])  field['info[withdraw_weixin]'] = 0
+		if(!field['info[withdraw_bankcard]'])  field['info[withdraw_bankcard]'] = 0
+		if(!field['info[withdraw_aliaccount]'])  field['info[withdraw_aliaccount]'] = 0
+		$.post("{:url('save')}",field,function(data){
+			dialog(data.msg,data.status,data.url);
+		})
+	})
+  </script>
+	{include file="public/copyright"/}
+</body>
+</html>

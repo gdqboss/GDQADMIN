@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>一物一码 - 海鲜社</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body { margin: 0; padding: 0; min-height: 100vh; background: #f0f2f5; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        
+        /* 顶部导航 */
+        .top-nav {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        
+        .top-nav a { color: white; text-decoration: none; font-size: 18px; }
+        .top-nav .title { font-size: 18px; font-weight: 600; }
+        
+        /* 统计卡片 */
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            padding: 15px;
+            background: white;
+            margin-bottom: 10px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            padding: 15px 10px;
+            text-align: center;
+            color: white;
+        }
+        
+        .stat-card.warning { background: linear-gradient(135deg, #ff9800 0%, #ff5722 100%); }
+        .stat-card.green { background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%); }
+        .stat-card.blue { background: linear-gradient(135deg, #2196f3 0%, #1565c0 100%); }
+        
+        .stat-num { font-size: 22px; font-weight: bold; }
+        .stat-label { font-size: 11px; opacity: 0.9; margin-top: 4px; }
+        
+        /* 操作栏 */
+        .action-bar {
+            padding: 12px 15px;
+            background: white;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .action-bar .btn {
+            padding: 10px 16px;
+            border-radius: 10px;
+            border: none;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); }
+        .btn-success { background: linear-gradient(135deg, #4caf50, #2e7d32); }
+        .btn-danger { background: linear-gradient(135deg, #f44336, #c62828); }
+        .btn-warning { background: linear-gradient(135deg, #ff9800, #ff5722); color: white; }
+        
+        /* 搜索栏 */
+        .search-bar {
+            padding: 12px 15px;
+            background: white;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-top: 10px;
+        }
+        
+        .search-bar input, .search-bar select {
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 14px;
+            background: #f8f9fa;
+        }
+        
+        .search-bar input { flex: 1; }
+        .search-bar select { min-width: 100px; }
+        
+        /* 列表 */
+        .qr-list { padding: 0 15px; }
+        
+        .qr-card {
+            background: white;
+            border-radius: 16px;
+            margin-bottom: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        }
+        
+        .qr-header {
+            padding: 12px 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .qr-checkbox {
+            width: 20px;
+            height: 20px;
+            accent-color: #667eea;
+        }
+        
+        .qr-code {
+            font-family: monospace;
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            background: #f5f5f5;
+            padding: 4px 8px;
+            border-radius: 6px;
+        }
+        
+        .qr-status {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            margin-left: auto;
+        }
+        
+        .qr-status.active { background: #e8f5e9; color: #2e7d32; }
+        .qr-status.used { background: #e3f2fd; color: #1565c0; }
+        .qr-status.scrap { background: #ffebee; color: #c62828; }
+        
+        .qr-body {
+            padding: 12px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .qr-product {
+            flex: 1;
+        }
+        
+        .qr-product-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .qr-product-sku {
+            font-size: 12px;
+            color: #888;
+            margin-top: 2px;
+        }
+        
+        .qr-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .qr-actions .btn {
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            border: none;
+        }
+        
+        /* 全选栏 */
+        .select-bar {
+            padding: 10px 15px;
+            background: #e8f4ff;
+            display: none;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .select-bar.show { display: flex; }
+        
+        .select-bar .count { font-size: 13px; color: #333; }
+        
+        /* 弹窗 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .modal.show { display: flex; }
+        
+        .modal-content {
+            background: white;
+            border-radius: 20px;
+            width: 100%;
+            max-width: 420px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .modal-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-header h5 { margin: 0; font-size: 16px; }
+        .modal-header .close { font-size: 24px; cursor: pointer; }
+        
+        .modal-body { padding: 20px; }
+        
+        .modal-body .form-group { margin-bottom: 15px; }
+        .modal-body label { font-size: 13px; color: #666; margin-bottom: 6px; display: block; }
+        .modal-body input, .modal-body select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+        }
+        
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid #f0f0f0;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .modal-footer .btn {
+            flex: 1;
+            padding: 12px;
+            border-radius: 10px;
+            border: none;
+            font-size: 14px;
+        }
+        
+        /* 二维码显示 */
+        .qr-display {
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .qr-display img {
+            width: 200px;
+            height: 200px;
+            border-radius: 10px;
+        }
+        
+        .qr-display .code {
+            font-family: monospace;
+            font-size: 16px;
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            display: inline-block;
+        }
+        
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+        
+        .empty-state i { font-size: 48px; margin-bottom: 15px; }
+        
+        /* 加载 */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        
+        /* 页脚 */
+        .page-footer {
+            padding: 15px;
+            text-align: center;
+        }
+        
+        .page-footer .btn {
+            padding: 10px 20px;
+            border-radius: 20px;
+            border: 1px solid #ddd;
+            background: white;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶部导航 -->
+    <div class="top-nav">
+        <a href="/"><i class="bi bi-house"></i></a>
+        <span class="title">🏷️ 一物一码</span>
+        <a href="#" onclick="showGenerateModal()"><i class="bi bi-plus-lg"></i></a>
+    </div>
+    
+    <!-- 统计 -->
+    <div class="stats-container">
+        <div class="stat-card">
+            <div class="stat-num" id="statTotal">0</div>
+            <div class="stat-label">总二维码</div>
+        </div>
+        <div class="stat-card green">
+            <div class="stat-num" id="statToday">0</div>
+            <div class="stat-label">今日新增</div>
+        </div>
+        <div class="stat-card blue">
+            <div class="stat-num" id="statLinked">0</div>
+            <div class="stat-label">已关联商品</div>
+        </div>
+        <div class="stat-card warning">
+            <div class="stat-num" id="statScanned">0</div>
+            <div class="stat-label">扫码次数</div>
+        </div>
+    </div>
+    
+    <!-- 操作栏 -->
+    <div class="action-bar">
+        <button class="btn btn-primary" onclick="showGenerateModal()">
+            <i class="bi bi-qr-code"></i> 生成二维码
+        </button>
+        <button class="btn btn-success" onclick="showBatchLinkModal()">
+            <i class="bi bi-link-45deg"></i> 批量关联
+        </button>
+        <button class="btn btn-warning" onclick="showBatchModal()">
+            <i class="bi bi-pencil"></i> 批量操作
+        </button>
+    </div>
+    
+    <!-- 搜索 -->
+    <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="搜索二维码编码、商品名称..." oninput="searchQR()">
+        <select id="statusFilter" onchange="searchQR()">
+            <option value="">全部状态</option>
+            <option value="active">可用</option>
+            <option value="used">已用</option>
+            <option value="scrap">已报废</option>
+        </select>
+    </div>
+    
+    <!-- 全选栏 -->
+    <div class="select-bar" id="selectBar">
+        <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+        <label for="selectAll">全选</label>
+        <span class="count">已选 <span id="selectedCount">0</span> 个</span>
+        <button class="btn btn-danger btn-sm" onclick="batchDelete()" style="margin-left:auto">删除</button>
+    </div>
+    
+    <!-- 列表 -->
+    <div class="qr-list" id="qrList">
+        <div class="loading">加载中...</div>
+    </div>
+    
+    <!-- 页脚 -->
+    <div class="page-footer">
+        <button class="btn" onclick="loadMore()">加载更多</button>
+    </div>
+
+    <!-- 生成二维码弹窗 -->
+    <div class="modal" id="generateModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5>📱 生成二维码</h5>
+                <span class="close" onclick="closeModal('generateModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>生成方式</label>
+                    <select id="generateType" onchange="toggleGenerateType()">
+                        <option value="single">单个二维码</option>
+                        <option value="batch">批量生成</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>前缀（可选）</label>
+                    <input type="text" id="prefix" placeholder="默认: QR" value="QR">
+                </div>
+                
+                <div class="form-group">
+                    <label>关联商品（可选）</label>
+                    <select id="productSelect" onchange="loadSKUs()">
+                        <option value="">不关联商品</option>
+                    </select>
+                </div>
+                
+                <div class="form-group" id="skuGroup" style="display:none">
+                    <label>SKU（可选）</label>
+                    <select id="skuSelect">
+                        <option value="">不关联SKU</option>
+                    </select>
+                </div>
+                
+                <div class="form-group" id="quantityGroup" style="display:none">
+                    <label>生成数量（1-1000）</label>
+                    <input type="number" id="quantity" value="10" min="1" max="1000">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" style="background:#f5f5f5" onclick="closeModal('generateModal')">取消</button>
+                <button class="btn btn-primary" onclick="generateQR()">生成</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 批量关联弹窗 -->
+    <div class="modal" id="batchLinkModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5>🔗 批量关联商品</h5>
+                <span class="close" onclick="closeModal('batchLinkModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:13px;color:#666;margin-bottom:15px">将选中的二维码关联到指定商品</p>
+                
+                <div class="form-group">
+                    <label>选择商品</label>
+                    <select id="linkProductSelect" onchange="loadLinkSKUs()">
+                        <option value="">不关联商品</option>
+                    </select>
+                </div>
+                
+                <div class="form-group" id="linkSkuGroup" style="display:none">
+                    <label>选择SKU（可选）</label>
+                    <select id="linkSkuSelect">
+                        <option value="">不关联SKU</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" style="background:#f5f5f5" onclick="closeModal('batchLinkModal')">取消</button>
+                <button class="btn btn-success" onclick="batchLink()">确认关联</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 批量操作弹窗 -->
+    <div class="modal" id="batchModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5>⚙️ 批量操作</h5>
+                <span class="close" onclick="closeModal('batchModal')">&times;</span>
+            </div>
+            <div class="modal-body" style="text-align:center">
+                <p>已选择 <span id="batchCount">0</span> 个二维码</p>
+                <div style="display:flex;flex-direction:column;gap:10px;margin-top:20px">
+                    <button class="btn btn-danger" onclick="batchDelete()">🗑️ 批量删除</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 单个二维码详情弹窗 -->
+    <div class="modal" id="qrDetailModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5>🏷️ 二维码详情</h5>
+                <span class="close" onclick="closeModal('qrDetailModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="qr-display" id="qrDisplay"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeModal('qrDetailModal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentPage = 1;
+        let selectedIds = [];
+        let allData = [];
+        let hasMore = true;
+        
+        // 加载统计
+        function loadStats() {
+            fetch('/api/commune/qrcode.php?action=stats')
+            .then(r => r.json())
+            .then(data => {
+                if (data.code === 1) {
+                    document.getElementById('statTotal').textContent = data.data.total;
+                    document.getElementById('statToday').textContent = data.data.today;
+                    document.getElementById('statLinked').textContent = data.data.linked;
+                    document.getElementById('statScanned').textContent = data.data.scanned;
+                }
+            });
+        }
+        
+        // 加载商品列表
+        function loadProducts(selectId) {
+            fetch('/api/commune/qrcode.php?action=get_products')
+            .then(r => r.json())
+            .then(data => {
+                if (data.code === 1) {
+                    const select = document.getElementById(selectId);
+                    select.innerHTML = '<option value="">不关联商品</option>';
+                    data.data.forEach(p => {
+                        select.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+                    });
+                }
+            });
+        }
+        
+        // 加载SKU
+        function loadSKUs() {
+            const productId = document.getElementById('productSelect').value;
+            const skuGroup = document.getElementById('skuGroup');
+            
+            if (!productId) {
+                skuGroup.style.display = 'none';
+                return;
+            }
+            
+            fetch('/api/commune/qrcode.php?action=get_skus&product_id=' + productId)
+            .then(r => r.json())
+            .then(data => {
+                if (data.code === 1 && data.data.length > 0) {
+                    skuGroup.style.display = 'block';
+                    const select = document.getElementById('skuSelect');
+                    select.innerHTML = '<option value="">不关联SKU</option>';
+                    data.data.forEach(s => {
+                        const spec = [s.spec1, s.spec2].filter(x => x).join(' / ');
+                        select.innerHTML += `<option value="${s.id}">${s.sku_name} ${spec}</option>`;
+                    });
+                } else {
+                    skuGroup.style.display = 'none';
+                }
+            });
+        }
+        
+        function loadLinkSKUs() {
+            const productId = document.getElementById('linkProductSelect').value;
+            const skuGroup = document.getElementById('linkSkuGroup');
+            
+            if (!productId) {
+                skuGroup.style.display = 'none';
+                return;
+            }
+            
+            fetch('/api/commune/qrcode.php?action=get_skus&product_id=' + productId)
+            .then(r => r.json())
+            .then(data => {
+                if (data.code === 1 && data.data.length > 0) {
+                    skuGroup.style.display = 'block';
+                    const select = document.getElementById('linkSkuSelect');
+                    select.innerHTML = '<option value="">不关联SKU</option>';
+                    data.data.forEach(s => {
+                        const spec = [s.spec1, s.spec2].filter(x => x).join(' / ');
+                        select.innerHTML += `<option value="${s.id}">${s.sku_name} ${spec}</option>`;
+                    });
+                } else {
+                    skuGroup.style.display = 'none';
+                }
+            });
+        }
+        
+        // 切换生成类型
+        function toggleGenerateType() {
+            const type = document.getElementById('generateType').value;
+            document.getElementById('quantityGroup').style.display = type === 'batch' ? 'block' : 'none';
+        }
+        
+        // 搜索
+        function searchQR() {
+            currentPage = 1;
+            allData = [];
+            selectedIds = [];
+            updateSelectBar();
+            loadQR();
+        }
+        
+        // 加载二维码列表
+        function loadQR(append = false) {
+            const search = document.getElementById('searchInput').value;
+            const status = document.getElementById('statusFilter').value;
+            
+            fetch('/api/commune/qrcode.php?action=list&search=' + encodeURIComponent(search) + '&status=' + status + '&page=' + currentPage + '&limit=20')
+            .then(r => r.json())
+            .then(data => {
+                if (data.code === 1) {
+                    if (append) {
+                        allData = allData.concat(data.data.list);
+                    } else {
+                        allData = data.data.list;
+                    }
+                    hasMore = data.data.list.length >= 20;
+                    renderQR();
+                }
+            });
+        }
+        
+        function loadMore() {
+            currentPage++;
+            loadQR(true);
+        }
+        
+        // 渲染列表
+        function renderQR() {
+            const container = document.getElementById('qrList');
+            
+            if (allData.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="bi bi-qr-code"></i>
+                        <p>暂无二维码<br>点击右上角 + 生成</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = '';
+            allData.forEach((q, index) => {
+                const isSelected = selectedIds.includes(q.id);
+                const statusText = q.status === 'active' ? '可用' : (q.status === 'used' ? '已用' : '已报废');
+                const productHtml = q.product_id > 0 
+                    ? `<div class="qr-product-name">${q.product_name}</div>
+                       <div class="qr-product-sku">${q.sku_name || '无SKU'} ${q.sku_spec || ''}</div>`
+                    : `<div class="qr-product-name" style="color:#999">未关联商品</div>`;
+                
+                html += `
+                    <div class="qr-card">
+                        <div class="qr-header">
+                            <input type="checkbox" class="qr-checkbox" ${isSelected ? 'checked' : ''} onchange="toggleSelect(${q.id})">
+                            <span class="qr-code">${q.code}</span>
+                            <span class="qr-status ${q.status}">${statusText}</span>
+                        </div>
+                        <div class="qr-body">
+                            <div class="qr-product">${productHtml}</div>
+                            <div class="qr-actions">
+                                <button class="btn" style="background:#e3f2fd;color:#1976d2" onclick="showQRDetail(${q.id}, '${q.code}')">查看</button>
+                                <button class="btn" style="background:#fff3e0;color:#e65100" onclick="linkProduct(${q.id})">关联</button>
+                                <button class="btn" style="background:#ffebee;color:#c62828" onclick="deleteQR(${q.id})">删除</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        // 选择/取消选择
+        function toggleSelect(id) {
+            const idx = selectedIds.indexOf(id);
+            if (idx > -1) {
+                selectedIds.splice(idx, 1);
+            } else {
+                selectedIds.push(id);
+            }
+            updateSelectBar();
+        }
+        
+        // 全选
+        function toggleSelectAll() {
+            const checkAll = document.getElementById('selectAll').checked;
+            if (checkAll) {
+                selectedIds = allData.map(q => q.id);
+            } else {
+                selectedIds = [];
+            }
+            renderQR();
+            updateSelectBar();
+        }
+        
+        // 更新选择栏
+        function updateSelectBar() {
+            const bar = document.getElementById('selectBar');
+            const count = document.getElementById('selectedCount');
+            const checkAll = document.getElementById('selectAll');
+            
+            if (selectedIds.length > 0) {
+                bar.classList.add('show');
+                count.textContent = selectedIds.length;
+                checkAll.checked = selectedIds.length === allData.length;
+            } else {
+                bar.classList.remove('show');
+            }
+        }
+        
+        // 显示生成弹窗
+        function showGenerateModal() {
+            loadProducts('productSelect');
+            document.getElementById('generateModal').classList.add('show');
+        }
+        
+        // 生成二维码
+        function generateQR() {
+            const type = document.getElementById('generateType').value;
+            const prefix = document.getElementById('prefix').value || 'QR';
+            const productId = document.getElementById('productSelect').value;
+            const skuId = document.getElementById('skuSelect').value;
+            const quantity = document.getElementById('quantity').value;
+            
+            const formData = new FormData();
+            formData.append('prefix', prefix);
+            formData.append('create_user', 'admin');
+            
+            if (productId) {
+                formData.append('product_id', productId);
+                if (skuId) {
+                    formData.append('sku_id', skuId);
+                }
+            }
+            
+            if (type === 'batch') {
+                formData.append('quantity', quantity);
+                fetch('/api/commune/qrcode.php?action=generate_batch', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(r => r.json())
+                .then(data => {
+                    alert(data.msg);
+                    if (data.code === 1) {
+                        closeModal('generateModal');
+                        loadStats();
+                        searchQR();
+                    }
+                });
+            } else {
+                fetch('/api/commune/qrcode.php?action=generate_single', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(r => r.json())
+                .then(data => {
+                    alert(data.msg);
+                    if (data.code === 1) {
+                        closeModal('generateModal');
+                        loadStats();
+                        searchQR();
+                    }
+                });
+            }
+        }
+        
+        // 显示二维码详情
+        function showQRDetail(id, code) {
+            const qrImage = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent('http://bot.gdqshop.cn/scan.html?code=' + code);
+            document.getElementById('qrDisplay').innerHTML = `
+                <img src="${qrImage}" alt="${code}">
+                <div class="code">${code}</div>
+            `;
+            document.getElementById('qrDetailModal').classList.add('show');
+        }
+        
+        // 关联商品
+        function linkProduct(id) {
+            loadProducts('linkProductSelect');
+            window.currentLinkId = id;
+            document.getElementById('batchLinkModal').classList.add('show');
+        }
+        
+        // 批量关联
+        function batchLink() {
+            const ids = selectedIds.join(',');
+            const productId = document.getElementById('linkProductSelect').value;
+            const skuId = document.getElementById('linkSkuSelect').value;
+            
+            const formData = new FormData();
+            formData.append('ids', ids);
+            if (productId) {
+                formData.append('product_id', productId);
+                if (skuId) {
+                    formData.append('sku_id', skuId);
+                }
+            }
+            
+            fetch('/api/commune/qrcode.php?action=batch_link', {
+                method: 'POST',
+                body: formData
+            })
+            .then(r => r.json())
+            .then(data => {
+                alert(data.msg);
+                if (data.code === 1) {
+                    closeModal('batchLinkModal');
+                    selectedIds = [];
+                    updateSelectBar();
+                    loadQR();
+                }
+            });
+        }
+        
+        // 批量关联（单个）
+        function linkProduct(id) {
+            loadProducts('linkProductSelect');
+            window.currentLinkId = id;
+            document.getElementById('batchLinkModal').classList.add('show');
+            
+            // 修改确认按钮行为
+            document.querySelector('#batchLinkModal .btn-success').onclick = function() {
+                const productId = document.getElementById('linkProductSelect').value;
+                const skuId = document.getElementById('linkSkuSelect').value;
+                
+                fetch('/api/commune/qrcode.php?action=link_product', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: 'id=' + id + '&product_id=' + (productId || 0) + '&sku_id=' + (skuId || 0)
+                })
+                .then(r => r.json())
+                .then(data => {
+                    alert(data.msg);
+                    if (data.code === 1) {
+                        closeModal('batchLinkModal');
+                        loadQR();
+                    }
+                });
+            };
+        }
+        
+        // 显示批量关联弹窗
+        function showBatchLinkModal() {
+            if (selectedIds.length === 0) {
+                alert('请先选择二维码');
+                return;
+            }
+            loadProducts('linkProductSelect');
+            document.getElementById('batchLinkModal').classList.add('show');
+            
+            // 修改确认按钮行为
+            document.querySelector('#batchLinkModal .btn-success').onclick = batchLink;
+        }
+        
+        // 显示批量操作弹窗
+        function showBatchModal() {
+            if (selectedIds.length === 0) {
+                alert('请先选择二维码');
+                return;
+            }
+            document.getElementById('batchCount').textContent = selectedIds.length;
+            document.getElementById('batchModal').classList.add('show');
+        }
+        
+        // 批量删除
+        function batchDelete() {
+            if (!confirm('确定删除选中的 ' + selectedIds.length + ' 个二维码？')) return;
+            
+            fetch('/api/commune/qrcode.php?action=batch_delete', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'ids=' + selectedIds.join(',')
+            })
+            .then(r => r.json())
+            .then(data => {
+                alert(data.msg);
+                if (data.code === 1) {
+                    selectedIds = [];
+                    updateSelectBar();
+                    closeModal('batchModal');
+                    loadStats();
+                    searchQR();
+                }
+            });
+        }
+        
+        // 删除单个
+        function deleteQR(id) {
+            if (!confirm('确定删除该二维码？')) return;
+            
+            fetch('/api/commune/qrcode.php?action=delete', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'id=' + id
+            })
+            .then(r => r.json())
+            .then(data => {
+                alert(data.msg);
+                if (data.code === 1) {
+                    loadStats();
+                    searchQR();
+                }
+            });
+        }
+        
+        // 关闭弹窗
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('show');
+        }
+        
+        // 初始化
+        loadStats();
+        loadQR();
+    </script>
+</body>
+</html>

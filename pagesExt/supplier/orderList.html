@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>订单列表 - 供应商发货管理系统</title>
+    <script src="/plugins/vue.min.js"></script>
+    <script src="/plugins/vant.min.js"></script>
+    <link rel="stylesheet" href="/plugins/vant.min.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f5f5;
+        }
+        .app-container {
+            max-width: 768px;
+            margin: 0 auto;
+            min-height: 100vh;
+            background-color: #fff;
+            position: relative;
+        }
+        .header {
+            background-color: #ff4500;
+            color: white;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .header .back-btn {
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        .header .title {
+            flex: 1;
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .filter-tabs {
+            display: flex;
+            overflow-x: auto;
+            white-space: nowrap;
+            border-bottom: 1px solid #eee;
+            background-color: #fff;
+            position: sticky;
+            top: 50px;
+            z-index: 99;
+        }
+        .filter-tab {
+            padding: 12px 16px;
+            font-size: 14px;
+            cursor: pointer;
+            color: #666;
+        }
+        .filter-tab.active {
+            color: #ff4500;
+            border-bottom: 2px solid #ff4500;
+        }
+        .order-item {
+            padding: 15px;
+            border-bottom: 10px solid #f5f5f5;
+            background-color: #fff;
+        }
+        .order-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .order-num {
+            font-size: 14px;
+            color: #666;
+        }
+        .order-status {
+            font-size: 14px;
+            color: #ff4500;
+            font-weight: 500;
+        }
+        .product-info {
+            padding: 10px 0;
+            border-top: 1px solid #f0f0f0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .product-item {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        .product-item:last-child {
+            margin-bottom: 0;
+        }
+        .product-image {
+            width: 60px;
+            height: 60px;
+            background-color: #f5f5f5;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        .product-details {
+            flex: 1;
+        }
+        .product-name {
+            font-size: 14px;
+            margin-bottom: 5px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            color: #333;
+        }
+        .product-spec {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 5px;
+        }
+        .product-price-count {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .product-price {
+            font-size: 14px;
+            color: #ff4500;
+        }
+        .product-count {
+            font-size: 14px;
+            color: #666;
+        }
+        .order-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+        }
+        .order-time {
+            font-size: 12px;
+            color: #999;
+        }
+        .order-amount {
+            font-size: 14px;
+            color: #333;
+        }
+        .order-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 10px;
+            gap: 10px;
+        }
+        .action-btn {
+            padding: 6px 12px;
+            border: 1px solid #ff4500;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #ff4500;
+            background-color: #fff;
+            cursor: pointer;
+        }
+        .action-btn.primary {
+            background-color: #ff4500;
+            color: #fff;
+        }
+        .empty-container {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+        }
+        .search-bar {
+            padding: 10px;
+            background-color: #fff;
+            position: sticky;
+            top: 92px;
+            z-index: 98;
+        }
+        .search-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            font-size: 14px;
+            box-sizing: border-box;
+            background-color: #f5f5f5;
+        }
+        .load-more {
+            text-align: center;
+            padding: 15px;
+            color: #999;
+            font-size: 14px;
+        }
+        .loading {
+            padding: 20px;
+            text-align: center;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="header">
+            <span class="back-btn" onclick="window.history.back();">< 返回</span>
+            <span class="title">订单管理</span>
+            <span style="width: 40px;"></span>
+        </div>
+        <div class="filter-tabs">
+            <div 
+                v-for="tab in tabs" 
+                :key="tab.value"
+                class="filter-tab"
+                :class="{ active: currentTab === tab.value }"
+                @click="switchTab(tab.value)"
+            >
+                {{ tab.label }}
+            </div>
+        </div>
+        <div class="search-bar">
+            <input 
+                type="text" 
+                class="search-input"
+                v-model="searchKeyword"
+                placeholder="请输入订单号或商品名称搜索"
+                @input="handleSearch"
+            >
+        </div>
+        <div id="app">
+            <!-- 订单列表 -->
+            <div v-if="loading" class="loading">
+                加载中...
+            </div>
+            <div v-else-if="orders.length === 0" class="empty-container">
+                暂无订单
+            </div>
+            <div v-else class="order-list">
+                <div 
+                    v-for="order in orders" 
+                    :key="order.id"
+                    class="order-item"
+                >
+                    <div class="order-header">
+                        <span class="order-num">订单号: {{ order.ordernum }}</span>
+                        <span class="order-status">{{ order.status_text }}</span>
+                    </div>
+                    <div class="product-info">
+                        <div 
+                            v-for="product in order.products" 
+                            :key="product.id"
+                            class="product-item"
+                        >
+                            <div class="product-image">
+                                <img 
+                                    v-if="product.image" 
+                                    :src="product.image" 
+                                    style="width: 100%; height: 100%; object-fit: cover;"
+                                >
+                            </div>
+                            <div class="product-details">
+                                <div class="product-name">{{ product.name }}</div>
+                                <div class="product-spec">{{ product.spec }}</div>
+                                <div class="product-price-count">
+                                    <span class="product-price">¥{{ product.price }}</span>
+                                    <span class="product-count">×{{ product.num }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="order-footer">
+                        <span class="order-time">下单时间: {{ order.addtime }}</span>
+                        <span class="order-amount">共{{ order.total_num }}件 合计: ¥{{ order.total_price }}</span>
+                    </div>
+                    <div class="order-actions">
+                        <button 
+                            v-if="order.status === 1" 
+                            class="action-btn primary"
+                            @click="goToDetail(order.id)"
+                        >
+                            确认发货
+                        </button>
+                        <button 
+                            v-if="order.status === 2" 
+                            class="action-btn"
+                            @click="viewExpress(order.id)"
+                        >
+                            查看物流
+                        </button>
+                        <button 
+                            class="action-btn"
+                            @click="goToDetail(order.id)"
+                        >
+                            订单详情
+                        </button>
+                    </div>
+                </div>
+                <div 
+                    v-if="hasMore" 
+                    class="load-more"
+                    @click="loadMore"
+                >
+                    加载更多
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                orders: [],
+                loading: false,
+                currentPage: 1,
+                hasMore: true,
+                currentTab: 0, // 0-全部，1-待发货，2-已发货，3-已完成
+                searchKeyword: '',
+                tabs: [
+                    { label: '全部', value: 0 },
+                    { label: '待发货', value: 1 },
+                    { label: '已发货', value: 2 },
+                    { label: '已完成', value: 3 }
+                ]
+            },
+            mounted() {
+                // 检查登录状态
+                const token = localStorage.getItem('supplier_token');
+                if (!token) {
+                    alert('请先登录');
+                    window.location.href = '/pagesExt/supplier/index.html';
+                    return;
+                }
+                
+                // 获取订单列表
+                this.getOrders();
+            },
+            methods: {
+                // 切换标签
+                switchTab(tab) {
+                    this.currentTab = tab;
+                    this.currentPage = 1;
+                    this.orders = [];
+                    this.hasMore = true;
+                    this.getOrders();
+                },
+                // 搜索
+                handleSearch() {
+                    // 防抖处理
+                    clearTimeout(this.searchTimer);
+                    this.searchTimer = setTimeout(() => {
+                        this.currentPage = 1;
+                        this.orders = [];
+                        this.hasMore = true;
+                        this.getOrders();
+                    }, 500);
+                },
+                // 获取订单列表
+                getOrders() {
+                    if (this.loading || !this.hasMore) return;
+                    
+                    this.loading = true;
+                    
+                    const token = localStorage.getItem('supplier_token');
+                    const data = {
+                        page: this.currentPage,
+                        limit: 10,
+                        status: this.currentTab || '',
+                        keyword: this.searchKeyword
+                    };
+                    
+                    fetch('/api/supplier/orderList', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': token
+                        },
+                        body: JSON.stringify(data)
+                    })
+                    .then(response => response.json())
+                    .then(res => {
+                        this.loading = false;
+                        
+                        if (res.status === 1) {
+                            if (res.data.list && res.data.list.length) {
+                                this.orders = this.currentPage === 1 ? res.data.list : [...this.orders, ...res.data.list];
+                                this.hasMore = res.data.list.length === 10;
+                                this.currentPage++;
+                            } else {
+                                this.hasMore = false;
+                            }
+                        } else {
+                            alert(res.msg || '获取订单列表失败');
+                            if (res.code === 401) {
+                                localStorage.removeItem('supplier_token');
+                                window.location.href = '/pagesExt/supplier/index.html';
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        this.loading = false;
+                        console.error('Error:', error);
+                    });
+                },
+                // 加载更多
+                loadMore() {
+                    this.getOrders();
+                },
+                // 查看订单详情
+                goToDetail(orderId) {
+                    window.location.href = `/pagesExt/supplier/orderDetail.html?id=${orderId}`;
+                },
+                // 查看物流信息
+                viewExpress(orderId) {
+                    // 可以跳转到物流详情页，或弹出物流信息
+                    fetch('/api/supplier/getExpressInfo', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': localStorage.getItem('supplier_token')
+                        },
+                        body: JSON.stringify({ order_id: orderId })
+                    })
+                    .then(response => response.json())
+                    .then(res => {
+                        if (res.status === 1) {
+                            // 这里可以跳转到物流详情页或显示物流信息
+                            alert(`物流公司: ${res.data.com_name}\n物流单号: ${res.data.no}`);
+                        } else {
+                            alert(res.msg || '获取物流信息失败');
+                        }
+                    });
+                }
+            }
+        });
+    </script>
+</body>
+</html>

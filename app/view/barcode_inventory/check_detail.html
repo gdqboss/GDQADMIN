@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>{$cfg['title']} - {$title}</title>
+    {include file="public/css"/}
+    <style>
+        .diff-positive { color: #52c41a; font-weight: bold; }
+        .diff-negative { color: #f5222d; font-weight: bold; }
+        .diff-zero { color: #8c8c8c; }
+    </style>
+</head>
+<body>
+    <div class="layui-fluid">
+        <div class="layui-row layui-col-space15">
+            <div class="layui-card layui-col-md12">
+                <div class="layui-card-header">
+                    <i class="fa fa-list"></i> {$title}
+                    <div class="layui-card-header-tool">
+                        <a href="{:url('BarcodeInventory/check')}" class="layui-btn layui-btn-sm layui-btn-primary" style="margin-left:10px;">
+                            <i class="fa fa-arrow-left"></i> {:t('返回列表')}
+                        </a>
+                        {{if $checkInfo.status == 0}}
+                        <button class="layui-btn layui-btn-sm layui-btn-normal" id="finishCheckBtn" style="margin-left:10px;">
+                            <i class="fa fa-check-circle"></i> {:t('完成盘点')}
+                        </button>
+                        {{/if}}
+                        <a href="{:url('BarcodeInventory/check_analysis', ['id' => $checkInfo.id])}" class="layui-btn layui-btn-sm layui-btn-warm" style="margin-left:10px;">
+                            <i class="fa fa-bar-chart"></i> {:t('查看分析')}
+                        </a>
+                    </div>
+                </div>
+                <div class="layui-card-body" pad15>
+                    <!-- 盘点基本信息 -->
+                    <div class="layui-form" style="margin-bottom: 20px; padding: 15px; background-color: #fafafa; border-radius: 4px;">
+                        <div class="layui-form-item">
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('盘点单号')}：</label>
+                                <div class="layui-input-inline">
+                                    <input type="text" value="{$checkInfo.check_sn}" class="layui-input" readonly>
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('盘点名称')}：</label>
+                                <div class="layui-input-inline">
+                                    <input type="text" value="{$checkInfo.check_name}" class="layui-input" readonly>
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('盘点人')}：</label>
+                                <div class="layui-input-inline">
+                                    <input type="text" value="{$checkInfo.check_user}" class="layui-input" readonly>
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('盘点时间')}：</label>
+                                <div class="layui-input-inline">
+                                    <input type="text" value="{:date('Y-m-d H:i:s', $checkInfo.check_time)}" class="layui-input" readonly>
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('状态')}：</label>
+                                <div class="layui-input-inline">
+                                    <input type="text" value="{$checkInfo.status == 1 ? t('已完成') : t('未完成')}" class="layui-input" readonly>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="layui-form-item">
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('盘点商品数')}：</label>
+                                <div class="layui-input-inline">
+                                    <input type="text" value="{$checkInfo.total_products}" class="layui-input" readonly>
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('差异总数')}：</label>
+                                <div class="layui-input-inline">
+                                    <input type="text" value="{$checkInfo.total_diff}" class="layui-input" readonly>
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('差异金额')}：</label>
+                                <div class="layui-input-inline">
+                                    <input type="text" value="{$checkInfo.total_diff_amount.toFixed(2)}" class="layui-input" readonly>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 搜索区域 -->
+                    <div class="layui-form" style="margin-bottom: 15px;">
+                        <div class="layui-form-item">
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('商品名称')}：</label>
+                                <div class="layui-input-inline" style="width: 250px;">
+                                    <input type="text" name="pro_name" id="pro_name" placeholder="{:t('请输入商品名称')}" class="layui-input">
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <button class="layui-btn layui-btn-primary" id="searchBtn">
+                                    <i class="fa fa-search"></i> {:t('搜索')}
+                                </button>
+                                <button class="layui-btn layui-btn-primary" id="resetBtn">
+                                    <i class="fa fa-refresh"></i> {:t('重置')}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 盘点详情列表 -->
+                    <table class="layui-hide" id="checkDetailTable" lay-filter="checkDetailTable"></table>
+                    
+                    <!-- 实际库存输入模板 -->
+                    <script type="text/html" id="actualStockTpl">
+                        {{if $checkInfo.status == 0}}
+                        <input type="number" name="actual_stock" class="layui-input actual-stock-input" value="{{d.actual_stock}}" min="0" data-id="{{d.id}}" style="width: 100px; text-align: center;">
+                        {{else}}
+                        {{d.actual_stock}}
+                        {{/if}}
+                    </script>
+                    
+                    <!-- 差异数量模板 -->
+                    <script type="text/html" id="diffStockTpl">
+                        {{if d.diff_stock > 0}}
+                        <span class="diff-positive">+{{d.diff_stock}}</span>
+                        {{else if d.diff_stock < 0}}
+                        <span class="diff-negative">{{d.diff_stock}}</span>
+                        {{else}}
+                        <span class="diff-zero">{{d.diff_stock}}</span>
+                        {{/if}}
+                    </script>
+                    
+                    <!-- 差异金额模板 -->
+                    <script type="text/html" id="diffAmountTpl">
+                        {{if d.diff_amount > 0}}
+                        <span class="diff-positive">+{{d.diff_amount.toFixed(2)}}</span>
+                        {{else if d.diff_amount < 0}}
+                        <span class="diff-negative">{{d.diff_amount.toFixed(2)}}</span>
+                        {{else}}
+                        <span class="diff-zero">{{d.diff_amount.toFixed(2)}}</span>
+                        {{/if}}
+                    </script>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部脚本 -->
+    {include file="public/js"/}
+    
+    <script>
+        layui.use(['table', 'form', 'layer'], function() {
+            var table = layui.table;
+            var form = layui.form;
+            var layer = layui.layer;
+            var checkId = {$checkInfo.id};
+            
+            // 渲染表单
+            form.render();
+            
+            // 渲染表格
+            var tableIns = table.render({
+                elem: '#checkDetailTable',
+                url: '{:url("BarcodeInventory/check_detail", "id=" . $checkInfo.id)}',
+                page: true,
+                limit: 20,
+                limits: [10, 20, 30, 50],
+                cols: [[
+                    {field: 'id', title: 'ID', width: 80, sort: true},
+                    {field: 'pro_name', title: '{:t('商品名称')}', minWidth: 200},
+                    {field: 'gg_name', title: '{:t('规格名称')}', minWidth: 150},
+                    {field: 'barcode', title: '{:t('条码/二维码')}', minWidth: 150},
+                    {field: 'system_stock', title: '{:t('系统库存')}', width: 120, align: 'right'},
+                    {field: 'actual_stock', title: '{:t('实际库存')}', width: 120, align: 'center', templet: '#actualStockTpl'},
+                    {field: 'diff_stock', title: '{:t('差异数量')}', width: 120, align: 'center', templet: '#diffStockTpl'},
+                    {field: 'price', title: '{:t('单价')}', width: 100, align: 'right', templet: function(d) { return d.price.toFixed(2); }},
+                    {field: 'diff_amount', title: '{:t('差异金额')}', width: 120, align: 'right', templet: '#diffAmountTpl'},
+                    {field: 'remark', title: '{:t('备注')}', minWidth: 150}
+                ]],
+                done: function() {
+                    // 绑定实际库存输入事件
+                    bindActualStockInputEvent();
+                }
+            });
+            
+            // 绑定实际库存输入事件
+            function bindActualStockInputEvent() {
+                $('.actual-stock-input').on('blur', function() {
+                    var id = $(this).data('id');
+                    var actual_stock = parseInt($(this).val()) || 0;
+                    
+                    // 更新库存
+                    $.ajax({
+                        url: '{:url('BarcodeInventory/update_check_stock')}',
+                        type: 'POST',
+                        data: {id: id, actual_stock: actual_stock},
+                        dataType: 'json',
+                        success: function(res) {
+                            if (res.status == 1) {
+                                // 重新加载表格
+                                tableIns.reload({page: false});
+                            } else {
+                                layer.msg(res.msg, {icon: 2});
+                            }
+                        },
+                        error: function() {
+                            layer.msg('{:t('网络错误，请稍后重试')}', {icon: 2});
+                        }
+                    });
+                });
+            }
+            
+            // 搜索
+            $('#searchBtn').click(function() {
+                var pro_name = $('#pro_name').val();
+                
+                tableIns.reload({
+                    where: {
+                        pro_name: pro_name
+                    },
+                    page: {
+                        curr: 1
+                    }
+                });
+            });
+            
+            // 重置
+            $('#resetBtn').click(function() {
+                $('#pro_name').val('');
+                tableIns.reload({
+                    where: {
+                        pro_name: ''
+                    },
+                    page: {
+                        curr: 1
+                    }
+                });
+            });
+            
+            // 完成盘点
+            $('#finishCheckBtn').click(function() {
+                layer.confirm('{:t('确定要完成盘点吗？完成后将更新实际库存。')}', {
+                    btn: ['{:t('确定')}', '{:t('取消')}']
+                }, function(index) {
+                    // 发送完成盘点请求
+                    $.ajax({
+                        url: '{:url('BarcodeInventory/finish_check')}',
+                        type: 'POST',
+                        data: {id: checkId},
+                        dataType: 'json',
+                        success: function(res) {
+                            if (res.status == 1) {
+                                layer.msg(res.msg, {icon: 1, time: 1500}, function() {
+                                    window.location.href = res.url;
+                                });
+                            } else {
+                                layer.msg(res.msg, {icon: 2});
+                            }
+                        },
+                        error: function() {
+                            layer.msg('{:t('网络错误，请稍后重试')}', {icon: 2});
+                        }
+                    });
+                    layer.close(index);
+                });
+            });
+        });
+    </script>
+</body>
+</html>

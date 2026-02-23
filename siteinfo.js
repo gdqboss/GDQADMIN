@@ -1,0 +1,1 @@
+var siteinfo = {"uniacid":"1","siteroot":"https://gdqshop.cn"};module.exports = siteinfo;

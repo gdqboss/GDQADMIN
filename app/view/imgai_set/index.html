@@ -1,0 +1,152 @@
+<!--custom_file(image_ai)-->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>百度文心AI绘画设置</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12">
+				<div class="layui-card-header"><i class="fa fa-cog"></i> 百度文心AI绘画设置</div>
+				<div class="layui-card-body" pad15 ng-app="loginApp" ng-controller="loginCtrl">
+					<div class="layui-form form-label-w8" lay-filter="">
+						<div class="layui-form-item">
+							<label class="layui-form-label">百度应用AppId：</label>
+							<div class="layui-input-inline">
+								<input type="text" name="info[app_id]" class="layui-input" value="{$info['app_id']}" placeholder="">
+							</div>
+							<div class="layui-form-mid layui-word-aux" style="margin-left:10px;"></div>
+						</div>
+
+						<div class="layui-form-item">
+							<label class="layui-form-label">百度应用API Key：</label>
+							<div class="layui-input-inline" style="width: 400px;">
+								<input type="text" name="info[api_key]" class="layui-input" value="{$info['api_key']}" placeholder="">
+							</div>
+							<div class="layui-form-mid layui-word-aux" style="margin-left:10px;"></div>
+						</div>
+					
+						<div class="layui-form-item">
+							<label class="layui-form-label">百度应用Secret Key：</label>
+							<div class="layui-input-inline" style="width: 400px;">
+								<input type="text" name="info[secret_key]" class="layui-input" value="{$info['secret_key']}" placeholder="">
+							</div>
+							<div class="layui-form-mid layui-word-aux" style="margin-left:10px;"></div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label">背景颜色：</label>
+							<div class="layui-input-inline" style="width:134px">
+								<input type="text" name="info[bgcolor]" autocomplete="off" class="layui-input" ng-model="data.bgcolor" >
+							</div>
+							<div class="colorpicker" ng-model="data.bgcolor"></div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label">支付方式：</label>
+							<div class="layui-input-inline" style="width: 80%;">
+								<input type="radio" name="info[pay_type]" value="0" title="不支付" {if $info['pay_type']==0}checked{/if} />
+								<input type="radio" name="info[pay_type]" value="1" title="余额支付" {if $info['pay_type']==1}checked{/if} />
+								<input type="radio" name="info[pay_type]" value="2" {if $info['pay_type']==2}checked{/if} title="积分支付"/>
+							</div>
+						</div>
+
+						<div class="layui-form-item">
+							<label class="layui-form-label">免费试用(次)：</label>
+							<div class="layui-input-inline" style="width: 400px;">
+								<input type="text" name="info[free_num]" class="layui-input" value="{$info['free_num']}" placeholder="">
+							</div>
+							<div class="layui-form-mid layui-word-aux" style="margin-left:10px;"></div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label">单次解析费用：</label>
+							<div class="layui-input-inline" style="width: 400px;">
+								<input type="text" name="info[pay_num]" class="layui-input" value="{$info['pay_num']}" placeholder="">
+							</div>
+							<div class="layui-form-mid layui-word-aux" style="margin-left:10px;"></div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label">包月费用(30天)：</label>
+							<div class="layui-input-inline" style="width: 400px;">
+								<input type="text" name="info[pay_num_month]" class="layui-input" value="{$info['pay_num_month']}" placeholder="">
+							</div>
+							<div class="layui-form-mid layui-word-aux" style="margin-left:10px;"></div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label">包季费用(90天)：</label>
+							<div class="layui-input-inline" style="width: 400px;">
+								<input type="text" name="info[pay_num_ji]" class="layui-input" value="{$info['pay_num_ji']}" placeholder="">
+							</div>
+							<div class="layui-form-mid layui-word-aux" style="margin-left:10px;"></div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label">包年费用(365天)：</label>
+							<div class="layui-input-inline" style="width: 400px;">
+								<input type="text" name="info[pay_num_year]" class="layui-input" value="{$info['pay_num_year']}" placeholder="">
+							</div>
+							<div class="layui-form-mid layui-word-aux" style="margin-left:10px;"></div>
+						</div>
+
+
+						<div class="layui-form-item">
+							<label class="layui-form-label"></label>
+							<div class="layui-input-block">
+								<button class="layui-btn" lay-submit lay-filter="formsubmit">提 交</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+    </div>
+  </div>
+	{include file="public/js"/}
+	<script>
+	layui.form.on('radio(cancodset)', function(data){
+		if(data.value == '1'){
+			$('#cancodset').show();
+		}else{
+			$('#cancodset').hide();
+		}
+	})
+	layui.form.on('radio(freightfree)', function(data){
+		if(data.value == '1'){
+			$('#freightfreemoneyset').show();
+		}else{
+			$('#freightfreemoneyset').hide();
+		}
+	})
+
+	layui.form.on('radio(comment)', function(data){
+		if(data.value == '1'){
+			$('#commentset').show();
+		}else{
+			$('#commentset').hide();
+		}
+	})
+	layui.form.on('submit(formsubmit)', function(obj){
+		var field = obj.field
+    console.log(field);
+		$.post("{:url('save')}",field,function(data){
+			dialog(data.msg,data.status,data.url);
+		})
+	})
+  </script>
+  <script src="__STATIC__/admin/js/jscolor.js"></script>
+  <script type="text/javascript" src="__STATIC__/admin/js/angular.min.js"></script>
+  <script type="text/javascript" src="__STATIC__/admin/js/angular-ueditor.js"></script>
+  <script>
+	  var app = angular.module('loginApp', ['ng.ueditor']);
+	  console.log({$info.data});
+	  app.controller('loginCtrl', function($scope) {
+		  $scope.data = {$info.data};
+		  console.log($scope.data);
+
+	  });
+  </script>
+	{include file="public/copyright"/}
+</body>
+</html>

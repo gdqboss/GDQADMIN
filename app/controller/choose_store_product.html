@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>选择仓库商品</title>
+	<meta name="renderer" content="webkit">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+	{include file="public/css"/}
+	<style>
+		.product-item {
+			border: 1px solid #e6e6e6;
+			padding: 10px;
+			margin-bottom: 10px;
+			border-radius: 5px;
+		}
+		.product-name {
+			font-size: 16px;
+			font-weight: bold;
+			margin-bottom: 5px;
+		}
+		.product-stock {
+			color: #666;
+			margin-bottom: 10px;
+		}
+		.guige-list {
+			display: flex;
+			flex-wrap: wrap;
+			margin-top: 10px;
+		}
+		.guige-item {
+			border: 1px solid #e6e6e6;
+			padding: 5px 10px;
+			margin-right: 10px;
+			margin-bottom: 5px;
+			border-radius: 3px;
+			cursor: pointer;
+		}
+		.guige-item:hover {
+			border-color: #1E9FFF;
+		}
+	</style>
+</head>
+<body>
+<div class="layui-fluid">
+	<div class="layui-row layui-col-space15">
+		<div class="layui-card">
+			<div class="layui-card-header">
+				<div class="layui-input-inline">
+					<input type="text" id="proname" placeholder="搜索商品名称" class="layui-input">
+				</div>
+				<button class="layui-btn layui-btn-primary" id="searchBtn">搜索</button>
+			</div>
+			<div class="layui-card-body">
+				<div id="productList"></div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<script>
+	$(function() {
+		console.log('页面加载完成');
+		
+		// 加载仓库商品数据
+		loadStoreProducts();
+		
+		// 搜索功能
+		$('#searchBtn').on('click', function() {
+			loadStoreProducts();
+		});
+		
+		// 回车搜索
+		$('#proname').on('keydown', function(e) {
+			if (e.keyCode == 13) {
+				$('#searchBtn').click();
+			}
+		});
+		
+		// 事件委托 - 选择规格
+		$(document).on('click', '.choose-guige', function() {
+			var proid = $(this).data('proid');
+			var ggid = $(this).data('ggid');
+			var proname = $(this).data('proname');
+			var ggname = $(this).data('ggname');
+			var stock = $(this).data('stock');
+			var barcode = $(this).data('barcode');
+			
+			// 构建商品和规格信息
+			var product = {
+				id: proid,
+				name: proname
+			};
+			var guige = {
+				id: ggid,
+				name: ggname,
+				stock: stock,
+				barcode: barcode
+			};
+			
+			// 调用父页面的回调函数
+			var parentWindow = window.parent;
+			parentWindow.chooseStoreProduct(product, guige);
+			
+			// 关闭当前弹窗
+			parent.layer.closeAll();
+		});
+		
+		// 加载仓库商品数据
+		function loadStoreProducts() {
+			console.log('开始加载仓库商品数据');
+			var proname = $('#proname').val();
+			var url = '{:url("getStoreProductList")}';
+			console.log('请求URL:', url);
+			
+			$.ajax({
+				url: url,
+				type: 'GET',
+				data: {
+					proname: proname
+				},
+				dataType: 'json',
+				success: function(res) {
+					console.log('请求成功，返回数据:', res);
+					if (res.code == 0) {
+						renderProductList(res.data);
+					} else {
+						$('#productList').html('<div style="text-align: center; padding: 20px;">加载失败: ' + res.msg + '</div>');
+					}
+				},
+				error: function(xhr, status, error) {
+					console.error('请求失败:', error);
+					$('#productList').html('<div style="text-align: center; padding: 20px;">请求失败: ' + error + '</div>');
+				}
+			});
+		}
+		
+		// 渲染商品列表
+		function renderProductList(data) {
+			console.log('开始渲染商品列表，数据:', data);
+			if (!data || data.length === 0) {
+				$('#productList').html('<div style="text-align: center; padding: 20px;">暂无仓库商品</div>');
+				return;
+			}
+			
+			var html = '';
+			data.forEach(function(product) {
+				html += '<div class="product-item">';
+				html += '<div class="product-name">' + product.name + '</div>';
+				html += '<div class="product-stock">库存: ' + product.stock + '</div>';
+				html += '<div class="guige-list">';
+				
+				if (product.guige && product.guige.length > 0) {
+					product.guige.forEach(function(gg) {
+						html += '<button type="button" class="layui-btn layui-btn-xs layui-btn-primary choose-guige" data-proid="' + product.id + '" data-ggid="' + gg.id + '" data-proname="' + product.name + '" data-ggname="' + gg.name + '" data-stock="' + gg.stock + '" data-barcode="' + (gg.barcode || '') + '">' + gg.name + ' (库存: ' + gg.stock + ')</button> ';
+					});
+				} else {
+					html += '<span>无规格</span>';
+				}
+				
+				html += '</div>';
+				html += '</div>';
+			});
+			
+			$('#productList').html(html);
+		}
+	});
+</script>
+</body>
+</html>

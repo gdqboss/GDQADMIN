@@ -1,0 +1,297 @@
+<!DOCTYPE html><!--custom_file(shop_add_stock)-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>录入库存</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+	<style>
+	
+	.product{width:660px;min-height:38px;background: #FFF;border:1px solid #f1f1f1}
+	.product .content{position:relative;width: 100%; padding:15px 10px;border-bottom: 1px #e5e5e5 dashed;box-sizing:border-box;}
+	.product .content:last-child{ border-bottom: 0; }
+	.product .product-row {display:flex;width: 500px;}
+	.product .create-date {margin-top: 10px}
+	.product .content img{ width: 70px; height: 70px;}
+	.product .content .detail{display:flex;flex-direction:column;margin-left:7px;flex:1}
+	.product .content .detail .t1{height: 30px;line-height: 15px;color: #000;}
+	.product .content .detail .t2{height: 23px;line-height: 23px;color: #999;overflow: hidden;font-size:13px;}
+	.product .content .detail .t3{display:flex;height:15px;line-height:15px;color: #ff4246;}
+	.product .content .detail .x1{ flex:1}
+	.product .content .detail .x2{ width:50px;font-size:16px;text-align:right;margin-right:4px}
+	.product .content .comment{position:absolute;top:32px;right:5px;border: 1px #ffc702 solid; border-radius:5px;background:#fff; color: #ffc702;  padding: 0 5px; height: 23px; line-height: 23px;}
+	#ggnamediv .layui-input,#ggvaldiv .layui-input{ display:inline;height:30px}
+	.layui-module-itemL div:nth-child(3) {margin-left: -10px};
+	</style>
+	<script src="__STATIC__/admin/js/address3.js"></script>
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12">
+		<div class="layui-card-header"><i class="fa fa-cog"></i> 录入商品库存
+			<i class="layui-icon layui-icon-close" style="font-size:18px;font-weight:bold;cursor:pointer" onclick="closeself()"></i>
+		</div>
+		  {if $custom_stock_cost}<blockquote class="layui-elem-quote">进货费用将自动折算成本价，下单时按顺序关联订单商品成本价，发货请先进先出，否则影响正常的统计和佣金结算。</blockquote>{/if}
+		  <div class="layui-card-body" pad15>
+			<div class="layui-form form-label-w6" lay-filter="">
+
+				<div class="layui-form-item">
+					<label class="layui-form-label">选择商品：</label>
+					<button class="layui-btn layui-btn-primary" style="float:left" onclick="showChooseProduct()">选择</button>
+				</div>
+
+				<div class="layui-form-item">
+					<label class="layui-form-label">已选商品：</label>
+					<div class="layui-input-inline">
+						<div class="product" id="prolistinfo"><p style="line-height: 38px; text-align: center">暂无数据</p></div>
+<!--						<div class="product" id="prolistinfo">-->
+<!--							<div class="content">-->
+<!--								<div class="product-row">-->
+<!--									<div>-->
+<!--										<img src="'+m.pic+'"/>-->
+<!--									</div>-->
+<!--									<div class="detail">-->
+<!--										<span class="t1">NAME</span>-->
+<!--										<span class="t2">G规格</span>-->
+<!--										<div class="t3"><span class="x1 flex1">进货费用 ￥999</span><span class="x2">×6</span></div>-->
+<!--									</div>-->
+<!--								</div>-->
+<!--								<div class="create-date">-->
+<!--									<div class="layui-form-item">-->
+<!--										<div class="layui-input-inline layui-module-itemL">-->
+<!--											<div>生产日期</div>-->
+<!--											<input type="text" name="create_date[]" class="layui-input" value="">-->
+<!--										</div>-->
+<!--										<div class="layui-input-inline layui-module-itemL">-->
+<!--											<div>保质期</div>-->
+<!--											<input type="number" min="0" name="quality_days[]" class="layui-input" value="">-->
+<!--											<div>天</div>-->
+<!--										</div>-->
+<!--										<div class="layui-input-inline layui-module-itemL">-->
+<!--											<div>提前</div>-->
+<!--											<input type="number" min="0" name="notice_days[]" class="layui-input" value="">-->
+<!--											<div>天预警</div>-->
+<!--										</div>-->
+<!--									</div>-->
+<!--								</div>-->
+<!--							</div>-->
+<!--						</div>-->
+
+					</div>
+				</div>
+
+				<!-- <div class="layui-form-item">
+					<label class="layui-form-label">备注：</label>
+					<div class="layui-input-inline"><input type="text" name="remark" value="" class="layui-input"></div>
+				</div> -->
+
+				<div class="layui-form-item">
+					<label class="layui-form-label"></label>
+					<div class="layui-input-block">
+						<button class="layui-btn" lay-submit lay-filter="formsubmit">提 交</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+    </div>
+  </div>
+	{include file="public/js"/}
+
+	<script>
+
+	layui.laydate.render({ 
+		elem: '#paytime',
+		trigger: 'click',
+		type:'datetime'
+	});
+	layui.form.on('submit(formsubmit)', function(obj){
+		var field = obj.field
+		console.log(field);
+		field.prodata = buydatastr
+		if(field.buydatastr==''){
+			layer.msg('请选择商品');return;
+		}
+		var index = layer.load();
+		$.post("{:url('save')}",field,function(res){
+			layer.close(index);
+			dialog(res);
+		})
+	})
+	var chooseProductLayer;
+	var levelid = 0;
+	function showChooseProduct(){
+		chooseProductLayer = layer.open({type:2,title:'选择商品',content:"{:url('shop_product/chooseproduct')}/hidebid/1/",area:['900px','600px'],shadeClose:true});
+	}
+
+	function choosepro(data){
+		showgg(data.product,data.guigedata,data.gglist);
+	}
+	var buydata = [];
+	var buydatastr = '';
+	function showgg(product,specs,gglist){
+		var len = specs.length;
+		var newlen = 1;
+		var h = new Array(len);
+		var rowspans = new Array(len);
+
+		var html = '<div style="margin:10px"><table id="ggvaldiv" class="layui-table"><thead><tr>';
+		for(var i=0;i<len;i++){
+			html+="<th>" + specs[i].title + "</th>";
+			var itemlen = specs[i].items.length;
+			if(itemlen<=0) { itemlen = 1 };
+			newlen*=itemlen;
+			h[i] = new Array(newlen);
+			for(var j=0;j<newlen;j++){
+				h[i][j] = new Array();
+			}
+			var l = specs[i].items.length;
+			rowspans[i] = 1;
+			for(j=i+1;j<len;j++){
+				rowspans[i]*= specs[j].items.length;
+			}
+		}
+		html += '<th>市场价</th>';
+		html += '<th>销售价</th>';
+		html += '<th>现有库存</th>';
+		html += '<th>录入数量</th>';
+		html += '<th>进货费用</th>';
+		html += '</tr></thead>';
+
+		for(var m=0;m<len;m++){
+			var k = 0,kid = 0,n=0;
+			for(var j=0;j<newlen;j++){
+				var rowspan = rowspans[m];
+				if( j % rowspan==0){
+					h[m][j]={ k:specs[m].items[kid].k,title: specs[m].items[kid].title, html: "<td rowspan='" +rowspan + "'>"+ specs[m].items[kid].title+"</td>\r\n",id: specs[m].items[kid].id};
+				}else{
+					h[m][j]={ k:specs[m].items[kid].k,title:specs[m].items[kid].title, html: "",id: specs[m].items[kid].id};
+				}
+				n++;
+				if(n==rowspan){
+					kid++; if(kid>specs[m].items.length-1) { kid=0; }
+					n=0;
+				}
+			}
+		}
+		var hh = "";
+		for(var i=0;i<newlen;i++){
+			hh+="<tr>";
+			var ks = [];
+			var titles = [];
+			for(var j=0;j<len;j++){
+				hh+=h[j][i].html;
+				ks.push( h[j][i].k);
+				titles.push( h[j][i].title);
+			}
+			ks =ks.join(',');
+			titles =titles.join(',');
+			if(typeof(gglist[ks])!='undefined'){
+				var val = gglist[ks];
+			}else{
+				var val = { procode:'',market_price:'',cost_price:'',sell_price:'',weight:'',stock:'1000',pic:''};
+			}
+			if(levelid && product.lvprice) {
+				var lvprice = JSON.parse(val['lvprice_data']);
+				if(lvprice[levelid] >= 0)
+				val['sell_price'] = lvprice[levelid];
+			}
+			{if getcustom('member_product_price')}
+				if(val['member_sell_price'] > 0){
+					val['sell_price'] = val['member_sell_price'];
+				}
+			{/if}
+			hh += '<td>'+val.market_price+'</td>';
+			hh += '<td>'+val.sell_price+'</td>';
+			hh += '<td>'+val.stock+'</td>';
+			hh += '<td>';
+			hh += ' <input name="buynum" ggid="'+val['id']+'" sellprice="'+val['sell_price']+'" ggname="'+val['name']+'" lvprice=\''+val['lvprice_data']+'\' type="num" style="width:80px" value="" class="layui-input"/>';
+			hh += '</td>';
+			hh += '<td>';
+			hh += ' <input name="buytotal" ggid="'+val['id']+'" sellprice="'+val['sell_price']+'" ggname="'+val['name']+'" lvprice=\''+val['lvprice_data']+'\' type="text" style="width:80px" value="" class="layui-input"/>';
+			hh += '</td>';
+			hh += "</tr>";
+		}
+		html+=hh;
+		html+='</table></div>';
+		layer.open({type:1,title:product.name,content:html,area:['900px','600px'],shadeClose:true,btn:['确定','取消'],
+			yes:function(index){
+				layer.close(index);
+				$('input[name=buynum]').each(function(){
+					var ggid = $(this).attr('ggid');
+					var ggname = $(this).attr('ggname');
+					var sell_price = $(this).attr('sellprice');
+					var buynum = $(this).val() ? $(this).val() : 0;
+					console.log($(this).parent().parent().children().html());
+					var buytotal = $(this).parent().parent().children().find("input[name='buytotal']").val();
+					console.log(buytotal);
+					if(buynum > 0){
+						var thisdata = {'name':product.name,'pic':product.pic,'id':product.id,'ggname':ggname,'ggid':ggid,'sell_price':sell_price,'buynum':buynum,'buytotal':buytotal}
+						buydata.push(thisdata);
+					}
+				});
+				showproinfo()
+			}
+		});
+	}
+	function showproinfo(){
+		var html = '';
+		// var totalgoodsprice = 0;
+		buydatastr = '';
+		buydatastrArr = [];
+		for(var i in buydata){
+			var m = buydata[i]
+			html += '<div class="content">';
+			html += '<div class="product-row">';
+			html += '	<div>';
+			html += '		<img src="'+m.pic+'"/>';
+			html += '	</div>';
+			html += '	<div class="detail">';
+			html += '		<span class="t1">'+m.name+'</span>';
+			html += '		<span class="t2">'+m.ggname+'</span>';
+			{if $custom_stock_cost}
+			html += '		<div class="t3"><span class="x1 flex1">进货费用 ￥'+m.buytotal+'</span><span class="x2">×'+m.buynum+'</span></div>';
+			{else}
+			html += '		<div class="t3"><span class="x1 flex1">￥'+m.sell_price+'</span><span class="x2">×'+m.buynum+'</span></div>';
+			{/if}
+			html += '	</div>';
+			html += '	</div>';
+			html += '<div class="create-date">\n' +
+					'\t\t\t\t\t\t\t\t\t<div class="layui-form-item">\n' +
+					'\t\t\t\t\t\t\t\t\t\t<div class="layui-input-inline layui-module-itemL">\n' +
+					'\t\t\t\t\t\t\t\t\t\t\t<div>生产日期</div>\n' +
+					'\t\t\t\t\t\t\t\t\t\t\t<input type="text" name="create_date[]" class="layui-input" value="">\n' +
+					'\t\t\t\t\t\t\t\t\t\t</div>\n' +
+					'\t\t\t\t\t\t\t\t\t\t<div class="layui-input-inline layui-module-itemL">\n' +
+					'\t\t\t\t\t\t\t\t\t\t\t<div>保质期</div>\n' +
+					'\t\t\t\t\t\t\t\t\t\t\t<input type="number" min="0" name="quality_days[]" class="layui-input" value="">\n' +
+					'\t\t\t\t\t\t\t\t\t\t\t<div>天</div>\n' +
+					'\t\t\t\t\t\t\t\t\t\t</div>\n' +
+					'\t\t\t\t\t\t\t\t\t\t<div class="layui-input-inline layui-module-itemL">\n' +
+					'\t\t\t\t\t\t\t\t\t\t\t<div>提前</div>\n' +
+					'\t\t\t\t\t\t\t\t\t\t\t<input type="number" min="0" name="notice_days[]" class="layui-input" value="">\n' +
+					'\t\t\t\t\t\t\t\t\t\t\t<div>天预警</div>\n' +
+					'\t\t\t\t\t\t\t\t\t\t</div>\n' +
+					'\t\t\t\t\t\t\t\t\t</div>\n' +
+					'\t\t\t\t\t\t\t\t</div>';
+			html += '</div>';
+			// totalgoodsprice += m.sell_price * m.buynum
+			buydatastrArr.push(m.id + ',' + m.ggid + ',' + m.buynum + ',' + m.buytotal);
+		}
+		buydatastr = buydatastrArr.join('-');
+		// var freightprice = parseFloat($('input[name=freightprice]').val());
+		// var totalprice = totalgoodsprice + freightprice
+		// totalgoodsprice = totalgoodsprice.toFixed(2);
+		// totalprice = totalprice.toFixed(2);
+		$('#prolistinfo').html(html);
+		// $('input[name=goodsprice]').val(totalgoodsprice);
+		// $('input[name=totalprice]').val(totalprice);
+	}
+
+  </script>
+	{include file="public/copyright"/}
+</body>
+</html>

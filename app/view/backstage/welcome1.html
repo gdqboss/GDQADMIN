@@ -1,0 +1,610 @@
+<!DOCTYPE html><!--custom_file(backstage_welcome1)-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>欢迎使用</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+</head>
+
+<style>
+
+
+html,body{
+    padding: 0;
+    margin: 0;
+    background: #f2f2f2;
+}
+.content{
+    padding: 10px;
+}
+.operate{
+    position: relative;
+    padding: 30px 70px;
+    border-radius: 10px;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.operate_item{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: #000;
+		cursor:pointer;
+}
+.operate_icon{
+    height: 35px;
+    width: 35px;
+    border-radius: 4px;
+    margin-right: 10px;
+}
+
+.total{
+    position: relative;
+    margin-top: 10px;
+    background: #fff;
+    border-radius: 10px;
+    color: #000;
+}
+.total_head{
+    padding: 15px;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #f2f2f2;
+}
+.total_data{
+    position: relative;
+    display: flex;
+}
+.total_table{
+    border: 1px solid #e0e0e0;
+    background: #ebeef5;
+    color: #333;
+    border-radius: 5px;
+    display: flex;
+    font-size: 12px;
+    overflow: hidden;
+	flex-shrink: 0;
+}
+.total_table .item{
+    border-right: 1px solid #e0e0e0;
+    height: 30px;
+    line-height: 30px;
+    padding: 0 15px;
+    text-align: center;
+    cursor: pointer;
+}
+.total_table .item:last-child{
+    border-right: none;
+}
+.total_table .active{
+    border-right: 1px solid #0da0ff;
+    height: 30px;
+    line-height: 30px;
+    text-align: center;
+    color: #fff;
+    background: #0da0ff;
+}
+.total_body{
+    padding: 40px 0;
+    display: flex;
+}
+.total_item{
+    position: relative;
+    flex: 1;
+}
+.total_lable{
+    font-size: 16px;
+    text-align: center;
+}
+.total_la{
+    color: #0da0ff;
+    font-size: 26px;
+}
+.total_value{
+    font-size: 26px;
+    text-align: center;
+    margin-top: 15px;
+}
+.total_va{
+    font-size: 18px;
+    color: #999;
+}
+.total_cut{
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    margin: auto 0;
+    height: 30px;
+    width: 1px;
+    background: #f2f2f2;
+}
+.total_opt{
+	display: flex;
+	align-items: center;
+}
+
+.chart{
+    position: relative;
+    margin-top: 10px;
+    background: #fff;
+    border-radius: 10px;
+    color: #000;
+}
+.chart_head{
+    padding: 15px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #f2f2f2;
+}
+.chart_total{
+    display: flex;
+}
+.chart_item{
+    display: flex;
+    align-items: center;
+    margin-right: 30px;
+}
+.chart_icon{
+    height: 15px;
+    width: 15px;
+    border-radius: 4px;
+    margin-right: 5px;
+}
+.chart_item:nth-child(1) .chart_icon{
+    background: #ffd06c;
+}
+.chart_item:nth-child(2) .chart_icon{
+    background: #ff9758;
+}
+.chart_item:nth-child(3) .chart_icon{
+    background: #2fc5ea;
+}
+.chart_item:nth-child(4) .chart_icon{
+    background: #338fdc;
+}
+.chart_item:nth-child(5) .chart_icon{
+    background: #e5666f;
+}
+.chart_body{
+    padding: 15px 5px;
+}
+
+.picker{
+	height: 30px;
+	padding: 0 5px;
+	border: 1px solid #f0f0f0;
+	border-radius: 4px;
+	display: flex;
+	align-items: center;
+	font-size: 14px;
+	color: #000;
+	margin-left: 15px;
+}
+.picker_icon{
+	height: 25px;
+	width: 25px;
+}
+.picker_input{
+	font-size: 14px;
+	color: #000;
+	padding: 0 10px;
+	width: 80px;
+	border: none;
+	height: 30px;
+}
+</style>
+
+<body>
+  <div class="content">
+    <div class="operate">
+        <div class="operate_item" onclick="location.href='{:url('ShopProduct/edit')}'">
+			<img class="operate_icon" src="__STATIC__/admin/img/wel_1.png"/>
+			添加商品
+        </div>
+        <div class="operate_item" onclick="location.href='{:url('DesignerPage/index')}'">
+            <img class="operate_icon" src="__STATIC__/admin/img/wel_2.png"/>
+			店铺装修
+        </div>
+        <div class="operate_item" onclick="location.href='{:url('ShopOrder/index')}'">
+            <img class="operate_icon" src="__STATIC__/admin/img/wel_3.png"/>
+			订单管理
+        </div>
+        <div class="operate_item" onclick="location.href='{:url('Member/index')}'">
+            <img class="operate_icon" src="__STATIC__/admin/img/wel_4.png"/>
+			会员管理
+        </div>
+        <div class="operate_item" onclick="location.href='{:url('Coupon/index')}'">
+            <img class="operate_icon" src="__STATIC__/admin/img/wel_5.png"/>
+			优惠券
+        </div>
+    </div>
+
+    <div class="total">
+        <div class="total_head">
+            <span>经营概况</span>
+			<div class="total_opt">
+				<div class="total_table" id="total_table1">
+					<div class="item active" onclick="changeOrdercount(this,0)">今日</div>
+					<div class="item" onclick="changeOrdercount(this,1)">昨日</div>
+					<div class="item" onclick="changeOrdercount(this,7)">7日</div>
+					<div class="item" onclick="changeOrdercount(this,10)">汇总</div>
+				</div>
+				<div class="picker">
+					<img class="picker_icon" src="__STATIC__/admin/img/wel_tag.png"/>
+					<input type="text" class="picker_input" placeholder="请选择" id="starttime1">
+					<span style="height:30px;line-height:30px;padding:0 10px;border:1px solid #f0f0f0;border-top:0;border-bottom:0">至</span>
+					<input type="text" class="picker_input" placeholder="请选择" id="endtime1">
+				</div>
+			</div>
+        </div>
+        <div class="total_body">
+            <div class="total_item">
+                <div class="total_lable total_la" id="data_orderallCount" style="cursor:pointer" onclick="location.href='{:url('ShopOrder/index')}'">{$orderallCount}</div>
+                <div class="total_value total_va" id="data_orderallCountName">今日订单数</div>
+                <div class="total_cut"></div>
+            </div>
+            <div class="total_item">
+                <div class="total_lable total_la" id="data_order0Count" style="cursor:pointer" onclick="location.href='{:url('ShopOrder/index')}/status/0'">{$order0Count}</div>
+                <div class="total_value total_va">待付款订单</div>
+                <div class="total_cut"></div>
+            </div>
+            <div class="total_item">
+                <div class="total_lable total_la" id="data_order1Count" style="cursor:pointer" onclick="location.href='{:url('ShopOrder/index')}/status/1'">{$order1Count}</div>
+                <div class="total_value total_va">待发货订单</div>
+                <div class="total_cut"></div>
+            </div>
+            <div class="total_item">
+                <div class="total_lable total_la" id="data_order3Count" style="cursor:pointer" onclick="location.href='{:url('ShopOrder/index')}/status/3'">{$order3Count}</div>
+                <div class="total_value total_va">已完成订单</div>
+                <div class="total_cut"></div>
+            </div>
+            <div class="total_item">
+                <div class="total_lable total_la" id="data_orderallCount" style="cursor:pointer" onclick="location.href='{:url('ShopProduct/index')}'">{$productCount}</div>
+                <div class="total_value total_va">商品数</div>
+            </div>
+        </div>
+    </div>
+		{if $bid==0}
+    <div class="total">
+        <div class="total_head">
+            <span>收入明细</span>
+			<div class="total_opt">
+				<div class="total_table" id="total_table2">
+					<div class="item active" onclick="changePaynum(this,0)">今日</div>
+					<div class="item" onclick="changePaynum(this,1)">昨日</div>
+					<div class="item" onclick="changePaynum(this,7)">7日</div>
+					<div class="item" onclick="changePaynum(this,10)">汇总</div>
+				</div>
+				<div class="picker">
+					<img class="picker_icon" src="__STATIC__/admin/img/wel_tag.png"/>
+					<input type="text" class="picker_input" placeholder="请选择" id="starttime2">
+					<span style="height:30px;line-height:30px;padding:0 10px;border:1px solid #f0f0f0;border-top:0;border-bottom:0">至</span>
+					<input type="text" class="picker_input" placeholder="请选择" id="endtime2">
+				</div>
+			</div>
+        </div>
+        <div class="total_body">
+            <div class="total_item">
+                <div class="total_lable">支付订单数</div>
+                <div class="total_value" id="data_paynumCount">{$paynumCount}</div>
+            </div>
+            <div class="total_item">
+                <div class="total_lable">支付人数</div>
+                <div class="total_value" id="data_paypersonCount">{$paypersonCount}</div>
+            </div>
+            <div class="total_item">
+                <div class="total_lable">支付商品数</div>
+                <div class="total_value" id="data_payproCount">{$payproCount}</div>
+            </div>
+            <div class="total_item">
+                <div class="total_lable">余额支付</div>
+                <div class="total_value" id="data_paysumMoney">{$paysumMoney}</div>
+            </div>
+            <div class="total_item">
+                <div class="total_lable">微信支付</div>
+                <div class="total_value" id="data_paysumWeixin">{$paysumWeixin}</div>
+            </div>
+            <div class="total_item">
+                <div class="total_lable">支付金额</div>
+                <div class="total_value" id="data_paysum">{$paysum}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="total">
+        <div class="total_head">
+            <span>支出明细</span>
+            <div class="total_opt">
+				<div class="total_table" id="total_table3">
+					<div class="item active" onclick="changeWithdrawSum(this,0)">今日</div>
+					<div class="item" onclick="changeWithdrawSum(this,1)">昨日</div>
+					<div class="item" onclick="changeWithdrawSum(this,7)">7日</div>
+					<div class="item" onclick="changeWithdrawSum(this,10)">汇总</div>
+				</div>
+				<div class="picker">
+					<img class="picker_icon" src="__STATIC__/admin/img/wel_tag.png"/>
+					<input type="text" class="picker_input" placeholder="请选择" id="starttime3">
+					<span style="height:30px;line-height:30px;padding:0 10px;border:1px solid #f0f0f0;border-top:0;border-bottom:0">至</span>
+					<input type="text" class="picker_input" placeholder="请选择" id="endtime3">
+				</div>
+			</div>
+        </div>
+        <div class="total_body">
+            <div class="total_item">
+                <div class="total_lable">已提现佣金</div>
+                <div class="total_value" id="data_withdraw2Sum">{$withdraw2Sum}</div>
+            </div>
+            <div class="total_item">
+                <div class="total_lable">已提现余额</div>
+                <div class="total_value" id="data_withdrawSum">{$withdrawSum}</div>
+            </div>
+            <div class="total_item">
+                <div class="total_lable">已退款金额</div>
+                <div class="total_value" id="data_refundSum">{$refundSum}</div>
+            </div>
+            <div class="total_item">
+                <div class="total_lable">其他支出</div>
+                <div class="total_value">0.00</div>
+            </div>
+        </div>
+    </div>
+		{/if}
+    <div class="chart">
+        <div class="chart_head">
+            <span>最近30天数据统计</span>
+            <div class="chart_total">
+								{if $bid == 0}
+                <div class="chart_item" onclick="getchart(1,'客户总数','#ffd06c')" style="cursor:pointer">
+                    <div class="chart_icon"></div>客户总数
+                </div>
+                <div class="chart_item" onclick="getchart(2,'新增客户数','#ff9758')" style="cursor:pointer">
+                    <div class="chart_icon"></div>新增客户数
+                </div>
+                <div class="chart_item" onclick="getchart(3,'收款金额','#2fc5ea')" style="cursor:pointer">
+                    <div class="chart_icon"></div>收款金额
+                </div>
+								{/if}
+                <div class="chart_item" onclick="getchart(4,'订单金额','#338fdc')" style="cursor:pointer">
+                    <div class="chart_icon"></div>订单金额
+                </div>
+                <div class="chart_item" onclick="getchart(5,'订单数','#e5666f')" style="cursor:pointer">
+                    <div class="chart_icon"></div>订单数
+                </div>
+            </div>
+        </div>
+        <div class="chart_body">
+			<div class="layui-carousel layadmin-carousel layadmin-dataview" style="width:100%" id="chart1"></div>
+		</div>
+    </div>
+  </div>
+</body>
+{include file="public/js"/}
+<script src="__STATIC__/admin/js/echarts.min.js"></script>
+<script>
+layui.use('laydate', function(){
+  var laydate = layui.laydate;
+  
+  //执行一个laydate实例
+  laydate.render({
+    elem: '#starttime1',
+		done: function(value){
+			console.log(value)
+			changeOrdercount(null,11);
+		}
+  });
+  laydate.render({
+    elem: '#endtime1',
+		done: function(value){
+			console.log(value)
+			changeOrdercount(null,11);
+		}
+  });
+  laydate.render({
+    elem: '#starttime2',
+		done: function(value){
+			console.log(value)
+			changePaynum(null,11);
+		}
+  });
+  laydate.render({
+    elem: '#endtime2',
+		done: function(value){
+			console.log(value)
+			changePaynum(null,11);
+		}
+  });
+  laydate.render({
+    elem: '#starttime3',
+		done: function(value){
+			console.log(value)
+			changeWithdrawSum(null,11);
+		}
+  });
+  laydate.render({
+    elem: '#endtime3',
+		done: function(value){
+			console.log(value)
+			changeWithdrawSum(null,11);
+		}
+  });
+});
+
+function changeOrdercount(obj,datetype){
+	var starttime = $('#starttime1').val();
+	var endtime = $('#endtime1').val();
+	if(datetype == 11){
+		if(starttime=='' || endtime ==''){
+			return;
+		}
+		$('#total_table1').children().removeClass('active');
+	}else{
+		$(obj).siblings().removeClass('active');
+		$(obj).addClass('active');
+	}
+	var index = layer.load();
+	$.post('',{op:'getordercount',datetype:datetype,starttime:starttime,endtime:endtime},function(res){
+		layer.close(index);
+		console.log(res)
+		for(var i in res){
+			$('#data_'+i).html(res[i]);
+		}
+	});
+}
+function changePaynum(obj,datetype){
+	var starttime = $('#starttime2').val();
+	var endtime = $('#endtime2').val();
+	if(datetype == 11){
+		if(starttime=='' || endtime ==''){
+			return;
+		}
+		$('#total_table2').children().removeClass('active');
+	}else{
+		$(obj).siblings().removeClass('active');
+		$(obj).addClass('active');
+	}
+	var index = layer.load();
+	$.post('',{op:'getpaynum',datetype:datetype,starttime:starttime,endtime:endtime},function(res){
+		layer.close(index);
+		console.log(res)
+		for(var i in res){
+			$('#data_'+i).html(res[i]);
+		}
+	});
+}
+function changeWithdrawSum(obj,datetype){
+	var starttime = $('#starttime3').val();
+	var endtime = $('#endtime3').val();
+	if(datetype == 11){
+		if(starttime=='' || endtime ==''){
+			return;
+		}
+		$('#total_table3').children().removeClass('active');
+	}else{
+		$(obj).siblings().removeClass('active');
+		$(obj).addClass('active');
+	}
+	var index = layer.load();
+	$.post('',{op:'getwithdrawsum',datetype:datetype,starttime:starttime,endtime:endtime},function(res){
+		layer.close(index);
+		console.log(res)
+		for(var i in res){
+			$('#data_'+i).html(res[i]);
+		}
+	});
+}
+
+var nowtime = "{:time()}";
+	$(function(){
+		setInterval(function(){
+			nowtime++;
+			var date = getLocalTime(nowtime);
+			$('#systime').html(date);
+		},1000)
+	})
+	function getLocalTime(time) {     
+		var date = new Date(time * 1000);  
+		var year = date.getFullYear();
+		var month = date.getMonth() + 1;
+		var day = parseInt(date.getDate());
+		var hour = date.getHours();
+		var minute = date.getMinutes();
+		var second = date.getSeconds();
+		return year + '-' + (month <10 ? '0' + month : month) + '-' + (day < 10 ? ('0' + day) : day) + ' '+(hour <10 ? '0' + hour : hour)+':'+(minute <10 ? '0' + minute : minute)+':'+(second <10 ? '0' + second : second);  
+	}
+	var myChart = echarts.init(document.getElementById("chart1"));
+	{if $bid == 0}
+	option = {
+		tooltip: {
+			trigger: 'axis'
+		},
+		xAxis: {
+			//name:'日期',
+			boundaryGap: false,
+			type: 'category',
+			data: {:json_encode($dateArr)}
+		},
+		yAxis: {
+			type: 'value'
+		},
+		series: [{
+			name:'客户数',
+			data: {:json_encode($dataArr)},
+			type: 'line',
+			lineStyle:{color:'#ffd06c'},
+			itemStyle:{color:'#ffd06c'}
+		}]
+	}
+	{else}
+	option = {
+		title: {
+			text: '订单金额',textStyle:{fontSize:12},x: "center"
+		},
+		tooltip: {
+			trigger: 'axis'
+		},
+		xAxis: {
+			//name:'日期',
+			boundaryGap: false,
+			type: 'category',
+			data: {:json_encode($dateArr)}
+		},
+		yAxis: {
+			type: 'value'
+		},
+		series: [{
+			name:'订单金额',
+			data: {:json_encode($dataArr)},
+			type: 'line',
+			lineStyle:{color:'#338fdc'},
+			itemStyle:{color:'#338fdc'}
+		}]
+	}
+	{/if}
+	myChart.setOption(option,true);
+	//getchart(1,'客户数');
+	function getchart(type,title,color){
+		var index = layer.load();
+		$.post('',{op:'getdata',type:type},function(res){
+			layer.close(index);
+			option = {
+				title: {
+					text: title,textStyle:{fontSize:12},x: "center"
+				},
+				tooltip: {
+					trigger: 'axis'
+				},
+				xAxis: {
+					//name:'日期',
+					boundaryGap: false,
+					type: 'category',
+					data: res.dateArr
+				},
+				yAxis: {
+					type: 'value'
+				},
+				series: [{
+					name:title,
+					data: res.dataArr,
+					type: 'line',
+				lineStyle:{color:color},
+				itemStyle:{color:color}
+				}]
+			}
+			myChart.setOption(option,true);
+		})
+		
+	}
+</script>
+{include file="public/copyright"/}
+</html>

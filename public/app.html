@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>智慧海鲜商店</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        body { background: linear-gradient(135deg, #667eea, #764ba2); min-height: 100vh; }
+        .app-container { max-width: 480px; margin: 0 auto; background: white; min-height: 100vh; }
+        .app-header { background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 20px; }
+        .feature-card { background: #f8f9fa; border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 12px; cursor: pointer; }
+        .quick-card { border-radius: 12px; padding: 15px; text-align: center; color: white; margin-bottom: 10px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="app-header">
+            <h4>🦐 智慧海鲜商店</h4>
+            <p>新鲜海鲜送到家</p>
+        </div>
+        <div class="p-3">
+            <!-- 快捷操作 -->
+            <div style="display:flex;gap:10px;margin-bottom:15px">
+                <div class="quick-card" style="flex:1;background:linear-gradient(135deg,#667eea,#764ba2)" onclick="toggleSection('checkin')">
+                    <div style="font-size:24px" id="checkInIcon">📌</div>
+                    <div style="font-size:14px" id="checkInText">签到</div>
+                </div>
+                <div class="quick-card" style="flex:1;background:linear-gradient(135deg,#4caf50,#2e7d32)" onclick="toggleSection('worklog')">
+                    <div style="font-size:24px">📝</div>
+                    <div style="font-size:14px">日志</div>
+                </div>
+            </div>
+            
+            <!-- 签到区域 -->
+            <div id="checkInSection" style="display:none;background:white;border-radius:12px;padding:15px;margin-bottom:15px;box-shadow:0 2px 8px rgba(0,0,0,0.1)">
+                <div style="text-align:center;padding:10px">
+                    <div id="checkStatusIcon" style="font-size:36px">📌</div>
+                    <div id="checkStatusText" style="font-weight:600;margin-top:5px">点击签到</div>
+                    <div id="checkTimeDisplay" style="font-size:12px;color:#999"></div>
+                </div>
+                <button id="mainCheckInBtn" class="btn btn-primary w-100" style="border-radius:8px" onclick="doCheckIn()">✅ 签到</button>
+                <div style="margin-top:12px;font-size:13px;font-weight:600">📅 最近签到</div>
+                <div id="checkInList" style="font-size:12px;color:#666;margin-top:8px"></div>
+            </div>
+            
+            <!-- 日志区域 -->
+            <div id="workLogSection" style="display:none;background:white;border-radius:12px;padding:15px;margin-bottom:15px;box-shadow:0 2px 8px rgba(0,0,0,0.1)">
+                <button class="btn btn-success w-100" style="border-radius:8px;margin-bottom:10px" onclick="showAddLogModal()">➕ 写日志</button>
+                <div id="workLogList" style="font-size:13px"></div>
+            </div>
+            
+            <!-- 功能入口 -->
+            <div class="row">
+                <div class="col-6">
+                    <div class="feature-card" onclick="location.href='/'">
+                        <h5>🏠 首页</h5>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="feature-card" onclick="location.href='/commune/index.html'">
+                        <h5>💬 社区</h5>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="feature-card" onclick="location.href='/public/inventory_stats.html'">
+                        <h5>📦 进销存</h5>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="feature-card" onclick="location.href='/public/qrcode_stats.html'">
+                        <h5>🏷️ 一物一码</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function toggleSection(section) {
+            if (section === 'checkin') {
+                const s = document.getElementById('checkInSection');
+                s.style.display = s.style.display === 'none' ? 'block' : 'none';
+                document.getElementById('workLogSection').style.display = 'none';
+                if (s.style.display === 'block') loadCheckIn();
+            } else if (section === 'worklog') {
+                const s = document.getElementById('workLogSection');
+                s.style.display = s.style.display === 'none' ? 'block' : 'none';
+                document.getElementById('checkInSection').style.display = 'none';
+                if (s.style.display === 'block') loadWorkLog();
+            }
+        }
+        
+        function loadCheckIn() {
+            fetch('/api/commune/attendance.php?action=today_status&user_id=1&user_name=' + encodeURIComponent(localStorage.getItem('commune_user')||'用户'))
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1) {
+                    if (d.data.checked) {
+                        document.getElementById('checkStatusIcon').textContent = '✅';
+                        document.getElementById('checkStatusText').textContent = '已签到';
+                        document.getElementById('checkTimeDisplay').textContent = '签到时间: ' + d.data.time;
+                        document.getElementById('mainCheckInBtn').textContent = '今日已签到';
+                        document.getElementById('mainCheckInBtn').disabled = true;
+                        document.getElementById('mainCheckInBtn').classList.add('disabled');
+                        document.getElementById('checkInIcon').textContent = '✅';
+                        document.getElementById('checkInText').textContent = '已签到';
+                    } else {
+                        document.getElementById('checkStatusIcon').textContent = '📌';
+                        document.getElementById('checkStatusText').textContent = '点击签到';
+                        document.getElementById('checkTimeDisplay').textContent = '';
+                        document.getElementById('mainCheckInBtn').textContent = '✅ 签到';
+                        document.getElementById('mainCheckInBtn').disabled = false;
+                        document.getElementById('mainCheckInBtn').classList.remove('disabled');
+                    }
+                }
+            });
+            loadCheckInList();
+        }
+        
+        function loadCheckInList() {
+            fetch('/api/commune/attendance.php?action=attendance_list&user_id=1')
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1) {
+                    let html = '';
+                    d.data.slice(0, 5).forEach(item => {
+                        html += '<div style="padding:6px 8px;background:#f8f9fa;border-radius:4px;margin-bottom:4px">' + item.user_name + ' - ' + item.check_date + ' ✅</div>';
+                    });
+                    document.getElementById('checkInList').innerHTML = html || '<div style="color:#999">暂无记录</div>';
+                }
+            });
+        }
+        
+        function doCheckIn() {
+            fetch('/api/commune/attendance.php?action=check_in', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'user_id=1&user_name=' + encodeURIComponent(localStorage.getItem('commune_user')||'用户')
+            })
+            .then(r => r.json())
+            .then(d => {
+                alert(d.msg);
+                if (d.code === 1) loadCheckIn();
+            });
+        }
+        
+        function loadWorkLog() {
+            fetch('/api/commune/attendance.php?action=log_list&user_id=1')
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1) {
+                    let html = '';
+                    d.data.slice(0, 5).forEach(item => {
+                        html += '<div style="padding:8px;background:#f8f9fa;border-radius:6px;margin-bottom:6px"><div style="font-weight:500;font-size:12px;color:#666">' + item.user_name + ' - ' + item.log_date + '</div><div style="font-size:13px">' + item.content + '</div></div>';
+                    });
+                    document.getElementById('workLogList').innerHTML = html || '<div style="color:#999;text-align:center;padding:20px">暂无日志</div>';
+                }
+            });
+        }
+        
+        function showAddLogModal() {
+            const content = prompt('请输入工作日志内容:');
+            if (!content) return;
+            fetch('/api/commune/attendance.php?action=add_log', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'user_id=1&user_name=' + encodeURIComponent(localStorage.getItem('commune_user')||'用户') + '&content=' + encodeURIComponent(content)
+            })
+            .then(r => r.json())
+            .then(d => {
+                alert(d.msg);
+                if (d.code === 1) loadWorkLog();
+            });
+        }
+        
+        // 页面加载时检查签到状态
+        window.onload = function() {
+            fetch('/api/commune/attendance.php?action=today_status&user_id=1')
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1 && d.data.checked) {
+                    document.getElementById('checkInIcon').textContent = '✅';
+                    document.getElementById('checkInText').textContent = '已签到';
+                }
+            });
+        };
+    </script>
+</body>
+</html>

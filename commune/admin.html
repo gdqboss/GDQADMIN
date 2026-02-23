@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>管理后台 - 海鲜社</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, sans-serif; background: #f5f5f5; }
+
+.header { 
+    background: linear-gradient(135deg, #667eea, #764ba2); 
+    color: white; padding: 15px; 
+    display: flex; justify-content: space-between; align-items: center;
+    position: sticky; top: 0;
+}
+.header button { background: none; border: none; color: white; font-size: 24px; cursor: pointer; }
+
+.sidebar { 
+    position: fixed; left: -260px; top: 0; width: 260px; height: 100%;
+    background: white; z-index: 100; transition: left 0.3s;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.2);
+}
+.sidebar.show { left: 0; }
+.s-header { background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 20px; }
+.s-menu a { display: block; padding: 15px 20px; color: #333; text-decoration: none; border-bottom: 1px solid #eee; }
+
+.overlay { 
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 50; 
+    display: none; 
+}
+.overlay.show { display: block; }
+
+.main { padding: 15px; }
+.card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 15px; }
+h5 { font-size: 16px; margin-bottom: 12px; }
+.btn { padding: 8px 15px; border-radius: 8px; border: none; font-size: 13px; }
+.btn-primary { background: #667eea; color: white; }
+
+table { width: 100%; font-size: 12px; border-collapse: collapse; }
+th, td { padding: 8px; text-align: left; border-bottom: 1px solid #eee; }
+
+@media (min-width: 768px) {
+    .header, .sidebar, .overlay { display: none; }
+    .main { margin-left: 200px; }
+    .pc-sidebar { width: 200px; background: white; min-height: 100vh; padding: 20px; position: fixed; }
+}
+@media (max-width: 767px) {
+    .pc-sidebar { display: none; }
+}
+</style>
+</head>
+<body>
+<!-- 移动端头部 -->
+<div class="header">
+    <button onclick="toggleMenu()">☰</button>
+    <span>管理后台</span>
+    <a href="/" style="color:white;text-decoration:none">🏠</a>
+</div>
+
+<!-- 遮罩 -->
+<div class="overlay" id="overlay" onclick="toggleMenu()"></div>
+
+<!-- 侧边栏 -->
+<div class="sidebar" id="sidebar">
+    <div class="s-header">⚙️ 管理后台</div>
+    <div class="s-menu">
+        <a href="javascript:void(0)" onclick="showPage('chat')">💬 聊天管理</a>
+        <a href="javascript:void(0)" onclick="showPage('users')">👥 用户管理</a>
+        <a href="javascript:void(0)" onclick="showPage('checkin')">📍 签到配置</a>
+        <a href="/">🏠 返回主页</a>
+    </div>
+</div>
+
+<!-- PC端侧边栏 -->
+<div class="pc-sidebar">
+    <div style="font-size:18px;margin-bottom:15px"><a href="/" style="text-decoration:none;color:#333">🏠 海鲜社</a></div>
+    <a href="javascript:void(0)" onclick="showPage('chat')" style="display:block;padding:10px;color:#333">💬 聊天管理</a>
+    <a href="javascript:void(0)" onclick="showPage('users')" style="display:block;padding:10px;color:#333">👥 用户管理</a>
+    <a href="javascript:void(0)" onclick="showPage('checkin')" style="display:block;padding:10px;color:#333">📍 签到配置</a>
+</div>
+
+<!-- 内容区 -->
+<div class="main">
+    <div id="page-chat">
+        <div class="card"><h5>💬 聊天消息</h5><button class="btn" style="background:#f44336;color:white;margin-bottom:10px" onclick="clearAll()">清空全部</button><div id="msgList"></div></div>
+    </div>
+    <div id="page-users" style="display:none">
+        <div class="card">
+            <h5>👥 用户列表</h5>
+            <button class="btn btn-primary" onclick="showAddUser()" style="margin-bottom:10px">➕ 添加用户</button>
+            <div id="userList"></div>
+        </div>
+    </div>
+    <div id="page-checkin" style="display:none">
+        <div class="card">
+            <h5>📍 签到配置</h5>
+            <input type="text" id="cfgLocation" placeholder="签到地点" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;margin-bottom:10px">
+            <button class="btn btn-primary" onclick="saveConfig()">保存</button>
+        </div>
+        <div class="card"><h5>📋 签到记录</h5><div id="checkinList"></div></div>
+    </div>
+</div>
+
+<!-- 用户弹窗 -->
+<div id="userModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;align-items:center;justify-content:center">
+    <div style="background:white;border-radius:16px;width:90%;max-width:400px;padding:20px">
+        <h5 style="margin-bottom:15px" id="modalTitle">添加用户</h5>
+        <input type="hidden" id="editUserId">
+        <input type="text" id="editUsername" placeholder="用户名 *" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;margin-bottom:10px">
+        <input type="text" id="editNickname" placeholder="昵称" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;margin-bottom:10px">
+        <input type="text" id="editDept" placeholder="部门" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;margin-bottom:10px">
+        <div style="margin-bottom:10px">
+            <label style="font-size:12px">权限: </label>
+            <label style="font-size:12px"><input type="checkbox" id="perm_home" checked> 主页</label>
+            <label style="font-size:12px"><input type="checkbox" id="perm_chat" checked> 聊天</label>
+            <label style="font-size:12px"><input type="checkbox" id="perm_checkin" checked> 签到</label>
+            <label style="font-size:12px"><input type="checkbox" id="perm_admin"> 管理</label>
+        </div>
+        <input type="password" id="editPassword" placeholder="密码" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;margin-bottom:15px">
+        <div style="display:flex;gap:10px">
+            <button onclick="closeModal()" style="flex:1;padding:12px;background:#eee;border:none;border-radius:8px">取消</button>
+            <button onclick="saveUser()" style="flex:1;padding:12px;background:#667eea;color:white;border:none;border-radius:8px">保存</button>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleMenu() {
+    var s = document.getElementById('sidebar');
+    var o = document.getElementById('overlay');
+    if (s.classList.contains('show')) {
+        s.classList.remove('show');
+        o.classList.remove('show');
+    } else {
+        s.classList.add('show');
+        o.classList.add('show');
+    }
+}
+
+function showPage(page) {
+    document.getElementById('page-chat').style.display = 'none';
+    document.getElementById('page-users').style.display = 'none';
+    document.getElementById('page-checkin').style.display = 'none';
+    toggleMenu();
+    
+    if (page === 'chat') { document.getElementById('page-chat').style.display = 'block'; loadMsgs(); }
+    else if (page === 'users') { document.getElementById('page-users').style.display = 'block'; loadUsers(); }
+    else if (page === 'checkin') { document.getElementById('page-checkin').style.display = 'block'; loadConfig(); loadCheckin(); }
+}
+
+function loadMsgs() {
+    fetch('/api/commune/chat.php?action=list').then(r => r.json()).then(d => {
+        if (d.code === 1) {
+            var html = '<table><tr><th>用户</th><th>内容</th><th></th></tr>';
+            d.data.forEach(m => { html += '<tr><td>' + (m.nickname||'用户') + '</td><td>' + (m.content||'').substring(0,20) + '</td><td><button onclick="delMsg(' + m.id + ')" style="padding:3px 8px;background:#f44336;color:white;border:none;border-radius:4px">删</button></td></tr>'; });
+            html += '</table>';
+            document.getElementById('msgList').innerHTML = html;
+        }
+    });
+}
+
+function delMsg(id) {
+    if (confirm('删除?')) fetch('/api/commune/chat.php?action=delete&id=' + id).then(r => r.json()).then(d => { alert(d.msg); loadMsgs(); });
+}
+
+function clearAll() {
+    if (confirm('确定清空所有消息?')) fetch('/api/commune/chat.php?action=clear_all').then(r => r.json()).then(d => { alert(d.msg); loadMsgs(); });
+}
+
+function loadUsers() {
+    fetch('/api/commune/user.php?action=list').then(r => r.json()).then(d => {
+        if (d.code === 1) {
+            var html = '';
+            d.data.forEach(u => {
+                var perms = u.permissions ? u.permissions.split(',') : [];
+                var tags = perms.map(p => '<span style="display:inline-block;padding:2px 6px;background:#e8f5e9;color:#2e7d32;border-radius:10px;font-size:10px;margin:1px">' + p + '</span>').join('');
+                html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:#f8f9fa;border-radius:8px;margin-bottom:8px"><div><div style="font-weight:600">' + (u.nickname || u.username) + '</div><div style="font-size:11px;color:#666">' + (u.dept||'') + '</div><div>' + tags + '</div></div><div><button onclick="editUser(' + u.id + ',\'' + u.username + '\',\'' + (u.nickname||'') + '\',\'' + (u.dept||'') + '\',\'' + (u.permissions||'') + '\')" style="padding:5px 10px;background:#667eea;color:white;border:none;border-radius:5px;font-size:12px">编辑</button></div></div>';
+            });
+            document.getElementById('userList').innerHTML = html || '暂无用户';
+        }
+    });
+}
+
+function showAddUser() {
+    document.getElementById('modalTitle').textContent = '添加用户';
+    document.getElementById('editUserId').value = '';
+    document.getElementById('editUsername').value = '';
+    document.getElementById('editNickname').value = '';
+    document.getElementById('editDept').value = '';
+    document.getElementById('editPassword').value = '';
+    document.getElementById('perm_home').checked = true;
+    document.getElementById('perm_chat').checked = true;
+    document.getElementById('perm_checkin').checked = true;
+    document.getElementById('perm_admin').checked = false;
+    document.getElementById('userModal').style.display = 'flex';
+}
+
+function editUser(id, username, nickname, dept, perms) {
+    document.getElementById('modalTitle').textContent = '编辑用户';
+    document.getElementById('editUserId').value = id;
+    document.getElementById('editUsername').value = username;
+    document.getElementById('editNickname').value = nickname || '';
+    document.getElementById('editDept').value = dept || '';
+    document.getElementById('editPassword').value = '';
+    var p = perms ? perms.split(',') : [];
+    document.getElementById('perm_home').checked = p.includes('home');
+    document.getElementById('perm_chat').checked = p.includes('chat');
+    document.getElementById('perm_checkin').checked = p.includes('checkin');
+    document.getElementById('perm_admin').checked = p.includes('admin');
+    document.getElementById('userModal').style.display = 'flex';
+}
+
+function closeModal() { document.getElementById('userModal').style.display = 'none'; }
+
+function saveUser() {
+    var id = document.getElementById('editUserId').value;
+    var username = document.getElementById('editUsername').value;
+    var nickname = document.getElementById('editNickname').value;
+    var dept = document.getElementById('editDept').value;
+    var password = document.getElementById('editPassword').value;
+    var perms = [];
+    if (document.getElementById('perm_home').checked) perms.push('home');
+    if (document.getElementById('perm_chat').checked) perms.push('chat');
+    if (document.getElementById('perm_checkin').checked) perms.push('checkin');
+    if (document.getElementById('perm_admin').checked) perms.push('admin');
+    if (!username) { alert('请输入用户名'); return; }
+    
+    var body = 'action=' + (id?'edit_user':'add_user') + '&username=' + username + '&nickname=' + nickname + '&dept=' + dept + '&permissions=' + perms.join(',');
+    if (id) body += '&id=' + id;
+    if (password) body += '&password=' + password;
+    
+    fetch('/api/commune/user.php', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: body })
+    .then(r => r.json()).then(d => { alert(d.msg); if(d.code===1){ closeModal(); loadUsers(); }});
+}
+
+function loadConfig() {
+    fetch('/api/commune/attendance.php?action=get_config').then(r => r.json()).then(d => {
+        if (d.code === 1 && d.data && d.data.checkin_location) document.getElementById('cfgLocation').value = d.data.checkin_location;
+    });
+}
+
+function saveConfig() {
+    var loc = document.getElementById('cfgLocation').value;
+    fetch('/api/commune/attendance.php?action=save_config&location=' + encodeURIComponent(loc)).then(r => r.json()).then(d => alert(d.msg));
+}
+
+function loadCheckin() {
+    fetch('/api/commune/attendance.php?action=attendance_list').then(r => r.json()).then(d => {
+        if (d.code === 1) {
+            var html = '<table><tr><th>用户</th><th>时间</th><th>位置</th></tr>';
+            d.data.forEach(i => { html += '<tr><td>' + i.user_name + '</td><td>' + i.check_date + ' ' + i.check_time + '</td><td>' + (i.location||'-') + '</td></tr>'; });
+            html += '</table>';
+            document.getElementById('checkinList').innerHTML = html;
+        }
+    });
+}
+
+loadMsgs();
+</script>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!DOCTYPE html><!--custom_file(miandan_batch_shipping)-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>创建运单</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+	<script src="__STATIC__/admin/js/address3.js?v=1"></script>
+	<style>
+	.layui-form-label{width:110px}
+	</style>
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12">
+				<!-- <div class="layui-card-header">
+					{if !$info['id']}<i class="fa fa-plus"></i> 创建运单{else}<i class="fa fa-pencil"></i> 编辑运单{/if}
+					<i class="layui-icon layui-icon-close" style="font-size:18px;font-weight:bold;cursor:pointer" onclick="closeself()"></i>
+				</div> -->
+				<div class="layui-card-body" pad15>
+					<div class="layui-form">
+						<div class="layui-form-item">
+							<label class="layui-form-label"><span class="redstar">*</span>快递公司：</label>
+							<div class="layui-input-inline" style="width:300px">
+								<select name="info[delivery_info]">
+									{foreach $deliverylist as $k=>$v}
+									{foreach $v['service_type'] as $k2=>$v2}
+									<option value="{$v.biz_id},{$v.delivery_id},{$v.delivery_name},{$v2.service_type},{$v2.service_name}" {if $lastorder['delivery_id']==$v['delivery_id'] && $lastorder['service_type'] == $v['service_type']}>{$v.delivery_name} - {$v2.service_name}</option>
+									{/foreach}
+									{/foreach}
+								</select>
+							</div>
+							<div class="layui-form-mid layui-word-aux" style="margin-left:10px;"></div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label"><span class="redstar"></span>上门揽件时间：</label>
+							<div class="layui-input-inline">
+								<input type="text" autocomplete="off" id="expect_time" name="info[expect_time]" value="{if $info['expect_time']}{:date('Y-m-d H:i:s',$info['expect_time'])}{/if}" class="layui-input">
+							</div>
+							<div class="layui-form-mid layui-word-aux" style="margin-left:10px;">不填写表示已事先约定取件时间；如果是下顺丰散单，则必填，否则不会有收件员上门揽件</div>
+						</div>
+						
+						<span style="color:#333">发件人信息</span><hr/>
+						
+						<div class="layui-form-item">
+							<label class="layui-form-label"><span class="redstar">*</span>姓名：</label>
+							<div class="layui-input-inline">
+								<input type="text" name="info[sender_name]" class="layui-input" lay-verify="required" value="{$lastorder.sender_name}"/>
+							</div>
+							<div class="layui-form-mid layui-word-aux" style="margin-left:10px;">发件人姓名</div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label"><span class="redstar">*</span>手机号码：</label>
+							<div class="layui-input-inline">
+								<input type="text" name="info[sender_mobile]" class="layui-input" lay-verify="required" value="{$lastorder.sender_mobile}"/>
+							</div>
+							<div class="layui-form-mid layui-word-aux" style="margin-left:10px;">座机号码和手机号不能同时为空</div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label"><span class="redstar">*</span>地区：</label>
+							<div class="layui-input-inline">
+								<select name="info[sender_province]" id="sender_province" lay-verify="required" lay-filter="sender_province"></select>
+							</div>
+							<div class="layui-input-inline">
+								<select name="info[sender_city]" id="sender_city" lay-verify="required" lay-filter="sender_city"></select>
+							</div>
+							<div class="layui-input-inline">
+								<select name="info[sender_area]" id="sender_area" lay-verify="required" ></select>
+							</div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label"><span class="redstar">*</span>详细地址：</label>
+							<div class="layui-input-inline" style="width:400px">
+								<input type="text" name="info[sender_address]" value="{$lastorder.sender_address}" lay-verify="required" class="layui-input">
+							</div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label"><span class="redstar"></span>座机号码：</label>
+							<div class="layui-input-inline">
+								<input type="text" name="info[sender_tel]" class="layui-input" value="{$lastorder.sender_tel}"/>
+							</div>
+							<div class="layui-form-mid layui-word-aux" style="margin-left:10px;">座机号码和手机号不能同时为空</div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label"><span class="redstar"></span>公司名称：</label>
+							<div class="layui-input-inline">
+								<input type="text" name="info[sender_company]" class="layui-input" value="{$lastorder.sender_company}"/>
+							</div>
+							<div class="layui-form-mid layui-word-aux" style="margin-left:10px;">发件人公司名称</div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label"><span class="redstar"></span>邮编：</label>
+							<div class="layui-input-inline">
+								<input type="text" name="info[sender_post_code]" class="layui-input" value="{$lastorder.sender_post_code}"/>
+							</div>
+							<div class="layui-form-mid layui-word-aux" style="margin-left:10px;">发件人邮编</div>
+						</div>
+
+						<div class="layui-form-item">
+							<label class="layui-form-label"></label>
+							<div class="layui-input-block">
+								<button class="layui-btn layui-btn-danger" lay-submit lay-filter="formsubmit">提 交</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+  </div>
+	{include file="public/js"/}
+	<script>
+	address3('sender_province','sender_city','sender_area',"{$lastorder.sender_province}","{$lastorder.sender_city}","{$lastorder.sender_area}");
+	//日期时间选择器
+	layui.laydate.render({ 
+		elem: '#expect_time',
+		type: 'datetime',
+		trigger: 'click'
+	});
+	layui.form.on('submit(formsubmit)', function(obj){
+		var field = obj.field
+		
+		var index = layer.load();
+		$.post("",field,function(data){
+			layer.close(index);
+			dialog(data.msg,data.status);
+			if(data.status == 1){
+				setTimeout(function(){
+					parent.layer.close(parent.layer.getFrameIndex(window.name));
+					parent.tableIns.reload()
+				},1000)
+			}
+		})
+	})
+	//选择链接
+	function chooseUrl(){
+		layer.open({type:2,shadeClose:true,area:['1200px', '650px'],'title':'选择链接',content:"{:url('DesignerPage/chooseurl')}"})
+	}
+	function chooseLink(urlname,url){
+		$("input[name='info[producturl]']").val(url);
+	}
+  </script>
+	{include file="public/copyright"/}
+</body>
+</html>

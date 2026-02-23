@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>{$cfg['title']} - {$title}</title>
+    {include file="public/css"/}
+    <style>
+        /* 全局样式 */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f9f9f9;
+        }
+        
+        /* 美化卡片样式 */
+        .layui-card {
+            border-radius: 8px;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+        
+        .layui-card:hover {
+            box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.15);
+        }
+        
+        /* 美化卡片标题 */
+        .layui-card-header {
+            background-color: #fafafa;
+            border-bottom: 1px solid #e8e8e8;
+            border-radius: 8px 8px 0 0;
+            font-weight: bold;
+            font-size: 16px;
+            padding: 15px;
+        }
+        
+        /* 美化卡片内容 */
+        .layui-card-body {
+            padding: 20px;
+        }
+        
+        /* 美化按钮样式 */
+        .layui-btn {
+            border-radius: 4px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            margin-right: 10px;
+        }
+        
+        .layui-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+        
+        /* 美化表单元素 */
+        .layui-form-item {
+            margin-bottom: 15px;
+        }
+        
+        .layui-form-label {
+            font-weight: bold;
+        }
+        
+        .layui-select,
+        .layui-input {
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+        
+        .layui-select:focus,
+        .layui-input:focus {
+            border-color: #1E9FFF;
+            box-shadow: 0 0 0 2px rgba(30, 159, 255, 0.2);
+        }
+        
+        /* 打印样式 */
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 12px;
+                background-color: white;
+            }
+            .print-container {
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            .print-title {
+                text-align: center;
+                font-size: 18px;
+                font-weight: bold;
+                margin: 20px 0;
+                color: #333;
+            }
+            .print-info {
+                text-align: center;
+                margin: 10px 0;
+                color: #666;
+                font-size: 12px;
+            }
+            .print-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 20px 0;
+                font-size: 12px;
+            }
+            .print-table th {
+                background-color: #f2f2f2;
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: center;
+                font-weight: bold;
+                color: #333;
+            }
+            .print-table td {
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: center;
+                color: #666;
+            }
+            .print-summary {
+                margin: 20px 0;
+                text-align: right;
+                font-weight: bold;
+                color: #333;
+            }
+            .print-table tr:nth-child(even) {
+                background-color: #f9f9f9;
+            }
+            .print-table tr:hover {
+                background-color: #f5f5f5;
+            }
+        }
+        
+        /* 页面样式 */
+        .print-btn-container {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border-radius: 4px;
+        }
+        
+        .report-stats {
+            margin-bottom: 20px;
+        }
+        
+        .report-stats .layui-col-md3 {
+            padding: 15px;
+        }
+        
+        .stat-card {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+            color: #1E9FFF;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        /* 美化统计卡片不同颜色 */
+        .stat-card:nth-child(1) .stat-value {
+            color: #67c23a;
+        }
+        
+        .stat-card:nth-child(2) .stat-value {
+            color: #e6a23c;
+        }
+        
+        .stat-card:nth-child(3) .stat-value {
+            color: #f56c6c;
+        }
+        
+        /* 美化打印容器 */
+        .print-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* 美化表格样式 */
+        .layui-table {
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .layui-table th {
+            background-color: #f5f7fa;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .layui-table tbody tr {
+            transition: all 0.3s ease;
+        }
+        
+        .layui-table tbody tr:hover {
+            background-color: #fafafa;
+        }
+        
+        /* 美化搜索筛选区域 */
+        .layui-form {
+            background-color: white;
+            padding: 20px;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* 美化导出按钮 */
+        .layui-btn-primary {
+            border-color: #dcdfe6;
+            color: #606266;
+        }
+        
+        /* 响应式设计 */
+        @media screen and (max-width: 768px) {
+            .layui-form-item {
+                display: block;
+            }
+            
+            .layui-inline {
+                display: block;
+                margin-bottom: 10px;
+            }
+            
+            .layui-input-inline {
+                display: block;
+                width: 100% !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="layui-fluid">
+        <div class="layui-row layui-col-space15">
+            <div class="layui-card layui-col-md12">
+                <div class="layui-card-header">
+                    <i class="fa fa-print"></i> {$title}
+                </div>
+                <div class="layui-card-body" pad15>
+                    <!-- 打印按钮 -->
+                    <div class="layui-row no-print">
+                        <div class="layui-col-md12">
+                            <div class="print-btn-container">
+                                <button type="button" class="layui-btn layui-btn-primary" id="printBtn">
+                                    <i class="fa fa-print"></i> {:t('打印报表')}
+                                </button>
+                                <button type="button" class="layui-btn layui-btn-primary" id="exportBtn">
+                                    <i class="fa fa-download"></i> {:t('导出报表')}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 搜索筛选区域 -->
+                    <div class="layui-form no-print" style="margin-bottom: 15px;">
+                        <div class="layui-form-item">
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('报表类型')}：</label>
+                                <div class="layui-input-inline" style="width: 120px;">
+                                    <select name="type" id="type" class="layui-select">
+                                        <option value="outbound" {if $type == 'outbound'}selected{/if}>{:t('出库报表')}</option>
+                                        <option value="in" {if $type == 'in'}selected{/if}>{:t('入库报表')}</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('商品')}：</label>
+                                <div class="layui-input-inline" style="width: 200px;">
+                                    <select name="proid" id="proid" class="layui-select">
+                                        <option value="">{:t('全部商品')}</option>
+                                        {volist name="products" id="product"}
+                                        <option value="{$product.id}" {if $proid == $product.id}selected{/if}>{$product.name}</option>
+                                        {/volist}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('开始日期')}：</label>
+                                <div class="layui-input-inline">
+                                    <input type="date" name="start_date" id="start_date" value="{$start_date}" class="layui-input">
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('结束日期')}：</label>
+                                <div class="layui-input-inline">
+                                    <input type="date" name="end_date" id="end_date" value="{$end_date}" class="layui-input">
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <button type="button" class="layui-btn layui-btn-primary" id="searchBtn">
+                                    <i class="fa fa-search"></i> {:t('查询')}
+                                </button>
+                                <button type="button" class="layui-btn layui-btn-primary" id="resetBtn">
+                                    <i class="fa fa-refresh"></i> {:t('重置')}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 统计数据 -->
+                    <div class="report-stats layui-row no-print">
+                        <div class="layui-col-md3">
+                            <div class="stat-card">
+                                <div class="stat-value" id="totalCount">0</div>
+                                <div class="stat-label">{:t('总记录数')}</div>
+                            </div>
+                        </div>
+                        <div class="layui-col-md3">
+                            <div class="stat-card">
+                                <div class="stat-value" id="totalNum">0</div>
+                                <div class="stat-label">{:t('总数量')}</div>
+                            </div>
+                        </div>
+                        <div class="layui-col-md3">
+                            <div class="stat-card">
+                                <div class="stat-value" id="totalAmount">0</div>
+                                <div class="stat-label">{:t('总金额')}</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 打印容器 -->
+                    <div class="print-container">
+                        <!-- 打印标题 -->
+                        <div class="print-title">
+                            {$title} - {if $type == 'outbound'}{:t('出库报表')}{else}{:t('入库报表')}{/if}
+                        </div>
+                        
+                        <!-- 打印信息 -->
+                        <div class="print-info">
+                            {:t('打印时间')}：{:date('Y-m-d H:i:s')}<br>
+                            {:t('统计时间')}：
+                            {if $start_date && $end_date}
+                                {$start_date} - {$end_date}
+                            {else}
+                                {:t('全部')}
+                            {/if}
+                        </div>
+                        
+                        <!-- 报表数据表格 -->
+                        <table class="layui-hide" id="reportTable" lay-filter="reportTable"></table>
+                        
+                        <!-- 打印用表格 -->
+                        <table class="print-table" id="printTable" style="display: none;">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>{:t('单据号')}</th>
+                                    <th>{:t('商品名称')}</th>
+                                    <th>{:t('商品规格')}</th>
+                                    <th>{:t('数量')}</th>
+                                    <th>{:t('类型')}</th>
+                                    <th>{:t('单价')}</th>
+                                    <th>{:t('金额')}</th>
+                                    <th>{:t('日期')}</th>
+                                    <th>{:t('备注')}</th>
+                                </tr>
+                            </thead>
+                            <tbody id="printTableBody">
+                                <!-- 数据将通过JS动态填充 -->
+                            </tbody>
+                        </table>
+                        
+                        <!-- 打印汇总信息 -->
+                        <div class="print-summary">
+                            {:t('总记录数')}：<span id="printTotalCount">0</span> &nbsp;&nbsp;
+                            {:t('总数量')}：<span id="printTotalNum">0</span> &nbsp;&nbsp;
+                            {:t('总金额')}：<span id="printTotalAmount">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部脚本 -->
+    {include file="public/js"/}
+    
+    <script>
+        layui.use(['table', 'form', 'layer'], function() {
+            var table = layui.table;
+            var form = layui.form;
+            var layer = layui.layer;
+            
+            // 渲染表单
+            form.render();
+            
+            // 渲染表格
+            var tableIns = table.render({
+                elem: '#reportTable',
+                url: '{:url("BarcodeInventory/print_report")}',
+                method: 'POST',
+                where: {
+                    type: '{$type}',
+                    start_date: '{$start_date}',
+                    end_date: '{$end_date}',
+                    proid: {$proid}
+                },
+                page: true,
+                limit: 20,
+                limits: [10, 20, 50, 100],
+                cols: [[
+                    {field: 'id', title: 'ID', width: 80, sort: true},
+                    {field: 'ordernum', title: '{:t('单据号')}', width: 200},
+                    {field: 'pro_name', title: '{:t('商品名称')}', minWidth: 150},
+                    {field: 'gg_name', title: '{:t('商品规格')}', minWidth: 150},
+                    {field: 'num', title: '{:t('数量')}', width: 100, sort: true},
+                    {field: 'type_text', title: '{:t('类型')}', width: 100},
+                    {field: 'price', title: '{:t('单价')}', width: 100, templet: function(d) { return d.price.toFixed(2); }},
+                    {field: 'total_amount', title: '{:t('金额')}', width: 120, templet: function(d) { return d.total_amount.toFixed(2); }, sort: true},
+                    {field: 'createtime', title: '{:t('日期')}', width: 180, sort: true},
+                    {field: 'remark', title: '{:t('备注')}', minWidth: 150}
+                ]],
+                done: function(res, curr, count) {
+                    // 更新统计数据
+                    updateStats(res.data);
+                }
+            });
+            
+            // 更新统计数据
+            function updateStats(data) {
+                var totalCount = data.length;
+                var totalNum = 0;
+                var totalAmount = 0;
+                
+                // 计算总数量和总金额
+                $.each(data, function(index, item) {
+                    totalNum += parseInt(item.num);
+                    totalAmount += parseFloat(item.total_amount);
+                });
+                
+                // 更新页面统计
+                $('#totalCount').text(totalCount);
+                $('#totalNum').text(totalNum);
+                $('#totalAmount').text(totalAmount.toFixed(2));
+            }
+            
+            // 搜索
+            $('#searchBtn').click(function() {
+                var type = $('#type').val();
+                var proid = $('#proid').val();
+                var start_date = $('#start_date').val();
+                var end_date = $('#end_date').val();
+                
+                tableIns.reload({
+                    where: {
+                        type: type,
+                        proid: proid,
+                        start_date: start_date,
+                        end_date: end_date
+                    },
+                    page: {
+                        curr: 1
+                    }
+                });
+            });
+            
+            // 重置
+            $('#resetBtn').click(function() {
+                $('#type').val('outbound');
+                $('#proid').val('');
+                $('#start_date').val('');
+                $('#end_date').val('');
+                form.render('select');
+                tableIns.reload({
+                    where: {
+                        type: 'outbound',
+                        proid: 0,
+                        start_date: '',
+                        end_date: ''
+                    },
+                    page: {
+                        curr: 1
+                    }
+                });
+            });
+            
+            // 打印报表
+            $('#printBtn').click(function() {
+                // 获取当前页面的所有数据
+                $.ajax({
+                    url: '{:url("BarcodeInventory/print_report")}',
+                    type: 'POST',
+                    data: {
+                        type: $('#type').val(),
+                        proid: $('#proid').val(),
+                        start_date: $('#start_date').val(),
+                        end_date: $('#end_date').val()
+                    },
+                    dataType: 'json',
+                    success: function(res) {
+                        if (res.code == 0) {
+                            generatePrintTable(res.data);
+                            window.print();
+                        } else {
+                            layer.msg(res.msg, {icon: 2});
+                        }
+                    },
+                    error: function() {
+                        layer.msg('{:t('网络错误，请稍后重试')}', {icon: 2});
+                    }
+                });
+            });
+            
+            // 生成打印表格
+            function generatePrintTable(data) {
+                var html = '';
+                var totalCount = data.length;
+                var totalNum = 0;
+                var totalAmount = 0;
+                
+                // 生成表格行
+                $.each(data, function(index, item) {
+                    html += '<tr>';
+                    html += '<td>' + item.id + '</td>';
+                    html += '<td>' + item.ordernum + '</td>';
+                    html += '<td>' + item.pro_name + '</td>';
+                    html += '<td>' + item.gg_name + '</td>';
+                    html += '<td>' + item.num + '</td>';
+                    html += '<td>' + item.type_text + '</td>';
+                    html += '<td>' + item.price.toFixed(2) + '</td>';
+                    html += '<td>' + item.total_amount.toFixed(2) + '</td>';
+                    html += '<td>' + item.createtime + '</td>';
+                    html += '<td>' + (item.remark || '') + '</td>';
+                    html += '</tr>';
+                    
+                    totalNum += parseInt(item.num);
+                    totalAmount += parseFloat(item.total_amount);
+                });
+                
+                // 更新打印表格
+                $('#printTableBody').html(html);
+                
+                // 更新打印汇总信息
+                $('#printTotalCount').text(totalCount);
+                $('#printTotalNum').text(totalNum);
+                $('#printTotalAmount').text(totalAmount.toFixed(2));
+            }
+            
+            // 导出报表
+            $('#exportBtn').click(function() {
+                layer.msg('{:t('导出功能开发中...')}', {icon: 1});
+            });
+        });
+    </script>
+</body>
+</html>

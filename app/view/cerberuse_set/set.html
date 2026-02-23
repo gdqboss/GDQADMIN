@@ -1,0 +1,132 @@
+<!DOCTYPE html><!--custom_file(lot_cerberuse)-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>智能开门设置</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12">
+				<div class="layui-card-header"><i class="fa fa-cog"></i> 智能开门设置</div>
+				<div class="layui-card-body" pad15>
+					<div class="layui-form form-label-w8" lay-filter="">
+
+						<div class="layui-form-item">
+							<label class="layui-form-label">自动关闭订单：</label>
+							<div class="layui-input-inline">
+								<input type="text" name="info[autoclose]" lay-verify="required" lay-verType="tips" class="layui-input" value="{$info.autoclose}">
+							</div>
+							<div class="layui-form-mid">分钟</div>
+							<div class="layui-form-mid layui-word-aux" style="margin-left:10px;">下单后多久不支付自动关闭订单,默认10分钟</div>
+						</div>
+					
+						<div class="layui-form-item">
+							<label class="layui-form-label">距结束提醒：</label>
+							<div class="layui-input-inline">
+								<input type="text" name="info[remind_minute]" lay-verify="required|positiveWholeNumberRequiredTrue" lay-verType="tips" class="layui-input" value="{$info.remind_minute}">
+							</div>
+							<div class="layui-form-mid">分钟</div>
+							<div class="layui-form-mid layui-word-aux" style="margin-left:10px;">距离结束x分钟进行语音提醒</div>
+						</div>
+<!--						<div class="layui-form-item">-->
+<!--							<label class="layui-form-label">会员折扣：</label>-->
+<!--							<div class="layui-input-inline" style="width:350px">-->
+<!--								<input type="radio" name="info[discount]" value="1" title="开启" {if $info['discount']==1}checked{/if}>-->
+<!--								<input type="radio" name="info[discount]" value="0" title="关闭" {if $info['discount']==0}checked{/if}>-->
+<!--							</div>-->
+<!--							<div class="layui-form-mid layui-word-aux">是否开启会员折扣</div>-->
+<!--						</div>-->
+<!--						<div class="layui-form-item">-->
+<!--							<label class="layui-form-label">{:t('优惠券')}抵扣：</label>-->
+<!--							<div class="layui-input-inline" style="width:350px">-->
+<!--								<input type="radio" name="info[iscoupon]" value="1" title="开启" {if $info['iscoupon']==1}checked{/if}>-->
+<!--								<input type="radio" name="info[iscoupon]" value="0" title="关闭" {if $info['iscoupon']==0}checked{/if}>-->
+<!--							</div>-->
+<!--							<div class="layui-form-mid layui-word-aux">是否开启{:t('优惠券')}抵扣</div>-->
+<!--						</div>-->
+						<div class="layui-form-item">
+							<label class="layui-form-label"></label>
+							<div class="layui-input-block">
+								<button class="layui-btn" lay-submit lay-filter="formsubmit">提 交</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+    </div>
+  </div>
+	{include file="public/js"/}
+	<script>
+		layui.form.verify({
+			positiveWholeNumberRequiredTrue:[/^[+]{0,1}(\d+)$/,'只能填写正整数'],//必填，且只能输入正整数
+		})
+	layui.form.on('submit(formsubmit)', function(obj){
+		var field = obj.field
+		var startdata=getstartdata();
+		field.start_data = JSON.stringify(startdata)
+		var enddata=getenddata();
+		field.end_data = JSON.stringify(enddata)
+		$.post("{:url('save')}",field,function(data){
+			dialog(data.msg,data.status,data.url);
+		})
+	})
+	
+	function getstartdata(){
+		var startdata = [];
+		var i=0;
+		$('input[name=start_time]').each(function(){
+			var start_time =  $(this).val();
+			var ratio=	$(this).parent().next().find('input').val();
+
+			startdata.push({'start_time':start_time,'start_ratio':ratio});
+			i++;
+		});
+		return   startdata;
+	}
+	function getenddata(){
+		var enddata = [];
+		var i=0;
+		$('input[name=end_time]').each(function(){
+			var start_time =  $(this).val();
+			var ratio=	$(this).parent().next().find('input').val();
+
+			enddata.push({'end_time':start_time,'end_ratio':ratio});
+			i++;
+		});
+		return   enddata;
+	}
+	function addRefundRadio(){
+		var num	= $('#jlnamediv').find('tr').length;
+		if(num >= 11){
+			layer.alert('最多添加11个');
+			return;
+		}
+		var gghtml = '<tr>';
+		gghtml += '<td ><input type="text" class="layui-input" name="start_time" value="" placeholder="请输入时间，单位分钟"  /></td>';
+		gghtml += '<td ><input type="number" name="start_ratio" class="layui-input"  value="" placeholder="请输入退款比例,例如：90" lay-verify="" min="0"></td>';
+		gghtml += '<td><button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="$(this).parent().parent().remove()">删除</button></td>';
+		gghtml += '</tr>';
+		$('#jlnamediv').append(gghtml);
+	}
+	function addEndRefundRadio(){
+		var num	= $('#end_time_ratio').find('tr').length;
+		if(num >= 11){
+			layer.alert('最多添加11个');
+			return;
+		}
+		var gghtml = '<tr>';
+		gghtml += '<td ><input type="text" class="layui-input" name="end_time" value="" placeholder="请输入时间，单位分钟"  /></td>';
+		gghtml += '<td ><input type="number" name="end_ratio" class="layui-input"  value="" placeholder="请输入退款比例,例如：90" lay-verify="" min="0"></td>';
+		gghtml += '<td><button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="$(this).parent().parent().remove()">删除</button></td>';
+		gghtml += '</tr>';
+		$('#end_time_ratio').append(gghtml);
+	}
+	</script>
+	{include file="public/copyright"/}
+</body>
+</html>

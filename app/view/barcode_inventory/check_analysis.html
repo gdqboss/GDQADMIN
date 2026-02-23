@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>{$cfg['title']} - {$title}</title>
+    {include file="public/css"/}
+    <style>
+        .analysis-card { margin-bottom: 20px; }
+        .analysis-item { margin-bottom: 15px; padding: 15px; background-color: #fafafa; border-radius: 4px; }
+        .analysis-label { font-weight: bold; color: #666; margin-right: 10px; }
+        .analysis-value { font-size: 18px; font-weight: bold; }
+        .positive { color: #52c41a; }
+        .negative { color: #f5222d; }
+        .zero { color: #8c8c8c; }
+        .chart-container { height: 400px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="layui-fluid">
+        <div class="layui-row layui-col-space15">
+            <div class="layui-card layui-col-md12 analysis-card">
+                <div class="layui-card-header">
+                    <i class="fa fa-bar-chart"></i> {$title}
+                    <div class="layui-card-header-tool">
+                        <a href="{:url('BarcodeInventory/check')}" class="layui-btn layui-btn-sm layui-btn-primary" style="margin-left:10px;">
+                            <i class="fa fa-arrow-left"></i> {:t('返回列表')}
+                        </a>
+                        <a href="{:url('BarcodeInventory/check_detail', ['id' => $checkInfo.id])}" class="layui-btn layui-btn-sm layui-btn-warm" style="margin-left:10px;">
+                            <i class="fa fa-list"></i> {:t('查看详情')}
+                        </a>
+                    </div>
+                </div>
+                <div class="layui-card-body" pad15>
+                    <!-- 盘点基本信息 -->
+                    <div class="layui-form" style="margin-bottom: 20px; padding: 15px; background-color: #fafafa; border-radius: 4px;">
+                        <div class="layui-form-item">
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('盘点单号')}：</label>
+                                <div class="layui-input-inline">
+                                    <input type="text" value="{$checkInfo.check_sn}" class="layui-input" readonly>
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('盘点名称')}：</label>
+                                <div class="layui-input-inline">
+                                    <input type="text" value="{$checkInfo.check_name}" class="layui-input" readonly>
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('盘点时间')}：</label>
+                                <div class="layui-input-inline">
+                                    <input type="text" value="{:date('Y-m-d H:i:s', $checkInfo.check_time)}" class="layui-input" readonly>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 差异分析概览 -->
+                    <div class="layui-row">
+                        <div class="layui-col-md6">
+                            <div class="analysis-item">
+                                <h4>{:t('差异分析概览')}</h4>
+                                <div class="layui-row">
+                                    <div class="layui-col-md6">
+                                        <div><span class="analysis-label">{:t('盘点商品总数')}：</span><span class="analysis-value">{$analysis.total_products}</span></div>
+                                        <div><span class="analysis-label">{:t('差异总数')}：</span><span class="analysis-value" style="color: #faad14;">{$analysis.total_diff}</span></div>
+                                        <div><span class="analysis-label">{:t('差异金额')}：</span>
+                                            <span class="analysis-value">
+                                                {if $analysis.total_diff_amount > 0}
+                                                    <span class="positive">+{$analysis.total_diff_amount.toFixed(2)}</span>
+                                                {elseif $analysis.total_diff_amount < 0}
+                                                    <span class="negative">{$analysis.total_diff_amount.toFixed(2)}</span>
+                                                {else}
+                                                    <span class="zero">{$analysis.total_diff_amount.toFixed(2)}</span>
+                                                {/if}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="layui-col-md6">
+                                        <div><span class="analysis-label">{:t('盘盈数量')}：</span><span class="analysis-value positive">{$analysis.overstock}</span></div>
+                                        <div><span class="analysis-label">{:t('盘盈金额')}：</span><span class="analysis-value positive">+{$analysis.overstock_amount.toFixed(2)}</span></div>
+                                        <div><span class="analysis-label">{:t('盘亏数量')}：</span><span class="analysis-value negative">{$analysis.shortage}</span></div>
+                                        <div><span class="analysis-label">{:t('盘亏金额')}：</span><span class="analysis-value negative">-{$analysis.shortage_amount.toFixed(2)}</span></div>
+                                        <div><span class="analysis-label">{:t('无差异商品数')}：</span><span class="analysis-value zero">{$analysis.no_diff}</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="layui-col-md6">
+                            <div class="analysis-item">
+                                <h4>{:t('盘点状态')}</h4>
+                                <div>
+                                    <span class="analysis-label">{:t('状态')}：</span>
+                                    <span class="analysis-value">
+                                        {if $checkInfo.status == 1}
+                                            <span class="positive">{:t('已完成')}</span>
+                                        {else}
+                                            <span class="negative">{:t('未完成')}</span>
+                                        {/if}
+                                    </span>
+                                </div>
+                                <div><span class="analysis-label">{:t('盘点人')}：</span><span class="analysis-value">{$checkInfo.check_user}</span></div>
+                                <div><span class="analysis-label">{:t('创建时间')}：</span><span class="analysis-value">{:date('Y-m-d H:i:s', $checkInfo.createtime)}</span></div>
+                                {if $checkInfo.status == 1}
+                                <div><span class="analysis-label">{:t('完成时间')}：</span><span class="analysis-value">{:date('Y-m-d H:i:s', $checkInfo.updatetime)}</span></div>
+                                {/if}
+                                {if $checkInfo.remark}
+                                <div style="margin-top: 10px;">
+                                    <span class="analysis-label">{:t('备注')}：</span>
+                                    <span>{$checkInfo.remark}</span>
+                                </div>
+                                {/if}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 图表分析 -->
+                    <div class="analysis-item">
+                        <h4>{:t('库存差异分布')}</h4>
+                        <div class="chart-container" id="diffChart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部脚本 -->
+    {include file="public/js"/}
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    
+    <script>
+        // 页面加载完成后初始化图表
+        $(document).ready(function() {
+            // 初始化差异分布图表
+            var diffChart = echarts.init(document.getElementById('diffChart'));
+            
+            // 准备图表数据
+            var diffData = [
+                {value: {$analysis.overstock}, name: '{:t('盘盈')}'},
+                {value: {$analysis.shortage}, name: '{:t('盘亏')}'},
+                {value: {$analysis.no_diff}, name: '{:t('无差异')}'}
+            ];
+            
+            // 图表配置
+            var diffOption = {
+                title: {
+                    text: '{:t('库存差异分布')}',
+                    left: 'center'
+                },
+                tooltip: {
+                    trigger: 'item',
+                    formatter: '{b}: {c} ({d}%)'
+                },
+                legend: {
+                    orient: 'vertical',
+                    left: 'left',
+                    data: ['{:t('盘盈')}', '{:t('盘亏')}', '{:t('无差异')}']
+                },
+                series: [
+                    {
+                        name: '{:t('差异类型')}',
+                        type: 'pie',
+                        radius: '50%',
+                        data: diffData,
+                        emphasis: {
+                            itemStyle: {
+                                shadowBlur: 10,
+                                shadowOffsetX: 0,
+                                shadowColor: 'rgba(0, 0, 0, 0.5)'
+                            }
+                        },
+                        itemStyle: {
+                            color: function(params) {
+                                var colorList = ['#52c41a', '#f5222d', '#8c8c8c'];
+                                return colorList[params.dataIndex];
+                            }
+                        }
+                    }
+                ]
+            };
+            
+            // 使用配置项显示图表
+            diffChart.setOption(diffOption);
+            
+            // 响应式调整
+            window.addEventListener('resize', function() {
+                diffChart.resize();
+            });
+        });
+    </script>
+</body>
+</html>

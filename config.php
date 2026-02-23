@@ -1,0 +1,1 @@
+<?php return ['hostname'=> '127.0.0.1','username'=>'ddshop','password'=>'6NpZeFbA2Kxc5MLz','hostport'=>'3306','database'=>'ddshop','prefix'=>'ddwx_','authkey'=>'1','authtoken'=>'1','kfport'=>6228,'custom'=>[]];

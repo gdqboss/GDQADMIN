@@ -1,0 +1,129 @@
+<!DOCTYPE html><!--custom_file(shop_add_stock)-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>库存记录</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+        <div class="layui-card layui-col-md12">
+          <div class="layui-card-header"><i class="fa fa-list"></i> 库存记录</div>
+					
+          <div class="layui-card-body" pad15>
+			<div class="layui-col-md4" style="padding-bottom:10px">
+				<a class="layui-btn layuiadmin-btn-list" href="javascript:void(0)" onclick="openmax('{:url('add')}')">录入库存</a>
+				<button class="layui-btn layui-btn-primary layuiadmin-btn-list" data-form-export="{:url('index')}">导出EXCEL</button>
+			</div>
+			<div class="layui-form layui-form-search layui-col-md8">
+				<div class="layui-inline layuiadmin-input-useradmin">
+					<label class="layui-form-label">商品ID</label>
+					<div class="layui-input-inline">
+						<input type="text" name="proid" autocomplete="off" class="layui-input" value="{$Request.param.proid}">
+					</div>
+				</div>
+				<div class="layui-inline layuiadmin-input-useradmin">
+					<label class="layui-form-label">商品名称</label>
+					<div class="layui-input-inline">
+						<input type="text" name="proname" autocomplete="off" class="layui-input" value="">
+					</div>
+				</div>
+				<div class="layui-inline">
+					<label class="layui-form-label">时间</label>
+					<div class="layui-input-inline" style="width:180px">
+						<input type="text" name="ctime" id="ctime" autocomplete="off" class="layui-input">
+					</div>
+				</div>
+				{if getcustom('shop_add_stock_cost')}
+				<div class="layui-inline">
+					<label class="layui-form-label">预警</label>
+					<div class="layui-input-inline">
+						<select name="notice">
+							<option value="">全部</option>
+							<option value="1">过期预警</option>
+						</select>
+					</div>
+				</div>
+				{/if}
+				<div class="layui-inline">
+					<button class="layui-btn layuiadmin-btn-replys" lay-submit="" lay-filter="LAY-app-forumreply-search">
+						<i class="layui-icon layui-icon-search layuiadmin-button-btn"></i>
+					</button>
+				</div>
+			</div>
+			<div class="layui-col-md12">
+				<table id="tabledata" lay-filter="tabledata"></table>
+			</div>
+          </div>
+        </div>
+    </div>
+  </div>
+	{include file="public/js"/}
+	<script>
+	layui.laydate.render({ 
+    elem: '#ctime',
+    trigger: 'click',
+    type:'date',
+    range: '~' //或 range: '~' 来自定义分割字符
+  });
+  var table = layui.table;
+  var datawhere = {};
+  //数据表
+  var tableIns = table.render({
+    elem: '#tabledata'
+    ,url: "{$Request.url}" //数据接口
+    ,page: true //开启分页
+    ,autoSort:false
+    ,cols: [[ //表头
+			{type:"checkbox"},
+      //{field: 'id', title: 'ID',sort:true,width:80},
+      {field: 'proid', title: '商品ID',width:80},
+      {field: 'name', title: '商品信息',templet:'<div>{{# if(d.name){ }}<img src="{{d.pic}}" style="width:50px"> {{d.name}}{{# } }}</div>'},
+      {field: 'ggname', title: '商品规格',templet:'<div>{{# if(d.ggname){ }}{{d.ggname}}{{# } }}</div>'},
+      {field: 'stock', title: '变更库存',sort:true,templet:function(d){ 
+		return '<span style="color:#03bc01;font-size:18px">+'+d.stock+'</span>';
+	  },width:100},
+      {field: 'afterstock', title: '变更后剩余',width:100,sort:true},
+	  {if getcustom('shop_add_stock_cost')}
+	  {field: 'outstock', title: '出库数量',width:100,sort:true},
+	  {field: 'cost_price', title: '成本价',width:100},
+	  {field: 'create_date', title: '生产日期',sort:true,width:120},
+	  {field: 'expire_date', title: '到期日期',sort:true,width:120},
+	  {field: 'quality_days', title: '保质期（天）',width:80},
+	  {/if}
+      {field: 'uname', title: '操作人',width:120},
+      {field: 'createtime', title: '变更时间',width:150,sort:true,templet:function(d){ return date('Y-m-d H:i:s',d.createtime)}},
+
+    ]]
+  });
+	//排序
+	table.on('sort(tabledata)', function(obj){
+		datawhere.field = obj.field;
+		datawhere.order = obj.type;
+		tableIns.reload({
+			initSort: obj,
+			where: datawhere
+		});
+	});
+	//检索
+	layui.form.on('submit(LAY-app-forumreply-search)', function(obj){
+		var field = obj.field
+		var olddatawhere = datawhere
+		datawhere = field
+		datawhere.field = olddatawhere.field
+		datawhere.order = olddatawhere.order
+		tableIns.reload({
+			where: datawhere,
+			page: {curr: 1}
+		});
+	})
+	
+
+	</script>
+	{include file="public/copyright"/}
+</body>
+</html>

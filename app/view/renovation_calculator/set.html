@@ -1,0 +1,404 @@
+<!DOCTYPE html><!--custom_file(renovation_calculator)-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>装修计算器设置</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+	<style>
+	#ggnamediv .layui-input,#ggvaldiv .layui-input{ display:inline;height:30px}
+	#ggnamediv .layui-colorpicker{width:18px;height:18px;line-height:18px;margin-top:2px}
+	#ggnamediv2 .layui-input,#ggvaldiv2 .layui-input{ display:inline;height:30px}
+	.modal-areas .layui-layer-content{ position:static;overflow:visible;height:300px}
+	.province { float:left; position:relative;width:210px; height:35px; line-height:35px;border:1px solid #fff;}
+	.province:hover { border:1px solid #f7e4a5;border-bottom:1px solid #fffec6; background:#fffec6;}
+	.province .cityall { margin-top:10px;}
+	.province ul { list-style: outside none none;position:absolute;padding:0;background:#fffec6;border:1px solid #f7e4a5;display:none;width:auto; width:300px; z-index:999999;left:-1px;top:32px;}
+	.province ul li  { float:left;min-width:60px;margin-left:20px; height:30px;line-height:30px; }
+	</style>
+	<script src="__STATIC__/admin/js/address3.js?v=1"></script>
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12">
+				<div class="layui-card-header">
+					<i class="fa fa-cog"></i> 装修计算器设置<!-- <i class="layui-icon layui-icon-close" style="font-size:18px;font-weight:bold;cursor:pointer" onclick="closeself()"></i> -->
+				</div>
+				<div class="layui-card-body" pad15>
+					<div class="layui-form form-label-w8" lay-filter="">
+						
+						<div class="layui-form-item">
+							<label class="layui-form-label">状态：</label>
+							<div class="layui-input-inline">
+								<input type="radio" name="info[status]" value="1" title="开启" {if !$info['id'] || $info['status']==1}checked{/if}>
+								<input type="radio" name="info[status]" value="0" title="关闭" {if $info['status']==0}checked{/if}>
+							</div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label">名称：</label>
+							<div class="layui-input-inline">
+								<input type="text" name="info[name]" class="layui-input" value="{$info.name}">
+							</div>
+						</div>
+						
+						
+						<div class="layui-form-item">
+							<label class="layui-form-label">类型参数：</label>
+							<div class="layui-input-inline layui-module-itemL">
+								<div>简装</div>
+								<input type="text" name="info[type1_param]" class="layui-input" value="{$info.type1_param}">
+							</div>
+							
+							<div class="layui-input-inline layui-module-itemL">
+								<div>精装</div>
+								<input style="width:70px" type="text" name="info[type2_param]" class="layui-input" value="{$info.type2_param}">
+							</div>
+							<div class="layui-input-inline layui-module-itemL">
+								<div>豪装</div>
+								<input style="width:70px;" type="text" name="info[type3_param]" class="layui-input" value="{$info.type3_param}">
+							</div>
+						</div>
+
+						
+						<div class="layui-form-item">
+							<label class="layui-form-label">区域参数：</label>
+							<div class="layui-input-inline" style="width:auto">
+								<table id="ggnamediv2"  class="layui-table" style="width:600px">
+									<thead>
+									<tr>
+										<th style="width:400px">区域</th>
+										<th>参数值</th>
+										<th>操作</th>
+									</tr>
+									</thead>
+									{php} $areadata = json_decode($info['areadata'],true);{/php}
+									{if $areadata}
+									{foreach $areadata as $k=>$gg}
+									<tr>
+										<td class="areasettd">
+											<span class="cityshtml">{$gg.region}</span>
+											<input type="hidden" class="citys" name="citys[]" value="{$gg.region}" />
+											{if $k!=0}<button class="layui-btn layui-btn-sm layui-btn-primary" onclick="editArea(this)"><i class="fa fa-edit"></i> 编辑</button>{/if}
+										</td>
+										<td><input type="text" class="layui-input" name="areaparam[]" value="{$gg.areaparam}" style="width:80px"/></td>
+										{if $k==0}
+										<td><button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="addggtype2()">添加</button></td>
+										{else}
+										<td><button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="$(this).parent().parent().remove()">删除</button></td>
+										{/if}
+									</tr>
+									{/foreach}
+									{else}
+									<tr>
+										<td><span class="cityshtml">全国(默认运费)</span><input type="hidden" class="citys" name="citys[]" value="全国(默认运费)" /></td>
+										<td><input type="text" class="layui-input" name="areaparam[]" value="1" style="width:80px"/></td>
+										<td><button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="addggtype2()">添加</button></td>
+									</tr>
+									{/if}
+								</table>
+								<div class="layui-word-aux"></div>
+							</div>
+						</div>
+
+					
+						<div class="layui-form-item">
+							<label class="layui-form-label">价格项设置：</label>
+							<div class="layui-input-inline" style="width:auto">
+								<table id="ggnamediv"  class="layui-table" style="width:800px">
+									<thead>
+									<tr>
+										<th>价格项分组</th>
+										<th>价格项名称</th>
+										<th>操作</th>
+									</tr>
+									</thead>
+									{php} $guigedata = json_decode($info['guigedata']);{/php}
+									{if $guigedata}
+									{foreach $guigedata as $k=>$gg}
+									<tr>
+										<td>
+											<input type="text" class="layui-input" name="ggname" value="{$gg->title}" style="width:120px" placeholder="请输入分组名称"/>
+											<div style="margin-top:8px"><input type="text" name="color" value="{$gg->color}" class="layui-input" style="width:90px" placeholder="分组颜色"><div class="_colorpicker"></div></div>
+										</td>
+										<td>
+											{foreach $gg->items as $k2=>$ggitem}
+											<div><input type="text" class="layui-input" name="title" value="{$ggitem->title}" placeholder="请输入价格项名称" style="width:180px"> <input type="text" class="layui-input" name="gongshi" value="{$ggitem->gongshi}" style="width:240px" placeholder="请输入价格项计算公式"/>
+											{if $k2==0}
+												<button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="addggname(this)" style="margin-top:-3px;"><i class="fa fa-plus" style="font-size:14px!important"></i></button>
+											{else}
+												<button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="$(this).parent().remove()" style="margin-top:-3px;"><i class="fa fa-remove" style="font-size:14px!important"></i></button>
+											{/if}
+											</div>
+											{/foreach}
+										</td>
+										{if $k==0}
+										<td><button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="addggtype()">添加</button></td>
+										{else}
+										<td><button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="$(this).parent().parent().remove()">删除</button></td>
+										{/if}
+									</tr>
+									{/foreach}
+									{else}
+									<tr>
+										<td>
+											<input type="text" class="layui-input" name="ggname" value="人工/辅材料" style="width:120px" placeholder="分组名称"/>
+											<div style="margin-top:8px"><input type="text" name="color" value="" class="layui-input" style="width:90px" placeholder="分组颜色"><div class="_colorpicker"></div></div>
+										</td>
+										<td><div><input type="text" class="layui-input" name="title" value="泥工工程" placeholder="请输入价格项名称" style="width:180px"> <input type="text" class="layui-input" name="gongshi" value="" style="width:240px" placeholder="请输入价格项计算公式"/> <button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="addggname(this)" style="margin-top:-3px;"><i class="fa fa-plus" style="font-size:14px!important"></i></button></div></td>
+										<td><button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="addggtype()">添加</button></td>
+									</tr>
+									{/if}
+								</table>
+								<div class="layui-word-aux">价格项计算公式变量[面积]、[类型参数]、[区域参数]，如：[面积]*[类型参数]*[区域参数]*10+150</div>
+							</div>
+						</div>
+						<script>
+						function addggtype(){
+							var gghtml = '<tr>';
+							gghtml += '<td><input type="text" name="ggname" class="layui-input" value="" style="width:120px" placeholder="分组名称"/><div style="margin-top:8px"><input type="text" name="color" value="" class="layui-input" style="width:90px" placeholder="分组颜色"><div class="_colorpicker"></div></div></td>';
+							gghtml += '<td><div><input type="text" class="layui-input" name="title" value="" placeholder="请输入价格项名称" style="width:180px"> <input type="text" class="layui-input" name="gongshi" value="" style="width:240px" placeholder="请输入价格项计算公式"/> <button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="addggname(this)" style="margin-top:-3px;"><i class="fa fa-plus" style="font-size:14px!important"></i></button></div></td>';
+							gghtml += '<td><button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="$(this).parent().parent().remove()">删除</button></td>';
+							gghtml += '</tr>';
+							$('#ggnamediv').append(gghtml);
+							initcolorpicker();
+						}
+						function addggname(obj){
+							var ggnameobj = $(obj).parent().parent().append('<div><input class="layui-input" type="text" name="title" value="" placeholder="请输入价格项名称" style="width:180px"> <input type="text" class="layui-input" name="gongshi" value="" style="width:240px" placeholder="请输入价格项计算公式"/> <button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="$(this).parent().remove()" style="margin-top:-3px;"><i class="fa fa-remove" style="font-size:14px!important"></i></button></div>');
+						}
+						</script>
+
+						
+						<div class="layui-form-item">
+							<label class="layui-form-label">页面背景色：</label>
+							<div class="layui-input-inline">
+								<input type="text" name="info[bgcolor]" value="{$info['bgcolor']}" class="layui-input">
+							</div>
+							<div class="_colorpicker" style="float:left"></div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label">顶部图片：</label>
+							<input type="hidden" name="info[banner]" id="banner" class="layui-input" value="{$info['banner']}">
+							<button style="float:left;" type="button" class="layui-btn layui-btn-primary" upload-input="banner" upload-preview="bannerPreview" onclick="uploader(this)">上传图片</button>
+							<div class="layui-form-mid layui-word-aux" style="margin-left:10px;">建议尺寸：750×400像素</div>
+							<div id="bannerPreview" style="float:left;padding-top:10px;margin-left:160px;clear: both;">
+								<div class="layui-imgbox" style="width:100px;"><div class="layui-imgbox-img"><img src="{$info['banner']}"/></div></div>
+							</div>
+						</div>
+						<!-- 详情编辑器 -->
+						<div class="layui-form-item">
+							<label class="layui-form-label">用户协议：</label>
+							<div class="layui-input-inline">
+								<input type="radio" name="info[xystatus]" value="1" title="开启" {if !$info['id'] || $info['xystatus']==1}checked{/if}>
+								<input type="radio" name="info[xystatus]" value="0" title="关闭" {if $info['xystatus']==0}checked{/if}>
+							</div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label">协议内容：</label>
+							<div class="layui-input-inline" style="width:500px">
+								<script id="xieyi" name="info[xieyi]" type="text/plain" style="width:100%;height:500px">{$info.xieyi}</script>
+							</div>
+						</div>
+						<!-- 详情编辑器 -->
+						<div class="layui-form-item">
+							<label class="layui-form-label">底部内容：</label>
+							<div class="layui-input-inline" style="width:500px">
+								<script id="description" name="info[description]" type="text/plain" style="width:100%;height:500px">{$info.description}</script>
+							</div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label"></label>
+							<div class="layui-input-block">
+								<button class="layui-btn" lay-submit lay-filter="formsubmit">提 交</button>
+							</div>
+						</div>
+					</div>
+					
+				</div>
+			</div>
+		</div>
+	</div>
+	<div id="modal-areas" style="display:none"></div> 
+	{include file="public/js"/}
+
+	
+	<script>
+	$(function(){
+		var regiondata = '';
+		for(var i in provinceList){
+			if(i>0){
+				var province = provinceList[i];
+				regiondata+='<div class="province">';
+				regiondata+='			<label class="checkbox-inline" style="margin-left:20px;">';
+				regiondata+='				<input type="checkbox" class="cityall" province="'+province.name+'"/> '+province.name;
+				regiondata+='				<span class="citycount" style="color:#ff6600"></span>';
+				regiondata+='			</label>';
+				if(province.cityList){
+					regiondata+='		<ul>';
+					for(var j in province.cityList){
+						var city = province.cityList[j];
+						regiondata+='		<li>';
+						regiondata+='			<label class="checkbox-inline">';
+						regiondata+='				<input type="checkbox" class="city" style="margin-top:8px;" city="'+city.name+'" /> '+city.name;
+						regiondata+='			</label>';
+						regiondata+='		</li>';
+					}
+					regiondata+='		</ul>';
+				}
+				regiondata+='		</div>';
+			}
+		}
+		$('#modal-areas').html(regiondata);
+		$('.province').mouseover(function(){
+			$(this).find('ul').show();
+		}).mouseout(function(){
+			$(this).find('ul').hide();
+		});
+		$('.cityall').click(function(){
+			var checked = $(this).get(0).checked;
+			var citys = $(this).parent().parent().find('.city');
+			citys.each(function(){
+				$(this).get(0).checked = checked;
+			});
+			var count = 0;
+			if(checked){
+				count =  $(this).parent().parent().find('.city:checked').length;
+			}
+			if(count>0){
+				$(this).next().html("(" + count + ")")    ;
+			}else{
+				$(this).next().html("");
+			}
+		});
+		$('.city').click(function(){
+			var checked = $(this).get(0).checked;
+			var cityall = $(this).parent().parent().parent().parent().find('.cityall');
+			if(checked){
+				cityall.get(0).checked = true;
+			}
+			var count = cityall.parent().parent().find('.city:checked').length;
+			if(count>0){
+				cityall.next().html("(" + count + ")")    ;
+			}else{
+				cityall.next().html("");
+			}
+		});
+	})
+	
+	function addggtype2(){
+		var gghtml = '<tr>';
+		gghtml += '<td class="areasettd">';
+		gghtml += '<span class="cityshtml"></span>';
+		gghtml += '<input type="hidden" class="citys" name="citys[]" value="" />';
+		gghtml += '<button class="layui-btn layui-btn-sm layui-btn-primary" onclick="editArea(this)"><i class="fa fa-edit"></i> 编辑</button>';
+		gghtml += '</td>'
+		gghtml += '<td><input type="text" class="layui-input" name="areaparam[]" value="1" style="width:80px"/></td>';
+		gghtml += '<td><button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="$(this).parent().parent().remove()">删除</button></td>';
+		gghtml += '</tr>';
+		$('#ggnamediv2').append(gghtml);
+		layui.form.render('checkbox');
+	}
+	
+	function editArea(btn){
+		//current = $(btn).attr('random');
+		var areasettd = $(btn).parent();
+		clearSelects();
+		var old_citys = $(btn).prev().val().split('];');
+		console.log(old_citys);
+		for(var i in old_citys){
+			if(old_citys[i] == '') continue;
+			var provincecity = old_citys[i].split('[');
+			$('input[province='+provincecity[0]+']').prop('checked',true);
+			if(provincecity[1] == '全部地区'){
+				$('input[province='+provincecity[0]+']').parent().parent().find('.city').prop('checked',true);
+				$('input[province='+provincecity[0]+']').next('.citycount').html('('+$('input[province='+provincecity[0]+']').parent().parent().find('.city').length+')');
+			}else{
+				var citys = provincecity[1].split(',');
+				var citycount = 0;
+				for(var j in citys){
+					citycount++;
+					$('input[province='+provincecity[0]+']').parent().parent().find('.city[city='+citys[j]+']').prop('checked',true);
+				}
+				$('input[province='+provincecity[0]+']').next('.citycount').html('('+citycount+')');
+			}
+		}
+		var areasLayer = layer.open({type:1,skin:'modal-areas',content:$("#modal-areas"),area:['900px','400px'],offset:'50px',shadeClose:true,title:'选择区域',btn:['确定','关闭'],yes:function(){
+			
+			var citystrs = '';
+			$('.cityall:checked').each(function(){
+				if($(this).parent().parent().find('.city').length == $(this).parent().parent().find('.city:checked').length){
+					citystrs+=$(this).attr('province') + '[全部地区]' + ';';
+				}else{
+					var citychecked = [];
+					$(this).parent().parent().find('.city:checked').each(function(){              
+						citychecked.push($(this).attr('city'));
+					});
+					citystrs+=$(this).attr('province') + '['+citychecked.join(',')+']' + ';';
+				}
+			})
+			areasettd.find('.cityshtml').html(citystrs);
+			areasettd.find('.citys').val(citystrs);
+			layer.close(areasLayer);
+		}})
+	}
+	var current = '';
+	function clearSelects(){
+		$('.city').attr('checked',false).removeAttr('disabled');
+		$('.cityall').attr('checked',false).removeAttr('disabled');
+		$('.citycount').html('');
+	}
+
+	</script>
+
+	<script>
+	var ueditor = UE.getEditor('xieyi');
+	var ueditor2 = UE.getEditor('description');
+	layui.form.on('submit(formsubmit)', function(obj){
+		var field = obj.field
+		field['info[xieyi]'] = ueditor.getContent();
+		field['info[description]'] = ueditor2.getContent();
+
+		var haskong = 0;
+		$('#ggnamediv').find("input").each(function(){
+			if($(this).val()=='') haskong = 1
+		})
+		if(haskong){
+			layer.msg('请填写完整');return;
+		}
+		specs = [];
+		var i=0;
+		$('input[name=ggname]').each(function(){
+			var ggval = [];
+			var j=0;
+			$(this).parent().next().find("input[name='title']").each(function(){
+				var thistitle = $(this).val();
+				console.log($(this).siblings("input[name='gongshi']").eq(0));
+				var thisgongshi = $(this).siblings("input[name='gongshi']").eq(0).val();
+				ggval.push({ 'k':j,'title':thistitle,'gongshi':thisgongshi});
+				j++
+			})
+			var color = $('input[name=color]').eq(i).val();
+			specs.push({ 'k':i,'title':$(this).val(),'color':color,'items':ggval});
+			i++;
+		});
+
+		field['info[guigedata]'] = JSON.stringify(specs)
+
+
+		var index = layer.load();
+		$.post('',field,function(data){
+			layer.close(index);
+			dialog(data.msg,data.status);
+			if(data.status==1){
+				setTimeout(function(){
+					location.href = location.href
+				},1000)
+			}
+		})
+	})
+  </script>
+	{include file="public/copyright"/}
+</body>
+</html>

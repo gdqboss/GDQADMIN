@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>钉钉绑定 - 海鲜社</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            max-width: 350px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .icon {
+            width: 80px;
+            height: 80px;
+            background: #07C160;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            margin: 0 auto 20px;
+        }
+        h2 { margin: 0 0 10px; color: #333; }
+        p { color: #666; margin: 0 0 20px; }
+        .btn {
+            background: #07C160;
+            color: white;
+            border: none;
+            padding: 14px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+        }
+        .btn:disabled { background: #ccc; }
+        .success { color: #4caf50; }
+        .error { color: #f44336; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">📱</div>
+        <h2>钉钉绑定</h2>
+        <p id="status">正在获取绑定信息...</p>
+        <button id="bindBtn" class="btn" onclick="doBind()" style="display:none">确认绑定</button>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const userId = urlParams.get('user_id');
+        
+        if (!userId) {
+            document.getElementById('status').innerHTML = '<span class="error">无效的绑定链接</span>';
+        } else {
+            document.getElementById('status').innerHTML = '用户ID: ' + userId + '<br>请在钉钉中打开此页面完成绑定';
+            document.getElementById('bindBtn').style.display = 'block';
+        }
+        
+        function doBind() {
+            // 获取钉钉用户信息
+            // 这里简化处理，实际应该通过钉钉SDK获取当前用户
+            const dingtalkUserId = 'DT_' + Date.now();
+            
+            // 调用API绑定
+            fetch('/api/commune/user.php?action=bind_dingtalk', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'user_id=' + userId + '&dingtalk_id=' + dingtalkUserId
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.code === 1) {
+                    document.getElementById('status').innerHTML = '<span class="success">✅ 绑定成功！</span><br>请关闭此页面';
+                    document.getElementById('bindBtn').style.display = 'none';
+                } else {
+                    document.getElementById('status').innerHTML = '<span class="error">' + data.msg + '</span>';
+                }
+            })
+            .catch(e => {
+                document.getElementById('status').innerHTML = '<span class="error">绑定失败，请重试</span>';
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>海鲜社聊天室</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            min-height: 100vh; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .login-card { 
+            background: white; 
+            border-radius: 20px; 
+            padding: 40px; 
+            width: 100%; 
+            max-width: 380px; 
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3); 
+        }
+        .login-header { text-align: center; margin-bottom: 30px; position: relative; }
+        .lang-select {
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            padding: 5px 10px;
+            border-radius: 15px;
+            border: 1px solid #ddd;
+            background: white;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .login-header h2 { color: #333; margin-bottom: 8px; }
+        .login-header p { color: #666; margin: 0; font-size: 14px; }
+        .form-control { 
+            border-radius: 12px; 
+            padding: 14px 15px; 
+            border: 2px solid #eee; 
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        .form-control:focus { border-color: #667eea; box-shadow: none; }
+        .btn-login { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            border: none; 
+            border-radius: 12px; 
+            padding: 14px; 
+            font-weight: bold; 
+            width: 100%;
+            color: white;
+            font-size: 16px;
+        }
+        .btn-login:hover { opacity: 0.9; }
+        .alert { border-radius: 10px; padding: 12px; }
+        .tips { 
+            text-align: center; 
+            margin-top: 20px; 
+            font-size: 12px; 
+            color: #999; 
+        }
+        .back-link {
+            text-align: center;
+            margin-top: 15px;
+        }
+        .back-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="login-header">
+            <select class="lang-select" id="langSelect" onchange="changeLang(this.value)">
+                <option value="zh">中文</option>
+                <option value="en">English</option>
+                <option value="ja">日本語</option>
+                <option value="ko">한국어</option>
+            </select>
+            <h2 id="titleText">🦐 海鲜社</h2>
+            <p id="subtitleText">聊天室 - 请登录</p>
+        </div>
+        
+        <div id="errorMsg" class="alert alert-danger" style="display:none;"></div>
+        
+        <form id="loginForm">
+            <input type="text" class="form-control" id="username" placeholder="用户名" required>
+            <input type="password" class="form-control" id="password" placeholder="密码" required>
+            <button type="submit" class="btn btn-login" id="loginBtn">
+                登录
+            </button>
+        </form>
+        
+        <div class="tips" id="tipsText">
+            <p>如需开通账号，请联系管理员</p>
+        </div>
+        
+        <div class="back-link">
+            <a href="/" id="backLink">← 返回工作台</a>
+        </div>
+    </div>
+
+    <script>
+        const i18n = {
+            zh: { title: '🦐 海鲜社', subtitle: '聊天室 - 请登录', username: '用户名', password: '密码', login: '登录', tips: '如需开通账号，请联系管理员', back: '← 返回工作台' },
+            en: { title: '🦐 Haixianshe', subtitle: 'Chat Room - Please Login', username: 'Username', password: 'Password', login: 'Login', tips: 'Contact admin for account', back: '← Back to Workspace' },
+            ja: { title: '🦐 海鮮社', subtitle: 'チャット - ログイン', username: 'ユーザー名', password: 'パスワード', login: 'ログイン', tips: '管理者にご連絡ください', back: '← ワークスペース' },
+            ko: { title: '🦐 해산사', subtitle: '채팅방 - 로그인', username: '사용자 이름', password: '비밀번호', login: '로그인', tips: '관리자에게 문의하세요', back: '← 워크스페이스' }
+        };
+        
+        let currentLang = localStorage.getItem('lang') || 'zh';
+        document.getElementById('langSelect').value = currentLang;
+        
+        function changeLang(lang) {
+            currentLang = lang;
+            localStorage.setItem('lang', lang);
+            updateLabels();
+        }
+        
+        function updateLabels() {
+            const t = i18n[currentLang] || i18n.zh;
+            document.getElementById('titleText').textContent = t.title;
+            document.getElementById('subtitleText').textContent = t.subtitle;
+            document.getElementById('username').placeholder = t.username;
+            document.getElementById('password').placeholder = t.password;
+            document.getElementById('loginBtn').textContent = t.login;
+            document.getElementById('tipsText').innerHTML = '<p>' + t.tips + '</p>';
+            document.getElementById('backLink').textContent = t.back;
+        }
+        
+        updateLabels();
+        
+        // 检查是否已登录
+        const stored = localStorage.getItem('commune_user');
+        if (stored) {
+            try {
+                const u = JSON.parse(stored);
+                if (u.username) {
+                    location.href = '/commune/chat.html';
+                }
+            } catch(e) {}
+        }
+
+        // 登录
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const errorMsg = document.getElementById('errorMsg');
+            
+            fetch('/api/commune/user.php?action=login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'username=' + encodeURIComponent(username) + '&password=' + encodeURIComponent(password),
+                credentials: 'include'
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.code === 1) {
+                    localStorage.setItem('commune_user', JSON.stringify(data.data));
+                    location.href = '/commune/chat.html';
+                } else {
+                    errorMsg.textContent = data.msg || '登录失败';
+                    errorMsg.style.display = 'block';
+                }
+            })
+            .catch(e => {
+                errorMsg.textContent = '登录失败，请稍后重试';
+                errorMsg.style.display = 'block';
+            });
+        });
+    </script>
+</body>
+</html>

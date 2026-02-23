@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>供应商登录</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/element-ui@2.15.9/lib/theme-chalk/index.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/element-ui@2.15.9/lib/index.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            background-color: #f5f7fa;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        }
+        .login-container {
+            width: 400px;
+            padding: 40px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+        }
+        .login-title {
+            text-align: center;
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 30px;
+            color: #303133;
+        }
+        .login-form-item {
+            margin-bottom: 24px;
+        }
+        .login-btn {
+            width: 100%;
+        }
+        .global-error {
+            color: #f56c6c;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+        .debug-info {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.8);
+            color: #fff;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            max-width: 400px;
+            max-height: 300px;
+            overflow-y: auto;
+            display: block; /* 默认显示调试信息 */
+        }
+        .debug-toggle {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            padding: 6px 12px;
+            background: #409eff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            z-index: 1000;
+        }
+        .debug-toggle:hover {
+            background: #66b1ff;
+        }
+        .connection-status {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 1000;
+        }
+        .connection-status.online {
+            background: #67c23a;
+            color: white;
+        }
+        .connection-status.offline {
+            background: #f56c6c;
+            color: white;
+        }
+        .debug-log {
+            margin: 2px 0;
+        }
+        .debug-log.info { color: #909399; }
+        .debug-log.success { color: #67c23a; }
+        .debug-log.error { color: #f56c6c; }
+        .debug-log.warning { color: #e6a23c; }
+        .debug-log.bold { font-weight: bold; }
+        .api-endpoint-status {
+            background: rgba(255,255,255,0.1);
+            padding: 5px;
+            margin-top: 10px;
+            border-radius: 4px;
+        }
+        .api-endpoint-item {
+            font-size: 11px;
+            margin: 2px 0;
+        }
+        .api-endpoint-item.available { color: #67c23a; }
+        .api-endpoint-item.unavailable { color: #f56c6c; }
+        .api-endpoint-item.testing { color: #e6a23c; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="login-container">
+            <h2 class="login-title">供应商登录</h2>
+            
+            <!-- 全局错误提示 -->
+            <div v-if="globalError" class="global-error">{{ globalError }}</div>
+            
+            <el-form ref="loginForm" :model="loginForm" :rules="rules">
+                <el-form-item prop="username" class="login-form-item">
+                    <el-input
+                        v-model="loginForm.username"
+                        placeholder="请输入账号"
+                        prefix-icon="el-icon-user"
+                        autocomplete="off"
+                        @keyup.enter.native="handleLogin"
+                    ></el-input>
+                </el-form-item>
+                
+                <el-form-item prop="password" class="login-form-item">
+                    <el-input
+                        v-model="loginForm.password"
+                        type="password"
+                        placeholder="请输入密码"
+                        prefix-icon="el-icon-lock"
+                        autocomplete="off"
+                        show-password
+                        @keyup.enter.native="handleLogin"
+                    ></el-input>
+                </el-form-item>
+                
+                <el-form-item class="login-form-item">
+                    <el-button 
+                        type="primary" 
+                        class="login-btn" 
+                        :loading="loading"
+                        @click="handleLogin"
+                    >
+                        登录
+                    </el-button>
+                </el-form-item>
+            </el-form>
+        </div>
+        
+        <!-- 网络连接状态指示器 -->
+        <div 
+            v-if="connectionStatus" 
+            :class="['connection-status', connectionStatus.status]"
+        >
+            {{ connectionStatus.message }}
+        </div>
+        
+        <!-- 调试信息面板 -->
+        <div class="debug-info" id="debugPanel" v-show="debugVisible">
+            <div class="debug-log bold">调试日志:</div>
+            <div 
+                v-for="log in debugLogs" 
+                :key="log.id"
+                :class="['debug-log', log.type]"
+            >
+                [{{ log.time }}] {{ log.message }}
+            </div>
+            <div class="api-endpoint-status">
+                <div class="debug-log bold">API端点状态:</div>
+                <div 
+                    v-for="(endpoint, index) in apiEndpoints" 
+                    :key="index"
+                    :class="['api-endpoint-item', endpoint.status]"
+                >
+                    {{ index + 1 }}. {{ endpoint.url }} - {{ endpoint.statusText }}
+                </div>
+            </div>
+        </div>
+        
+        <!-- 调试面板切换按钮 -->
+        <button class="debug-toggle" @click="toggleDebug">
+            {{ debugVisible ? '隐藏调试' : '显示调试' }}
+        </button>
+    </div>
+
+    <script>
+        // 增强版登录页面，添加全面调试功能和错误处理
+        new Vue({
+            el: '#app',
+            data() {
+                return {
+                    loginForm: {
+                        username: '',
+                        password: ''
+                    },
+                    rules: {
+                        username: [
+                            { required: true, message: '请输入账号', trigger: 'blur' }
+                        ],
+                        password: [
+                            { required: true, message: '请输入密码', trigger: 'blur' }
+                        ]
+                    },
+                    loading: false,
+                    globalError: '',
+                    debugVisible: true,
+                    debugLogs: [],
+                    connectionStatus: null,
+                    // 定义可能的API端点及状态
+                    apiEndpoints: [
+                        { url: 'https://gdqshop.cn/api/supplier/login', status: 'testing', statusText: '测试中...' },
+                        { url: 'https://gdqshop.cn/index.php?s=/api/supplier/login', status: 'testing', statusText: '测试中...' },
+                        { url: 'https://gdqshop.cn/index.php/api/supplier/login', status: 'testing', statusText: '测试中...' }
+                    ],
+                    // 登录尝试配置
+                    loginConfig: {
+                        timeout: 15000, // 15秒超时
+                        maxAttempts: 3, // 每个端点最大尝试次数
+                        retryDelay: 1000 // 重试延迟
+                    }
+                };
+            },
+            created() {
+                // 页面加载时记录信息
+                this.log('info', '页面已加载，准备初始化登录功能');
+                this.log('info', '当前URL: ' + window.location.href);
+                this.log('info', '可用API端点数量: ' + this.apiEndpoints.length);
+            },
+            mounted() {
+                // 检查系统状态
+                this.checkSystemStatus();
+                
+                // 预测试所有API端点
+                this.pretestApiEndpoints();
+                
+                // 监听网络状态变化
+                window.addEventListener('online', this.updateConnectionStatus);
+                window.addEventListener('offline', this.updateConnectionStatus);
+                
+                // 添加全局键盘监听
+                document.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.handleLogin();
+                    }
+                });
+            },
+            beforeDestroy() {
+                // 清理监听器
+                window.removeEventListener('online', this.updateConnectionStatus);
+                window.removeEventListener('offline', this.updateConnectionStatus);
+            },
+            methods: {
+                // 切换调试面板显示
+                toggleDebug() {
+                    this.debugVisible = !this.debugVisible;
+                },
+                
+                // 更新网络连接状态
+                updateConnectionStatus() {
+                    if (navigator.onLine) {
+                        this.connectionStatus = {
+                            status: 'online',
+                            message: '网络连接正常'
+                        };
+                        this.log('success', '网络连接恢复');
+                    } else {
+                        this.connectionStatus = {
+                            status: 'offline',
+                            message: '无网络连接'
+                        };
+                        this.log('error', '网络连接断开');
+                    }
+                },
+                
+                // 检查系统状态
+                checkSystemStatus() {
+                    this.log('info', '===== 开始系统状态检查 =====');
+                    
+                    // 检查网络连接
+                    this.updateConnectionStatus();
+                    
+                    // 检查浏览器特性支持
+                    this.log('info', `浏览器: ${navigator.userAgent}`);
+                    this.log('info', `本地存储支持: ${typeof localStorage !== 'undefined'}`);
+                    this.log('info', `Cookie支持: ${navigator.cookieEnabled}`);
+                    
+                    // 检查当前页面路径
+                    this.log('info', `页面路径: ${window.location.pathname}`);
+                    this.log('info', `主机名: ${window.location.hostname}`);
+                },
+                
+                // 预测试所有API端点
+                pretestApiEndpoints() {
+                    this.log('info', '开始预测试API端点连接性...');
+                    
+                    this.apiEndpoints.forEach((endpoint, index) => {
+                        const xhr = new XMLHttpRequest();
+                        xhr.open('OPTIONS', endpoint.url, true);
+                        xhr.timeout = 3000;
+                        
+                        xhr.onreadystatechange = () => {
+                            if (xhr.readyState === 4) {
+                                if (xhr.status >= 200 && xhr.status < 300) {
+                                    this.apiEndpoints[index].status = 'available';
+                                    this.apiEndpoints[index].statusText = '可用';
+                                    this.log('success', `端点 ${index + 1} 连接性测试通过: ${endpoint.url}`);
+                                } else {
+                                    this.apiEndpoints[index].status = 'unavailable';
+                                    this.apiEndpoints[index].statusText = `不可用 (${xhr.status})`;
+                                    this.log('warning', `端点 ${index + 1} 连接性测试失败: ${endpoint.url}, 状态码: ${xhr.status}`);
+                                }
+                            }
+                        };
+                        
+                        xhr.onerror = () => {
+                            this.apiEndpoints[index].status = 'unavailable';
+                            this.apiEndpoints[index].statusText = '连接错误';
+                            this.log('error', `端点 ${index + 1} 连接错误: ${endpoint.url}`);
+                        };
+                        
+                        xhr.ontimeout = () => {
+                            this.apiEndpoints[index].status = 'unavailable';
+                            this.apiEndpoints[index].statusText = '请求超时';
+                            this.log('warning', `端点 ${index + 1} 请求超时: ${endpoint.url}`);
+                        };
+                        
+                        xhr.send();
+                    });
+                },
+                
+                // 显示调试日志
+                log(type = 'info', message) {
+                    const now = new Date();
+                    const time = now.toLocaleTimeString('zh-CN', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        fractionalSecondDigits: 3
+                    });
+                    
+                    // 添加到日志数组
+                    this.debugLogs.push({
+                        id: Date.now(),
+                        time: time,
+                        type: type,
+                        message: message
+                    });
+                    
+                    // 限制日志数量
+                    if (this.debugLogs.length > 100) {
+                        this.debugLogs.shift();
+                    }
+                    
+                    // 同时输出到控制台
+                    console[typeof console[type] === 'function' ? type : 'log'](`[${time}] ${message}`);
+                },
+                
+                // 验证表单
+                validateForm() {
+                    let isValid = true;
+                    this.$refs.loginForm.validate((valid) => {
+                        isValid = valid;
+                    });
+                    return isValid;
+                },
+                
+                // 处理登录
+                handleLogin() {
+                    if (!this.validateForm()) {
+                        return;
+                    }
+                    
+                    // 检查网络连接
+                    if (!navigator.onLine) {
+                        this.globalError = '请检查网络连接后重试';
+                        this.log('error', '网络连接不可用，无法发送登录请求');
+                        return;
+                    }
+                    
+                    this.loading = true;
+                    this.globalError = '';
+                    this.log('bold', '========== 开始登录流程 ==========');
+                    
+                    // 优先选择可用端点，然后是所有端点
+                    const availableEndpoints = this.apiEndpoints.filter(e => e.status === 'available');
+                    const endpointsToTry = availableEndpoints.length > 0 ? 
+                        availableEndpoints.map(e => e.url) : 
+                        this.apiEndpoints.map(e => e.url);
+                    
+                    this.log('info', `将尝试 ${endpointsToTry.length} 个API端点`);
+                    this.log('info', '用户名: ' + this.loginForm.username);
+                    
+                    // 开始尝试登录
+                    this.tryNextEndpoint(endpointsToTry, 0, 0);
+                },
+                
+                // 尝试下一个API端点
+                tryNextEndpoint(endpoints, endpointIndex, attemptCount) {
+                    // 如果所有端点都尝试失败
+                    if (endpointIndex >= endpoints.length) {
+                        this.loading = false;
+                        this.globalError = '所有API端点请求失败，请检查网络或联系管理员';
+                        this.log('error', '❌ 所有API端点都已尝试，登录失败');
+                        return;
+                    }
+                    
+                    // 如果当前端点尝试次数过多，跳到下一个
+                    if (attemptCount >= this.loginConfig.maxAttempts) {
+                        this.log('warning', `端点 ${endpointIndex + 1} 已达最大尝试次数，尝试下一个端点`);
+                        this.tryNextEndpoint(endpoints, endpointIndex + 1, 0);
+                        return;
+                    }
+                    
+                    const currentEndpoint = endpoints[endpointIndex];
+                    this.log('info', `尝试API端点 (${endpointIndex + 1}/${endpoints.length}, 尝试 ${attemptCount + 1}/${this.loginConfig.maxAttempts}): ${currentEndpoint}`);
+                    
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', currentEndpoint, true);
+                    xhr.setRequestHeader('Content-Type', 'application/json');
+                    xhr.setRequestHeader('Accept', 'application/json');
+                    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                    xhr.withCredentials = true; // 包含cookies
+                    xhr.timeout = this.loginConfig.timeout;
+                    
+                    xhr.onreadystatechange = () => {
+                        if (xhr.readyState === 4) {
+                            this.log('info', `端点响应状态: ${xhr.status} ${xhr.statusText}`);
+                            
+                            // 记录响应头
+                            const headers = xhr.getAllResponseHeaders();
+                            this.log('info', `响应头: ${headers ? headers : '无响应头'}`);
+                            
+                            // 记录响应文本
+                            const responseText = xhr.responseText || '空响应';
+                            this.log('info', `响应文本: ${responseText}`);
+                            
+                            // 检查是否是空响应
+                            if (responseText.trim() === '') {
+                                this.log('error', '响应为空，尝试重新请求...');
+                                setTimeout(() => {
+                                    this.tryNextEndpoint(endpoints, endpointIndex, attemptCount + 1);
+                                }, this.loginConfig.retryDelay);
+                                return;
+                            }
+                            
+                            // 尝试解析响应
+                            this.processLoginResponse(responseText, currentEndpoint, endpoints, endpointIndex, attemptCount);
+                        }
+                    };
+                    
+                    xhr.onerror = (error) => {
+                        this.log('error', `网络请求错误: ${error.message || '未知错误'}`);
+                        this.tryNextEndpoint(endpoints, endpointIndex, attemptCount + 1);
+                    };
+                    
+                    xhr.ontimeout = () => {
+                        this.log('error', '请求超时');
+                        this.tryNextEndpoint(endpoints, endpointIndex, attemptCount + 1);
+                    };
+                    
+                    // 发送请求
+                    const requestData = JSON.stringify({
+                        username: this.loginForm.username,
+                        password: this.loginForm.password
+                    });
+                    
+                    this.log('info', `发送请求数据: ${JSON.stringify({username: this.loginForm.username, password: '********'})}`);
+                    
+                    try {
+                        xhr.send(requestData);
+                    } catch (sendError) {
+                        this.log('error', `发送请求时出错: ${sendError.message}`);
+                        this.tryNextEndpoint(endpoints, endpointIndex, attemptCount + 1);
+                    }
+                },
+                
+                // 处理登录响应
+                processLoginResponse(responseText, currentEndpoint, endpoints, endpointIndex, attemptCount) {
+                    try {
+                        // 尝试解析JSON
+                        const response = JSON.parse(responseText);
+                        this.log('success', 'JSON解析成功');
+                        
+                        // 扩展的成功条件检查
+                        const successConditions = [
+                            // 检查状态码和布尔标志
+                            response.status === 1,
+                            response.code === 1,
+                            response.code === '1',
+                            response.success === true,
+                            response.ok === true,
+                            response.status === 'success',
+                            // 检查是否有token或用户信息
+                            response.token !== undefined && response.token !== null && response.token !== '',
+                            response.data?.token !== undefined && response.data?.token !== null && response.data?.token !== '',
+                            response.access_token !== undefined && response.access_token !== null && response.access_token !== '',
+                            response.data?.access_token !== undefined && response.data?.access_token !== null && response.data?.access_token !== '',
+                            // 检查响应文本中是否包含成功关键字
+                            responseText.toLowerCase().includes('success'),
+                            responseText.includes('成功'),
+                            responseText.includes('ok'),
+                            responseText.includes('200')
+                        ];
+                        
+                        // 只要有一个条件满足就认为成功
+                        const isSuccess = successConditions.some(condition => condition === true);
+                        
+                        if (isSuccess) {
+                            this.handleLoginSuccess(response, responseText);
+                        } else {
+                            this.log('warning', '未检测到成功标志，尝试下一个端点');
+                            this.tryNextEndpoint(endpoints, endpointIndex + 1, 0);
+                        }
+                    } catch (e) {
+                        this.log('warning', `JSON解析错误: ${e.message}，但将继续分析响应`);
+                        
+                        // 即使JSON解析失败，也尝试从响应文本中提取信息
+                        if (responseText.toLowerCase().includes('success') || 
+                            responseText.includes('成功') ||
+                            responseText.includes('token') ||
+                            responseText.includes('登录成功')) {
+                            
+                            this.log('info', '从响应文本中检测到可能的成功信息');
+                            this.handleLoginSuccess({ raw: responseText }, responseText);
+                        } else {
+                            // 解析失败且没有成功信息，尝试下一个端点
+                            this.tryNextEndpoint(endpoints, endpointIndex + 1, 0);
+                        }
+                    }
+                },
+                
+                // 处理登录成功
+                handleLoginSuccess(response, originalText) {
+                    this.loading = false;
+                    this.log('success', '✅ 登录成功！');
+                    
+                    // 尝试从各种可能的位置获取token
+                    const tokenSources = [
+                        response.token,
+                        response.data?.token,
+                        response.access_token,
+                        response.data?.access_token,
+                        response.data?.supplier_token,
+                        response.supplier_token,
+                        // 尝试从响应文本中提取token（简单正则匹配）
+                        originalText.match(/'token'\s*:\s*['"]([^'"]+)['"]/)?.[1],
+                        originalText.match(/"token"\s*:\s*['"]([^'"]+)['"]/)?.[1],
+                        originalText.match(/token\s*=\s*['"]([^'"]+)['"]/)?.[1]
+                    ];
+                    
+                    const token = tokenSources.find(t => t !== undefined && t !== null && t !== '');
+                    this.log('info', '找到的token: ' + (token ? '已找到' : '未找到'));
+                    
+                    // 尝试从各种可能的位置获取用户信息
+                    const userInfoSources = [
+                        response.userInfo,
+                        response.userinfo,
+                        response.user,
+                        response.data?.userInfo,
+                        response.data?.userinfo,
+                        response.data?.user,
+                        response.data?.supplier_info,
+                        response.supplier_info,
+                        response.data // 整个data对象
+                    ];
+                    
+                    const userInfo = userInfoSources.find(u => u !== undefined && u !== null && (typeof u === 'object' || typeof u === 'string'));
+                    this.log('info', '找到的用户信息: ' + (userInfo ? '已找到' : '未找到'));
+                    
+                    // 保存token和用户信息
+                    try {
+                        if (token) {
+                            localStorage.setItem('supplier_token', token);
+                            localStorage.setItem('token', token); // 同时保存两个键名
+                            this.log('success', '✅ 已保存token到localStorage');
+                        }
+                        
+                        if (userInfo) {
+                            const userInfoString = typeof userInfo === 'string' ? userInfo : JSON.stringify(userInfo);
+                            localStorage.setItem('supplier_info', userInfoString);
+                            localStorage.setItem('userInfo', userInfoString); // 同时保存两个键名
+                            this.log('success', '✅ 已保存用户信息到localStorage');
+                        }
+                        
+                        // 显示成功消息
+                        this.$message({
+                            message: '登录成功，正在跳转...',
+                            type: 'success',
+                            duration: 1000
+                        });
+                        
+                        // 尝试多种可能的跳转路径
+                        const possibleRedirects = [
+                            response.redirect,
+                            response.data?.redirect,
+                            '/pagesExt/supplier/orderList.html',
+                            '/pagesExt/supplier/index.html',
+                            '/pagesExt/supplier/dashboard.html'
+                        ];
+                        
+                        const redirectPath = possibleRedirects.find(path => path !== undefined && path !== null && path !== '');
+                        this.log('info', `准备跳转到: ${redirectPath}`);
+                        
+                        setTimeout(() => {
+                            window.location.href = redirectPath;
+                        }, 800);
+                        
+                    } catch (e) {
+                        this.globalError = '保存登录信息失败，但登录已成功';
+                        this.log('error', `❌ 保存localStorage失败: ${e.message}`);
+                        this.log('info', '即使保存失败，也尝试跳转...');
+                        
+                        // 即使保存失败也尝试跳转
+                        setTimeout(() => {
+                            window.location.href = '/pagesExt/supplier/orderList.html';
+                        }, 1500);
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

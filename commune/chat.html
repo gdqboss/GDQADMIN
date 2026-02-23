@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>海鲜聊天室</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f2f5;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .chat-header {
+            background: linear-gradient(135deg, #0f0c29, #302b63);
+            color: white;
+            padding: 12px 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .chat-header a {
+            color: white;
+            text-decoration: none;
+            font-size: 20px;
+            padding: 5px;
+        }
+        
+        .chat-header h5 {
+            margin: 0;
+            font-size: 16px;
+        }
+        
+        .chat-container {
+            display: flex;
+            height: calc(100vh - 50px);
+        }
+        
+        .chat-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: white;
+        }
+        
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            background: #f8f9fa;
+        }
+        
+        .message {
+            display: flex;
+            margin-bottom: 15px;
+            align-items: flex-start;
+        }
+        
+        .message.me {
+            flex-direction: row-reverse;
+        }
+        
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+            margin: 0 10px;
+        }
+        
+        .message.me .avatar {
+            background: linear-gradient(135deg, #4caf50, #2e7d32);
+        }
+        
+        .bubble {
+            max-width: 70%;
+            background: white;
+            padding: 10px 14px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        
+        .message.me .bubble {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        
+        .bubble .name {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 4px;
+        }
+        
+        .message.me .bubble .name {
+            color: rgba(255,255,255,0.7);
+            text-align: right;
+        }
+        
+        .bubble .time {
+            font-size: 10px;
+            color: #aaa;
+            margin-top: 4px;
+        }
+        
+        .message.me .bubble .time {
+            color: rgba(255,255,255,0.6);
+            text-align: right;
+        }
+        
+        /* 私聊消息样式 */
+        .message.private .bubble {
+            background: #fff3e0;
+            border: 1px solid #ffcc80;
+        }
+        .message.private .bubble .name::before {
+            content: '🔒 ';
+        }
+        .message.me.private .bubble {
+            background: linear-gradient(135deg, #ff9800, #f57c00);
+        }
+        
+        .input-area {
+            background: white;
+            padding: 12px 15px;
+            border-top: 1px solid #eee;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .input-area input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #eee;
+            border-radius: 25px;
+            font-size: 14px;
+            outline: none;
+        }
+        
+        .input-area input:focus {
+            border-color: #667eea;
+        }
+        
+        .input-area button {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        
+        .online-panel {
+            width: 100px;
+            background: white;
+            border-left: 1px solid #eee;
+            padding: 10px;
+            overflow-y: auto;
+        }
+        
+        .online-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: #888;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+        
+        .online-item {
+            padding: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .online-item:hover {
+            background: #f5f5f5;
+        }
+        
+        .online-item.private {
+            background: #e3f2fd;
+        }
+        
+        .dot {
+            width: 8px;
+            height: 8px;
+            background: #4caf50;
+            border-radius: 50%;
+        }
+        
+        .private-badge {
+            font-size: 10px;
+            background: #667eea;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-header">
+        <div style="display:flex;align-items:center;gap:10px">
+            <a href="/" title="返回主页">🏠</a>
+            <h5>💬 海鲜聊天室</h5>
+            <span onclick="toggleQuickActions()" style="cursor:pointer;font-size:18px;margin-left:5px">📌</span>
+        </div>
+        <div id="userInfo" style="font-size:13px"></div>
+    </div>
+    
+    <!-- 快捷操作面板 -->
+    <div id="quickActionsPanel" style="display:none;background:white;padding:10px;border-bottom:1px solid #eee">
+        <div style="display:flex;gap:8px">
+            <button onclick="toggleCheckIn()" style="flex:1;padding:10px;background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;border-radius:8px;font-size:13px">
+                <span id="checkInBtnIcon">📌</span> <span id="checkInBtnText">签到</span>
+            </button>
+            <button onclick="toggleWorkLog()" style="flex:1;padding:10px;background:linear-gradient(135deg,#4caf50,#2e7d32);color:white;border:none;border-radius:8px;font-size:13px">
+                📝 日志
+            </button>
+        </div>
+        <!-- 签到面板 -->
+        <div id="checkInPanel" style="display:none;margin-top:10px;padding:10px;background:#f8f9fa;border-radius:8px">
+            <div style="text-align:center">
+                <div id="checkStatusIcon" style="font-size:28px">📌</div>
+                <div id="checkStatusText" style="font-weight:600;margin:5px 0">点击签到</div>
+                <div id="checkTimeText" style="font-size:11px;color:#999"></div>
+            </div>
+            <button id="mainCheckInBtn" class="btn btn-primary w-100" style="margin-top:10px;border-radius:6px" onclick="doCheckIn()">✅ 签到</button>
+            <div style="margin-top:10px;font-size:12px;font-weight:600">📅 最近签到</div>
+            <div id="checkInList" style="font-size:11px;color:#666;margin-top:5px"></div>
+        </div>
+        <!-- 日志面板 -->
+        <div id="workLogPanel" style="display:none;margin-top:10px">
+            <button class="btn btn-success w-100" style="border-radius:6px;margin-bottom:8px" onclick="showAddLog()">➕ 写日志</button>
+            <div id="workLogList" style="max-height:200px;overflow-y:auto;font-size:12px"></div>
+        </div>
+    </div>
+    
+    <div class="chat-container">
+        <div class="chat-main">
+            <div class="messages" id="messages"></div>
+            
+            <div class="input-area">
+                <div id="privateIndicator" style="display:none;background:#e3f2fd;color:#1976d2;padding:8px 12px;border-radius:20px;font-size:12px;margin-right:10px;white-space:nowrap">
+                    🔒 私聊: <span id="privateName"></span>
+                    <span onclick="clearPrivate()" style="cursor:pointer;margin-left:5px">✕</span>
+                </div>
+                <input type="text" id="msgInput" placeholder="输入消息..." onkeypress="if(event.key==='Enter')sendMsg()">
+                <button onclick="sendMsg()">➤</button>
+            </div>
+        </div>
+        
+        <div class="online-panel">
+            <div class="online-title">在线用户</div>
+            <div id="onlineList"></div>
+        </div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        let myName = '';
+        let myNickname = '';
+        
+        // 获取用户信息
+        try {
+            const stored = localStorage.getItem('commune_user');
+            if (stored) {
+                const user = JSON.parse(stored);
+                myName = user.username || '';
+                myNickname = user.nickname || myName;
+            }
+        } catch(e) {
+            console.error('Failed to parse user data:', e);
+        }
+        
+        if (!myName) {
+            location.href = '/commune/index.html';
+        }
+        
+        console.log('Chat initialized for:', myName, myNickname);
+        
+        let privateTo = '';
+        let privateNickname = '';
+        
+        function getAvatar(username) {
+            if (username.includes('鱼')) return '🐟';
+            if (username.includes('蟹')) return '🦀';
+            if (username.includes('bot_')) return '🤖';
+            return username.charAt(0).toUpperCase();
+        }
+        
+        function loadMsgs() {
+            fetch('/api/commune/chat.php?action=list&local_user=' + encodeURIComponent(myName) + '&private_to=' + (privateTo || ''))
+            .then(r => r.json())
+            .then(data => {
+                if (data.code === 1) {
+                    let html = '';
+                    data.data.forEach(m => {
+                        const isMe = m.username === myName || m.from_user === myName;
+                        const isPrivate = m.to_user && m.to_user !== '';
+                        const avatar = getAvatar(m.nickname || m.username);
+                        const time = new Date(m.create_time * 1000).toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'});
+                        // 将换行符转换为 <br>
+                        const content = (m.content || '').replace(/\n/g, '<br>');
+                        
+                        let msgClass = 'message';
+                        if (isMe) msgClass += ' me';
+                        if (isPrivate) msgClass += ' private';
+                        
+                        html += '<div class="' + msgClass + '">';
+                        html += '<div class="avatar">' + avatar + '</div>';
+                        html += '<div class="bubble">';
+                        html += '<div class="name">' + (m.nickname || m.username) + '</div>';
+                        html += content;
+                        html += '<div class="time">' + time + '</div>';
+                        html += '</div></div>';
+                    });
+                    document.getElementById('messages').innerHTML = html;
+                    document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+                }
+            })
+            .catch(err => console.error('loadMsgs error:', err));
+        }
+        
+        function sendMsg() {
+            const input = document.getElementById('msgInput');
+            const content = input.value.trim();
+            if (!content) return;
+            
+            fetch('/api/commune/chat.php?action=send', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'content=' + encodeURIComponent(content) + '&username=' + myName + (privateTo ? '&private_to=' + privateTo : '')
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.code === 1) {
+                    input.value = '';
+                    loadMsgs();
+                }
+            });
+        }
+        
+        function loadOnline() {
+            fetch('/api/commune/user.php?action=online')
+            .then(r => r.json())
+            .then(data => {
+                if (data.code === 1 && data.data) {
+                    let html = '';
+                    data.data.forEach(u => {
+                        const isMe = u.username === myName;
+                        const isPrivate = privateTo === u.username;
+                        html += '<div class="online-item ' + (isPrivate ? 'private' : '') + '" onclick="setPrivate(\'' + u.username + '\',\'' + u.nickname + '\')">';
+                        html += '<span class="dot"></span>';
+                        html += (u.nickname || u.username).substring(0, 8);
+                        html += isMe ? ' (我)' : '';
+                        html += '</div>';
+                    });
+                    document.getElementById('onlineList').innerHTML = html || '<div style="font-size:11px;color:#999;padding:10px">暂无其他在线用户</div>';
+                }
+            })
+            .catch(err => console.error('loadOnline error:', err));
+        }
+        
+        function setPrivate(username, nickname) {
+            if (privateTo === username) {
+                privateTo = '';
+                privateNickname = '';
+            } else {
+                privateTo = username;
+                privateNickname = nickname;
+            }
+            
+            // 更新顶部状态
+            document.getElementById('userInfo').innerHTML = privateTo 
+                ? '<span class="private-badge">私聊: ' + privateNickname + '</span> <span style="cursor:pointer" onclick="clearPrivate()">✕</span>'
+                : '';
+            
+            // 更新输入框私聊提示
+            const indicator = document.getElementById('privateIndicator');
+            if (privateTo) {
+                document.getElementById('privateName').textContent = privateNickname;
+                indicator.style.display = 'flex';
+                document.getElementById('msgInput').placeholder = '发送私聊消息给 ' + privateNickname + '...';
+            } else {
+                indicator.style.display = 'none';
+                document.getElementById('msgInput').placeholder = '输入消息...';
+            }
+            
+            loadOnline();
+            loadMsgs();
+        }
+        
+        function clearPrivate() {
+            privateTo = '';
+            privateNickname = '';
+            document.getElementById('userInfo').innerHTML = '';
+            document.getElementById('privateIndicator').style.display = 'none';
+            document.getElementById('msgInput').placeholder = '输入消息...';
+            loadMsgs();
+        }
+        
+        // 心跳 - 30 秒一次
+        setInterval(() => {
+            if (myName) {
+                fetch('/api/commune/user.php?action=heartbeat&username=' + encodeURIComponent(myName) + '&nickname=' + encodeURIComponent(myNickname));
+            }
+        }, 30000);
+        
+        // 初始心跳 - 立即发送
+        if (myName) {
+            fetch('/api/commune/user.php?action=heartbeat&username=' + encodeURIComponent(myName) + '&nickname=' + encodeURIComponent(myNickname));
+        }
+        
+        // 立即加载在线用户和消息
+        loadOnline();
+        loadMsgs();
+        
+        // 定时刷新
+        setInterval(loadMsgs, 3000);
+        setInterval(loadOnline, 10000);
+        
+        // 检查签到状态
+        checkTodayStatus();
+    </script>
+    
+    <!-- 签到日志功能 -->
+    <script>
+        // ========== 快捷操作 ==========
+        function toggleQuickActions() {
+            const p = document.getElementById('quickActionsPanel');
+            p.style.display = p.style.display === 'none' ? 'block' : 'none';
+        }
+        
+        function getUserInfo() {
+            try {
+                const stored = localStorage.getItem('commune_user');
+                if (stored) {
+                    return JSON.parse(stored);
+                }
+            } catch(e) {}
+            return { id: 1, username: '用户', nickname: '用户' };
+        }
+        
+        function checkTodayStatus() {
+            const user = getUserInfo();
+            fetch('/api/commune/attendance.php?action=today_status&user_id=' + user.id + '&user_name=' + encodeURIComponent(user.nickname || user.username))
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1 && d.data.checked) {
+                    document.getElementById('checkInBtnIcon').textContent = '✅';
+                    document.getElementById('checkInBtnText').textContent = '已签到';
+                }
+            });
+        }
+        
+        function toggleCheckIn() {
+            const p = document.getElementById('checkInPanel');
+            p.style.display = p.style.display === 'none' ? 'block' : 'none';
+            document.getElementById('workLogPanel').style.display = 'none';
+            if (p.style.display === 'block') loadCheckIn();
+        }
+        
+        function toggleWorkLog() {
+            const p = document.getElementById('workLogPanel');
+            p.style.display = p.style.display === 'none' ? 'block' : 'none';
+            document.getElementById('checkInPanel').style.display = 'none';
+            if (p.style.display === 'block') loadWorkLog();
+        }
+        
+        function loadCheckIn() {
+            const user = getUserInfo();
+            fetch('/api/commune/attendance.php?action=today_status&user_id=' + user.id + '&user_name=' + encodeURIComponent(user.nickname || user.username))
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1) {
+                    if (d.data.checked) {
+                        document.getElementById('checkStatusIcon').textContent = '✅';
+                        document.getElementById('checkStatusText').textContent = '已签到';
+                        document.getElementById('checkTimeText').textContent = '签到时间: ' + d.data.time;
+                        document.getElementById('mainCheckInBtn').textContent = '今日已签到';
+                        document.getElementById('mainCheckInBtn').disabled = true;
+                    } else {
+                        document.getElementById('checkStatusIcon').textContent = '📌';
+                        document.getElementById('checkStatusText').textContent = '点击签到';
+                        document.getElementById('checkTimeText').textContent = '';
+                        document.getElementById('mainCheckInBtn').textContent = '✅ 签到';
+                        document.getElementById('mainCheckInBtn').disabled = false;
+                    }
+                }
+            });
+            loadCheckInList();
+        }
+        
+        function loadCheckInList() {
+            fetch('/api/commune/attendance.php?action=attendance_list&user_id=1')
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1) {
+                    let html = '';
+                    d.data.slice(0, 5).forEach(item => {
+                        html += '<div style="padding:4px 6px;background:white;border-radius:4px;margin-bottom:4px">' + item.user_name + ' - ' + item.check_date + ' ✅</div>';
+                    });
+                    document.getElementById('checkInList').innerHTML = html || '<div style="color:#999">暂无记录</div>';
+                }
+            });
+        }
+        
+        function doCheckIn() {
+            const user = getUserInfo();
+            fetch('/api/commune/attendance.php?action=check_in', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'user_id=' + user.id + '&user_name=' + encodeURIComponent(user.nickname || user.username)
+            })
+            .then(r => r.json())
+            .then(d => {
+                alert(d.msg);
+                if (d.code === 1) {
+                    loadCheckIn();
+                    checkTodayStatus();
+                }
+            });
+        }
+        
+        function loadWorkLog() {
+            const user = getUserInfo();
+            fetch('/api/commune/attendance.php?action=log_list&user_id=' + user.id)
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1) {
+                    let html = '';
+                    d.data.slice(0, 10).forEach(item => {
+                        html += '<div style="padding:8px;background:white;border-radius:6px;margin-bottom:6px"><div style="font-weight:500;font-size:11px;color:#666">' + item.user_name + ' - ' + item.log_date + '</div><div style="font-size:12px">' + item.content + '</div></div>';
+                    });
+                    document.getElementById('workLogList').innerHTML = html || '<div style="color:#999;text-align:center;padding:15px">暂无日志</div>';
+                }
+            });
+        }
+        
+        function showAddLog() {
+            const user = getUserInfo();
+            const content = prompt('请输入工作日志内容:');
+            if (!content) return;
+            fetch('/api/commune/attendance.php?action=add_log', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'user_id=' + user.id + '&user_name=' + encodeURIComponent(user.nickname || user.username) + '&content=' + encodeURIComponent(content)
+            })
+            .then(r => r.json())
+            .then(d => {
+                alert(d.msg);
+                if (d.code === 1) loadWorkLog();
+            });
+        }
+    </script>
+</body>
+</html>

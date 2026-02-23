@@ -1,0 +1,138 @@
+<!DOCTYPE html><!--custom_file(yx_order_discount_rand)-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>下单随机立减</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+	<style type="text/css">
+		.object_table .layui-input {width: 80px;}
+		.object_table .xuhao .layui-input {width: 146px;}
+		.object_table .layui-input:nth-child(2){ margin-top: 10px;}
+		.object_table .w150 {width: 150px;}
+	</style>
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12">
+				<div class="layui-card-header">
+					<i class="fa fa-cog"></i> 下单随机立减设置
+				</div>
+				<div class="layui-card-body" pad15>
+					<div class="layui-form form-label-w8" lay-filter="">
+						<div class="layui-form-item">
+							<label class="layui-form-label">状态：</label>
+							<div class="layui-input-inline">
+								<input type="radio" name="info[status]" value="1" title="开启" {if !$info['id'] || $info['status']==1}checked{/if}>
+								<input type="radio" name="info[status]" value="0" title="关闭" {if $info['status']==0}checked{/if}>
+							</div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label">立减类型：</label>
+							<div class="layui-input-inline">
+								<input type="radio" name="info[discount_type]" value="0" title="按金额" {if !$info['id'] || $info['discount_type']==0}checked{/if}>
+							</div>
+						</div>
+						<!--
+						<div class="layui-form-item">
+							<label class="layui-form-label">比例：</label>
+							<div class="layui-input-inline" style="width:150px">
+								<input type="number" name="info[rate_min]" value="{$info['rate_min']}" class="layui-input">
+							</div>
+							<div class="layui-form-mid">-</div>
+							<div class="layui-input-inline" style="width:150px">
+								<input type="number" name="info[rate_max]" value="{$info['rate_max']}" class="layui-input">
+							</div>
+
+							<div class="layui-form-mid layui-word-aux"></div>
+						</div>-->
+						<div class="layui-form-item">
+							<label class="layui-form-label">立减金额范围：</label>
+							<div class="layui-input-inline" style="width:150px">
+								<input type="number" name="info[money_min]" value="{$info['money_min']|default=0.01}" placeholder="最小值" class="layui-input">
+							</div>
+							<div class="layui-form-mid">-</div>
+							<div class="layui-input-inline" style="width:150px">
+								<input type="number" name="info[money_max]" value="{$info['money_max']|default=0}" placeholder="最大值" class="layui-input">
+							</div>
+							<div class="layui-form-mid layui-word-aux layui-clear">上限0为不限制，固定数值</div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label">最小订单金额：</label>
+							<div class="layui-input-inline" style="width:150px">
+								<input type="number" name="info[order_price_min]" value="{$info['order_price_min']|default=0}" placeholder="" class="layui-input">
+							</div>
+							<div class="layui-form-mid layui-word-aux layui-clear">0为不限制，单位：元；达到最小金额的订单才会触发随机立减（下单页面因其他金额的不确定性以商品金额判断是否展示）</div>
+						</div>
+						<!--<div class="layui-form-item">
+							<label class="layui-form-label">间隔等待时间：</label>
+							<div class="layui-input-inline" style="width:150px">
+								<input type="number" name="info[wait_time]" value="{$info['wait_time']|default=0}" placeholder="" class="layui-input">
+							</div>
+							<div class="layui-form-mid layui-word-aux layui-clear">0为不限制，单位：分钟；下单后享受随机立减，未来N分钟内下单不再触发，防止用户恶意下单</div>
+						</div>-->
+						<div class="layui-form-item">
+							<label class="layui-form-label">参与订单：</label>
+							<div class="layui-input-inline" style="width:500px">
+								<input type="checkbox" name="info[order_types][]" value="all" title="全部" {if in_array('all',explode(',',$info['order_types']))}checked{/if}/>
+								<!--<input type="checkbox" name="info[order_types][]" value="maidan" title="买单" {if in_array('maidan',explode(',',$info['order_types']))}checked{/if}/>-->
+								<input type="checkbox" name="info[order_types][]" value="shop" title="商城" {if in_array('shop',explode(',',$info['order_types']))}checked{/if}/>
+							</div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label">参与等级：</label>
+							<div class="layui-input-inline" style="width:800px">
+								<div class="layui-input-inline" style="width:500px">
+									<input type="checkbox" name="info[gettj][]" value="-1" title="所有人" {if in_array('-1',$info['gettj'])}checked{/if}/>
+									<input type="checkbox" name="info[gettj][]" value="0" title="关注用户" {if in_array('0',$info['gettj'])}checked{/if}/>
+									{foreach $memberlevel as $v}
+										<input type="checkbox" name="info[gettj][]" value="{$v.id}" title="{$v.name}" {if in_array($v['id'],$info['gettj'])}checked{/if}/>
+									{/foreach}
+								</div>
+							</div>
+						</div>
+
+						<div class="layui-form-item">
+							<label class="layui-form-label"></label>
+							<div class="layui-input-block">
+								<div class="layui-form-mid layui-word-aux">
+									规则：<br>
+									1.订单下单页面展示立减优惠<br>
+									2.订单详情展示优惠金额<br>
+								</div>
+							</div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label"></label>
+							<div class="layui-input-block">
+								<button class="layui-btn" lay-submit lay-filter="formsubmit">提 交</button>
+							</div>
+						</div>
+					</div>
+					
+				</div>
+			</div>
+    </div>
+  </div>
+	{include file="public/js"/}
+	<script>
+	layui.form.on('submit(formsubmit)', function(obj){
+		var field = obj.field
+		var index = layer.load();
+		$.post('',field,function(data){
+			layer.close(index);
+			dialog(data.msg,data.status);
+			if(data.status==1){
+				setTimeout(function(){
+					location.href = location.href
+				},1000)
+			}
+		})
+	})
+  </script>
+	{include file="public/copyright"/}
+</body>
+</html>

@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>订单管理 - 供应商发货系统</title>
+    <script src="/plugins/vue.min.js"></script>
+    <link rel="stylesheet" href="/plugins/element-ui/index.css">
+    <script src="/plugins/element-ui/index.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f0f2f5;
+            min-height: 100vh;
+        }
+        .container {
+            padding: 20px;
+        }
+        .header {
+            background-color: #fff;
+            padding: 15px 20px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .header h3 {
+            margin: 0;
+            color: #333;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        .search-form {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        .form-item {
+            display: flex;
+            align-items: center;
+        }
+        .form-item label {
+            width: 80px;
+            font-size: 14px;
+            color: #606266;
+            margin-right: 10px;
+        }
+        .form-item .el-input,
+        .form-item .el-select {
+            flex: 1;
+            min-width: 0;
+        }
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding-top: 15px;
+            border-top: 1px solid #ebeef5;
+        }
+        .order-table {
+            background-color: #fff;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        .table-header {
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #ebeef5;
+        }
+        .table-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #303133;
+        }
+        .table-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .table-content {
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ebeef5;
+        }
+        th {
+            background-color: #f5f7fa;
+            font-weight: 600;
+            color: #303133;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+        td {
+            color: #606266;
+            font-size: 14px;
+        }
+        tr:hover {
+            background-color: #fafafa;
+        }
+        .order-status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .status-pending {
+            background-color: #fdf6ec;
+            color: #e6a23c;
+        }
+        .status-processing {
+            background-color: #f0f9eb;
+            color: #67c23a;
+        }
+        .status-shipped {
+            background-color: #f0f2ff;
+            color: #409eff;
+        }
+        .status-completed {
+            background-color: #ecf5ff;
+            color: #66b1ff;
+        }
+        .status-cancelled {
+            background-color: #fef0f0;
+            color: #f56c6c;
+        }
+        .product-image {
+            width: 60px;
+            height: 60px;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .product-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .product-info {
+            display: flex;
+            align-items: center;
+        }
+        .product-details {
+            margin-left: 12px;
+            flex: 1;
+            min-width: 0;
+        }
+        .product-name {
+            font-size: 14px;
+            color: #303133;
+            margin-bottom: 5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .product-spec {
+            font-size: 12px;
+            color: #909399;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .order-actions {
+            display: flex;
+            gap: 8px;
+        }
+        .btn-primary {
+            background-color: #ff6000;
+            border-color: #ff6000;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #ff7800;
+            border-color: #ff7800;
+        }
+        .btn-view {
+            background-color: #409eff;
+            border-color: #409eff;
+            color: white;
+        }
+        .btn-view:hover {
+            background-color: #66b1ff;
+            border-color: #66b1ff;
+        }
+        .btn-disabled {
+            background-color: #c0c4cc;
+            border-color: #c0c4cc;
+            color: white;
+            cursor: not-allowed;
+        }
+        .pagination {
+            display: flex;
+            justify-content: flex-end;
+            padding: 15px 20px;
+            background-color: #fff;
+            border-top: 1px solid #ebeef5;
+        }
+        .no-data {
+            text-align: center;
+            padding: 60px;
+            color: #909399;
+        }
+        .el-button {
+            padding: 8px 16px;
+            font-size: 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all 0.3s;
+        }
+        .el-button:hover:not(.btn-disabled) {
+            opacity: 0.9;
+        }
+        .el-input__inner {
+            height: 32px;
+            border-radius: 4px;
+        }
+        .el-select {
+            width: 100%;
+        }
+        .el-select .el-input__inner {
+            height: 32px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="container">
+            <div class="header">
+                <h3>订单管理</h3>
+            </div>
+            
+            <!-- 搜索表单 -->
+            <div class="search-form">
+                <div class="form-row">
+                    <div class="form-item">
+                        <label for="orderNo">订单编号：</label>
+                        <input type="text" id="orderNo" v-model="searchForm.order_no" placeholder="请输入订单编号" class="el-input__inner">
+                    </div>
+                    <div class="form-item">
+                        <label for="productName">商品名称：</label>
+                        <input type="text" id="productName" v-model="searchForm.product_name" placeholder="请输入商品名称" class="el-input__inner">
+                    </div>
+                    <div class="form-item">
+                        <label for="orderStatus">订单状态：</label>
+                        <div class="el-select">
+                            <select id="orderStatus" v-model="searchForm.order_status" class="el-input__inner">
+                                <option value="">全部状态</option>
+                                <option value="10">待发货</option>
+                                <option value="20">处理中</option>
+                                <option value="30">已发货</option>
+                                <option value="40">已完成</option>
+                                <option value="-1">已取消</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-item">
+                        <label for="startTime">下单时间：</label>
+                        <input type="date" id="startTime" v-model="searchForm.start_time" placeholder="开始日期" class="el-input__inner">
+                    </div>
+                    <div class="form-item">
+                        <label for="endTime">至：</label>
+                        <input type="date" id="endTime" v-model="searchForm.end_time" placeholder="结束日期" class="el-input__inner">
+                    </div>
+                    <div class="form-item">
+                        <label for="expressNo">物流单号：</label>
+                        <input type="text" id="expressNo" v-model="searchForm.express_no" placeholder="请输入物流单号" class="el-input__inner">
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button @click="resetSearch" class="el-button">重置</button>
+                    <button @click="searchOrders" class="el-button btn-primary">搜索</button>
+                </div>
+            </div>
+            
+            <!-- 订单表格 -->
+            <div class="order-table">
+                <div class="table-content">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th width="150">订单编号</th>
+                                <th width="150">下单时间</th>
+                                <th width="200">商品信息</th>
+                                <th width="100">数量</th>
+                                <th width="100">金额</th>
+                                <th width="100">收货人</th>
+                                <th width="150">收货信息</th>
+                                <th width="100">订单状态</th>
+                                <th width="150">物流信息</th>
+                                <th width="120">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody v-if="orderList.length > 0">
+                            <tr v-for="order in orderList" :key="order.id">
+                                <td>{{ order.order_no }}</td>
+                                <td>{{ formatDate(order.create_time) }}</td>
+                                <td>
+                                    <div class="product-info">
+                                        <div class="product-image">
+                                            <img :src="order.product_image || '/static/img/default-product.png'" alt="商品图片">
+                                        </div>
+                                        <div class="product-details">
+                                            <div class="product-name">{{ order.product_name }}</div>
+                                            <div class="product-spec">{{ order.spec_name || '无规格' }}</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>{{ order.quantity }}</td>
+                                <td>¥{{ order.price }}</td>
+                                <td>{{ order.recipient_name }}</td>
+                                <td>
+                                    {{ order.recipient_address }}
+                                    <br />
+                                    {{ order.recipient_phone }}
+                                </td>
+                                <td>
+                                    <span :class="['order-status', getStatusClass(order.order_status)]">
+                                        {{ getStatusText(order.order_status) }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <template v-if="order.express_no">
+                                        {{ order.express_company }}
+                                        <br />
+                                        {{ order.express_no }}
+                                    </template>
+                                    <template v-else>
+                                        - 无 -
+                                    </template>
+                                </td>
+                                <td>
+                                    <div class="order-actions">
+                                        <button @click="viewOrderDetail(order)" class="el-button btn-view">详情</button>
+                                        <button 
+                                            v-if="order.order_status === 10"
+                                            @click="openShipModal(order)" 
+                                            class="el-button btn-primary"
+                                        >发货</button>
+                                        <button 
+                                            v-if="order.order_status === 30"
+                                            @click="viewExpress(order)" 
+                                            class="el-button btn-view"
+                                        >物流轨迹</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                        <tbody v-else>
+                            <tr>
+                                <td colspan="10" class="no-data">暂无订单数据</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- 分页 -->
+                <div class="pagination">
+                    <div style="display: flex; align-items: center; gap: 20px; font-size: 14px; color: #606266;">
+                        <span>共 {{ total }} 条记录</span>
+                        <div>
+                            <span>每页</span>
+                            <select v-model="pageSize" @change="changePageSize" style="margin: 0 5px; padding: 4px;">
+                                <option :value="10">10</option>
+                                <option :value="20">20</option>
+                                <option :value="50">50</option>
+                                <option :value="100">100</option>
+                            </select>
+                            <span>条</span>
+                        </div>
+                        <div>
+                            <span>第 {{ currentPage }} / {{ totalPages }} 页</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 5px;">
+                        <button @click="goToPage(1)" :disabled="currentPage === 1" class="el-button" :class="{ 'btn-disabled': currentPage === 1 }">首页</button>
+                        <button @click="goToPage(currentPage - 1)" :disabled="currentPage === 1" class="el-button" :class="{ 'btn-disabled': currentPage === 1 }">上一页</button>
+                        <button @click="goToPage(currentPage + 1)" :disabled="currentPage >= totalPages" class="el-button" :class="{ 'btn-disabled': currentPage >= totalPages }">下一页</button>
+                        <button @click="goToPage(totalPages)" :disabled="currentPage >= totalPages" class="el-button" :class="{ 'btn-disabled': currentPage >= totalPages }">末页</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 发货弹窗 -->
+        <div v-if="showShipModal" class="modal-overlay">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4>订单发货</h4>
+                    <button @click="closeShipModal" class="modal-close">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-row">
+                        <div class="form-item">
+                            <label>订单编号：</label>
+                            <span>{{ selectedOrder.order_no }}</span>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-item">
+                            <label>物流公司：</label>
+                            <select v-model="shipForm.express_company" class="el-input__inner">
+                                <option value="">请选择物流公司</option>
+                                <option value="SF">顺丰速运</option>
+                                <option value="YT">圆通速递</option>
+                                <option value="YD">韵达快递</option>
+                                <option value="ZT">中通快递</option>
+                                <option value="ST">申通快递</option>
+                                <option value="YZ">邮政快递</option>
+                                <option value="JD">京东物流</option>
+                                <option value="OTHER">其他</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-item">
+                            <label>物流单号：</label>
+                            <input type="text" v-model="shipForm.express_no" placeholder="请输入物流单号" class="el-input__inner">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-item">
+                            <label>备注：</label>
+                            <input type="text" v-model="shipForm.express_remark" placeholder="选填，输入发货备注" class="el-input__inner">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button @click="closeShipModal" class="el-button">取消</button>
+                    <button @click="confirmShip" class="el-button btn-primary">确认发货</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 订单详情弹窗 -->
+        <div v-if="showDetailModal" class="modal-overlay">
+            <div class="modal-content" style="width: 600px;">
+                <div class="modal-header">
+                    <h4>订单详情</h4>
+                    <button @click="closeDetailModal" class="modal-close">×</button>
+                </div>
+                <div class="modal-body">
+                    <!-- 订单基本信息 -->
+                    <div class="detail-section">
+                        <div class="detail-section-title">订单信息</div>
+                        <div class="detail-item">
+                            <div class="detail-label">订单编号：</div>
+                            <div class="detail-value">{{ orderDetail.order_num }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">创建时间：</div>
+                            <div class="detail-value">{{ formatDate(orderDetail.create_time) }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">订单金额：</div>
+                            <div class="detail-value">¥{{ orderDetail.total_amount }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">订单状态：</div>
+                            <div class="detail-value">
+                                <span v-if="orderDetail.status === 1" class="order-status status-pending">待发货</span>
+                                <span v-else-if="orderDetail.status === 2" class="order-status status-shipped">已发货</span>
+                                <span v-else-if="orderDetail.status === 3" class="order-status status-completed">已完成</span>
+                                <span v-else-if="orderDetail.status === -1" class="order-status status-cancelled">已取消</span>
+                                <span v-else>未知状态</span>
+                            </div>
+                        </div>
+                        <div v-if="orderDetail.express_no" class="detail-item">
+                            <div class="detail-label">物流信息：</div>
+                            <div class="detail-value">
+                                {{ orderDetail.express_name }}<br>
+                                {{ orderDetail.express_no }}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 收货信息 -->
+                    <div class="detail-section">
+                        <div class="detail-section-title">收货信息</div>
+                        <div class="detail-item">
+                            <div class="detail-label">收货人：</div>
+                            <div class="detail-value">{{ orderDetail.consignee }} {{ orderDetail.mobile }}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">收货地址：</div>
+                            <div class="detail-value">{{ orderDetail.address }}</div>
+                        </div>
+                    </div>
+                    
+                    <!-- 商品信息 -->
+                    <div class="detail-section">
+                        <div class="detail-section-title">商品信息</div>
+                        <div class="detail-goods-list">
+                            <div v-for="(goods, index) in orderDetail.goodsInfo" :key="index" class="detail-goods-item">
+                                <div class="detail-goods-img">
+                                    <img :src="goods.goods_image || '/static/img/default-product.png'" alt="商品图片">
+                                </div>
+                                <div class="detail-goods-info">
+                                    <div class="detail-goods-name">{{ goods.goods_name }}</div>
+                                    <div class="detail-goods-spec">{{ goods.spec_name || '无规格' }}</div>
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <div class="detail-goods-price">¥{{ goods.price }}</div>
+                                        <div class="detail-goods-quantity">x{{ goods.goods_num }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button @click="closeDetailModal" class="el-button btn-primary">关闭</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 物流轨迹弹窗 -->
+        <div v-if="showExpressModal" class="modal-overlay">
+            <div class="modal-content" style="width: 600px;">
+                <div class="modal-header">
+                    <h4>物流轨迹</h4>
+                    <button @click="closeExpressModal" class="modal-close">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="express-track-list">
+                        <div 
+                            v-for="(track, index) in expressTracks" 
+                            :key="index" 
+                            class="express-track-item"
+                            :class="{ active: index === 0 }"
+                        >
+                            <div class="express-track-dot"></div>
+                            <div class="express-track-content">
+                                <div class="express-track-time">{{ formatDate(track.time) }}</div>
+                                <div class="express-track-info">{{ track.content }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-if="expressTracks.length === 0" style="text-align: center; padding: 40px 0; color: #909399;">
+                        暂无物流信息
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button @click="closeExpressModal" class="el-button btn-primary">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <style>
+        /* 弹窗样式 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: #fff;
+            border-radius: 6px;
+            width: 500px;
+            max-width: 90%;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid #ebeef5;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h4 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: #303133;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 20px;
+            color: #909399;
+            cursor: pointer;
+            padding: 0;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-close:hover {
+            color: #606266;
+        }
+        .modal-body {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid #ebeef5;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+        
+        /* 订单详情弹窗样式 */
+        .detail-section {
+            margin-bottom: 20px;
+        }
+        .detail-section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #606266;
+            margin-bottom: 10px;
+        }
+        .detail-item {
+            display: flex;
+            margin-bottom: 10px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .detail-label {
+            width: 80px;
+            color: #909399;
+        }
+        .detail-value {
+            flex: 1;
+            color: #303133;
+        }
+        .detail-goods-list {
+            border: 1px solid #ebeef5;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .detail-goods-item {
+            display: flex;
+            padding: 15px;
+            border-bottom: 1px solid #ebeef5;
+        }
+        .detail-goods-item:last-child {
+            border-bottom: none;
+        }
+        .detail-goods-img {
+            width: 80px;
+            height: 80px;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .detail-goods-img img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .detail-goods-info {
+            flex: 1;
+            margin-left: 15px;
+        }
+        .detail-goods-name {
+            font-size: 14px;
+            color: #303133;
+            margin-bottom: 8px;
+        }
+        .detail-goods-spec {
+            font-size: 12px;
+            color: #909399;
+            margin-bottom: 8px;
+        }
+        .detail-goods-price,
+        .detail-goods-quantity {
+            font-size: 14px;
+            color: #303133;
+        }
+        
+        /* 物流轨迹样式 */
+        .express-track-list {
+            padding-left: 20px;
+            position: relative;
+        }
+        .express-track-list::before {
+            content: '';
+            position: absolute;
+            left: 8px;
+            top: 8px;
+            bottom: 0;
+            width: 2px;
+            background-color: #ebeef5;
+        }
+        .express-track-item {
+            position: relative;
+            padding-bottom: 20px;
+        }
+        .express-track-item:last-child {
+            padding-bottom: 0;
+        }
+        .express-track-item:last-child::before {
+            display: none;
+        }
+        .express-track-dot {
+            position: absolute;
+            left: -22px;
+            top: 6px;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background-color: #ebeef5;
+            border: 2px solid #fff;
+            z-index: 1;
+        }
+        .express-track-item.active .express-track-dot {
+            background-color: #ff6000;
+        }
+        .express-track-content {
+            padding: 0 10px 10px 15px;
+        }
+        .express-track-time {
+            font-size: 12px;
+            color: #909399;
+            margin-bottom: 5px;
+        }
+        .express-track-info {
+            font-size: 14px;
+            color: #303133;
+        }
+        .express-track-item.active .express-track-info {
+            color: #ff6000;
+            font-weight: 500;
+        }
+    </style>
+    
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                // 搜索表单
+                searchForm: {
+                    order_no: '',
+                    product_name: '',
+                    order_status: '',
+                    start_time: '',
+                    end_time: '',
+                    express_no: ''
+                },
+                // 订单列表
+                orderList: [],
+                total: 0,
+                currentPage: 1,
+                pageSize: 20,
+                totalPages: 0,
+                // 发货弹窗
+                showShipModal: false,
+                selectedOrder: {},
+                shipForm: {
+                    express_company: '',
+                    express_no: '',
+                    express_remark: ''
+                },
+                // 详情弹窗
+                showDetailModal: false,
+                orderDetail: {},
+                // 物流弹窗
+                showExpressModal: false,
+                expressTracks: []
+            },
+            created() {
+                // 检查登录状态
+                if (!localStorage.getItem('supplier_token')) {
+                    window.location.href = 'index.html';
+                }
+                // 获取订单列表
+                this.getOrderList();
+            },
+            methods: {
+                // 获取订单列表
+                getOrderList() {
+                    // 构建查询参数，适配现有API
+                    const params = new URLSearchParams();
+                    params.append('page', this.currentPage);
+                    params.append('pageSize', this.pageSize);
+                    
+                    // 状态映射，适配现有API（0:全部, 1:待发货, 2:已发货, 3:已完成）
+                    let status = '';
+                    if (this.searchForm.order_status === '10') status = 1; // 待发货
+                    else if (this.searchForm.order_status === '30') status = 2; // 已发货
+                    else if (this.searchForm.order_status === '40') status = 3; // 已完成
+                    
+                    if (status !== '') {
+                        params.append('status', status);
+                    }
+                    
+                    // 关键词搜索
+                    let keyword = '';
+                    if (this.searchForm.order_no) {
+                        keyword = this.searchForm.order_no;
+                    } else if (this.searchForm.product_name) {
+                        keyword = this.searchForm.product_name;
+                    }
+                    
+                    if (keyword) {
+                        params.append('keyword', keyword);
+                    }
+                    
+                    // 日期范围
+                    if (this.searchForm.start_time) {
+                        params.append('startDate', this.searchForm.start_time);
+                    }
+                    if (this.searchForm.end_time) {
+                        params.append('endDate', this.searchForm.end_time);
+                    }
+                    
+                    fetch('/api/supplier/orderList?' + params.toString(), {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + localStorage.getItem('supplier_token')
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(res => {
+                        if (res.status === 1) {
+                            // 格式化订单数据，适配前端页面显示
+                            this.orderList = (res.data.list || []).map(order => {
+                                // 状态映射：1->10(待发货), 2->30(已发货), 3->40(已完成)
+                                let orderStatus = 10;
+                                if (order.status === 2) orderStatus = 30;
+                                else if (order.status === 3) orderStatus = 40;
+                                else if (order.status === -1) orderStatus = -1;
+                                
+                                // 提取订单商品信息
+                                const goodsInfo = (order.goodsInfo || []).length > 0 ? order.goodsInfo[0] : {};
+                                
+                                return {
+                                    id: order.id,
+                                    order_no: order.order_num || '',
+                                    create_time: order.create_time || '',
+                                    product_name: goodsInfo.goods_name || '',
+                                    product_image: goodsInfo.goods_image || '',
+                                    spec_name: goodsInfo.spec_name || '',
+                                    quantity: goodsInfo.goods_num || 0,
+                                    price: order.total_amount || 0,
+                                    recipient_name: order.consignee || '',
+                                    recipient_phone: order.mobile || '',
+                                    recipient_address: order.address || '',
+                                    order_status: orderStatus,
+                                    express_company: order.express_name || '',
+                                    express_no: order.express_no || ''
+                                };
+                            });
+                            
+                            this.total = res.data.total || 0;
+                            this.totalPages = Math.ceil(this.total / this.pageSize);
+                        } else {
+                            alert(res.msg || '获取订单列表失败');
+                            if (res.code === 401) {
+                                localStorage.removeItem('supplier_token');
+                                window.location.href = 'index.html';
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('获取订单列表失败:', error);
+                        alert('网络错误，请稍后重试');
+                    });
+                },
+                
+                // 搜索订单
+                searchOrders() {
+                    this.currentPage = 1;
+                    this.getOrderList();
+                },
+                
+                // 重置搜索
+                resetSearch() {
+                    this.searchForm = {
+                        order_no: '',
+                        product_name: '',
+                        order_status: '',
+                        start_time: '',
+                        end_time: '',
+                        express_no: ''
+                    };
+                    this.currentPage = 1;
+                    this.getOrderList();
+                },
+                
+                // 翻页
+                goToPage(page) {
+                    if (page >= 1 && page <= this.totalPages) {
+                        this.currentPage = page;
+                        this.getOrderList();
+                    }
+                },
+                
+                // 改变每页条数
+                changePageSize() {
+                    this.currentPage = 1;
+                    this.getOrderList();
+                },
+                
+                // 查看订单详情
+                viewOrderDetail(order) {
+                    const params = new URLSearchParams();
+                    params.append('order_id', order.id);
+                    
+                    fetch('/api/supplier/orderDetail?' + params.toString(), {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + localStorage.getItem('supplier_token')
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(res => {
+                        if (res.status === 1) {
+                            this.orderDetail = res.data;
+                            this.showDetailModal = true;
+                        } else {
+                            alert(res.msg || '获取订单详情失败');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('获取订单详情失败:', error);
+                        alert('网络错误，请稍后重试');
+                    });
+                },
+                
+                // 打开发货弹窗
+                openShipModal(order) {
+                    this.selectedOrder = order;
+                    this.shipForm = {
+                        express_company: '',
+                        express_no: '',
+                        express_remark: ''
+                    };
+                    this.showShipModal = true;
+                },
+                
+                // 关闭发货弹窗
+                closeShipModal() {
+                    this.showShipModal = false;
+                    this.selectedOrder = {};
+                },
+                
+                // 关闭详情弹窗
+                closeDetailModal() {
+                    this.showDetailModal = false;
+                    this.orderDetail = {};
+                },
+                
+                // 关闭物流弹窗
+                closeExpressModal() {
+                    this.showExpressModal = false;
+                    this.expressTracks = [];
+                },
+                
+                // 确认发货
+                confirmShip() {
+                    if (!this.shipForm.express_company) {
+                        alert('请选择物流公司');
+                        return;
+                    }
+                    if (!this.shipForm.express_no) {
+                        alert('请输入物流单号');
+                        return;
+                    }
+                    
+                    const formData = new FormData();
+                    formData.append('order_id', this.selectedOrder.id);
+                    formData.append('express_company', this.shipForm.express_company);
+                    formData.append('express_number', this.shipForm.express_no);
+                    formData.append('express_remark', this.shipForm.express_remark);
+                    
+                    fetch('/api/supplier/sendExpress', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + localStorage.getItem('supplier_token')
+                        },
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(res => {
+                        if (res.status === 1) {
+                            alert('发货成功');
+                            this.closeShipModal();
+                            this.getOrderList();
+                        } else {
+                            alert(res.msg || '发货失败');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('发货失败:', error);
+                        alert('网络错误，请稍后重试');
+                    });
+                },
+                
+                // 查看物流轨迹
+                viewExpress(order) {
+                    const params = new URLSearchParams();
+                    params.append('express_no', order.express_no);
+                    
+                    fetch('/api/supplier/queryExpress?' + params.toString(), {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + localStorage.getItem('supplier_token')
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(res => {
+                        if (res.status === 1) {
+                            this.expressTracks = res.data || [];
+                            this.showExpressModal = true;
+                        } else {
+                            alert(res.msg || '获取物流信息失败');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('获取物流信息失败:', error);
+                        alert('网络错误，请稍后重试');
+                    });
+                },
+                
+                // 获取状态样式类
+                getStatusClass(status) {
+                    switch(status) {
+                        case 10: return 'status-pending';
+                        case 20: return 'status-processing';
+                        case 30: return 'status-shipped';
+                        case 40: return 'status-completed';
+                        case -1: return 'status-cancelled';
+                        default: return '';
+                    }
+                },
+                
+                // 获取状态文本
+                getStatusText(status) {
+                    switch(status) {
+                        case 10: return '待发货';
+                        case 20: return '处理中';
+                        case 30: return '已发货';
+                        case 40: return '已完成';
+                        case -1: return '已取消';
+                        default: return '未知状态';
+                    }
+                },
+                
+                // 格式化日期
+                formatDate(dateString) {
+                    if (!dateString) return '';
+                    const date = new Date(dateString);
+                    return date.getFullYear() + '-' + 
+                           String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+                           String(date.getDate()).padStart(2, '0') + ' ' + 
+                           String(date.getHours()).padStart(2, '0') + ':' + 
+                           String(date.getMinutes()).padStart(2, '0') + ':' + 
+                           String(date.getSeconds()).padStart(2, '0');
+                }
+            }
+        });
+    </script>
+</body>
+</html>

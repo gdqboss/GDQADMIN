@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>{$cfg['title']} - {$title}</title>
+    {include file="public/css"/}
+    <style>
+        #ggnamediv .layui-input,#ggvaldiv .layui-input{ display:inline;height:30px}
+        .guigeimg{display: inline-block; position: relative}
+        .guigeimg_close{width: 25px;height: 22px;right: -14px;top:-14px;}
+        .layui-imgbox .layui-imgbox-close{z-index: 6;}
+        #jieti_discountdiv .layui-input,#jieti_discountdiv .layui-input{ display:inline;height:30px}
+        .mt5 {margin-bottom: 5px}
+    </style>
+</head>
+<body>
+    <div class="layui-fluid">
+        <div class="layui-row layui-col-space15">
+            <div class="layui-card layui-col-md12">
+                <div class="layui-card-header">
+                    {if !$info['id']}<i class="fa fa-plus"></i> {$title}{else}<i class="fa fa-pencil"></i> {$title}{/if}
+                    <i class="layui-icon layui-icon-close" style="font-size:18px;font-weight:bold;cursor:pointer" onclick="closeself()"></i>
+                    <a href="{:url('BarcodeInventory/index')}" class="layui-btn layui-btn-sm layui-btn-primary" style="margin-left:10px;">返回列表</a>
+                </div>
+                <div class="layui-card-body" pad15>
+                    <form class="layui-form form-label-w6" id="productForm" lay-filter="productForm">
+                        <div class="layui-tab" lay-filter="mytab">
+                            <ul class="layui-tab-title">
+                                <li class="layui-this" lay-id="1">商品信息</li>
+                                <li lay-id="2">规格信息</li>
+                            </ul>
+                            <div class="layui-tab-content">
+                                <!-- 商品信息 -->
+                                <div class="layui-tab-item layui-show">
+                                    <input type="hidden" name="id" value="{$info.id|default='0'}">
+                                    
+                                    <!-- 基本信息 -->
+                                    <div class="ibox float-e-margins">
+                                        <div class="ibox-title">
+                                            <h5>{:t('基本信息')}</h5>
+                                            <div class="ibox-tools">
+                                                <a class="collapse-link">
+                                                    <i class="fa fa-chevron-down"></i>
+                                                </a>
+                                            </div>
+                                        </div>
+                                        <div class="ibox-content">
+                                            <div class="layui-form-item">
+                                                <label class="layui-form-label"><span class="redstar">*</span>{:t('商品名称')}：</label>
+                                                <div class="layui-input-inline" style="width:400px">
+                                                    <input type="text" class="layui-input" name="name" value="{$info.name|default=''}" placeholder="{:t('请输入商品名称')}" required>
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- 供应商选择 -->
+                                            {if $suppliers}
+                                            <div class="layui-form-item">
+                                                <label class="layui-form-label">{:t('供应商')}：</label>
+                                                <div class="layui-input-inline">
+                                                    <select class="layui-select" name="supplier_id">
+                                                        <option value="">{:t('请选择供应商')}</option>
+                                                        {volist name="suppliers" id="supplier"}
+                                                        <option value="{$supplier.id}" {if isset($info.supplier_id) && $info.supplier_id == $supplier.id}selected{/if}>{$supplier.name}</option>
+                                                        {/volist}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            {/if}
+                                            
+                                            <!-- 商品主图 -->
+                                            <div class="layui-form-item">
+                                                <label class="layui-form-label"><span class="redstar">*</span>{:t('商品主图')}：</label>
+                                                <button style="float:left;" type="button" class="layui-btn layui-btn-primary" upload-input="pic" upload-preview="picPreview" onclick="uploader(this)">{:t('上传图片')}</button>
+                                                <div class="layui-form-mid layui-word-aux" style="margin-left:10px;">{:t('建议尺寸：640×640像素')}</div>
+                                                <div id="picPreview" class="picsList-class-padding" style="clear:both;padding-top:10px;">
+                                                    <div class="layui-imgbox imgbox-required">
+                                                        <a {if $info.pic}style="display: block;" {else /} style="display: none;"  {/if} class="layui-imgbox-close" href="javascript:void(0)" onclick="$(this).parent().find('img').attr('src','').hide();getpicsval('pic','picPreview');$(this).hide();" title="{:t('删除')}"><i class="layui-icon layui-icon-close-fill-opaque"></i></a>
+                                                        <div class="layui-imgbox-img">
+                                                            <img src="{$info.pic}"/>
+                                                        </div>
+                                                        <input autocomplete='off' type="text" id="pic" name="pic" value="{$info.pic|default=''}" style="cursor:default;display:none;">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 规格信息 -->
+                                <div class="layui-tab-item">
+                                    <div class="ibox float-e-margins">
+                                        <div class="ibox-title">
+                                            <h5>{:t('规格信息')}</h5>
+                                            <div class="ibox-tools">
+                                                <a class="collapse-link">
+                                                    <i class="fa fa-chevron-down"></i>
+                                                </a>
+                                                <button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="addOption()">
+                                                    <i class="fa fa-plus"></i> {:t('添加规格')}
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="ibox-content">
+                                            <div class="table-responsive">
+                                                <table class="layui-table layui-table-bordered">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>{:t('规格名称')}</th>
+                                                            <th>{:t('库存')}</th>
+                                                            <th>{:t('成本价')}</th>
+                                                            <th>{:t('市场价')}</th>
+                                                            <th>{:t('销售价')}</th>
+                                                            <th>{:t('码类型')}</th>
+                                                            <th>{:t('条码/二维码')}</th>
+                                                            <th>{:t('操作')}</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="optionTable">
+                                                        {if $gglist}
+                                                        {volist name="gglist" id="item" key="k"}
+                                                        <tr>
+                                                            <td>
+                                                                <input type="hidden" name="option[{$k}][id]" value="{$item.id}">
+                                                                <input type="text" class="layui-input" name="option[{$k}][name]" value="{$item.name}" placeholder="{:t('规格名称')}" required>
+                                                            </td>
+                                                            <td>
+                                                                <input type="number" class="layui-input" name="option[{$k}][stock]" value="{$item.stock}" placeholder="{:t('库存')}" min="0" required>
+                                                            </td>
+                                                            <td>
+                                                                <input type="number" class="layui-input" name="option[{$k}][cost_price]" value="{$item.cost_price}" placeholder="{:t('成本价')}" min="0" step="0.01">
+                                                            </td>
+                                                            <td>
+                                                                <input type="number" class="layui-input" name="option[{$k}][market_price]" value="{$item.market_price}" placeholder="{:t('市场价')}" min="0" step="0.01">
+                                                            </td>
+                                                            <td>
+                                                                <input type="number" class="layui-input" name="option[{$k}][sell_price]" value="{$item.sell_price}" placeholder="{:t('销售价')}" min="0" step="0.01" required>
+                                                            </td>
+                                                            <td>
+                                                                <select class="layui-select" name="option[{$k}][code_type]">
+                                                                    <option value="1" {if $item.code_type == 1}selected{/if}>{:t('条码')}</option>
+                                                                    <option value="2" {if $item.code_type == 2}selected{/if}>{:t('二维码')}</option>
+                                                                </select>
+                                                            </td>
+                                                            <td>
+                                                                <input type="text" class="layui-input" name="option[{$k}][barcode]" value="{$item.barcode}" placeholder="{:t('请输入条码/二维码内容')}">
+                                                            </td>
+                                                            <td>
+                                                                <button type="button" class="layui-btn layui-btn-danger layui-btn-xs" onclick="$(this).closest('tr').remove()">
+                                                                    <i class="fa fa-trash"></i> {:t('删除')}
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                        {/volist}
+                                                        {else}
+                                                        <tr>
+                                                            <td>
+                                                                <input type="text" class="layui-input" name="option[0][name]" placeholder="{:t('规格名称')}" required>
+                                                            </td>
+                                                            <td>
+                                                                <input type="number" class="layui-input" name="option[0][stock]" placeholder="{:t('库存')}" min="0" required>
+                                                            </td>
+                                                            <td>
+                                                                <input type="number" class="layui-input" name="option[0][cost_price]" placeholder="{:t('成本价')}" min="0" step="0.01">
+                                                            </td>
+                                                            <td>
+                                                                <input type="number" class="layui-input" name="option[0][market_price]" placeholder="{:t('市场价')}" min="0" step="0.01">
+                                                            </td>
+                                                            <td>
+                                                                <input type="number" class="layui-input" name="option[0][sell_price]" placeholder="{:t('销售价')}" min="0" step="0.01" required>
+                                                            </td>
+                                                            <td>
+                                                                <select class="layui-select" name="option[0][code_type]">
+                                                                    <option value="1">{:t('条码')}</option>
+                                                                    <option value="2">{:t('二维码')}</option>
+                                                                </select>
+                                                            </td>
+                                                            <td>
+                                                                <input type="text" class="layui-input" name="option[0][barcode]" placeholder="{:t('请输入条码/二维码内容')}">
+                                                            </td>
+                                                            <td>
+                                                                <button type="button" class="layui-btn layui-btn-danger layui-btn-xs" onclick="$(this).closest('tr').remove()">
+                                                                    <i class="fa fa-trash"></i> {:t('删除')}
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                        {/if}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 提交按钮 -->
+                        <div class="layui-form-item">
+                            <div class="col-sm-4 col-sm-offset-2">
+                                <button class="layui-btn" type="submit" lay-submit lay-filter="productForm"><i class="fa fa-check"></i> {:t('保存商品')}</button>
+                                <button class="layui-btn layui-btn-primary" type="reset"><i class="fa fa-refresh"></i> {:t('重置')}</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部脚本 -->
+    {include file="public/js"/}
+    
+    <script>
+        // 全局变量定义
+        var lang = {
+            upload_success: '{:t('上传成功')}',
+            network_error: '{:t('网络错误，请稍后重试')}',
+            delete: '{:t('删除')}'
+        };
+        
+        // 页面加载完成后初始化
+        $(document).ready(function() {
+            layui.use(['form', 'layer', 'upload', 'element'], function() {
+                var form = layui.form;
+                var layer = layui.layer;
+                var upload = layui.upload;
+                var element = layui.element;
+                
+                // 渲染表单
+                form.render();
+                
+                // 初始化标签页
+                element.init();
+                
+                // 监听标签页切换
+                element.on('tab(mytab)', function(data){});
+                
+                // 图片上传功能
+                window.uploader = function(obj, multiple=false) {
+                    var uploadInput = $(obj).attr('upload-input');
+                    var uploadPreview = $(obj).attr('upload-preview');
+                    var input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'image/*';
+                    input.multiple = multiple;
+                    
+                    input.onchange = function(e) {
+                        var files = e.target.files;
+                        var formData = new FormData();
+                        
+                        for(var i=0; i<files.length; i++) {
+                            formData.append('file[]', files[i]);
+                        }
+                        
+                        $.ajax({
+                            url: '{:url("Upload/index")}',
+                            type: 'POST',
+                            data: formData,
+                            processData: false,
+                            contentType: false,
+                            dataType: 'json',
+                            success: function(res) {
+                                if (res.status == 1) {
+                                    if(multiple) {
+                                        // 批量上传处理
+                                        var existingPics = $('#'+uploadInput).val().split(',').filter(Boolean);
+                                        var newPics = res.data.files;
+                                        var allPics = existingPics.concat(newPics);
+                                        $('#'+uploadInput).val(allPics.join(','));
+                                        
+                                        // 更新预览
+                                        var previewHtml = '';
+                                        allPics.forEach(function(pic) {
+                                            previewHtml += `<div class="layui-imgbox">
+                                                <a class="layui-imgbox-close" href="javascript:void(0)" onclick="$(this).parent().remove();getpicsval('${uploadInput}','${uploadPreview}')" title="${lang.delete}"><i class="layui-icon layui-icon-close-fill-opaque"></i></a>
+                                                <span class="layui-imgbox-img"><img src="${pic}"></span>
+                                            </div>`;
+                                        });
+                                        $('#'+uploadPreview).html(previewHtml);
+                                    } else {
+                                        // 单张上传处理
+                                        $('#'+uploadInput).val(res.data.file);
+                                        var imgElement = $('#'+uploadPreview).find('img');
+                                        imgElement.attr('src', res.data.file).show();
+                                        $('#'+uploadPreview).find('a.layui-imgbox-close').show();
+                                    }
+                                    alert(lang.upload_success);
+                                } else {
+                                    alert(res.msg);
+                                }
+                            },
+                            error: function() {
+                                alert(lang.network_error);
+                            }
+                        });
+                    };
+                    
+                    input.click();
+                };
+                
+                // 获取图片值
+                window.getpicsval = function(inputId, previewId) {
+                    var pics = [];
+                    $('#'+previewId).find('img').each(function() {
+                        var src = $(this).attr('src');
+                        if(src && src !== '') {
+                            pics.push(src);
+                        }
+                    });
+                    $('#'+inputId).val(pics.join(','));
+                };
+                
+                // 添加规格行
+                window.addOption = function() {
+                    var len = $('#optionTable tr').length;
+                    var spec_name = '{:t('规格名称')}';
+                    var stock = '{:t('库存')}';
+                    var cost_price = '{:t('成本价')}';
+                    var market_price = '{:t('市场价')}';
+                    var sell_price = '{:t('销售价')}';
+                    var barcode = '{:t('条码')}';
+                    var qrcode = '{:t('二维码')}';
+                    var barcode_content = '{:t('请输入条码/二维码内容')}';
+                    var delete_text = '{:t('删除')}';
+                    
+                    var html = `
+                    <tr>
+                        <td>
+                            <input type="text" class="layui-input" name="option[${len}][name]" placeholder="${spec_name}" required>
+                        </td>
+                        <td>
+                            <input type="number" class="layui-input" name="option[${len}][stock]" placeholder="${stock}" min="0" required>
+                        </td>
+                        <td>
+                            <input type="number" class="layui-input" name="option[${len}][cost_price]" placeholder="${cost_price}" min="0" step="0.01">
+                        </td>
+                        <td>
+                            <input type="number" class="layui-input" name="option[${len}][market_price]" placeholder="${market_price}" min="0" step="0.01">
+                        </td>
+                        <td>
+                            <input type="number" class="layui-input" name="option[${len}][sell_price]" placeholder="${sell_price}" min="0" step="0.01" required>
+                        </td>
+                        <td>
+                            <select class="layui-select" name="option[${len}][code_type]">
+                                <option value="1">${barcode}</option>
+                                <option value="2">${qrcode}</option>
+                            </select>
+                        </td>
+                        <td>
+                            <input type="text" class="layui-input" name="option[${len}][barcode]" placeholder="${barcode_content}">
+                        </td>
+                        <td>
+                            <button type="button" class="layui-btn layui-btn-danger layui-btn-xs" onclick="$(this).closest('tr').remove()">
+                                <i class="fa fa-trash"></i> ${delete_text}
+                            </button>
+                        </td>
+                    </tr>`;
+                    $('#optionTable').append(html);
+                    
+                    // 重新渲染表单
+                    form.render();
+                };
+                
+                // 表单提交
+                form.on('submit(productForm)', function(data) {
+                    $.ajax({
+                        url: '{:url('BarcodeInventory/save_product')}',
+                        type: 'POST',
+                        data: $('#productForm').serialize(),
+                        dataType: 'json',
+                        success: function(res) {
+                            if (res.status == 1) {
+                                layer.msg(res.msg, {icon: 1, time: 1500}, function() {
+                                    window.location.href = res.url;
+                                });
+                            } else {
+                                layer.msg(res.msg, {icon: 2});
+                            }
+                        },
+                        error: function() {
+                            layer.msg(lang.network_error, {icon: 2});
+                        }
+                    });
+                    return false;
+                });
+            });
+        });
+        
+        // 关闭窗口函数
+        function closeself() {
+            var index = parent.layer.getFrameIndex(window.name);
+            parent.layer.close(index);
+        }
+    </script>
+</body>
+</html>

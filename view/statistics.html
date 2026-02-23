@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>扫码统计</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+  <style>
+    .stats-container {
+      margin: 20px 0;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    .stats-card {
+      background-color: white;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      padding: 20px;
+      text-align: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .stats-number {
+      font-size: 36px;
+      font-weight: bold;
+      color: #1890ff;
+      margin-bottom: 10px;
+    }
+    .stats-label {
+      font-size: 14px;
+      color: #666;
+    }
+    .chart-section {
+      background-color: white;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .chart-title {
+      font-size: 16px;
+      font-weight: bold;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .chart-container {
+      width: 100%;
+      height: 400px;
+    }
+  </style>
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12">
+        <div class="layui-card-header">
+          扫码统计
+          <a href="{:url('ProductQrcode/index')}" class="layui-btn layui-btn-sm layui-btn-primary" style="float: right;">返回列表</a>
+        </div>
+        <div class="layui-card-body" pad15>
+          <!-- 统计概览 -->
+          <div class="stats-container">
+            <div class="stats-grid">
+              <div class="stats-card">
+                <div class="stats-number" id="totalScans">0</div>
+                <div class="stats-label">总扫码次数</div>
+              </div>
+              <div class="stats-card">
+                <div class="stats-number" id="todayScans">0</div>
+                <div class="stats-label">今日扫码次数</div>
+              </div>
+              <div class="stats-card">
+                <div class="stats-number" id="weekScans">0</div>
+                <div class="stats-label">本周扫码次数</div>
+              </div>
+              <div class="stats-card">
+                <div class="stats-number" id="monthScans">0</div>
+                <div class="stats-label">本月扫码次数</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 图表区域 -->
+          <div class="chart-section">
+            <div class="chart-title">扫码趋势（最近30天）</div>
+            <div class="chart-container" id="trendChart"></div>
+          </div>
+          
+          <div class="chart-section">
+            <div class="chart-title">扫码平台分布</div>
+            <div class="chart-container" id="platformChart"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {include file="public/js"/}
+  <!-- 引入ECharts -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+  <script>
+    layui.use(['layer', 'jquery'], function() {
+      var layer = layui.layer;
+      var $ = layui.jquery;
+      
+      // 初始化图表
+      var trendChart = echarts.init(document.getElementById('trendChart'));
+      var platformChart = echarts.init(document.getElementById('platformChart'));
+      
+      // 加载统计数据
+      function loadStatsData() {
+        layer.load(2);
+        
+        // 这里应该通过AJAX请求获取实际的统计数据
+        // 目前使用模拟数据
+        var mockData = {
+          total: 1250,
+          today: 86,
+          week: 324,
+          month: 956,
+          trend: {
+            dates: Array.from({length: 30}, function(v, i) {
+              return new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            }),
+            counts: Array.from({length: 30}, function(v, i) {
+              return Math.floor(Math.random() * 50) + 10;
+            })
+          },
+          platform: {
+            '微信小程序': 720,
+            'H5': 280,
+            '支付宝小程序': 150,
+            '百度小程序': 100
+          }
+        };
+        
+        setTimeout(function() {
+          layer.closeAll('loading');
+          updateStats(mockData);
+        }, 500);
+      }
+      
+      // 更新统计数据
+      function updateStats(data) {
+        // 更新统计数字
+        $('#totalScans').text(data.total);
+        $('#todayScans').text(data.today);
+        $('#weekScans').text(data.week);
+        $('#monthScans').text(data.month);
+        
+        // 更新趋势图表
+        updateTrendChart(data.trend);
+        
+        // 更新平台分布图表
+        updatePlatformChart(data.platform);
+      }
+      
+      // 更新趋势图表
+      function updateTrendChart(trendData) {
+        var option = {
+          tooltip: {
+            trigger: 'axis',
+            axisPointer: {
+              type: 'cross',
+              label: {
+                backgroundColor: '#6a7985'
+              }
+            }
+          },
+          legend: {
+            data: ['扫码次数']
+          },
+          grid: {
+            left: '3%',
+            right: '4%',
+            bottom: '3%',
+            containLabel: true
+          },
+          xAxis: {
+            type: 'category',
+            boundaryGap: false,
+            data: trendData.dates
+          },
+          yAxis: {
+            type: 'value'
+          },
+          series: [
+            {
+              name: '扫码次数',
+              type: 'line',
+              stack: 'Total',
+              smooth: true,
+              lineStyle: {
+                width: 3,
+                color: '#1890ff'
+              },
+              areaStyle: {
+                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                  { offset: 0, color: 'rgba(24, 144, 255, 0.3)' },
+                  { offset: 1, color: 'rgba(24, 144, 255, 0.1)' }
+                ])
+              },
+              emphasis: {
+                focus: 'series'
+              },
+              data: trendData.counts
+            }
+          ]
+        };
+        
+        trendChart.setOption(option);
+      }
+      
+      // 更新平台分布图表
+      function updatePlatformChart(platformData) {
+        var option = {
+          tooltip: {
+            trigger: 'item',
+            formatter: '{a} <br/>{b}: {c} ({d}%)'
+          },
+          legend: {
+            orient: 'vertical',
+            left: 10,
+            data: Object.keys(platformData)
+          },
+          series: [
+            {
+              name: '扫码平台',
+              type: 'pie',
+              radius: ['40%', '70%'],
+              avoidLabelOverlap: false,
+              itemStyle: {
+                borderRadius: 10,
+                borderColor: '#fff',
+                borderWidth: 2
+              },
+              label: {
+                show: false,
+                position: 'center'
+              },
+              emphasis: {
+                label: {
+                  show: true,
+                  fontSize: 20,
+                  fontWeight: 'bold'
+                }
+              },
+              labelLine: {
+                show: false
+              },
+              data: Object.keys(platformData).map(function(key) {
+                return {
+                  value: platformData[key],
+                  name: key
+                };
+              })
+            }
+          ]
+        };
+        
+        platformChart.setOption(option);
+      }
+      
+      // 响应式处理
+      window.addEventListener('resize', function() {
+        trendChart.resize();
+        platformChart.resize();
+      });
+      
+      // 初始化加载数据
+      loadStatsData();
+    });
+  </script>
+</body>
+</html>

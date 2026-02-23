@@ -1,0 +1,218 @@
+<!DOCTYPE html><!--custom_file(member_tag)-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{:t('会员')}标签设置</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+	<style>
+	#ggtable .layui-input{ display:inline;height:30px}
+	#ggtable .layui-btn{ margin-top:-3px;margin-left:1px}
+	</style>
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12">
+				<div class="layui-card-header">
+					{if !$info['id']}<i class="fa fa-plus"></i> 添加{:t('会员')}标签{else}<i class="fa fa-pencil"></i> 编辑{:t('会员')}标签{/if}
+					<i class="layui-icon layui-icon-close" style="font-size:18px;font-weight:bold;cursor:pointer" onclick="closeself()"></i>
+				</div>
+				<div class="layui-card-body" pad15>
+					<div class="layui-form form-label-w6" lay-filter="">
+						<input type="hidden" name="info[id]" value="{$info.id}"/>
+						<span style="color:#333">基础设置</span><hr/>
+						
+						<div class="layui-form-item">
+							<label class="layui-form-label">标签名称</label>
+							<div class="layui-input-inline">
+								<input type="text" name="info[name]" class="layui-input" value="{$info.name}" lay-verify="required" lay-verType="tips">
+							</div>
+						</div>
+						
+						{if !getcustom('member_tag_pic')}
+						<div class="layui-form-item" >
+							<label class="layui-form-label">标签类型</label>
+							<div class="layui-input-inline" style="width:400px">
+								<input type="radio" name="info[type]" value="1" title="自动标签" {if $info['type']==1}checked{/if} >
+								<input type="radio" name="info[type]" value="2" title="手动标签" {if $info['type']!=1}checked{/if} >
+							</div>
+						
+						</div>
+					
+						<div class="layui-form-item">
+							<label class="layui-form-label">条件满足方式</label>
+							<div class="layui-input-inline">
+								<input type="radio" name="info[condition]" value="or" title="或" {if $info['condition']=='or'}checked{/if} >
+								<input type="radio" name="info[condition]" value="and" title="与" {if $info['condition']=='and'}checked{/if} >
+							</div>
+						</div>
+					
+						<div class="layui-form-item">
+						
+							<label class="layui-form-label">条件设置</label>
+							<div class="layui-input-inline" style="width:60px">
+								<input type="checkbox" name="info[regdatestatus]" value="1" lay-skin="switch" lay-text="开启|关闭" {if $info.regdatestatus==1}checked{/if}>
+							</div>
+							<div class="layui-input-inline" style="width:500px">
+								<div class="layui-input-inline layui-module-itemL">
+									<div>注册时间</div>
+									<input type="text" name="info[mindays]" value="{$info.mindays}" id="mindays" autocomplete="off" class="layui-input"/>
+									至
+								</div>
+								<div class="layui-input-inline layui-module-itemL">
+									<input type="text" name="info[maxdays]" value="{$info.maxdays}" id="maxdays" autocomplete="off" class="layui-input"/>
+									天
+								</div>
+							</div>
+
+						</div>
+						<div class="layui-form-item" >
+							<label class="layui-form-label"></label>
+							<div class="layui-input-inline" style="width:60px">
+								<input type="checkbox" name="info[levelstatus]" value="1" lay-skin="switch" lay-text="开启|关闭" {if $info.levelstatus==1}checked{/if}>
+							</div>
+							<div class="layui-form-mid layui-module-color">会员等级</div>
+							<div class="layui-input-inline" >
+								<select name="info[levelid]">
+									{foreach $level as $v}
+									<option value="{$v.id}" {if $info['levelid'] == $v['id']}selected{/if}>{$v.name}</option>
+									{/foreach}
+								</select>
+							</div>
+						</div>
+
+						<div class="layui-form-item" >
+							<label class="layui-form-label"></label>
+							<div class="layui-input-inline" style="width:60px">
+								<input type="checkbox" name="info[buystatus]" value="1" lay-skin="switch" lay-text="开启|关闭" {if $info.buystatus==1}checked{/if}>
+							</div>
+							<div class="layui-input-inline layui-module-itemL">
+								<div>消费次数</div>
+								<input type="text" name="info[buynum]" class="layui-input" value="{$info.buynum}"> 
+								次以上
+							</div>
+						</div>
+
+						<div class="layui-form-item" >
+							<label class="layui-form-label"></label>
+							<div class="layui-input-inline" style="width:60px">
+								<input type="checkbox" name="info[buymoneystatus]" value="1" lay-skin="switch" lay-text="开启|关闭" {if $info.buymoneystatus==1}checked{/if}>
+							</div>
+							<div class="layui-input-inline layui-module-itemL">
+								<div>消费金额</div>
+								<input type="text" name="info[buymoney]" class="layui-input" value="{$info.buymoney}">
+								元以上
+							</div>
+						</div>
+
+						<div class="layui-form-item" >
+							<label class="layui-form-label"></label>
+							<div class="layui-input-inline" style="width:60px">
+								<input type="checkbox" name="info[prostatus]" value="1" lay-skin="switch" lay-text="开启|关闭" {if $info.prostatus==1}checked{/if}>
+							</div>
+							<div class="layui-form-mid layui-module-color">消费指定商品</div>
+							<div class="fwtype fwtypeExtend" style="clear:both;">
+									<label class="layui-form-label"></label>
+									<div class="layui-input-inline" style="width:auto">
+										<table id="setproductdiv"  class="layui-table" style="width:500px">
+											<thead>
+											<tr>
+												<th>商品ID</th>
+												<th>商品名称</th>
+												<th>操作</th>
+											</tr>
+											</thead>
+											{if $productdata}
+											{foreach $productdata as $k=>$ff}
+											<tr class="productlisttr"><td>{$ff.id}</td><td>{$ff.name}</td><td><button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="delProduct(this,{$ff.id})">删除</button></td></tr>
+											{/foreach}
+											{/if}
+											<tr id="productaddtr">
+												<td colspan="3"><button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="showChooseProduct()">添加</button></td>
+											</tr>
+										</table>
+										<input type="hidden" name="info[productids]" value="{$info.productids}"/>
+									</div>
+								</div>
+
+								<script>
+								var chooseProductLayer;
+								function showChooseProduct(){
+									chooseProductLayer = layer.open({type:2,title:'选择商品',content:"{:url('ShopProduct/chooseproduct')}/hidebid/1",area:['1000px','600px'],shadeClose:true});
+								}
+								function choosepro(res){
+									var product = res.product
+									layer.close(chooseProductLayer);
+									var productids = [];
+									var isadd = 0;
+									$('.productlisttr').each(function(){
+										var thisfid = $(this).find('td:eq(0)').html();
+										if(thisfid == product.id){
+											isadd = 1
+											dialog('该商品已添加过了');
+										}
+										productids.push(thisfid)
+									})
+									if(isadd == 0){
+										productids.push(product.id)
+										$("input[name='info[productids]']").val(productids.join(','));
+										$('#productaddtr').before('<tr class="productlisttr"><td>'+product.id+'</td><td>'+product.name+'</td><td><button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="delProduct(this,'+product.id+')">删除</button></td></tr>');
+									}
+									console.log(productids)
+								}
+								function delProduct(obj,fid){
+									$(obj).parent().parent().remove();
+									var productids = [];
+									$('.productlisttr').each(function(){
+										productids.push($(this).find('td:eq(0)').html())
+									})
+									$("input[name='info[productids]']").val(productids.join(','));
+								}
+								</script>
+						</div>
+						{/if}
+						<div class="layui-form-item">
+							<label class="layui-form-label"></label>
+							<div class="layui-input-block">
+								<button class="layui-btn" lay-submit lay-filter="formsubmit">提 交</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+  </div>
+	{include file="public/js"/}
+	<script>
+
+	layui.form.on('submit(formsubmit)', function(obj){
+		var field = obj.field
+		//return;
+	
+		var index = layer.load();
+	  // console.log(obj)
+	  //return;
+	  	if(!field['info[regdatestatus]']) field['info[regdatestatus]'] = 0;
+		if(!field['info[levelstatus]']) field['info[levelstatus]'] = 0;
+		if(!field['info[buystatus]']) field['info[buystatus]'] = 0;
+		if(!field['info[buymoneystatus]']) field['info[buymoneystatus]'] = 0;
+		if(!field['info[prostatus]']) field['info[prostatus]'] = 0;
+
+		$.post("{:url('save')}",field,function(data){
+			layer.close(index);
+			dialog(data.msg,data.status);
+			if(data.status == 1){
+				setTimeout(function(){
+					parent.layer.closeAll();
+					parent.tableIns.reload()
+				},1000)
+			}
+		})
+	})
+  </script>
+	{include file="public/copyright"/}
+</body>
+</html>

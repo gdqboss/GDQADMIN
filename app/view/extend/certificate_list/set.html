@@ -1,0 +1,75 @@
+<!DOCTYPE html><!--custom_file(extend_certificate)-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>设置</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12">
+				<div class="layui-card-header"><i class="fa fa-cog"></i> 设置</div>
+				<div class="layui-card-body" pad15>
+					<div class="layui-form form-label-w6" lay-filter="">
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">查看详情等级：</label>
+                            <div class="layui-input-inline" style="width:800px">
+                                <input type="checkbox" name="info[gettj][]" value="-1" title="所有等级" lay-skin="primary" {if !$info['id'] || in_array('-1',explode(',',$info['gettj']))}checked{/if}/>
+                                {foreach $memberlevel as $v}
+                                <input type="checkbox" name="info[gettj][]" value="{$v.id}" title="{$v.name}" lay-skin="primary" {if in_array($v['id'],explode(',',$info['gettj']))}checked{/if}/>
+                                {/foreach}
+                            </div>
+                            <div class="layui-form-mid layui-word-aux layui-clear">未选择的等级无权限查看证书详情，证书独立设置优先级高于此设置</div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">提醒升级文字：</label>
+                            <div class="layui-input-inline" style="width:300px">
+                                <input type="text" name="info[uplevel_text]" class="layui-input" value="{$info.uplevel_text}">
+                            </div>
+                            <div class="layui-form-mid layui-word-aux">如：您还不是我们VIP会员，请尽快升级</div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">升级跳转链接：</label>
+                            <div class="layui-input-inline" style="width:200px">
+                                <input type="text" name="info[uplevel_url]" class="layui-input" value="{$info.uplevel_url}" id="tourl">
+                            </div>
+                            <div class="layui-btn layui-btn-primary" style="float:left" onclick="chooseUrl2('tourl')">选择链接</div>
+                        </div>
+						<div class="layui-form-item">
+							<label class="layui-form-label"></label>
+							<div class="layui-input-block">
+								<button class="layui-btn" lay-submit lay-filter="formsubmit">提 交</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+    </div>
+  </div>
+	{include file="public/js"/}
+	<script>
+
+	layui.form.on('submit(formsubmit)', function(obj){
+		var field = obj.field
+		$.post("",field,function(data){
+			dialog(data.msg,data.status,data.url);
+		})
+	})
+
+    var chooseUrlField = '';
+    function chooseUrl2(field){
+        chooseUrlField = field;
+        layer.open({type:2,shadeClose:true,area:['1200px', '650px'],'title':'选择链接',content:"{:url('DesignerPage/chooseurl')}&callback=chooseLink2"})
+    }
+    function chooseLink2(urlname,url){
+        $("#"+chooseUrlField).val(url);
+    }
+
+  </script>
+	{include file="public/copyright"/}
+</body>
+</html>

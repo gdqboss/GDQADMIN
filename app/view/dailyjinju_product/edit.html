@@ -1,0 +1,219 @@
+<!DOCTYPE html><!--custom_file(daily_jinju)-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title></title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+  <link rel="stylesheet" href="__STATIC__/admin/poster/jquery.contextMenu.css"/>
+  <style type='text/css'>
+		#ggnamediv .layui-input,#ggvaldiv .layui-input{ display:inline;height:30px}
+		.guigeimg{display: inline-block; position: relative}
+		.guigeimg_close{width: 25px;height: 22px;right: -14px;top:-14px;}
+		.layui-imgbox .layui-imgbox-close{z-index: 6;}
+  </style>
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12" style="min-height: 700px;">
+        <div class="layui-card-header">
+        {if !$info['id']}<i class="fa fa-plus"></i> 添加每日金句{else}<i class="fa fa-pencil"></i> 编辑每日金句{/if}
+          <i class="layui-icon layui-icon-close" style="font-size:18px;font-weight:bold;cursor:pointer" onclick="closeself()"></i>
+        </div>
+        <div class="layui-card-body" pad15>
+          <form class="layui-form" lay-filter="">
+              <input type="hidden" name="info[id]" class="layui-input" value="{$info['id']}">
+              <div class="layui-form-item">
+                <label class="layui-form-label">名称：</label>
+                <div class="layui-input-inline" >
+                  <input type="text" name="info[name]" lay-verify="required" lay-verType="tips" class="layui-input" value="{$info['name']}">
+                </div>
+              </div>
+              <div class="layui-form-item">
+                <label class="layui-form-label">图片：</label>
+                {if !$type}
+                <button style="float:left;" type="button" class="layui-btn layui-btn-primary" upload-input="pic" upload-preview="picPreview" onclick="uploader(this)">上传图片</button>
+                {/if}
+                <div class="layui-form-mid layui-word-aux" style="margin-left:10px;">建议尺寸：640×320像素</div>
+                <div id="picPreview" style="float:left;padding-top:10px;padding-left:110px;clear: both;">
+                  <div class="layui-imgbox imgbox-required">
+										<div class="layui-imgbox-img"><img src="{$info['pic']}"/></div>
+										<input type="text" name="info[pic]" id="pic" class="layui-input" value="{$info['pic']}">
+									</div>
+                </div>
+              </div>
+              <div class="layui-form-item">
+                <label class="layui-form-label">音 频：</label>
+                <div class="layui-input-inline" style="width:400px">
+                <input type="text" name="info[voice_url]" id="voiceurl" class="layui-input" value="{$info['voice_url']}">
+                </div>
+                <button style="float:left;" type="button" class="layui-btn layui-btn-primary" upload-input="voiceurl" onclick="uploader(this,false,{'browser':'active','wxvoice':''})">上传音频</button>
+                <div class="layui-form-mid layui-word-aux" style="margin-left:10px;">请上传mp3格式的音频，不大于2M</div>
+              </div>
+              <div class="layui-form-item">
+                <label class="layui-form-label w100" >音频时长：</label>
+                <div class="layui-input-inline" style="width:100px">
+                  <input type="number" name="info[voice_duration]" id="voice_duration" value="{$info.voice_duration}" class="layui-input">
+                </div>
+                <div class="layui-form-mid">秒</div>
+              </div>
+              <div class="layui-form-item">
+                <label class="layui-form-label">金句详情</label>
+                <div class="layui-input-inline" style="width:500px">
+                  <script id="content" name="info[content]" type="text/plain" style="width:100%;height:400px">{$info.content}</script>
+                </div>
+              </div>
+              <div class="layui-form-item">
+                <label class="layui-form-label">关联内容</label>
+                <div class="layui-input-inline" style="width:500px">
+                  <button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="addtourldata()">添加</button>
+                </div>
+              </div>
+              <div class="layui-form-item">
+                <label class="layui-form-label">内容列表：</label>
+                <div class="layui-input-inline" style="width:300px">
+                  <table id="tourlnamediv"  class="layui-table" style="width:600px">
+                    <thead>
+                    <tr>
+                      <th>图片</th>
+                      <th>链接</th>
+                      <th>操作</th>
+                    </tr>
+                    </thead>
+                    {php} $tourldata = json_decode($info['tourldata']);{/php}
+                    {if $tourldata}
+                      {foreach $tourldata as $k=>$gg}
+                      <tr>
+                        <td>
+                          <input type="hidden" name="tourlpic[]" id="tourlpic{$k}" value="{$gg->tourlpic}"/>
+                          <div class="layui-imgbox" style="width:35px;height:35px;float:left" id="j{$k}pic_preview">
+                            <a class="layui-imgbox-close" href="javascript:void(0)" onclick="removejxpic(this)" title="删除"><i class="layui-icon layui-icon-close-fill-opaque"></i></a>
+                            <span class="layui-imgbox-img" ><img src="{$gg->tourlpic}"></span>
+                          </div>
+                          <button style="float:left;padding:0 12px" class="layui-btn  layui-btn-primary" onclick="uploader(this)" upload-input="tourlpic{$k}" upload-preview="j{$k}pic_preview" type="button">上传</button>
+                        </td>
+                        
+                        <td ><input type="text" class="layui-input" id="tourl{$k}" value="{$gg->tourl}" placeholder="链接地址" lay-verify="" name="tourl[]">
+                          <button style="float:left;padding:0 12px" class="layui-btn  layui-btn-primary" onclick="chooseUrl2('tourl{$k}')" upload-input="tourl{$k}" type="button">选择</button>
+                        </td>
+                        <td><button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="$(this).parent().parent().remove()">删除</button></td>
+                      </tr>
+                      {/foreach}                    
+                    {/if}
+                  </table>
+                </div>
+              </div>
+              <script>
+               
+                	function addtourldata(){
+                var num	= $('#tourlnamediv').find('tr').length;
+                if(num >= 11){
+                  layer.alert('最多添加10个');
+                  return;
+                }
+                var randomNum = Math.floor(Math.random() * 100);
+                var gghtml = '<tr>';
+                var ks2 = randomNum+num;
+                var tourlid = "tourl"+ks2;
+                gghtml += '<td id="ggpic'+ks2+'"><input type="hidden" name="tourlpic[]" id="ggpicval'+ks2+'" value=""/><div class="guigeimg"><img class="thumb_img" src="" style="max-width:50px;"/><a class="layui-imgbox-close guigeimg_close" style="display: none;"    href="javascript:void(0)" onclick="$(this).prev(\'.thumb_img\').attr(\'src\',\'\');$(this).parent().prev(\'input\').val(\'\');$(this).hide();" title="删除"><i class="layui-icon layui-icon-close-fill-opaque"></i></a></div> <button class="layui-btn layui-btn-sm layui-btn-primary" onclick="uploader(this)" upload-input="ggpicval'+ks2+'" upload-preview="ggpic'+ks2+'" type="button">上传</button></td>';
+                
+                gghtml += '<td ><input type="text" class="layui-input" id="'+tourlid+'" value="" placeholder="链接地址" lay-verify="" name="tourl[]"><button style="float:left;padding:0 12px" class="layui-btn  layui-btn-primary" onclick="chooseUrl2(\''+tourlid+'\')" upload-input="'+tourlid+'"  type="button">选择</button></td>';
+                gghtml += '<td><button type="button" class="layui-btn layui-btn-sm layui-btn-primary" onclick="$(this).parent().parent().remove()">删除</button></td>';
+                gghtml += '</tr>';
+                $('#tourlnamediv').append(gghtml);
+              }	
+              </script>
+              <div class="layui-form-item">
+                <label class="layui-form-label">打卡期限：</label>
+                <div class="layui-input-inline" >
+                  <input type="number" name="info[daka_limit_day]" class="layui-input" value="{$info['daka_limit_day']}">
+                </div>
+                <div class="layui-form-mid">发布后多少天内可打卡，为0不限制领取</div>
+              </div>
+              <div class="layui-form-item">
+                <label class="layui-form-label">发布时间：</label>
+                <div class="layui-input-inline">
+                  <input type="text" id="fabutime" name="info[fabutime]" value="{:date('Y-m-d H:i:s',$info['fabutime'])}" class="layui-input">
+                </div>
+              </div>
+
+              <div class="layui-form-item">
+                <label class="layui-form-label">审核感悟：</label>
+                <div class="layui-input-inline">
+                  <input type="radio" name="info[ganwu_checked]" value="1" title="审核" {if $info['ganwu_checked']==1 || !$info['id']}checked{/if}>
+                  <input type="radio" name="info[ganwu_checked]" value="0" title="不审核" {if $info['id'] && $info['ganwu_checked']==0}checked{/if}>
+                </div>
+              </div>
+
+              <div class="layui-form-item">
+                <label class="layui-form-label">状态：</label>
+                <div class="layui-input-inline">
+                  <input type="radio" name="info[status]" value="1" title="显示" {if $info['status']==1 || !$info['id']}checked{/if}>
+                  <input type="radio" name="info[status]" value="0" title="隐藏" {if $info['id'] && $info['status']==0}checked{/if}>
+                </div>
+              </div>
+
+              <div class="layui-form-item">
+								<label class="layui-form-label"></label>
+                <div class="layui-input-block">
+                  <button class="layui-btn layui-btn-normal layui-btn-lg" lay-submit lay-filter="formsubmit">保 存</button>
+                </div>
+              </div>
+
+            </form>
+          <input type="hidden" name="poster_data" value="" />
+        </div>
+      </div>
+      <video id="myvideo" style="display:none"></video>
+    </div>
+  </div>
+  
+  {include file="public/js"/}
+  <script src="__STATIC__/admin/js/jscolor.js"></script>
+  <script language='javascript' src="__STATIC__/admin/poster/designer.js"></script>
+  <script language='javascript' src="__STATIC__/admin/poster/jquery.contextMenu.js"></script>
+  <script language='javascript'>
+	var content = UE.getEditor('content',{imageScaleEnabled:false});
+    //日期时间选择器
+	layui.laydate.render({ 
+		elem: '#fabutime',
+		type: 'datetime',
+		trigger: 'click'
+	});
+  layui.form.on('submit(formsubmit)', function(formobj){
+      var field = formobj.field;
+      var index = layer.load();
+      $.post("{:url('save')}",field,function(data){
+        layer.close(index);
+        dialog(data.msg,data.status,data.url);
+      })
+      return false;
+  });
+	var chooseUrlField = '';
+	function chooseUrl2(field){
+		chooseUrlField = field;
+		layer.open({type:2,shadeClose:true,area:['1200px', '650px'],'title':'选择链接',content:"{:url('DesignerPage/chooseurl')}&callback=chooseLink2"})
+	}
+	function chooseLink2(urlname,url){
+		$("#"+chooseUrlField).val(url);
+	}
+  $(".layui-form input#voiceurl").bind("input change propertychange",function(event){
+		var videourl = $('#voiceurl').val();
+		if(videourl){
+			$("#myvideo").prop("src", videourl);
+			$("#myvideo")[0].addEventListener("loadedmetadata", function() {
+				var tol = Math.floor(this.duration); //获取总时长
+				$('#voice_duration').val(tol);
+			});
+		}else{
+			$('#voice_duration').val(0);
+		}
+	})
+
+</script>
+  {include file="public/copyright"/}
+</body>
+</html>

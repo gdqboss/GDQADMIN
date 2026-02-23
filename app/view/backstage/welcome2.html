@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>欢迎使用</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12">
+			<div class="layui-card-body" pad15>
+				 <div style="padding:20px 10px;font-size:16px">{:session('ADMIN_NAME')}，欢迎光临！</div>
+				 <div style="padding:0px 10px 20px 10px;">
+					<div style="margin-bottom:10px;">
+						<span style="display:inline-block;width:80px;">姓名：</span>
+						<span>{$user_info.name|default='未设置'}</span>
+					</div>
+					<div style="margin-bottom:10px;">
+						<span style="display:inline-block;width:80px;">关联供应商：</span>
+						<span>
+							{if $user_info.supplier_id > 0}
+								{$user_info.supplier_name|default='未知供应商'} (ID: {$user_info.supplier_id})
+							{else}
+								未设置
+							{/if}
+						</span>
+					</div>
+					<div style="margin-bottom:10px;">
+						<span style="display:inline-block;width:80px;">身份：</span>
+						<span>{$user_info.identity|default='未设置'}</span>
+					</div>
+				</div>
+			</div>
+      </div>
+    </div>
+  </div>
+	{include file="public/js"/}
+	{include file="public/copyright"/}
+</body>
+</html>

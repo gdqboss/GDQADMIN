@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>批量打印</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+  <style>
+    .batch-print {
+      display: flex;
+      gap: 20px;
+      margin: 20px 0;
+    }
+    .select-panel {
+      flex: 1;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      padding: 15px;
+      background-color: #f9f9f9;
+    }
+    .preview-panel {
+      width: 400px;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      padding: 15px;
+      background-color: white;
+    }
+    .template-select {
+      margin-bottom: 20px;
+      padding: 15px;
+      background-color: white;
+      border-radius: 4px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .qrcode-select {
+      padding: 15px;
+      background-color: white;
+      border-radius: 4px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .preview-title {
+      font-size: 16px;
+      font-weight: bold;
+      margin-bottom: 15px;
+      text-align: center;
+    }
+    .preview-container {
+      border: 1px solid #eee;
+      background-color: white;
+      padding: 10px;
+      height: 400px;
+      overflow-y: auto;
+    }
+    .preview-item {
+      display: inline-block;
+      margin: 10px;
+      padding: 10px;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      text-align: center;
+    }
+    .preview-item img {
+      max-width: 100px;
+      max-height: 100px;
+    }
+    .preview-code {
+      margin-top: 5px;
+      font-size: 12px;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12">
+        <div class="layui-card-header">
+          批量打印
+          <a href="{:url('ProductQrcode/index')}" class="layui-btn layui-btn-sm layui-btn-primary" style="float: right;">返回列表</a>
+        </div>
+        <div class="layui-card-body" pad15>
+          <form class="layui-form" lay-filter="batchPrintForm">
+            <div class="batch-print">
+              <!-- 左侧选择面板 -->
+              <div class="select-panel">
+                <!-- 模板选择 -->
+                <div class="template-select">
+                  <div class="layui-form-item">
+                    <label class="layui-form-label">打印模板</label>
+                    <div class="layui-input-inline" style="width: 300px;">
+                      <select name="template_id" lay-verify="required" lay-filter="templateSelect">
+                        <option value="">请选择打印模板</option>
+                        {volist name="templates" id="template"}
+                        <option value="{$template.id}">{$template.name}</option>
+                        {/volist}
+                      </select>
+                    </div>
+                    <div class="layui-form-mid">
+                      <a href="{:url('ProductQrcode/printDesign')}" class="layui-btn layui-btn-sm layui-btn-primary">设计模板</a>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- 二维码选择 -->
+                <div class="qrcode-select">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h4>选择二维码</h4>
+                    <div>
+                      <button type="button" class="layui-btn layui-btn-sm" id="selectAllBtn">全选</button>
+                      <button type="button" class="layui-btn layui-btn-sm layui-btn-primary" id="selectNoneBtn">取消全选</button>
+                    </div>
+                  </div>
+                  
+                  <!-- 二维码列表 -->
+                  <table class="layui-table" lay-data="{id:'qrcodeTable', page:true, limit:10, limits:[10,20,50]}" lay-filter="qrcodeTable">
+                    <thead>
+                      <tr>
+                        <th lay-data="{type:'checkbox'}"></th>
+                        <th lay-data="{field:'id', width:80}">ID</th>
+                        <th lay-data="{field:'code', width:200}">唯一码</th>
+                        <th lay-data="{field:'product_id', width:100}">商品ID</th>
+                        <th lay-data="{field:'customer_name', width:120}">客户姓名</th>
+                        <th lay-data="{field:'customer_phone', width:120}">客户电话</th>
+                        <th lay-data="{field:'create_time', width:180, templet:'#timeTpl'}">创建时间</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <!-- 数据将通过AJAX加载 -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              
+              <!-- 右侧预览面板 -->
+              <div class="preview-panel">
+                <div class="preview-title">打印预览</div>
+                <div class="preview-container" id="previewContainer">
+                  <div style="text-align: center; color: #999; padding: 50px 0;">
+                    请选择模板和二维码查看预览
+                  </div>
+                </div>
+                
+                <div style="margin-top: 20px; text-align: center;">
+                  <button class="layui-btn" lay-submit lay-filter="batchPrint">批量打印</button>
+                  <button class="layui-btn layui-btn-primary" lay-submit lay-filter="generatePreview">生成预览</button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 隐藏字段 -->
+            <input type="hidden" name="qrcode_ids" id="qrcodeIds" value="">
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  {include file="public/js"/}
+  <script type="text/html" id="timeTpl">
+    {{layui.util.toDateString(d.create_time * 1000, 'yyyy-MM-dd HH:mm:ss')}}    
+  </script>
+  <script>
+    layui.use(['form', 'layer', 'table', 'jquery'], function() {
+      var form = layui.form;
+      var layer = layui.layer;
+      var table = layui.table;
+      var $ = layui.jquery;
+      
+      // 渲染二维码表格
+      var tableIns = table.render({
+        elem: '#qrcodeTable',
+        url: '{:url("ProductQrcode/index")}',
+        page: true,
+        limit: 10,
+        limits: [10, 20, 50],
+        cols: [[
+          {type: 'checkbox'},
+          {field: 'id', width: 80, title: 'ID'},
+          {field: 'code', width: 200, title: '唯一码'},
+          {field: 'product_id', width: 100, title: '商品ID'},
+          {field: 'customer_name', width: 120, title: '客户姓名'},
+          {field: 'customer_phone', width: 120, title: '客户电话'},
+          {field: 'create_time', width: 180, title: '创建时间', templet: '#timeTpl'}
+        ]],
+        text: {
+          none: '暂无数据'
+        }
+      });
+      
+      // 全选按钮点击事件
+      $('#selectAllBtn').click(function() {
+        table.checkStatus('qrcodeTable').setAllChecked(true);
+      });
+      
+      // 取消全选按钮点击事件
+      $('#selectNoneBtn').click(function() {
+        table.checkStatus('qrcodeTable').setAllChecked(false);
+      });
+      
+      // 模板选择事件
+      form.on('select(templateSelect)', function(data) {
+        updatePreview();
+      });
+      
+      // 生成预览按钮点击事件
+      form.on('submit(generatePreview)', function() {
+        updatePreview();
+        return false;
+      });
+      
+      // 更新预览
+      function updatePreview() {
+        var templateId = $('select[name="template_id"]').val();
+        var checkStatus = table.checkStatus('qrcodeTable');
+        var data = checkStatus.data;
+        
+        if (!templateId) {
+          layer.msg('请选择打印模板', {icon: 2});
+          return;
+        }
+        
+        if (data.length === 0) {
+          layer.msg('请选择要打印的二维码', {icon: 2});
+          return;
+        }
+        
+        // 构建预览数据
+        var qrcodeIds = data.map(function(item) { return item.id; }).join(',');
+        
+        layer.load(2);
+        
+        // 发送AJAX请求生成预览
+        $.ajax({
+          url: '{:url("ProductQrcode/batchPrint")}',
+          type: 'POST',
+          data: {template_id: templateId, qrcode_ids: qrcodeIds}, 
+          dataType: 'JSON',
+          success: function(res) {
+            layer.closeAll('loading');
+            if (res.status == 1) {
+              renderPreview(res.data);
+            } else {
+              layer.msg('生成预览失败：' + res.msg, {icon: 2});
+            }
+          },
+          error: function() {
+            layer.closeAll('loading');
+            layer.msg('网络错误', {icon: 2});
+          }
+        });
+      }
+      
+      // 渲染预览
+      function renderPreview(data) {
+        var previewContainer = $('#previewContainer');
+        var html = '';
+        
+        // 渲染每个二维码的预览
+        data.qrcodes.forEach(function(qrcode) {
+          html += '<div class="preview-item">';
+          html += '<img src="' + qrcode.qrcode_url + '" alt="二维码">';
+          html += '<div class="preview-code">' + qrcode.code + '</div>';
+          html += '</div>';
+        });
+        
+        previewContainer.html(html);
+      }
+      
+      // 批量打印表单提交
+      form.on('submit(batchPrint)', function(data) {
+        var checkStatus = table.checkStatus('qrcodeTable');
+        var qrcodeData = checkStatus.data;
+        
+        if (qrcodeData.length === 0) {
+          layer.msg('请选择要打印的二维码', {icon: 2});
+          return false;
+        }
+        
+        // 更新隐藏字段
+        var qrcodeIds = qrcodeData.map(function(item) { return item.id; }).join(',');
+        $('#qrcodeIds').val(qrcodeIds);
+        
+        layer.confirm('确定要打印选中的' + qrcodeData.length + '个二维码吗？', function(index) {
+          layer.load(2);
+          
+          // 发送AJAX请求执行打印
+          $.ajax({
+            url: '{:url("ProductQrcode/batchPrint")}',
+            type: 'POST',
+            data: {template_id: data.field.template_id, qrcode_ids: qrcodeIds, action: 'print'},
+            dataType: 'JSON',
+            success: function(res) {
+              layer.closeAll('loading');
+              if (res.status == 1) {
+                layer.msg('打印任务已提交', {icon: 1});
+              } else {
+                layer.msg('打印失败：' + res.msg, {icon: 2});
+              }
+            },
+            error: function() {
+              layer.closeAll('loading');
+              layer.msg('网络错误', {icon: 2});
+            }
+          });
+          
+          layer.close(index);
+        });
+        
+        return false;
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>供应商个人中心 - GDQ商城</title>
+    <!-- Element UI 样式 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <!-- Vue.js -->
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+    <!-- Element UI 组件库 -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f7fa;
+            color: #303133;
+        }
+        
+        .container {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background-color: #fff;
+            padding: 0 20px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #e4e7ed;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+        }
+        
+        .header-left {
+            display: flex;
+            align-items: center;
+        }
+        
+        .logo {
+            font-size: 20px;
+            font-weight: bold;
+            color: #1890ff;
+            margin-right: 20px;
+        }
+        
+        .header-right {
+            display: flex;
+            align-items: center;
+        }
+        
+        .user-info {
+            margin-right: 20px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            margin-right: 10px;
+            object-fit: cover;
+        }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            padding: 20px;
+        }
+        
+        .sidebar {
+            width: 200px;
+            background-color: #fff;
+            border-radius: 4px;
+            box-shadow: 0 2px 12px 0 rgba(0,0,0,0.1);
+            margin-right: 20px;
+        }
+        
+        .menu-item {
+            height: 50px;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
+        }
+        
+        .menu-item:hover {
+            background-color: #f5f7fa;
+        }
+        
+        .menu-item.active {
+            background-color: #e6f7ff;
+            border-left-color: #1890ff;
+            color: #1890ff;
+            font-weight: 500;
+        }
+        
+        .menu-icon {
+            margin-right: 10px;
+            font-size: 18px;
+        }
+        
+        .content-wrapper {
+            flex: 1;
+            background-color: #fff;
+            border-radius: 4px;
+            box-shadow: 0 2px 12px 0 rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        
+        .info-section {
+            margin-bottom: 30px;
+        }
+        
+        .section-title {
+            font-size: 18px;
+            font-weight: 500;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e4e7ed;
+        }
+        
+        .info-form {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .form-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .form-item label {
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        
+        .form-item .el-input {
+            width: 100%;
+        }
+        
+        .button-group {
+            margin-top: 30px;
+            text-align: center;
+        }
+        
+        .button-group .el-button {
+            margin: 0 10px;
+        }
+        
+        .avatar-uploader {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        
+        .avatar-uploader .avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin-bottom: 10px;
+        }
+        
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+        
+        .status-normal {
+            background-color: #f0f9ff;
+            color: #1890ff;
+        }
+        
+        .status-frozen {
+            background-color: #fff2e8;
+            color: #fa8c16;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="app">
+        <!-- 顶部导航 -->
+        <div class="header">
+            <div class="header-left">
+                <div class="logo">GDQ商城</div>
+                <span>供应商个人中心</span>
+            </div>
+            <div class="header-right">
+                <div class="user-info">
+                    <img 
+                        v-if="supplierInfo.avatar" 
+                        :src="supplierInfo.avatar" 
+                        class="user-avatar"
+                    >
+                    <img 
+                        v-else 
+                        src="https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png" 
+                        class="user-avatar"
+                    >
+                    <span>{{ supplierInfo.supplier_name || '未登录' }}</span>
+                </div>
+                <el-button type="text" @click="handleLogout">退出登录</el-button>
+            </div>
+        </div>
+        
+        <!-- 主体内容 -->
+        <div class="main-content">
+            <!-- 侧边栏 -->
+            <div class="sidebar">
+                <div 
+                    class="menu-item" 
+                    :class="{ active: activeTab === 'profile' }" 
+                    @click="activeTab = 'profile'"
+                >
+                    <i class="el-icon-user menu-icon"></i>
+                    <span>基本信息</span>
+                </div>
+                <div 
+                    class="menu-item" 
+                    :class="{ active: activeTab === 'password' }" 
+                    @click="activeTab = 'password'"
+                >
+                    <i class="el-icon-key menu-icon"></i>
+                    <span>修改密码</span>
+                </div>
+                <div 
+                    class="menu-item" 
+                    :class="{ active: activeTab === 'loginLog' }" 
+                    @click="activeTab = 'loginLog'"
+                >
+                    <i class="el-icon-document menu-icon"></i>
+                    <span>登录日志</span>
+                </div>
+            </div>
+            
+            <!-- 内容区域 -->
+            <div class="content-wrapper">
+                <!-- 基本信息 -->
+                <div v-if="activeTab === 'profile'">
+                    <div class="section-title">基本信息</div>
+                    
+                    <!-- 头像上传 -->
+                    <div class="avatar-uploader">
+                        <img 
+                            v-if="supplierInfo.avatar" 
+                            :src="supplierInfo.avatar" 
+                            class="avatar"
+                        >
+                        <img 
+                            v-else 
+                            src="https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png" 
+                            class="avatar"
+                        >
+                        <el-upload
+                            action="/api/supplier/updateAvatar"
+                            :on-success="handleAvatarSuccess"
+                            :show-file-list="false"
+                            accept="image/*"
+                            :headers="{ 'token': getToken() }"
+                        >
+                            <el-button size="small" type="primary">更换头像</el-button>
+                        </el-upload>
+                    </div>
+                    
+                    <el-form :model="formData" label-position="top" size="small">
+                        <div class="info-form">
+                            <div class="form-item">
+                                <label>供应商名称</label>
+                                <el-input v-model="formData.supplier_name" disabled></el-input>
+                            </div>
+                            <div class="form-item">
+                                <label>联系人</label>
+                                <el-input v-model="formData.contact_name"></el-input>
+                            </div>
+                            <div class="form-item">
+                                <label>联系电话</label>
+                                <el-input v-model="formData.contact_tel" placeholder="请输入11位手机号码"></el-input>
+                            </div>
+                            <div class="form-item">
+                                <label>电子邮箱</label>
+                                <el-input v-model="formData.email" placeholder="请输入有效的邮箱地址"></el-input>
+                            </div>
+                            <div class="form-item">
+                                <label>注册时间</label>
+                                <el-input v-model="formData.create_time" disabled></el-input>
+                            </div>
+                            <div class="form-item">
+                                <label>账户状态</label>
+                                <div class="status-badge" :class="formData.status === 1 ? 'status-normal' : 'status-frozen'">
+                                    {{ formData.status === 1 ? '正常' : '冻结' }}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="button-group">
+                            <el-button type="primary" @click="handleUpdateProfile">保存修改</el-button>
+                            <el-button @click="resetForm">取消</el-button>
+                        </div>
+                    </el-form>
+                </div>
+                
+                <!-- 修改密码 -->
+                <div v-else-if="activeTab === 'password'">
+                    <div class="section-title">修改密码</div>
+                    
+                    <el-form :model="passwordForm" :rules="passwordRules" ref="passwordFormRef" label-position="top" size="small">
+                        <div class="info-form">
+                            <div class="form-item">
+                                <label>当前密码</label>
+                                <el-input type="password" v-model="passwordForm.oldPassword" placeholder="请输入当前密码" show-password></el-input>
+                            </div>
+                            <div class="form-item">
+                                <label>新密码</label>
+                                <el-input type="password" v-model="passwordForm.newPassword" placeholder="请输入新密码（6-20位）" show-password></el-input>
+                            </div>
+                            <div class="form-item">
+                                <label>确认新密码</label>
+                                <el-input type="password" v-model="passwordForm.confirmPassword" placeholder="请再次输入新密码" show-password></el-input>
+                            </div>
+                        </div>
+                        
+                        <div class="button-group">
+                            <el-button type="primary" @click="handleChangePassword">确认修改</el-button>
+                            <el-button @click="resetPasswordForm">取消</el-button>
+                        </div>
+                    </el-form>
+                </div>
+                
+                <!-- 登录日志 -->
+                <div v-else-if="activeTab === 'loginLog'">
+                    <div class="section-title">登录日志</div>
+                    
+                    <el-table :data="loginLogList" style="width: 100%">
+                        <el-table-column prop="login_time" label="登录时间" width="200"></el-table-column>
+                        <el-table-column prop="login_ip" label="登录IP" width="150"></el-table-column>
+                        <el-table-column prop="user_agent" label="浏览器信息" show-overflow-tooltip></el-table-column>
+                    </el-table>
+                    
+                    <div style="margin-top: 20px; text-align: right;">
+                        <el-pagination
+                            background
+                            :current-page="currentPage"
+                            :page-sizes="[10, 20, 50, 100]"
+                            :page-size="pageSize"
+                            layout="total, sizes, prev, pager, next, jumper"
+                            :total="total"
+                            @size-change="handleSizeChange"
+                            @current-change="handleCurrentChange"
+                        >
+                        </el-pagination>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                activeTab: 'profile',
+                supplierInfo: {},
+                formData: {
+                    supplier_name: '',
+                    contact_name: '',
+                    contact_tel: '',
+                    email: '',
+                    create_time: '',
+                    status: 0
+                },
+                passwordForm: {
+                    oldPassword: '',
+                    newPassword: '',
+                    confirmPassword: ''
+                },
+                passwordRules: {
+                    oldPassword: [
+                        { required: true, message: '请输入当前密码', trigger: 'blur' }
+                    ],
+                    newPassword: [
+                        { required: true, message: '请输入新密码', trigger: 'blur' },
+                        { min: 6, max: 20, message: '密码长度在 6 到 20 个字符', trigger: 'blur' }
+                    ],
+                    confirmPassword: [
+                        { required: true, message: '请确认新密码', trigger: 'blur' },
+                        { validator: this.validateConfirmPassword, trigger: 'blur' }
+                    ]
+                },
+                loginLogList: [],
+                currentPage: 1,
+                pageSize: 10,
+                total: 0
+            },
+            created() {
+                // 初始化时获取供应商信息
+                this.getSupplierInfo();
+                // 初始化时获取登录日志
+                this.getLoginLog();
+            },
+            methods: {
+                // 获取Token
+                getToken() {
+                    return localStorage.getItem('token') || '';
+                },
+                
+                // 获取供应商信息
+                getSupplierInfo() {
+                    const token = this.getToken();
+                    if (!token) {
+                        this.$message.error('未登录，请先登录');
+                        setTimeout(() => {
+                            window.location.href = 'index.html';
+                        }, 1500);
+                        return;
+                    }
+                    
+                    this.$http({
+                        url: '/api/supplier/getProfile',
+                        method: 'get',
+                        headers: {
+                            'token': token
+                        }
+                    }).then((response) => {
+                        const res = response.data;
+                        if (res.status === 1) {
+                            this.supplierInfo = res.data;
+                            this.formData = { ...res.data };
+                        } else {
+                            this.$message.error(res.msg || '获取信息失败');
+                        }
+                    }).catch((error) => {
+                        console.error('获取供应商信息失败:', error);
+                        this.$message.error('获取信息失败');
+                    });
+                },
+                
+                // 重置表单
+                resetForm() {
+                    this.formData = { ...this.supplierInfo };
+                    this.$message('已重置');
+                },
+                
+                // 更新个人信息
+                handleUpdateProfile() {
+                    const token = this.getToken();
+                    
+                    this.$http({
+                        url: '/api/supplier/updateProfile',
+                        method: 'post',
+                        headers: {
+                            'token': token
+                        },
+                        data: {
+                            contact_name: this.formData.contact_name,
+                            contact_tel: this.formData.contact_tel,
+                            email: this.formData.email
+                        }
+                    }).then((response) => {
+                        const res = response.data;
+                        if (res.status === 1) {
+                            this.$message.success('信息更新成功');
+                            this.getSupplierInfo(); // 重新获取最新信息
+                        } else {
+                            this.$message.error(res.msg || '更新失败');
+                        }
+                    }).catch((error) => {
+                        console.error('更新个人信息失败:', error);
+                        this.$message.error('更新失败');
+                    });
+                },
+                
+                // 处理头像上传成功
+                handleAvatarSuccess(response, file, fileList) {
+                    if (response.status === 1) {
+                        this.$message.success('头像上传成功');
+                        this.getSupplierInfo(); // 重新获取最新信息
+                    } else {
+                        this.$message.error(response.msg || '头像上传失败');
+                    }
+                },
+                
+                // 验证确认密码
+                validateConfirmPassword(rule, value, callback) {
+                    if (value !== this.passwordForm.newPassword) {
+                        callback(new Error('两次输入的密码不一致'));
+                    } else {
+                        callback();
+                    }
+                },
+                
+                // 重置密码表单
+                resetPasswordForm() {
+                    this.passwordForm = {
+                        oldPassword: '',
+                        newPassword: '',
+                        confirmPassword: ''
+                    };
+                    this.$refs.passwordFormRef.resetFields();
+                },
+                
+                // 修改密码
+                handleChangePassword() {
+                    this.$refs.passwordFormRef.validate((valid) => {
+                        if (valid) {
+                            const token = this.getToken();
+                            
+                            this.$http({
+                                url: '/api/supplier/changePassword',
+                                method: 'post',
+                                headers: {
+                                    'token': token
+                                },
+                                data: {
+                                    oldPassword: this.passwordForm.oldPassword,
+                                    newPassword: this.passwordForm.newPassword,
+                                    confirmPassword: this.passwordForm.confirmPassword
+                                }
+                            }).then((response) => {
+                                const res = response.data;
+                                if (res.status === 1) {
+                                    this.$message.success('密码修改成功');
+                                    this.resetPasswordForm();
+                                    // 提示用户重新登录
+                                    this.$confirm('密码已修改，请重新登录', '提示', {
+                                        confirmButtonText: '确定',
+                                        showCancelButton: false,
+                                        type: 'info'
+                                    }).then(() => {
+                                        this.handleLogout();
+                                    });
+                                } else {
+                                    this.$message.error(res.msg || '密码修改失败');
+                                }
+                            }).catch((error) => {
+                                console.error('修改密码失败:', error);
+                                this.$message.error('修改密码失败');
+                            });
+                        }
+                    });
+                },
+                
+                // 获取登录日志
+                getLoginLog() {
+                    const token = this.getToken();
+                    
+                    this.$http({
+                        url: '/api/supplier/getLoginLog',
+                        method: 'get',
+                        headers: {
+                            'token': token
+                        },
+                        params: {
+                            page: this.currentPage,
+                            pageSize: this.pageSize
+                        }
+                    }).then((response) => {
+                        const res = response.data;
+                        if (res.status === 1) {
+                            this.loginLogList = res.data.list;
+                            this.total = res.data.total;
+                            this.currentPage = res.data.page;
+                            this.pageSize = res.data.pageSize;
+                        } else {
+                            this.$message.error(res.msg || '获取登录日志失败');
+                        }
+                    }).catch((error) => {
+                        console.error('获取登录日志失败:', error);
+                        this.$message.error('获取登录日志失败');
+                    });
+                },
+                
+                // 分页大小变化
+                handleSizeChange(val) {
+                    this.pageSize = val;
+                    this.getLoginLog();
+                },
+                
+                // 当前页码变化
+                handleCurrentChange(val) {
+                    this.currentPage = val;
+                    this.getLoginLog();
+                },
+                
+                // 退出登录
+                handleLogout() {
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('supplierInfo');
+                    window.location.href = 'index.html';
+                }
+            }
+        });
+    </script>
+</body>
+</html>

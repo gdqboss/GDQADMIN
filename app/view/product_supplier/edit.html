@@ -1,0 +1,142 @@
+<!DOCTYPE html><!--custom_file(product_supplier)-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>供应商</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12">
+				<div class="layui-card-header">
+					{if !$info['id']}<i class="fa fa-plus"></i> 添加供应商{else}<i class="fa fa-pencil"></i> 编辑供应商{/if}
+					<i class="layui-icon layui-icon-close" style="font-size:18px;font-weight:bold;cursor:pointer" onclick="closeself()"></i>
+				</div>
+				<div class="layui-card-body" pad15>
+					<form class="layui-form form-label-w8" method="post" action="{:url('save')}">
+						<input type="hidden" name="id" value="{$info.id}"/>
+						<div class="layui-form-item">
+							<label class="layui-form-label"><span class="redstar">*</span>供应商名称：</label>
+							<div class="layui-input-inline" style="width:400px">
+								<input type="text" name="info[supplier_name]" lay-verify="required" lay-verType="tips" class="layui-input" value="{$info.supplier_name}">
+							</div>
+						</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label">供应商编号：</label>
+							<div class="layui-input-inline" style="width:400px">
+								<input type="text" name="info[supplier_number]" class="layui-input" value="{$info.supplier_number}">
+							</div>
+						</div>
+
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">联系人：</label>
+                            <div class="layui-input-inline" style="width:200px">
+                                <input type="text" name="info[name]" class="layui-input" value="{$info.name}">
+                            </div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">联系电话：</label>
+                            <div class="layui-input-inline" style="width:200px">
+                                <input type="text" name="info[tel]" lay-verify="required|tel" lay-verType="tips" class="layui-input" value="{$info.tel}">
+                            </div>
+                            <div class="layui-form-mid layui-word-aux">请输入正确的联系方式</div>
+                        </div>
+
+                        <div class="layui-form-item">
+                            <label class="layui-form-label"><span class="redstar">*</span>供货商账号：</label>
+                            <div class="layui-input-inline" style="width:200px">
+                                <input type="text" name="info[account]" lay-verify="required" lay-verType="tips" class="layui-input" value="{$info.account}">
+                            </div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">密码：</label>
+                            <div class="layui-input-inline" style="width:200px">
+                                <input type="password" name="info[password]" placeholder="不修改请留空" class="layui-input">
+                            </div>
+                            {if $info.password}<div class="layui-form-mid layui-word-aux">密码已设置</div>{/if}
+                        </div>
+
+						<div class="layui-form-item">
+							<label class="layui-form-label"></label>
+							<div class="layui-input-block">
+								<button class="layui-btn layui-btn-danger" lay-submit lay-filter="formsubmit">提 交</button>
+							</div>
+						</div>
+					</form>
+				</div>
+			</div>
+		</div>
+  </div>
+	{include file="public/js"/}
+	<script>
+	layui.use(['form', 'layer'], function(){
+		var form = layui.form;
+		var layer = layui.layer;
+		
+		form.on('submit(formsubmit)', function(obj){
+			var field = obj.field;
+			var index = layer.load(2, {time: 10000}); // 添加超时时间
+			
+			// 设置AJAX请求超时和错误处理
+			$.ajax({
+				url: "{:url('save')}",
+				type: "POST",
+				data: field,
+				dataType: "json",
+				timeout: 10000, // 10秒超时
+				success: function(data){
+					layer.close(index);
+					
+					// 使用layui的layer弹窗替代dialog函数
+					layer.msg(data.msg, {
+						icon: data.status == 1 ? 1 : 2,
+						time: 1500,
+						shade: 0.3
+					}, function() {
+						if(data.status == 1){
+							try {
+								// 安全关闭弹窗
+								var frameIndex = parent.layer.getFrameIndex(window.name);
+								if(frameIndex > 0) {
+									parent.layer.close(frameIndex);
+								}
+								// 安全刷新表格
+								if(parent.tableIns && typeof parent.tableIns.reload === 'function') {
+									parent.tableIns.reload();
+								}
+							} catch (e) {
+								// 忽略异常，避免页面卡住
+							}
+						}
+					});
+				},
+				error: function(xhr, textStatus, errorThrown){
+					layer.close(index);
+					var errorMsg = "提交失败";
+					if(textStatus === "timeout") {
+						errorMsg = "请求超时，请稍后重试";
+					} else if(xhr.responseJSON && xhr.responseJSON.msg) {
+						errorMsg = xhr.responseJSON.msg;
+					} else if(errorThrown) {
+						errorMsg += ": " + errorThrown;
+					}
+					layer.msg(errorMsg, {
+						icon: 2,
+						time: 1500,
+						shade: 0.3
+					});
+				}
+			});
+			
+			return false; // 阻止表单跳转
+		});
+	});
+    	</script>
+
+	{include file="public/copyright"/}
+</body>
+</html>

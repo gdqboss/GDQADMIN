@@ -1,0 +1,1141 @@
+<template>
+<view class="container">
+	<block v-if="isload">
+		<form @submit="topay">
+		<view v-if="needaddress==0" class="address-add">
+			<view class="linkitem">
+				<label style="color: red;" v-if="contact_require==1"> * </label><text class="f1">联 系 人：</text>
+				<input type="text" class="input" :value="linkman" placeholder="请输入您的姓名" @input="inputLinkman" placeholder-style="color:#626262;font-size:28rpx;"/>
+			</view>
+			<view class="linkitem">
+				<label style="color: red;" v-if="contact_require==1"> * </label><text class="f1">联系电话：</text>
+				<input type="text" class="input" :value="tel" placeholder="请输入您的手机号" @input="inputTel" placeholder-style="color:#626262;font-size:28rpx;"/>
+			</view>
+		</view>
+		<view v-else class="address-add flex-y-center" @tap="goto" :data-url="'/pagesB/address/address?fromPage=buy&type=' + (havetongcheng==1?'1':'0')">
+			<view class="f1"><image class="img" :src="pre_url+'/static/img/address.png'" /></view>
+			<view class="f2 flex1" v-if="address.name">
+				<view style="font-weight:bold;color:#111111;font-size:30rpx">{{address.name}} {{address.tel}} <text v-if="address.company">{{address.company}}</text></view>
+				<view style="font-size:24rpx">{{address.area}} {{address.address}}</view>
+			</view>
+			<view v-else class="f2 flex1">请选择收货地址</view>
+			<image :src="pre_url+'/static/img/arrowright.png'" class="f3"/>
+		</view>
+		<view class="buydata">
+			<view class="btitle"><image class="img" :src="pre_url+'/static/img/ico-shop.png'"/>{{business.name}}</view>
+			<view class="bcontent">
+				<view class="product">
+					<view class="item flex">
+                        <view class="img">
+                            <image class="img" v-if="guige.pic" :src="guige.pic" mode="aspectFill" lazy-load="true"></image>
+                            <image class="img" v-else :src="product.pic" mode="aspectFill" lazy-load="true"></image>
+                        </view>
+						<view class="info flex1">
+							<view class="f1">{{product.name}}</view>
+							<view class="f2">规格：{{guige.name}}</view>
+							<view class="f3">￥{{guige.sell_price}}<text v-if="buytype!=1" class="collage_icon">拼团价</text> × {{totalnum}}</view>
+						</view>
+					</view>
+				</view>
+                <view class="freight">
+                    <view class="f1">配送方式</view>
+                    <view class="freight-ul">
+                        <view class="flex" style="width:100%;overflow-y:hidden;overflow-x:scroll;">
+                         <block v-for="(item, idx2) in freightList" :key="idx2">
+                         <view class="freight-li" :style="freightkey==idx2?'color:'+t('color1')+';background:rgba('+t('color1rgb')+',0.2)':''" @tap="changeFreight" :data-index="idx2">{{item.name}}</view>
+                         </block>
+                        </view>
+                    </view>
+                    <!-- 名店推广模式下不显示满减和超出范围提示 -->
+                    <view class="freighttips" v-if="!isMingdianTuiGuang && freightList[freightkey].minpriceset==1 && freightList[freightkey].minprice > 0 && freightList[freightkey].minprice*1 > product_price*1">满{{freightList[freightkey].minprice}}元起送，还差{{(freightList[freightkey].minprice - product_price).toFixed(2)}}元</view>
+                    <view class="freighttips" v-if="!isMingdianTuiGuang && freightList[freightkey].isoutjuli==1">超出配送范围</view>
+                </view>
+                <view class="price" v-if="freightList[freightkey].pstimeset==1">
+                    <view class="f1">{{product.promote_type==1?'消费':(freightList[freightkey].pstype==1?'取货':'配送')}}时间</view>
+                    <view class="f2" @tap="choosePstime">{{pstimetext==''?'请选择时间':pstimetext}}<text class="iconfont iconjiantou" style="color:#999;font-weight:normal"></text></view>
+                </view>
+                <view class="storeitem" v-if="freightList[freightkey].pstype==1">
+                    <view class="panel">
+                        <view class="f1">{{product.promote_type==1?'消费地点':'取货地点'}}</view>
+                        <view class="f2" @tap="openMendian" :data-freightkey="freightkey" :data-storekey="freightList[freightkey].storekey"><text class="iconfont icondingwei"></text>{{freightList[freightkey].storedata[freightList[freightkey].storekey].name}}</view>
+                    </view>
+                    <block v-for="(item, idx) in freightList[freightkey].storedata" :key="idx">
+                        <view class="radio-item" @tap.stop="choosestore" :data-index="idx" v-if="idx<5 || storeshowall==true">
+                            <view class="f1">{{item.name}} </view>
+							<text style="color:#f50;">{{item.juli}}</text>
+							<view class="radio" :style="freightList[freightkey].storekey==idx ? 'background:'+t('color1')+';border:0' : ''"><image class="radio-img" :src="pre_url+'/static/img/checkd.png'"/></view>
+						</view>
+					</block>
+					<view v-if="storeshowall==false && (freightList[freightkey].storedata).length > 5" class="storeviewmore" @tap="doStoreShowAll">- 查看更多 - </view>
+				</view>
+				<view class="price">
+					<text class="f1">商品金额</text>
+					<text class="f2">¥{{product_price}}</text>
+				</view>
+				<view class="price" v-if="leadermoney*1>0">
+					<text class="f1">团长优惠</text>
+					<text class="f2">-¥{{leadermoney}}</text>
+				</view>
+				<view class="price" v-if="leveldk_money*1>0">
+					<text class="f1">{{t('会员')}}折扣({{userinfo.discount}}折)</text>
+					<text class="f2">-¥{{leveldk_money}}</text>
+				</view>
+				<view class="price">
+					<view class="f1"><text v-if="freightList[freightkey].pstype==1">服务费</text><text v-else>运费</text></view>
+					<text class="f2">+¥{{freight_price}}</text>
+				</view>
+				<view class="price">
+					<view class="f1">{{t('优惠券')}}</view>
+					<view v-if="couponList.length>0" class="f2" @tap="showCouponList"><text style="color:#fff;padding:4rpx 16rpx;font-weight:normal;border-radius:8rpx;font-size:24rpx" :style="{background:t('color1')}">{{couponrid!=0?couponList[couponkey].couponname:couponList.length+'张可用'}}</text><text class="iconfont iconjiantou" style="color:#999;font-weight:normal"></text></view>
+					<text class="f2" v-else style="color:#999">无可用{{t('优惠券')}}</text>
+				</view>
+
+				<view style="display:none">{{test}}</view>
+				<view class="form-item" v-for="(item,idx) in freightList[freightkey].formdata" :key="item.id">
+					<view class="label">{{item.val1}}<text v-if="item.val3==1" style="color:red"> *</text></view>
+					<block v-if="item.key=='input'">
+						<input type="text" :name="'form'+idx" class="input" :placeholder="item.val2" placeholder-style="font-size:28rpx"/>
+					</block>
+					<block v-if="item.key=='textarea'">
+						<textarea :name="'form'+idx" class='textarea' :placeholder="item.val2" placeholder-style="font-size:28rpx"/>
+					</block>
+					<block v-if="item.key=='radio'">
+						<radio-group class="radio-group" :name="'form'+idx">
+							<label v-for="(item1,idx1) in item.val2" :key="item1.id" class="flex-y-center">
+								<radio class="radio" :value="item1"/>{{item1}}
+							</label>
+						</radio-group>
+					</block>
+					<block v-if="item.key=='checkbox'">
+						<checkbox-group :name="'form'+idx" class="checkbox-group">
+							<label v-for="(item1,idx1) in item.val2" :key="item1.id" class="flex-y-center">
+								<checkbox class="checkbox" :value="item1"/>{{item1}}
+							</label>
+						</checkbox-group>
+					</block>
+					<block v-if="item.key=='selector'">
+						<picker class="picker" mode="selector" :name="'form'+idx" value="" :range="item.val2" @change="editorBindPickerChange" :data-idx="idx">
+							<view v-if="editorFormdata[idx] || editorFormdata[idx]===0"> {{item.val2[editorFormdata[idx]]}}</view>
+							<view v-else>请选择</view>
+						</picker>
+						<text class="iconfont iconjiantou" style="color:#999;font-weight:normal"></text>
+					</block>
+					<block v-if="item.key=='time'">
+						<picker class="picker" mode="time" :name="'form'+idx" value="" :start="item.val2[0]" :end="item.val2[1]" :range="item.val2" @change="editorBindPickerChange" :data-idx="idx">
+							<view v-if="editorFormdata[idx]">{{editorFormdata[idx]}}</view>
+							<view v-else>请选择</view>
+						</picker>
+						<text class="iconfont iconjiantou" style="color:#999;font-weight:normal"></text>
+					</block>
+					<block v-if="item.key=='date'">
+						<picker class="picker" mode="date" :name="'form'+idx" value="" :start="item.val2[0]" :end="item.val2[1]" :range="item.val2" @change="editorBindPickerChange" :data-idx="idx">
+							<view v-if="editorFormdata[idx]">{{editorFormdata[idx]}}</view>
+							<view v-else>请选择</view>
+						</picker>
+						<text class="iconfont iconjiantou" style="color:#999;font-weight:normal"></text>
+					</block>
+					<block v-if="item.key=='upload'">
+						<input type="text" style="display:none" :name="'form'+idx" :value="editorFormdata[idx]"/>
+						<view class="flex" style="flex-wrap:wrap;padding-top:20rpx">
+							<view class="form-imgbox" v-if="editorFormdata[idx]">
+								<view class="layui-imgbox-close" style="z-index: 2;" @tap="removeimg" :data-idx="idx"><image style="display:block" :src="pre_url+'/static/img/ico-del.png'"></image></view>
+								<view class="form-imgbox-img"><image class="image" :src="editorFormdata[idx]" @click="previewImage" :data-url="editorFormdata[idx]" mode="aspectFit"/></view>
+							</view>
+							<view v-else class="form-uploadbtn" :style="{background:'url('+pre_url+'/static/img/shaitu_icon.png) no-repeat 50rpx',backgroundSize:'80rpx 80rpx',backgroundColor:'#F3F3F3'}" @click="editorChooseImage" :data-idx="idx"></view>
+						</view>
+					</block>
+          <block v-if="item.key=='upload_pics'">
+            <input type="text" style="display:none" :name="'form'+idx" :value="editorFormdata && editorFormdata[idx]?editorFormdata[idx].join(','):''" maxlength="-1"/>
+            <view class="flex" style="flex-wrap:wrap;padding-top:20rpx">
+              <view v-for="(item2, index2) in editorFormdata[idx]" :key="index2" class="form-imgbox" >
+                <view class="layui-imgbox-close" @tap="removeimg" :data-index="index2" data-type="pics" :data-idx="idx" :data-formidx="'form'+idx"><image :src="pre_url+'/static/img/ico-del.png'" class="image" data-type="pics"></image></view>
+                <view class="form-imgbox-img" style="margin-bottom: 10rpx;"><image class="image" :src="item2" @click="previewImage" :data-url="item2" mode="aspectFit" :data-idx="idx"/></view>
+              </view>
+              <view class="form-uploadbtn" :style="{background:'url('+pre_url+'/static/img/shaitu_icon.png) no-repeat 50rpx',backgroundSize:'80rpx 80rpx',backgroundColor:'#F3F3F3'}" @click="editorChooseImages" :data-idx="idx" :data-formidx="'form'+idx" data-type="pics"></view>
+            </view>
+          </block>
+				</view>
+			</view>
+		</view>
+		<!-- <view class="scoredk flex" v-if="userinfo.score2money > 0">
+			<checkbox-group @change="scoredk" class="flex" style="width:100%">
+				<view class="f1">
+					<view>{{userinfo.score*1}} {{t('积分')}}可抵扣 <text style="color:#e94745">{{userinfo.scoredk_money*1}}</text> 元</view>
+					<view style="font-size:22rpx;color:#999" v-if="userinfo.scoredkmaxpercent > 0 && userinfo.scoredkmaxpercent<100">最多可抵扣订单金额的{{userinfo.scoredkmaxpercent}}%</view>
+				</view>
+				<view class="f2">使用{{t('积分')}}抵扣
+					<checkbox value="1" style="margin-left:6px;transform:scale(.8)"></checkbox>
+				</view>
+			</checkbox-group>
+		</view> -->
+        <!-- 普通拼团显示支付方式选择，名店推广模式下不显示 -->
+        <view class="scoredk flex" v-if="buytype == 2 && !isMingdianTuiGuang">
+            <view class="freight">
+                <view class="f1">支付方式</view>
+                <view class="freight-ul">
+                    <view class="flex" style="width:100%;overflow-y:hidden;overflow-x:scroll;">
+           <block v-for="(item, idx2) in payOrderType" :key="idx2">
+           <view class="freight-li" :style="payOrderTypeIndex==idx2?'color:'+t('color1')+';background:rgba('+t('color1rgb')+',0.2)':''" @tap="changePayOrderType" :data-index="idx2">{{item.lable}}</view>
+           </block>
+                    </view>
+                </view>
+            </view>
+        </view>
+        <!-- 佣金显示条件：名店推广模式下始终显示，普通拼团选择"团购拿佣金"时显示 -->
+        <view v-if="isMingdianTuiGuang || (buytype == 2 && payOrderType.length > 0 && payOrderTypeIndex >= 0 && payOrderType[payOrderTypeIndex].value == 2)" style="width:94%;margin:0 3%;margin-bottom:20rpx;border-radius:20rpx;padding:24rpx 20rpx;background:#fff">
+            <text style="color:#e94745;font-size:40rpx;font-weight:bold">可得佣金: ¥{{(leaderCommissionMoney || commissionAmount || 0).toFixed(2)}}</text>
+        </view>
+		
+		<view style="width: 100%;height:110rpx"></view>
+		<view class="footer flex notabbarbot">
+			<view class="text1 flex1">总计：
+				<text style="font-weight:bold;font-size:36rpx">￥{{totalprice}}</text>
+			</view>
+			<button class="op" form-type="submit" :style="{background:'linear-gradient(-90deg,'+t('color1')+' 0%,rgba('+t('color1rgb')+',0.8) 100%)'}">提交订单</button>
+		</view>
+		</form>
+
+		<view v-if="couponvisible" class="popup__container">
+			<view class="popup__overlay" @tap.stop="handleClickMask"></view>
+			<view class="popup__modal">
+				<view class="popup__title">
+					<text class="popup__title-text">请选择{{t('优惠券')}}</text>
+					<image :src="pre_url+'/static/img/close.png'" class="popup__close" style="width:36rpx;height:36rpx" @tap.stop="handleClickMask"/>
+				</view>
+				<view class="popup__content">
+					<couponlist :couponlist="couponList" :choosecoupon="true" :selectedrid="couponrid" :bid="product.bid" @chooseCoupon="chooseCoupon"></couponlist>
+				</view>
+			</view>
+		</view>
+
+		<view v-if="pstimeDialogShow" class="popup__container">
+			<view class="popup__overlay" @tap.stop="hidePstimeDialog"></view>
+			<view class="popup__modal">
+				<view class="popup__title">
+					<text class="popup__title-text">请选择{{freightList[freightkey].pstype==1?'取货':'配送'}}时间</text>
+					<image :src="pre_url+'/static/img/close.png'" class="popup__close" style="width:36rpx;height:36rpx" @tap.stop="hidePstimeDialog"/>
+				</view>
+				<view class="popup__content">
+					<view class="pstime-item" v-for="(item, index) in freightList[freightkey].pstimeArr" :key="index" @tap="pstimeRadioChange" :data-index="index">
+						<view class="flex1">{{item.title}}</view>
+						<view class="radio" :style="freight_time==item.value ? 'background:'+t('color1')+';border:0' : ''"><image class="radio-img" :src="pre_url+'/static/img/checkd.png'"/></view>
+					</view>
+				</view>
+			</view>
+		</view>
+	</block>
+	<loading v-if="loading"></loading>
+	<dp-tabbar :opt="opt"></dp-tabbar>
+	<popmsg ref="popmsg"></popmsg>
+	<wxxieyi></wxxieyi>
+</view>
+</template>
+
+<script>
+var app = getApp();
+
+export default {
+  data() {
+    return {
+			opt:{},
+			loading:false,
+      isload: false,
+		menuindex:-1,
+
+		pre_url:app.globalData.pre_url,
+		editorFormdata:[],
+		test:'test',
+	
+		business:{},
+      productList: [],
+      freightList: [],	
+	  payOrderType:[],	
+	  payOrderTypeIndex:0,
+      couponList: [],
+      couponrid: 0,
+      coupontype: 1,
+      address: [],
+      needaddress: 1,
+      linkman: '',
+      tel: '',
+      freightkey: 0,
+      freight_price: 0,
+      pstimetext: '',
+      freight_time: '',
+      usescore: 0,
+      totalprice: '0.00',
+      product_price: 0,
+      leveldk_money: 0,
+      scoredk_money: 0,
+      coupon_money: 0,
+      storedata: [],
+      storeid: '',
+      storename: '',
+      latitude: '',
+      longitude: '' ,
+      leadermoney: 0,
+      leader_price: 0,
+      leaderCommissionMoney: 0,
+      couponvisible: false,
+      pstimeDialogShow: false,
+      pstimeIndex: -1,
+      product: "",
+      guige: "",
+      userinfo: "",
+      buytype: "",
+      scorebdkyf: "",
+      totalnum: "",
+      havetongcheng: "",
+      weight: "",
+      goodsnum: "",
+      beizhu: "",
+      couponkey: 0,
+		storeshowall:false,
+      contact_require:0,
+      teampid:0,
+      hasCommissionOption:false,
+      isMingdianTuiGuang: false, // 是否为'名店推广拼团'
+      commissionAmount: 0, // 佣金金额
+      // 拼团商品详细信息
+      collageProductInfo: {
+        id: '',          // 商品ID
+        name: '',        // 商品名称
+        stock: '',       // 库存
+        marketPrice: '', // 市场价
+        collagePrice: '', // 拼团价
+        leaderPrice: '', // 团长价
+        leaderCommissionRatio: '', // 团长佣金比例
+        collagePromoteType: '', // 拼团推广类型
+        selectedStore: '', // 选择的门店
+        recipientAddress: '' // 收件地址
+      }
+    };
+  },
+
+  onLoad: function (opt) {
+		this.opt = app.getopts(opt);
+    this.teampid = this.opt.teampid || 0;
+		this.getdata();
+  },
+	onPullDownRefresh: function () {
+		this.getdata();
+	},
+  methods: {
+		// 设置拼团商品信息
+      setCollageProductInfo: function(res) {
+        var that = this;
+        // 从响应数据中提取拼团商品所需信息，优先从规格级表获取团长价和佣金比例
+        that.collageProductInfo = {
+          id: res.product ? res.product.id : '',
+          name: res.product ? res.product.name : '',
+          stock: res.product ? res.product.stock : '',
+          marketPrice: res.product ? res.product.market_price : '',
+          collagePrice: res.guige ? res.guige.sell_price : (res.product ? res.product.sell_price : ''),
+          // 优先从规格级表(guige)获取团长价，没有则从商品级表(product)获取
+          leaderPrice: res.guige && res.guige.leader_price ? res.guige.leader_price : (res.product ? res.product.leader_price : ''),
+          // 优先从规格级表(guige)获取团长佣金比例，没有则从商品级表(product)获取
+          // 如果都没有，手动设置为10%（根据用户提供的例子）
+          leaderCommissionRatio: (res.guige && res.guige.leader_commission_rate ? res.guige.leader_commission_rate : (res.product && res.product.leader_commission_rate ? res.product.leader_commission_rate : 10)),
+          // 设置拼团人数，兼容teamnum和team_num两种字段名
+          team_num: res.product && (res.product.team_num || res.product.teamnum) ? (res.product.team_num || res.product.teamnum) : 2,
+          // 设置拼团类型，0普通拼团 1名店推广拼团
+          promote_type: res.product ? res.product.promote_type : 0,
+          selectedStore: '', // 将在选择门店时设置
+          recipientAddress: res.address ? (res.address.area + ' ' + res.address.address) : ''
+        };
+      },
+      
+      // 设置商品价格
+      setProductPrice: function(res) {
+        var that = this;
+        // 根据需求：商品金额=市场价
+        if (res.guige && res.guige.market_price) {
+          that.product_price = parseFloat(res.guige.market_price) || 0;
+        } else if (res.product && res.product.market_price) {
+          that.product_price = parseFloat(res.product.market_price) || 0;
+        } else {
+          that.product_price = 0;
+        }
+        
+        // 设置团长价，用于计算总价和佣金
+        if (res.guige && res.guige.leader_price) {
+          that.leader_price = parseFloat(res.guige.leader_price) || 0;
+        } else if (res.product && res.product.leader_price) {
+          that.leader_price = parseFloat(res.product.leader_price) || 0;
+        } else {
+          // 如果没有设置团长价，使用拼团价
+          that.leader_price = res.guige && res.guige.sell_price ? parseFloat(res.guige.sell_price) : 
+                             (res.product && res.product.sell_price ? parseFloat(res.product.sell_price) : 0);
+        }
+      },
+      
+      // 检测是否为'名店推广拼团'
+      checkMingdianTuiGuang: function() {
+        var that = this;
+        // 检查商品是否具有'名店推广拼团'属性
+        that.isMingdianTuiGuang = 
+          (that.product && that.product.promote_type === 1) ||
+          (that.collageProductInfo && that.collageProductInfo.promote_type === 1);
+        
+        // 如果是名店推广拼团，调整支付方式显示
+        if (that.isMingdianTuiGuang) {
+          // 名店推广只显示到店自提，过滤配送方式
+          var newFreight = [];
+          // 标记是否找到到店自提配送方式
+          var hasPstype1 = false;
+          
+          for(var i=0;i<that.freightList.length;i++){
+            if(that.freightList[i].pstype==1){
+              // 找到到店自提配送方式，直接添加到新列表
+              newFreight.push(that.freightList[i]);
+              hasPstype1 = true;
+            }
+          }
+          
+          // 如果没有找到pstype==1的配送方式，手动添加一个
+          if(!hasPstype1){
+            // 手动添加一个到店自提配送方式
+            newFreight.push({
+              id: 0,
+              name: '到店自提',
+              pstype: 1,
+              freight_price: 0,
+              storedata: that.freightList[0] ? that.freightList[0].storedata || [] : [],
+              storekey: 0
+            });
+          }
+          
+          // 更新freightList
+          that.freightList = newFreight;
+          that.freightkey = 0;
+          
+          // 确保有默认选中的门店
+          if(that.freightList[that.freightkey].storedata && that.freightList[that.freightkey].storedata.length>0 && that.freightList[that.freightkey].storekey===undefined){
+            that.freightList[that.freightkey].storekey = 0;
+          }
+          
+          // 设置为不需要地址，需要填写姓名和电话
+          that.needaddress = 0;
+          
+          // 支付方式改名为"推广奖励"，直接显示佣金
+          that.payOrderType = [{lable: '推广奖励', value: 2}];
+          that.payOrderTypeIndex = 0;
+          that.hasCommissionOption = true;
+        }
+        
+        // 直接调用calculatePrice重新计算佣金，确保所有类型商品都能正确计算佣金
+        that.calculatePrice();
+      },
+      
+		getdata: function () {
+			var that = this; //获取产品信息
+			that.loading = true;
+      app.get('ApiCollage/buy', {proid: that.opt.proid,ggid: that.opt.ggid,num: that.opt.num,buytype: that.opt.buytype}, function (res) {
+				that.loading = false;
+				// 只要返回了商品数据，就继续加载页面，即使状态不是1
+				if (res.product || res.guige) {
+					// 有商品数据，正常加载页面
+				} else {
+					// 没有商品数据，但可能有提示信息
+					if (res.msg) {
+						// 忽略"你有该商品正在拼团的订单"等限制开团提示，允许用户继续浏览
+						// app.alert(res.msg);
+					}
+					// 没有商品数据也没有提示信息，返回上一页
+					app.alert('获取商品信息失败', function(){
+						app.goback()
+					});
+					return;
+				}
+				var product = res.product;
+				var freightList = res.freightList;
+				var userinfo = res.userinfo;
+				var couponList = res.couponList;
+				that.product = product;
+				that.guige = res.guige;
+				that.business = res.business;
+        that.freightList = freightList;
+        that.payOrderType = res.payOrderType
+        that.hasCommissionOption = false;
+        if(res.payOrderType && res.payOrderType.length>0){
+          for(var i=0;i<res.payOrderType.length;i++){
+            var it = res.payOrderType[i];
+            if((it.value && it.value*1==2) || (it.lable && it.lable.indexOf('佣金')>-1)){
+              that.hasCommissionOption = true;break;
+            }
+          }
+        }
+        that.userinfo = userinfo;
+        that.couponList = couponList;
+        that.buytype = res.buytype;
+        that.address = res.address;
+        that.scorebdkyf = res.scorebdkyf;
+        that.totalnum = res.totalnum;
+        that.havetongcheng = res.havetongcheng;
+        that.linkman = res.linkman;
+        that.tel = res.tel;
+        
+        // 初始化所有计算相关变量为0
+        that.leaderCommissionMoney = 0;
+        that.commissionAmount = 0;
+        that.leveldk_money = 0;
+        // 设置leadermoney，从商品或规格中获取
+        that.leadermoney = res.product && res.product.leadermoney ? parseFloat(res.product.leadermoney) : (res.guige && res.guige.leadermoney ? parseFloat(res.guige.leadermoney) : 0);
+        
+        // 设置拼团商品信息
+        that.setCollageProductInfo(res);
+        
+        // 设置商品价格
+        that.setProductPrice(res);
+        
+        that.scoredk_money = that.userinfo && that.userinfo.scoredk_money ? that.userinfo.scoredk_money : 0;
+        
+        // 检测是否为'名店推广拼团'
+        that.checkMingdianTuiGuang();
+        
+        // 普通拼团支付方式处理
+        if(!that.isMingdianTuiGuang){
+          // 团长价>0元时，隐藏佣金，自动默认取货
+          if(that.leader_price > 0){
+            that.payOrderType = [];
+            that.hasCommissionOption = false;
+          }else{
+            // 团长价=0元时，可选择"需要货品"或佣金
+            that.payOrderType = [
+              {lable:'需要货品',value:1},
+              {lable:'团购拿佣金',value:2}
+            ];
+            that.hasCommissionOption = true;
+          }
+          that.payOrderTypeIndex = 0;
+        }
+        
+        that.calculatePrice();
+        that.loaded();
+				//根据商品信息，更新联系人填写要求
+				// 添加安全检查，使用res.product而不是直接使用product变量
+				if(res.product && ((res.product.freighttype == 3|| res.product.freighttype == 4) && res.product.contact_require==1)){
+					that.contact_require = 1;
+				}
+        
+        // 更新收件地址信息
+        that.updateRecipientAddress(res.address);
+
+				if (res.needLocation == 1) {
+					app.getLocation(function (resLocation) {
+						var latitude = resLocation.latitude;
+						var longitude = resLocation.longitude;
+						// 使用当前的freightList（已经过checkMingdianTuiGuang过滤）
+						var currentFreightList = that.freightList;
+						for (var j in currentFreightList) {
+							if (currentFreightList[j].pstype == 1) {
+								var storedata = currentFreightList[j].storedata;
+
+								if (storedata) {
+									for (var x in storedata) {
+										if (latitude && longitude && storedata[x].latitude && storedata[x].longitude) {
+											var juli = that.getDistance(latitude, longitude, storedata[x].latitude, storedata[x].longitude);
+											storedata[x].juli = juli;
+										}
+									}
+									storedata.sort(function (a, b) {
+										return a["juli"] - b["juli"];
+									});
+									for (var x in storedata) {
+										if (storedata[x].juli) {
+											storedata[x].juli = storedata[x].juli + '千米';
+										}
+									}
+									currentFreightList[j].storedata = storedata;
+								}
+							}
+						}
+						// 更新当前的freightList，而不是使用原始的freightList
+						that.freightList = currentFreightList;
+					});
+				}
+			});
+    },
+    isCommissionItem:function(it){
+      if(!it) return false;
+      if(typeof it.value!='undefined' && it.value*1==2) return true;
+      if(it.lable && it.lable.indexOf('佣金')>-1) return true;
+      return false;
+    },
+    inputLinkman: function (e) {
+      this.linkman = e.detail.value
+    },
+    inputTel: function (e) {
+      this.tel = e.detail.value
+    },
+    //选择收货地址
+    chooseAddress: function () {
+      app.goto('/pagesB/address/address?fromPage=buy&type=' + (this.havetongcheng == 1 ? '1' : '0'));
+    },
+    // 计算价格
+    calculatePrice: function () {
+      var that = this;
+      
+      // 重置所有计算相关变量
+      that.leadermoney = 0;
+      that.leveldk_money = 0;
+      that.leaderCommissionMoney = 0;
+      that.commissionAmount = 0;
+      
+      // 获取订单支付类型
+      var order_pay_type = 0;
+      if (this.payOrderType && this.payOrderType.length > 0 && this.payOrderTypeIndex !== undefined && this.payOrderTypeIndex >= 0 && this.payOrderTypeIndex < this.payOrderType.length) {
+        order_pay_type = this.payOrderType[this.payOrderTypeIndex].value;
+      }
+      
+      // 获取基本价格信息
+      var product_price = parseFloat(that.product_price) || 0; // 商品总价
+      var coupon_money = parseFloat(that.coupon_money) || 0; // 优惠券抵扣
+      
+      // 运费计算 - 增强健壮性
+      var freight_price = 0;
+      var freightdata = {pstype: 1, freight_price: 0};
+      
+      // 安全获取运费数据
+      if (that.freightList && Array.isArray(that.freightList) && that.freightList.length > 0) {
+        // 确保freightkey在有效范围内
+        if (that.freightkey === undefined || that.freightkey < 0 || that.freightkey >= that.freightList.length) {
+          that.freightkey = 0;
+        }
+        freightdata = that.freightList[that.freightkey] || {pstype: 1, freight_price: 0};
+        freight_price = parseFloat(freightdata.freight_price) || 0;
+      }
+      
+      // 判断是否需要地址
+      // 名店推广模式固定不需要地址，只需要姓名和电话
+      if (that.isMingdianTuiGuang) {
+        that.needaddress = 0;
+      } else {
+        // 普通拼团根据配送方式类型设置needaddress
+        if (freightdata.pstype != 1 && freightdata.pstype != 3 && freightdata.pstype != 4) {
+          that.needaddress = 1;
+        } else {
+          that.needaddress = 0;
+        }
+      }
+      
+      // 优惠券折扣处理 - 修复逻辑
+      if (that.coupontype == 4) {
+        // 运费券：运费设为0，优惠券抵扣也设为0
+        freight_price = 0;
+        coupon_money = 0;
+      }
+      
+      // 根据需求：总价=团长价+运费
+      var totalprice = parseFloat(that.leader_price) || 0 + freight_price;
+      
+      // 应用优惠券折扣
+      totalprice = totalprice - coupon_money;
+      if (totalprice < 0) totalprice = 0; // 确保价格不为负数
+      
+      // 积分抵扣计算
+      if (that.usescore) {
+        var allscoredk_money = parseFloat(that.scoredk_money) || 0; // 个人积分全部转换金额
+        var scoredkmaxpercent = parseFloat(that.userinfo.scoredkmaxpercent) || 0; // 最大抵扣比例
+        
+        if(allscoredk_money > 0 && scoredkmaxpercent > 0 && scoredkmaxpercent < 100){
+          // 确定积分抵扣的基数（是否包含运费）
+          var scoredk_totalprice = that.scorebdkyf == '1' ? (parseFloat(that.leader_price) || 0) : totalprice;
+          
+          // 计算实际可抵扣金额（不超过最大比例）
+          var scoredk_money = Math.min(allscoredk_money, scoredk_totalprice * scoredkmaxpercent * 0.01);
+          totalprice = totalprice - scoredk_money;
+        }
+      }
+      
+      // 确保最终价格不为负数
+      if (totalprice < 0) totalprice = 0;
+      
+      // 格式化价格显示
+      freight_price = freight_price.toFixed(2);
+      totalprice = totalprice.toFixed(2);
+      
+      // 更新页面数据
+      that.totalprice = totalprice;
+      that.freight_price = freight_price;
+      
+      // 佣金计算逻辑：根据团长佣金比例和拼团价计算佣金
+      let calculatedCommission = 0;
+      try {
+        // 获取团长价
+        const leaderPrice = parseFloat(that.leader_price || that.collageProductInfo.leaderPrice || 0);
+        
+        // 如果团长价>0，团长没有佣金
+        if (leaderPrice <= 0) {
+          // 获取团长佣金比例
+          let leaderCommissionRate = 0;
+          
+          // 优先从collageProductInfo获取（已在setCollageProductInfo中处理）
+          if (that.collageProductInfo && that.collageProductInfo.leaderCommissionRatio) {
+            leaderCommissionRate = parseFloat(that.collageProductInfo.leaderCommissionRatio) || 0;
+          } 
+          // 从商品获取
+          else if (that.product && that.product.leader_commission_rate) {
+            leaderCommissionRate = parseFloat(that.product.leader_commission_rate) || 0;
+          } 
+          // 从规格获取
+          else if (that.guige && that.guige.leader_commission_rate) {
+            leaderCommissionRate = parseFloat(that.guige.leader_commission_rate) || 0;
+          }
+          // 手动设置为10%，作为默认值（根据用户提供的例子）
+          else {
+            leaderCommissionRate = 10;
+          }
+          
+          // 获取拼团人数，优先从collageProductInfo获取
+          const teamSize = parseInt(that.collageProductInfo.team_num || (that.product && that.product.team_num) || (that.product && that.product.teamnum) || 2);
+          
+          // 获取拼团价，优先从collageProductInfo获取
+          const collagePrice = parseFloat(that.collageProductInfo.collagePrice || (that.guige && that.guige.sell_price) || (that.product && that.product.sell_price) || 0);
+          
+          // 根据需求：佣金=拼团价*团长佣金比例*（拼团人数-1）
+          calculatedCommission = (teamSize - 1) * collagePrice * leaderCommissionRate * 0.01;
+        }
+      } catch (e) {
+        // 捕获可能的异常
+        calculatedCommission = 0;
+      }
+      
+      // 设置佣金金额
+      that.commissionAmount = calculatedCommission;
+      that.leaderCommissionMoney = calculatedCommission;
+    },
+    // 缺失的loaded方法定义
+    loaded: function() {
+      this.isload = true;
+    },
+    // 更新收件地址信息
+    updateRecipientAddress: function(addressData) {
+      var that = this;
+      if (addressData) {
+        that.collageProductInfo.recipientAddress = (addressData.area || '') + ' ' + (addressData.address || '');
+      }
+    },
+    //积分抵扣
+    scoredk: function (e) {
+      var usescore = e.detail.value[0];
+      if (!usescore) usescore = 0;
+      this.usescore = usescore;
+      this.calculatePrice();
+    },
+    changeFreight: function (e) {
+      var that = this;
+      var index = e.currentTarget.dataset.index;
+		this.freightkey = index;
+		that.calculatePrice();
+      
+      // 确保有默认选中的门店，特别是在切换配送方式后
+      var freightdata = that.freightList[that.freightkey] || {pstype: 1, freight_price: 0, storedata: []};
+      if (freightdata.pstype == 1 && freightdata.storedata && freightdata.storedata.length > 0 && freightdata.storekey === undefined) {
+        freightdata.storekey = 0;
+        // 更新freightList数据
+        that.freightList[that.freightkey] = freightdata;
+      }
+      
+      // 重新计算needaddress，确保切换配送方式时收件方式自动更新
+      // 名店推广模式固定不需要地址，只需要姓名和电话
+      if (that.isMingdianTuiGuang) {
+        that.needaddress = 0;
+      } else {
+        // 普通拼团根据配送方式类型设置needaddress
+        if (freightdata.pstype != 1 && freightdata.pstype != 3 && freightdata.pstype != 4) {
+          that.needaddress = 1;
+        } else {
+          that.needaddress = 0;
+        }
+      }
+    },
+	changePayOrderType:function(e)
+	{
+		var that = this;
+		var index = e.currentTarget.dataset.index;
+		this.payOrderTypeIndex = index;
+		that.calculatePrice();
+	},
+    chooseCoupon: function (e) {
+			var couponrid = e.rid;
+      var couponkey = e.key;
+
+      if (couponrid == this.couponrid) {
+        this.couponkey = 0;
+        this.couponrid = 0;
+        this.coupontype = 1;
+        this.coupon_money = 0;
+        this.couponvisible = false;
+      } else {
+        var couponList = this.couponList;
+        var coupon_money = couponList[couponkey]['money'];
+        var coupontype = couponList[couponkey]['type'];
+        if (coupontype == 4) {
+          coupon_money = this.freightprice;
+        }
+        this.couponkey = couponkey;
+        this.couponrid = couponrid;
+        this.coupontype = coupontype;
+        this.coupon_money = coupon_money;
+        this.couponvisible = false;
+      }
+      this.calculatePrice();
+    },
+    choosePstime: function () {
+      var that = this;
+      var freightkey = this.freightkey;
+      var freightList = this.freightList;
+      var freight = freightList[freightkey];
+      var pstimeArr = freightList[freightkey].pstimeArr;
+      var itemlist = [];
+
+      for (var i = 0; i < pstimeArr.length; i++) {
+        itemlist.push(pstimeArr[i].title);
+      }
+      if (itemlist.length == 0) {
+        app.alert('当前没有可选' + (freightList[freightkey].pstype == 1 ? '取货' : '配送') + '时间段');
+        return;
+      }
+      if (itemlist.length > 6) {
+        that.pstimeDialogShow = true;
+        that.pstimeIndex = -1;
+      } else {
+        uni.showActionSheet({
+          itemList: itemlist,
+          success: function (res) {
+						if(res.tapIndex >= 0){
+							var choosepstime = pstimeArr[res.tapIndex];
+							that.pstimetext = choosepstime.title;
+							that.freight_time = choosepstime.value;
+						}
+          }
+        });
+      }
+    },
+    pstimeRadioChange: function (e) {
+      var pstimeIndex = e.currentTarget.dataset.index;
+			var freightkey = this.freightkey;
+      var freightList = this.freightList;
+      var freight = freightList[freightkey];
+      var pstimeArr = freightList[freightkey].pstimeArr;
+      var choosepstime = pstimeArr[pstimeIndex];
+      this.pstimetext = choosepstime.title;
+			this.freight_time = choosepstime.value;
+      this.pstimeDialogShow = false;
+    },
+    hidePstimeDialog: function () {
+      this.pstimeDialogShow = false
+    },
+    choosestore: function (e) {
+      var storekey = e.currentTarget.dataset.index;
+			var freightkey = this.freightkey
+			var freightList = this.freightList
+			freightList[freightkey].storekey = storekey
+      this.freightList = freightList;
+    },
+    //提交并支付
+    topay: function (e) {
+      var that = this;
+      var buytype = this.buytype;
+      var freightkey = this.freightkey;
+      var freightid = this.freightList[freightkey].id;
+      var prodata = this.opt.prodata;
+      var addressid = this.address.id;
+      var linkman = this.linkman;
+      // 处理支付方式，当payOrderType为空时，默认取货
+      var order_pay_type = 1;
+      if(this.payOrderType && this.payOrderType.length > 0 && this.payOrderType[this.payOrderTypeIndex]){
+        order_pay_type = this.payOrderType[this.payOrderTypeIndex].value;
+      }
+      var tel = this.tel;
+      var usescore = this.usescore;
+      var couponkey = this.couponkey;
+      var couponrid = this.couponrid;
+	var storeid = 0;
+	// 门店选择逻辑
+	if(this.freightList[freightkey].pstype==1){
+		var storekey = this.freightList[freightkey].storekey;
+		// 验证是否选择了门店
+		if(storekey === undefined || storekey === null){
+			app.error('请选择门店');
+			return;
+		}
+		// 验证门店数据是否存在
+		if(!this.freightList[freightkey].storedata || !this.freightList[freightkey].storedata[storekey]){
+			app.error('请选择有效的门店');
+			return;
+		}
+		// 验证门店是否有地址
+		var selectedStore = this.freightList[freightkey].storedata[storekey];
+		if(!selectedStore.id || !selectedStore.name){
+			app.error('请选择有地址的门店');
+			return;
+		}
+		var storeid = selectedStore.id;
+	}
+      var freight_time = that.freight_time;
+	  
+		if(this.contact_require == 1 && (linkman.trim() == '' || tel.trim() == '')){
+			return app.error("请填写联系人信息");
+		}
+		if(tel.trim()!= '' && !app.isPhone(tel)){
+			return app.error("请填写正确的手机号");
+		}
+
+
+      var needaddress = that.needaddress;
+      if (needaddress == 0) addressid = 0;
+
+      if (needaddress == 1 && addressid == undefined) {
+        app.error('请选择收货地址');
+        return;
+      }
+
+      if (this.freightList[freightkey].pstimeset == 1 && freight_time == '') {
+        app.error('请选择' + (this.freightList[freightkey].pstype == 0 ? '配送' : '提货') + '时间');
+        return;
+      }
+
+		var formdataSet = this.freightList[freightkey].formdata;
+      var formdata = e.detail.value;
+		var newformdata = {};
+		for (var i = 0; i < formdataSet.length;i++){
+			if (formdataSet[i].val3 == 1 && (formdata['form' + i] === '' || formdata['form' + i] === undefined || formdata['form' + i].length==0)){
+					app.alert(formdataSet[i].val1+' 必填');return;
+			}
+			if (formdataSet[i].key == 'selector') {
+					formdata['form' + i] = formdataSet[i].val2[formdata['form' + i]]
+			}
+			newformdata['form'+i] = formdata['form' + i];
+		}
+
+		// 允许团长无限次开团，去掉未完成订单检查
+        app.showLoading('提交中');
+        app.post('ApiCollage/createOrder', {
+          proid: that.opt.proid,
+          ggid: that.opt.ggid,
+          num: that.opt.num,
+          buytype: buytype,
+          teamid: that.opt.teamid,
+          storeid: storeid,
+          couponrid: couponrid,
+          freightid: freightid,
+          freight_time: freight_time,
+          addressid: addressid,
+          usescore: usescore,
+          linkman: linkman,
+          order_pay_type: order_pay_type,
+          tel: tel,
+          formdata: newformdata,
+          teampid: that.teampid,
+          mingdian_tuiguang: that.isMingdianTuiGuang // 标记是否为名店推广拼团订单，用于后端特殊处理
+        }, function (data) {
+          app.showLoading(false);
+          if (data.status == 0) {
+            app.error(data.msg);
+            return;
+          }
+          app.goto('/pagesExt/pay/pay?id=' + data.payorderid + '&leadermoney=' + that.leadermoney,'redirectTo');
+        });
+    },
+    showCouponList: function () {
+      this.couponvisible = true;
+    },
+    handleClickMask: function () {
+      this.couponvisible = false;
+    },
+		openMendian: function(e) {
+			var freightkey = e.currentTarget.dataset.freightkey;
+			var storekey = e.currentTarget.dataset.storekey;
+			var frightinfo = this.freightList[freightkey]
+			var storeinfo = frightinfo.storedata[storekey];
+			console.log(storeinfo)
+			app.goto('/pages/shop/mendian?id=' + storeinfo.id);
+		},
+		openLocation:function(e){
+			var freightkey = e.currentTarget.dataset.freightkey;
+			var storekey = e.currentTarget.dataset.storekey;
+			var frightinfo = this.freightList[freightkey]
+			var storeinfo = frightinfo.storedata[storekey];
+			var latitude = parseFloat(storeinfo.latitude);
+			var longitude = parseFloat(storeinfo.longitude);
+			var address = storeinfo.name;
+			uni.openLocation({
+			 latitude:latitude,
+			 longitude:longitude,
+			 name:address,
+			 scale: 13
+			})
+		},
+		editorChooseImage: function (e) {
+			var that = this;
+			var idx = e.currentTarget.dataset.idx;
+			var tplindex = e.currentTarget.dataset.tplindex;
+			var editorFormdata = this.editorFormdata;
+			if(!editorFormdata) editorFormdata = [];
+			app.chooseImage(function(data){
+				editorFormdata[idx] = data[0];
+				console.log(editorFormdata)
+				that.editorFormdata = editorFormdata
+				that.test = Math.random();
+			})
+		},
+    //多图上传，一次最多选8个
+    editorChooseImages: function (e) {
+      var that = this;
+      var idx = e.currentTarget.dataset.idx;
+      var editorFormdata = that.editorFormdata;;
+      if(!editorFormdata) editorFormdata = [];
+      app.chooseImage(function(data){
+        var pics = editorFormdata[idx];
+        if(!pics){
+          pics = [];
+        }
+        for(var i=0;i<data.length;i++){
+          pics.push(data[i]);
+        }
+        editorFormdata[idx] = pics;
+        that.editorFormdata = editorFormdata
+        that.test = Math.random();
+      },8)
+    },
+		removeimg:function(e){
+
+			var that = this;
+			var idx = e.currentTarget.dataset.idx;
+      var type  = e.currentTarget.dataset.type;
+      if(type == 'pics'){
+        var editorFormdata = this.editorFormdata;
+        var index = e.currentTarget.dataset.index;
+        var pics = editorFormdata[idx]
+        pics.splice(index,1);
+        editorFormdata[idx] = pics;
+        that.editorFormdata = editorFormdata
+        that.test = Math.random();
+      }else{
+        var pics = that.editorFormdata
+        pics.splice(idx,1);
+        that.editorFormdata = pics;
+      }
+		},
+		editorBindPickerChange:function(e){
+			var idx = e.currentTarget.dataset.idx;
+			var tplindex = e.currentTarget.dataset.tplindex;
+			var val = e.detail.value;
+			var editorFormdata = this.editorFormdata;
+			if(!editorFormdata) editorFormdata = [];
+			editorFormdata[idx] = val;
+			console.log(editorFormdata)
+			this.editorFormdata = editorFormdata
+			this.test = Math.random();
+		},
+		doStoreShowAll:function(){
+			this.storeshowall = true;
+		},
+  }
+}
+</script>
+<style>
+.address-add{ width:94%;margin:20rpx 3%;background:#fff;border-radius:20rpx;padding: 20rpx 3%;min-height:140rpx;}
+.address-add .f1{margin-right:20rpx}
+.address-add .f1 .img{ width: 66rpx; height: 66rpx; }
+.address-add .f2{ color: #666; }
+.address-add .f3{ width: 26rpx; height: 26rpx;}
+
+.linkitem{width: 100%;padding:1px 0;background: #fff;display:flex;align-items:center}
+.linkitem .f1{width:160rpx;color:#111111}
+.linkitem .input{height:50rpx;padding-left:10rpx;color:#222222;font-weight:bold;font-size:28rpx;flex:1}
+
+.buydata{width:94%;margin:0 3%;background:#fff;margin-bottom:20rpx;border-radius:20rpx;}
+
+.btitle{width:100%;padding:20rpx 20rpx;display:flex;align-items:center;color:#111111;font-weight:bold;font-size:30rpx}
+.btitle .img{width:34rpx;height:34rpx;margin-right:10rpx}
+
+.bcontent{width:100%;padding:0 20rpx}
+
+.product{width:100%;border-bottom:1px solid #f4f4f4} 
+.product .item{width:100%; padding:20rpx 0;background:#fff;border-bottom:1px #ededed dashed;}
+.product .item:last-child{border:none}
+.product .info{padding-left:20rpx;}
+.product .info .f1{color: #222222;font-weight:bold;font-size:26rpx;line-height:36rpx;margin-bottom:10rpx;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;}
+.product .info .f2{color: #999999; font-size:24rpx}
+.product .info .f3{color: #FF4C4C; font-size:28rpx;display:flex;align-items:center;margin-top:10rpx}
+.product .img{ width:140rpx;height:140rpx}
+.collage_icon{ color:#fe7203;border:1px solid #feccaa;display:flex;align-items:center;font-size:20rpx;padding:0 6rpx;margin-left:6rpx}
+
+.freight{width:100%;padding:20rpx 0;background:#fff;display:flex;flex-direction:column;}
+.freight .f1{color:#333;margin-bottom:10rpx}
+.freight .f2{color: #111111;text-align:right;flex:1}
+.freight .f3{width: 24rpx;height:28rpx;}
+.freighttips{color:red;font-size:24rpx;}
+
+.freight-ul{width:100%;display:flex;}
+.freight-li{flex-shrink:0;display:flex;background:#F5F6F8;border-radius:24rpx;color:#6C737F;font-size:24rpx;text-align: center;height:48rpx; line-height:48rpx;padding:0 28rpx;margin:12rpx 10rpx 12rpx 0}
+
+
+.price{width:100%;padding:20rpx 0;background:#fff;display:flex;align-items:center}
+.price .f1{color:#333}
+.price .f2{ color:#111;font-weight:bold;text-align:right;flex:1}
+.price .f3{width: 24rpx;height:24rpx;}
+
+.scoredk{width:94%;margin:0 3%;margin-bottom:20rpx;border-radius:20rpx;padding:24rpx 20rpx; background: #fff;display:flex;align-items:center}
+.scoredk .f1{color:#333333}
+.scoredk .f2{ color: #999999;text-align:right;flex:1}
+
+.remark{width: 100%;padding:16rpx 0;background: #fff;display:flex;align-items:center}
+.remark .f1{color:#333;width:200rpx}
+.remark input{ border:0px solid #eee;height:70rpx;padding-left:10rpx;text-align:right}
+
+.footer {width: 96%;background: #fff;margin-top: 5px;position: fixed;left: 0px;bottom: 0px;padding: 0 2%;display: flex;align-items: center;z-index: 8;box-sizing:content-box}
+.footer .text1 {height:110rpx;line-height:110rpx;color: #2a2a2a;font-size: 30rpx;}
+.footer .text1  text{color: #e94745;font-size: 32rpx;}
+.footer .op{width: 200rpx;height:80rpx;line-height:80rpx;color: #fff;text-align: center;font-size: 30rpx;border-radius:44rpx}
+
+.storeitem{width: 100%;padding:20rpx 0;display:flex;flex-direction:column;color:#333}
+.storeitem .panel{width: 100%;height:60rpx;line-height:60rpx;font-size:28rpx;color:#333;margin-bottom:10rpx;display:flex}
+.storeitem .panel .f1{color:#333}
+.storeitem .panel .f2{ color:#111;font-weight:bold;text-align:right;flex:1}
+.storeitem .radio-item{display:flex;width:100%;color:#000;align-items: center;background:#fff;border-bottom:0 solid #eee;padding:8rpx 20rpx;}
+.storeitem .radio-item:last-child{border:0}
+.storeitem .radio-item .f1{color:#666;flex:1}
+.storeitem .radio{flex-shrink:0;width: 32rpx;height: 32rpx;background: #FFFFFF;border: 2rpx solid #BFBFBF;border-radius: 50%;margin-left:30rpx}
+.storeitem .radio .radio-img{width:100%;height:100%}
+
+.pstime-item{display:flex;border-bottom: 1px solid #f5f5f5;padding:20rpx 30rpx;}
+.pstime-item .radio{flex-shrink:0;width: 32rpx;height: 32rpx;background: #FFFFFF;border: 2rpx solid #BFBFBF;border-radius: 50%;margin-right:30rpx}
+.pstime-item .radio .radio-img{width:100%;height:100%}
+
+.cuxiao-desc{width:100%}
+.cuxiao-item{display: flex;padding:0 40rpx 20rpx 40rpx;}
+.cuxiao-item .type-name{font-size:28rpx; color: #49aa34;margin-bottom: 10rpx;flex:1}
+.cuxiao-item .radio{flex-shrink:0;width: 32rpx;height: 32rpx;background: #FFFFFF;border: 2rpx solid #BFBFBF;border-radius: 50%;margin-right:30rpx}
+.cuxiao-item .radio .radio-img{width:100%;height:100%}
+
+
+.form-item {width: 100%;padding: 16rpx 0;background: #fff;display: flex;align-items: center;justify-content:space-between}
+.form-item .label {color: #333;width: 200rpx;flex-shrink:0}
+.form-item .radio{transform:scale(.7);}
+.form-item .checkbox{transform:scale(.7);}
+.form-item .input {border:0px solid #eee;height: 70rpx;padding-left: 10rpx;text-align: right;flex:1}
+.form-item .textarea{height:140rpx;line-height:40rpx;overflow: hidden;flex:1;border:1px solid #eee;border-radius:2px;padding:8rpx}
+.form-item .radio-group{display:flex;flex-wrap:wrap;justify-content:flex-end}
+.form-item .radio{height: 70rpx;line-height: 70rpx;display:flex;align-items:center}
+.form-item .radio2{display:flex;align-items:center;}
+.form-item .radio .myradio{margin-right:10rpx;display:inline-block;border:1px solid #aaa;background:#fff;height:32rpx;width:32rpx;border-radius:50%}
+.form-item .checkbox-group{display:flex;flex-wrap:wrap;justify-content:flex-end}
+.form-item .checkbox{height: 70rpx;line-height: 70rpx;display:flex;align-items:center}
+.form-item .checkbox2{display:flex;align-items:center;height: 40rpx;line-height: 40rpx;}
+.form-item .checkbox .mycheckbox{margin-right:10rpx;display:inline-block;border:1px solid #aaa;background:#fff;height:32rpx;width:32rpx;border-radius:2px}
+.form-item .picker{height: 70rpx;line-height:70rpx;flex:1;text-align:right}
+
+.form-imgbox{margin-right:16rpx;margin-bottom:10rpx;font-size:24rpx;position: relative;}
+.form-imgbox-close{position: absolute;display: block;width:32rpx;height:32rpx;right:-16rpx;top:-16rpx;color:#999;font-size:32rpx;background:#fff}
+.form-imgbox-close .image{width:100%;height:100%}
+.form-imgbox-img{display: block;width:180rpx;height:180rpx;padding:2px;border: #d3d3d3 1px solid;background-color: #f6f6f6;overflow:hidden}
+.form-imgbox-img>.image{width:100%;height:100%}
+.form-imgbox-repeat{position: absolute;display: block;width:32rpx;height:32rpx;line-height:28rpx;right: 2px;bottom:2px;color:#999;font-size:30rpx;background:#fff}
+.form-uploadbtn{position:relative;height:180rpx;width:180rpx;margin-right: 16rpx;margin-bottom:10rpx;}
+
+.storeviewmore{width:100%;text-align:center;color:#889;height:40rpx;line-height:40rpx;margin-top:10rpx}
+</style>

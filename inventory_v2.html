@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>进销存V2 - 海鲜社</title>
+<style>
+*{box-sizing:border-box}body{margin:0;padding:0;font-family:-apple-system,sans-serif;background:#f0f2f5}
+.top{background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;padding:15px;text-align:center;font-size:18px;font-weight:600;position:sticky;top:0;z-index:100}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:10px;background:#fff}
+.stat{background:linear-gradient(135deg,#667eea,#764ba2);border-radius:8px;padding:10px;text-align:center;color:#fff}
+.stat.w{background:linear-gradient(135deg,#ff9800,#ff5722)}
+.n{font-size:20px;font-weight:700}
+.l{font-size:11px;opacity:.9}
+.tabs{display:flex;background:#fff;overflow-x:auto;border-bottom:1px solid #eee}
+.tab{padding:10px 14px;border:none;background:0 0;color:#666;font-size:13px;cursor:pointer;white-space:nowrap}
+.tab.active{color:#667eea;border-bottom:2px solid #667eea;font-weight:600}
+.cont{padding:10px}
+.card{background:#fff;border-radius:10px;padding:12px;margin-bottom:8px}
+.flex{display:flex;justify-content:space-between;align-items:center}
+.badge{background:#4caf50;color:#fff;padding:3px 10px;border-radius:15px;font-size:12px;font-weight:600}
+.badge.l{background:#ff9800}
+.btn{padding:4px 8px;border:none;border-radius:5px;font-size:11px;cursor:pointer;margin:2px}
+.b-i{background:#e8f5e9;color:#2e7d32}
+.b-o{background:#fff3e0;color:#e65100}
+.b-e{background:#e3f2fd;color:#1976d2}
+.b-d{background:#ffebee;color:#c62828}
+.fab{position:fixed;bottom:70px;right:15px;width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;font-size:24px;border:none}
+.modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center}
+.modal.show{display:flex}
+.m{background:#fff;border-radius:15px;width:90%;max-width:450px;margin:15px;max-height:85vh;overflow-y:auto}
+.mh{padding:12px 15px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;font-weight:600}
+.mb{padding:15px}
+.mf{display:flex;gap:10px;padding:10px 15px;border-top:1px solid #eee}
+.b1{flex:1;padding:10px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:8px;cursor:pointer}
+.b2{flex:1;padding:10px;background:#eee;color:#666;border:none;border-radius:8px;cursor:pointer}
+.g{margin-bottom:12px}
+.lb{display:block;font-size:13px;margin-bottom:5px}
+.in{width:100%;padding:10px;border:2px solid #eee;border-radius:8px;font-size:14px}
+.em{text-align:center;padding:50px;color:#999}
+</style>
+</head>
+<body>
+<div class="top">📦 进销存V2</div>
+<div class="stats">
+<div class="stat"><div class="n" id="tp">0</div><div class="l">商品</div></div>
+<div class="stat"><div class="n" id="ts">0</div><div class="l">SKU</div></div>
+<div class="stat"><div class="n" id="tt">0</div><div class="l">库存</div></div>
+<div class="stat w"><div class="n" id="tw">0</div><div class="l">预警</div></div>
+</div>
+<div class="tabs">
+<button class="tab active" onclick="st('p')">商品</button>
+<button class="tab" onclick="st('s')">供应商</button>
+<button class="tab" onclick="st('c')">客户</button>
+<button class="tab" onclick="st('pu')">采购</button>
+<button class="tab" onclick="st('sa')">销售</button>
+<button class="tab" onclick="st('l')">流水</button>
+<button class="tab" onclick="st('r')">报表</button>
+</div>
+<div id="pTab" class="cont"></div>
+<div id="sTab" class="cont" style="display:none"></div>
+<div id="cTab" class="cont" style="display:none"></div>
+<div id="puTab" class="cont" style="display:none"></div>
+<div id="saTab" class="cont" style="display:none"></div>
+<div id="lTab" class="cont" style="display:none"></div>
+<div id="rTab" class="cont" style="display:none"></div>
+<button class="fab" onclick="sam()">+</button>
+<!-- 商品弹窗 -->
+<div class="modal" id="pm">
+<div class="m"><div class="mh"><span id="pt">➕ 商品</span><span style="font-size:20px;cursor:pointer" onclick="cm('pm')">×</span></div>
+<div class="mb"><input type="hidden" id="pi"><div class="g"><label class="lb">名称 *</label><input class="in" id="pn"></div><div class="g"><label class="lb">分类</label><select class="in" id="pc"></select></div><div class="g"><label class="lb">单位</label><input class="in" id="pu" value="只"></div></div><div class="mf"><button class="b2" onclick="cm('pm')">取消</button><button class="b1" onclick="sp()">保存</button></div></div></div>
+<!-- SKU弹窗 -->
+<div class="modal" id="sm">
+<div class="m"><div class="mh"><span id="st">➕ SKU</span><span style="font-size:20px;cursor:pointer" onclick="cm('sm')">×</span></div>
+<div class="mb"><input type="hidden" id="si"><input type="hidden" id="spid"><div id="spn" style="padding:10px;background:#f5f5f5;border-radius:8px;margin-bottom:12px">加载中...</div><div class="g"><label class="lb">名称 *</label><input class="in" id="sn"></div><div class="g"><label class="lb">规格 *</label><input class="in" id="ss" placeholder="如: 3两/只"></div><div style="display:flex;gap:10px"><div class="g" style="flex:1"><label class="lb">售价</label><input class="in" id="spr" type="number" step="0.01"></div><div class="g" style="flex:1"><label class="lb">成本</label><input class="in" id="sc" type="number" step="0.01"></div></div><div class="g"><label class="lb">库存</label><input class="in" id="sst" value="0" type="number"></div></div><div class="mf"><button class="b2" onclick="cm('sm')">取消</button><button class="b1" onclick="ssk()">保存</button></div></div></div>
+<!-- 供应商弹窗 -->
+<div class="modal" id="supm">
+<div class="m"><div class="mh"><span>➕ 供应商</span><span style="font-size:20px;cursor:pointer" onclick="cm('supm')">×</span></div>
+<div class="mb"><div class="g"><label class="lb">名称 *</label><input class="in" id="supn"></div><div class="g"><label class="lb">联系人</label><input class="in" id="supc"></div><div class="g"><label class="lb">电话</label><input class="in" id="supp"></div></div><div class="mf"><button class="b2" onclick="cm('supm')">取消</button><button class="b1" onclick="ssup()">保存</button></div></div></div>
+<!-- 客户弹窗 -->
+<div class="modal" id="cm">
+<div class="m"><div class="mh"><span>➕ 客户</span><span style="font-size:20px;cursor:pointer" onclick="cm('cmo')">×</span></div>
+<div class="mb"><div class="g"><label class="lb">名称 *</label><input class="in" id="cn"></div><div class="g"><label class="lb">联系人</label><input class="in" id="cc"></div><div class="g"><label class="lb">电话</label><input class="in" id="cp"></div><div class="g"><label class="lb">类型</label><select class="in" id="ct"><option value="normal">普通</option><option value="vip">VIP</option></select></div></div><div class="mf"><button class="b2" onclick="cm('cmo')">取消</button><button class="b1" onclick="sc()">保存</button></div></div></div>
+<!-- 出入库弹窗 -->
+<div class="modal" id="stm">
+<div class="m"><div class="mh"><span id="stt">出入库</span><span style="font-size:20px;cursor:pointer" onclick="cm('stm')">×</span></div>
+<div class="mb"><input type="hidden" id="ssid"><input type="hidden" id="sttype"><div id="ssn" style="font-weight:600;padding:12px;background:#f8f9fa;border-radius:8px;margin-bottom:12px"></div><div style="font-size:24px;font-weight:bold;color:#667eea;padding:12px;background:#f8f9fa;border-radius:8px;text-align:center;margin-bottom:12px" id="ssc"></div><div class="g"><label class="lb">数量 *</label><input class="in" id="stn" type="number" min="1"></div></div><div class="mf"><button class="b2" onclick="cm('stm')">取消</button><button class="b1" onclick="sst()">确认</button></div></div></div>
+<!-- 销售弹窗 -->
+<div class="modal" id="sam">
+<div class="m"><div class="mh"><span>📤 销售</span><span style="font-size:20px;cursor:pointer" onclick="cm('samo')">×</span></div>
+<div class="mb"><div class="g"><label class="lb">客户 *</label><select class="in" id="sac"></select></div><div class="g"><label class="lb">商品 *</label><select class="in" id="sap" onchange="lpsk()"></select></div><div class="g"><label class="lb">SKU *</label><select class="in" id="sask"></select></div><div style="display:flex;gap:10px"><div class="g" style="flex:1"><label class="lb">数量 *</label><input class="in" id="saq" value="1" type="number"></div><div class="g" style="flex:1"><label class="lb">单价</label><input class="in" id="sapri" type="number" step="0.01"></div></div></div><div class="mf"><button class="b2" onclick="cm('samo')">取消</button><button class="b1" onclick="ssa()">确认</button></div></div></div>
+<!-- 采购弹窗 -->
+<div class="modal" id="pum">
+<div class="m"><div class="mh"><span>📥 采购</span><span style="font-size:20px;cursor:pointer" onclick="cm('pumo')">×</span></div>
+<div class="mb"><div class="g"><label class="lb">供应商 *</label><select class="in" id="pus"></select></div><div class="g"><label class="lb">商品 *</label><select class="in" id="pup" onchange="lppsk()"></select></div><div class="g"><label class="lb">SKU *</label><select class="in" id="pusk"></select></div><div style="display:flex;gap:10px"><div class="g" style="flex:1"><label class="lb">数量 *</label><input class="in" id="puq" value="1" type="number"></div><div class="g" style="flex:1"><label class="lb">单价</label><input class="in" id="pupri" type="number" step="0.01"></div></div></div><div class="mf"><button class="b2" onclick="cm('pumo')">取消</button><button class="b1" onclick="spu()">确认</button></div></div></div>
+<script>
+var ct='p',cats=[],prods=[],sups=[],custs=[];
+var api='/api/commune/inventory.php';
+window.onload=function(){ls();lc();lp();lsu();lcus();lp();lsa();ll();lr()};
+function ls(){fetch(api+'?action=stats').then(r=>r.json()).then(d=>{if(d.code==1){document.getElementById('tp').textContent=d.data.total_products;document.getElementById('ts').textContent=d.data.total_skus;document.getElementById('tt').textContent=d.data.total_stock;document.getElementById('tw').textContent=d.data.warnings.length}})}
+function lc(){fetch(api+'?action=categories').then(r=>r.json()).then(d=>{if(d.code==1){cats=d.data;var s='<option value="0">请选择</option>';cats.forEach(c=>s+='<option value="'+c.id+'">'+c.name+'</option>');document.getElementById('pc').innerHTML=s}})}
+function lp(){fetch(api+'?action=products').then(r=>r.json()).then(d=>{if(d.code==1){prods=d.data;rp()}})}
+function rp(){if(prods.length==0){document.getElementById('pTab').innerHTML='<div class="em">暂无商品</div>';return}var h='';prods.forEach(p=>{var sc=(p.total_stock||0)<=0?'l':((p.total_stock||0)<p.min_stock?'l':'');h+='<div class="card"><div class="flex"><div><div style="font-weight:600">'+p.name+'</div><div style="font-size:12px;color:#999">'+(p.category_name||'')+'</div></div><div class="badge '+sc+'">'+(p.total_stock||0)+'</div></div>';if(p.skus&&p.skus.length>0){h+='<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee">';p.skus.forEach(s=>{var sn=p.name+(s.sku_spec?' - '+s.sku_spec:'');h+='<div class="flex" style="padding:6px 0"><div><div>'+sn+'</div><div style="color:#667eea;font-weight:600">¥'+s.price+'</div></div><div><button class="btn b-i" onclick="ssm('+s.id+',\''+sn+'\','+s.stock+',\'in\')">入库</button><button class="btn b-o" onclick="ssm('+s.id+',\''+sn+'\','+s.stock+',\'out\')">出库</button><button class="btn b-e" onclick="ssm('+p.id+','+s.id+')">✏️</button></div></div>'});h+='</div>'}h+='<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee"><button class="btn b-e" onclick="ssm('+p.id+',0)">➕ SKU</button></div></div>'});document.getElementById('pTab').innerHTML=h}
+function lsu(){fetch(api+'?action=suppliers').then(r=>r.json()).then(d=>{if(d.code==1){sups=d.data;var h=sups.length?'':'<div class="em">暂无供应商</div>';sups.forEach(s=>h+='<div class="card flex"><div><div style="font-weight:600">'+s.name+'</div><div style="font-size:12px;color:#666">'+(s.contact||'')+' '+(s.phone||'')+'</div></div><button class="btn b-d" onclick="dsup('+s.id+')">删除</button></div>');document.getElementById('sTab').innerHTML=h;var s='<option value="0">请选择</option>';sups.forEach(s=>s+='<option value="'+s.id+'">'+s.name+'</option>');document.getElementById('pus').innerHTML=s}})}
+function ssup(){var n=document.getElementById('supn').value.trim();if(!n){alert('请输入名称');return}fetch(api,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'action=add_supplier&name='+encodeURIComponent(n)+'&contact='+encodeURIComponent(document.getElementById('supc').value)+'&phone='+encodeURIComponent(document.getElementById('supp').value)}).then(r=>r.json()).then(d=>{alert(d.msg);if(d.code==1){cm('supm');lsu()}})}
+function dsup(id){if(!confirm('确定删除?'))return;fetch(api,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'action=delete_supplier&id='+id}).then(r=>r.json()).then(d=>{alert(d.msg);if(d.code==1)lsu()})}
+function lcus(){fetch(api+'?action=customers').then(r=>r.json()).then(d=>{if(d.code==1){custs=d.data;var h=custs.length?'':'<div class="em">暂无客户</div>';custs.forEach(c=>h+='<div class="card flex"><div><div style="font-weight:600">'+(c.type==='vip'?'⭐ ':'')+c.name+'</div><div style="font-size:12px;color:#666">'+(c.contact||'')+' '+(c.phone||'')+'</div></div><button class="btn b-d" onclick="dc('+c.id+')">删除</button></div>');document.getElementById('cTab').innerHTML=h;var s='<option value="0">请选择</option>';custs.forEach(c=>s+='<option value="'+c.id+'">'+c.name+'</option>');document.getElementById('sac').innerHTML=s;var p='<option value="0">请选择</option>';prods.forEach(c=>p+='<option value="'+c.id+'">'+c.name+'</option>');document.getElementById('sap').innerHTML=p;document.getElementById('pup').innerHTML=p}})}
+function sc(){var n=document.getElementById('cn').value.trim();if(!n){alert('请输入名称');return}fetch(api,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'action=add_customer&name='+encodeURIComponent(n)+'&contact='+encodeURIComponent(document.getElementById('cc').value)+'&phone='+encodeURIComponent(document.getElementById('cp').value)+'&type='+document.getElementById('ct').value}).then(r=>r.json()).then(d=>{alert(d.msg);if(d.code==1){cm('cmo');lcus()}})}
+function dc(id){if(!confirm('确定删除?'))return;fetch(api,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'action=delete_customer&id='+id}).then(r=>r.json()).then(d=>{alert(d.msg);if(d.code==1)lcus()})}
+function lp(){fetch(api+'?action=purchases').then(r=>r.json()).then(d=>{if(d.code==1){var h=d.data.length?'':'<div class="em">暂无采购单</div>';d.data.forEach(o=>h+='<div class="card"><div class="flex"><span>'+o.order_no+'</span><span style="background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:4px;font-size:11px">'+o.status+'</span></div><div style="color:#666;font-size:12px">供应商: '+o.supplier_name+'</div><div style="color:#667eea;font-weight:600">¥'+o.total_amount+'</div></div>');document.getElementById('puTab').innerHTML=h}})}
+function lsa(){fetch(api+'?action=sales').then(r=>r.json()).then(d=>{if(d.code==1){var h=d.data.length?'':'<div class="em">暂无销售单</div>';d.data.forEach(o=>h+='<div class="card"><div class="flex"><span>'+o.order_no+'</span><span style="background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:4px;font-size:11px">'+o.status+'</span></div><div style="color:#666;font-size:12px">客户: '+o.customer_name+'</div><div style="color:#667eea;font-weight:600">¥'+o.total_amount+'</div></div>');document.getElementById('saTab').innerHTML=h}})}
+function ll(){fetch(api+'?action=inventory_logs').then(r=>r.json()).then(d=>{if(d.code==1){var h=d.data.length?'':'<div class="em">暂无流水</div>';d.data.forEach(l=>{var icon=l.type==='inbound'?'📥':'📤';var col=l.type==='inbound'?'#4caf50':'#2196f3';h+='<div class="card"><div class="flex"><span>'+icon+' '+l.sku_name+'</span><span style="color:'+col+'">'+l.num+'件</span></div><div style="font-size:11px;color:#999">'+new Date(l.create_time*1000).toLocaleString()+'</div></div>'});document.getElementById('lTab').innerHTML=h}})}
+function lr(){fetch(api+'?action=report&type=summary').then(r=>r.json()).then(d=>{if(d.code==1){var r=d.data;document.getElementById('rTab').innerHTML='<div class="card"><div style="font-weight:600;margin-bottom:12px">📊 数据汇总</div><div class="flex" style="padding:6px 0;border-bottom:1px solid #eee"><span>商品</span><span>'+r.total_products+'</span></div><div class="flex" style="padding:6px 0;border-bottom:1px solid #eee"><span>SKU</span><span>'+r.total_skus+'</span></div><div class="flex" style="padding:6px 0;border-bottom:1px solid #eee"><span>库存</span><span>'+r.total_stock+'</span></div><div class="flex" style="padding:6px 0;border-bottom:1px solid #eee"><span>供应商</span><span>'+r.total_suppliers+'</span></div><div class="flex" style="padding:6px 0"><span>客户</span><span>'+r.total_customers+'</span></div></div><div class="card"><div style="font-weight:600;margin-bottom:12px">💰 本月</div><div class="flex" style="padding:6px 0;border-bottom:1px solid #eee"><span>销售</span><span style="color:#4caf50">¥'+r.month_sales+'</span></div><div class="flex" style="padding:6px 0;border-bottom:1px solid #eee"><span>采购</span><span style="color:#f44336">¥'+r.month_purchase+'</span></div><div class="flex" style="padding:6px 0"><span>利润</span><span style="font-weight:bold;color:'+(r.month_profit>=0?'#4caf50':'#f44336')+'">¥'+r.month_profit+'</span></div></div>'}})}
+function st(t){ct=t;document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));event.target.classList.add('active');['p','s','c','pu','sa','l','r'].forEach(x=>document.getElementById(x+'Tab').style.display=t===x?'block':'none')}
+function sam(){if(ct==='p'){spm(0)}else if(ct==='s'){document.getElementById('supn').value='';document.getElementById('supm').classList.add('show')}else if(ct==='c'){document.getElementById('cn').value='';document.getElementById('cm').classList.add('show')}else if(ct==='pu'){document.getElementById('pum').classList.add('show')}else if(ct==='sa'){document.getElementById('sam').classList.add('show')}}
+function cm(id){document.getElementById(id).classList.remove('show')}
+function spm(id){document.getElementById('pm').classList.add('show');if(id){fetch(api+'?action=product&id='+id).then(r=>r.json()).then(d=>{if(d.code==1){var p=d.data.product;document.getElementById('pi').value=p.id;document.getElementById('pn').value=p.name;document.getElementById('pc').value=p.category_id;document.getElementById('pu').value=p.unit;document.getElementById('pt').textContent='✏️ 商品'}})}else{document.getElementById('pi').value='';document.getElementById('pn').value='';document.getElementById('pc').value='0';document.getElementById('pu').value='只';document.getElementById('pt').textContent='➕ 商品'}}
+function sp(){var n=document.getElementById('pn').value.trim();if(!n){alert('请输入名称');return}var a=document.getElementById('pi').value?'edit_product':'add_product';var b='action='+a+'&name='+encodeURIComponent(n)+'&category_id='+document.getElementById('pc').value+'&unit='+encodeURIComponent(document.getElementById('pu').value);if(document.getElementById('pi').value)b+='&id='+document.getElementById('pi').value;fetch(api,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b}).then(r=>r.json()).then(d=>{alert(d.msg);if(d.code==1){cm('pm');lp();ls()}})}
+function ssm(pid,sid){document.getElementById('sm').classList.add('show');document.getElementById('si').value=sid;document.getElementById('spid').value=pid;document.getElementById('st').textContent=sid?'✏️ SKU':'➕ SKU';fetch(api+'?action=products').then(r=>r.json()).then(d=>{if(d.code==1){var p=d.data.find(p=>p.id==pid);if(p){document.getElementById('spn').textContent=p.name;if(sid>0){var s=p.skus.find(s=>s.id==sid);if(s){document.getElementById('sn').value=s.sku_name;document.getElementById('ss').value=s.sku_spec||'';document.getElementById('spr').value=s.price;document.getElementById('sc').value=s.cost;document.getElementById('sst').value=s.stock}else{document.getElementById('sn').value=p.name;document.getElementById('ss').value='';document.getElementById('spr').value='';document.getElementById('sc').value='';document.getElementById('sst').value='0'}}else{document.getElementById('sn').value=p.name;document.getElementById('ss').value='';document.getElementById('spr').value='';document.getElementById('sc').value='';document.getElementById('sst').value='0'}}}})}
+function ssk(){var n=document.getElementById('sn').value.trim();var s=document.getElementById('ss').value.trim();if(!n||!s){alert('请输入名称和规格');return}var a=document.getElementById('si').value?'edit_sku':'add_sku';var b='action='+a+'&product_id='+document.getElementById('spid').value+'&sku_name='+encodeURIComponent(n)+'&sku_spec='+encodeURIComponent(s)+'&price='+(document.getElementById('spr').value||0)+'&cost='+(document.getElementById('sc').value||0)+'&stock='+(document.getElementById('sst').value||0);if(document.getElementById('si').value)b+='&id='+document.getElementById('si').value;fetch(api,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b}).then(r=>r.json()).then(d=>{alert(d.msg);if(d.code==1){cm('sm');lp();ls()}})}
+function ssm(sid,sn,stock,type){document.getElementById('stm').classList.add('show');document.getElementById('ssid').value=sid;document.getElementById('sttype').value=type;document.getElementById('ssn').textContent=sn;document.getElementById('ssc').textContent=stock;document.getElementById('stt').textContent=type==='in'?'📥 入库':'📤 出库';document.getElementById('stn').value=''}
+function sst(){var num=document.getElementById('stn').value;if(!num||num<=0){alert('请输入数量');return}var a=document.getElementById('sttype').value==='in'?'stock_in':'stock_out';fetch(api,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'action='+a+'&sku_id='+document.getElementById('ssid').value+'&num='+num}).then(r=>r.json()).then(d=>{alert(d.msg);if(d.code==1){cm('stm');lp();ls()}})}
+function lpsk(){var pid=document.getElementById('sap').value;if(!pid)return;var s='<option value="0">请选择</option>';var p=prods.find(p=>p.id==pid);if(p&&p.skus){p.skus.forEach(sku=>{s+='<option value="'+sku.id+'">'+p.name+(sku.sku_spec?' - '+sku.sku_spec:'')+'</option>'})}document.getElementById('sask').innerHTML=s}
+function lppsk(){var pid=document.getElementById('pup').value;if(!pid)return;var s='<option value="0">请选择</option>';var p=prods.find(p=>p.id==pid);if(p&&p.skus){p.skus.forEach(sku=>{s+='<option value="'+sku.id+'">'+p.name+(sku.sku_spec?' - '+sku.sku_spec:'')+'</option>'})}document.getElementById('pusk').innerHTML=s}
+function ssa(){var cid=document.getElementById('sac').value;if(!cid||cid==='0'){alert('请选择客户');return}var sku=document.getElementById('sask').value;if(!sku||sku==='0'){alert('请选择SKU');return}var q=document.getElementById('saq').value;var p=document.getElementById('sapri').value||0;var cn=document.getElementById('sac').options[document.getElementById('sac').selectedIndex].text;var skuName=document.getElementById('sask').options[document.getElementById('sask').selectedIndex].text;var items=[{sku_id:sku,quantity:q,price:p,amount:q*p,sku_name:skuName}];fetch(api,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'action=add_sales&customer_id='+cid+'&customer_name='+encodeURIComponent(cn)+'&items='+encodeURIComponent(JSON.stringify(items))}).then(r=>r.json()).then(d=>{alert(d.msg);if(d.code==1){cm('samo');lsa();lp();ls()}})}
+function spu(){var sid=document.getElementById('pus').value;if(!sid||sid==='0'){alert('请选择供应商');return}var sku=document.getElementById('pusk').value;if(!sku||sku==='0'){alert('请选择SKU');return}var q=document.getElementById('puq').value;var p=document.getElementById('pupri').value||0;var sn=document.getElementById('pus').options[document.getElementById('pus').selectedIndex].text;var skuName=document.getElementById('pusk').options[document.getElementById('pusk').selectedIndex].text;var items=[{sku_id:sku,quantity:q,price:p,amount:q*p,sku_name:skuName}];fetch(api,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'action=add_purchase&supplier_id='+sid+'&supplier_name='+encodeURIComponent(sn)+'&items='+encodeURIComponent(JSON.stringify(items))}).then(r=>r.json()).then(d=>{alert(d.msg);if(d.code==1){cm('pumo');lp();lp();ls()}})}
+</script></body></html>

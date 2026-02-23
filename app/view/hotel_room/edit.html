@@ -1,0 +1,813 @@
+<!DOCTYPE html><!--custom_file(hotel)-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>编辑房型</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+	<style>     
+		.guigeimg{display: inline-block; position: relative}
+		.guigeimg_close{width: 25px;height: 22px;right: -14px;top:-14px;}
+		.layui-table .layui-input { width: 120px;}
+		#ggnamediv .layui-input,#ggvaldiv .layui-input{ display:inline;height:30px}
+	</style>
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12">
+				<div class="layui-card-header">
+					{if !$info['id']}<i class="fa fa-plus"></i> 添加房型{else}<i class="fa fa-pencil"></i> 编辑房型{/if}
+					<i class="layui-icon layui-icon-close" style="font-size:18px;font-weight:bold;cursor:pointer" onclick="closeself()"></i>
+				</div>
+				<div class="layui-card-body" pad15>
+					<div class="layui-form form-label-w6">
+						<div class="layui-tab" lay-filter="mytab">
+							<ul class="layui-tab-title">
+								<li class="layui-this" lay-id="1">基本信息</li>
+								<li lay-id="2">房型详情</li>
+							</ul>
+							<div class="layui-tab-content">
+								<div class="layui-tab-item layui-show">
+									<input type="hidden" name="id" value="{$info['id']}"/>
+								  
+									<div class="layui-form-item">
+										<label class="layui-form-label"><span class="redstar">*</span>房型名称：</label>
+										<div class="layui-input-inline" style="width:300px">
+											<input type="text" name="info[name]" lay-verify="required" lay-verType="tips" class="layui-input" value="{$info.name}">
+										</div>
+									</div>
+									<div class="layui-form-item">
+										<label class="layui-form-label">房型主图：</label>
+										<button style="float:left;" type="button" class="layui-btn layui-btn-primary" upload-input="pic" upload-preview="picPreview" onclick="uploader(this)">上传图片</button>
+										<div class="layui-form-mid layui-word-aux" style="margin-left:10px;">建议尺寸：640×640像素</div>
+										<div id="picPreview" class="picsList-class-padding">
+											<div class="layui-imgbox imgbox-required">
+												<div class="layui-imgbox-img"><img src="{$info.pic}"/></div>
+												<input type="text" name="info[pic]" id="pic" class="layui-input" value="{$info.pic}">
+											</div>
+										</div>
+									</div>
+									<div class="layui-form-item">
+										<label class="layui-form-label">房型组图：</label>
+										<input type="hidden" name="info[pics]" value="{$info['pics']}" id="pics">
+										<button style="float:left;" type="button" class="layui-btn layui-btn-primary" onclick="uploader(this,true)" upload-input="pics" upload-preview="picList" >批量上传</button>
+										<div class="layui-form-mid layui-word-aux" style="margin-left:10px;">建议尺寸：640×640像素</div>
+										<div id="picList" class="picsList-class-padding">
+											{if $info['pics']}
+											{php}$pics = explode(',',$info['pics']);{/php}
+											{foreach $pics as $pic}
+											<div class="layui-imgbox">
+												<a class="layui-imgbox-close" href="javascript:void(0)" onclick="$(this).parent().remove();getpicsval('pics','picList')" title="删除"><i class="layui-icon layui-icon-close-fill-opaque"></i></a>
+												<span class="layui-imgbox-img"><img src="{$pic}"></span>
+											</div>
+											{/foreach}{/if}
+										</div>
+									</div>
+					
+									<div class="layui-form-item">
+										<label class="layui-form-label">房型分组：</label>
+										<div class="layui-input-inline" style="width:600px">
+											{php} $gids = explode(',',$info['gid']);{/php}
+											{foreach $glist as $g}<input type="checkbox" name="info[gid][]" value="{$g['id']}" {if in_array($g['id'],$gids)}checked{/if} title="{$g['name']}" lay-skin="primary">{/foreach}
+										</div>
+										<!-- <div class="layui-form-mid layui-word-aux"><a href="groupadd.php">创建分组</a></div> -->
+									</div>
+									<div class="layui-form-item">
+										<label class="layui-form-label">标签：</label>
+<!-- 										<div class="layui-input-inline" style="width:500px">
+											<input type="text" name="info[tag]" value="{$info['tag']}" class="layui-input">
+										</div>
+										<div class="layui-form-mid layui-word-aux ">输入标签用英文逗号,隔开</div> -->
+										<input type="hidden" name = info[tag]>
+										<div class="layui-input-inline layui-tags">
+											<div class="layui-input">
+												<input type="text" name="" id="inputTags" placeholder="回车生成标签"  autocomplete="off">
+											</div>
+										</div>
+									</div>
+						
+									<div class="layui-form-item">
+										<label class="layui-form-label">面积：</label>
+										<div class="layui-input-inline layui-module-itemL">
+											<input type="text" name="info[square]" value="{$info['square']}" class="layui-input" style="margin-right:0">
+											<div>平米</div>
+										</div>
+									</div>
+
+									<div class="layui-form-item">
+										<label class="layui-form-label"><span class="redstar">*</span>床型：</label>
+										<div class="layui-input-inline">
+											<select name="info[bedxing]"  value="{$info['bedxing']}"  lay-verify="required">
+												{foreach $getBedarr['bedxing'] as $k=>$x}
+												<option value="{$k}"   {if $info['bedxing']==$k}selected{/if} >{$x}</option>
+												{/foreach}
+											</select>
+										</div>
+									</div>
+									<div class="layui-form-item">
+										<label class="layui-form-label">床宽：</label>
+										<div class="layui-input-inline layui-module-itemL">
+											<input type="text" name="info[bedwidth]" value="{$info['bedwidth']}" class="layui-input" style="margin-right:0">
+											<div>米</div>
+										</div>
+									</div>
+									<div class="layui-form-item">
+										<label class="layui-form-label">窗户：</label>
+										<div class="layui-input-inline" style="width:400px">
+										    <input type="radio" name="info[ischuanghu]" value="有" title="有" {if $info['ischuanghu']=='有'}checked{/if}/>
+											<input type="radio" name="info[ischuanghu]" value="无" title="无" {if $info['ischuanghu']=='无'}checked{/if}/>
+											<input type="radio" name="info[ischuanghu]" value="0" title="不显示" {if !$info['ischuanghu'] || $info['ischuanghu']=='0'}checked{/if}/>
+										</div>
+									</div>
+
+									<div class="layui-form-item">
+										<label class="layui-form-label">早餐：</label>
+										<div class="layui-input-inline" style="width:400px"> 
+											<input type="radio" name="info[breakfast]" value="有" title="有" {if $info['breakfast']=='有'}checked{/if}/>
+											<input type="radio" name="info[breakfast]" value="无" title="无" {if $info['breakfast']=='无'}checked{/if}/>
+											<input type="radio" name="info[breakfast]" value="0" title="不显示" {if !$info['breakfast'] || $info['breakfast']=='0'}checked{/if}/>
+										</div>
+									</div>
+
+									<div class="layui-form-item">
+										<label class="layui-form-label">特色：</label>
+										<div class="layui-input-inline" style="width:300px">
+											<textarea type="text" name="info[tese]" class="layui-textarea">{$info['tese']}</textarea>
+										</div>
+									</div>
+									<span style="color:#333">房型设置</span><hr/>
+
+									<div class="layui-form-item">
+										<label class="layui-form-label">房型价格：</label>
+										<div class="layui-input-inline layui-module-itemL">
+											<input type="text" name="info[sell_price]" class="layui-input" value="{$info.sell_price}"style="margin-right: 0;width:200px">
+											<div>元/每日</div>
+										</div>
+									</div>
+
+									<div class="layui-form-item">
+										<label class="layui-form-label">{:t('余额')}定价：</label>
+										<div class="layui-input-inline" style="width:600px">
+										
+											<input type="radio" name="info[isdaymoney]" value="0" title="关闭" {if !$info['id'] || $info['isdaymoney']==0}checked{/if} lay-filter="daypriceset"/>
+											<input type="radio" name="info[isdaymoney]" value="1" title="开启" {if $info['isdaymoney']==1}checked{/if} lay-filter="daypriceset"/>
+										</div>
+										
+									</div>
+
+									<div class="layui-form-item"  id="daypriceset" {if !$info['id'] || $info['isdaymoney']==0}style='display:none'{/if} >
+										<label class="layui-form-label">{:t('余额')}价格：</label>
+										<div class="layui-input-inline layui-module-itemL" >
+											<input type="text" name="info[daymoney]" value="{$info['daymoney']}" class="layui-input" style="margin-right: 0;width:200px">	
+											<div>{$moneyunit}</div>
+											
+										</div>
+										<div class="layui-form-mid layui-word-aux ">每晚需要消耗的{:t('余额')}</div>
+									</div>		
+
+									<div class="layui-form-item">
+										<label class="layui-form-label">会员价：</label>
+										<div class="layui-input-inline" style="width:600px">
+										
+											<input type="radio" name="info[lvprice]" value="0" title="关闭" {if !$info['id'] || $info['lvprice']==0}checked{/if} lay-filter="lvpriceset"/>
+											<input type="radio" name="info[lvprice]" value="1" title="开启" {if $info['id'] && $info['lvprice']==1}checked{/if} lay-filter="lvpriceset"/>
+										</div>
+										
+									</div>
+
+									{foreach $levellist as $key=>$level}	
+									<div class="layui-form-item lvpriceset" {if !$info['id'] || $info['lvprice']==0}style='display:none'{/if}>
+										<label class="layui-form-label">{$level.name}价格：</label>
+										<div class="layui-input-inline layui-module-itemL">
+											<input type="text" name="info[lvprice_data][{$level.id}]" class="layui-input" value="{$info['lvprice_data'][$level['id']]}"style="margin-right: 0;width:200px">
+											<div>元/每日</div>
+										</div>
+									</div>
+									{/foreach}
+ 									
+
+									<div class="layui-form-item">
+										<label class="layui-form-label">房型数量：</label>
+										<div class="layui-input-inline layui-module-itemL">
+											<input type="text" name="info[stock]" class="layui-input" value="{$info.stock?$info['stock']:10}"style="margin-right: 0;width:200px">
+											<div>{$text['间']}/每日</div>
+										</div>
+									</div>
+
+									<div class="layui-form-item">
+										<label class="layui-form-label">下单可选{$text['间']}数：</label>
+										<div class="layui-input-inline layui-module-itemL">
+											<input type="text" name="info[limitnum]" class="layui-input" value="{$info.limitnum?$info['limitnum']:7}"style="margin-right: 0;width:200px">
+										</div>
+										<div class="layui-form-mid layui-word-aux ">下单时可选{$this->text['酒店']}数设置，默认为7</div>
+									</div>
+
+									<div class="layui-form-item">
+										<label class="layui-form-label">确认方式：</label>
+										<div class="layui-input-inline" style="width:300px">
+											<input type="radio" name="info[qrtype]" value="1" title="即时确认" {if !$info['id'] || $info['qrtype']==1}checked{/if}/>
+											<input type="radio" name="info[qrtype]" value="2" title="手动确认" {if $info['id'] && $info['qrtype']==2}checked{/if}/>
+										</div>
+									</div>
+
+									<div class="layui-form-item">
+										<label class="layui-form-label">订房须知：</label>
+										<div class="layui-input-inline" style="width:300px">
+											<textarea type="text" name="info[booking_notice]" class="layui-textarea">{$info['booking_notice']}</textarea>
+										</div>
+									</div>
+
+									<span style="color:#333">其他设置</span><hr/>
+									<div class="layui-form-item">
+										<label class="layui-form-label">{$text['服务费']}：</label>
+										<div class="layui-input-inline" style="width:600px">
+											<input type="radio" name="info[isservice_money]" value="1" title="开启" {if $info['id'] && $info['isservice_money']==1}checked{/if} lay-filter="serviceChange"/>
+											<input type="radio" name="info[isservice_money]" value="0" title="关闭" {if !$info['id'] || $info['isservice_money']==0}checked{/if} lay-filter="serviceChange"/>
+										</div>
+									</div>
+							
+									<div class="layui-form-item"   id='servicediv' {if !$info['id'] || $info['isservice_money']==0}style='display:none'{/if} >
+										<label class="layui-form-label">{$text['服务费']}：</label>
+										<div class="layui-input-inline layui-module-itemL" >
+											<input type="text" name="info[service_money]" value="{$info['service_money']}" class="layui-input" style="margin-right: 0;width:200px"  >	
+											<div>天/人</div> 
+										</div>
+										<div class="layui-form-mid layui-word-aux ">按人数和天数计算{$text['服务费']}</div>
+									</div>		
+									<div class="layui-form-item">
+										<label class="layui-form-label">押金：</label>
+										<div class="layui-input-inline" style="width:600px">
+											<input type="radio" name="info[isyajin]" value="0" title="跟随基础设置" {if !$info['id'] || $info['isyajin']==0}checked{/if} lay-filter="yajinset"/>
+											<input type="radio" name="info[isyajin]" value="1" title="一{$text['间']}一押金" {if $info['isyajin']==1}checked{/if} lay-filter="yajinset"/>
+											<input type="radio" name="info[isyajin]" value="2" title="一份押金" {if $info['isyajin']==2}checked{/if} lay-filter="yajinset"/>
+											<input type="radio" name="info[isyajin]" value="-1" title="关闭" {if $info['isyajin']==-1}checked{/if} lay-filter="yajinset"/>
+										</div>
+									</div>
+							
+									
+									<div class="layui-form-item"  id="yajinset" {if !$info['id'] || ($info['isyajin']==0 || $info['isyajin']==-1)}style='display:none'{/if} >
+										<label class="layui-form-label">押金金额：</label>
+										<div class="layui-input-inline layui-module-itemL" >
+											<input type="text" name="info[yajin_money]" value="{$info['yajin_money']}" class="layui-input" style="margin-right: 0;width:200px">	
+											<div>元</div>
+										</div>
+									</div>	
+									
+
+									{if $bid==0 || $bset['commission_canset']==1}
+									<div class="layui-form-item">
+										<label class="layui-form-label">分销设置：</label>
+										<div class="layui-input-block" style="width:900px">
+											<input type="radio" name="info[commissionset]" value="0" {if !$info['id'] || $info['commissionset']==0}checked{/if} title="按照{:t('会员')}等级" lay-filter="commissionset">
+											<input type="radio" name="info[commissionset]" value="1" {if $info['commissionset']==1}checked{/if} title="单独设置提成比例" lay-filter="commissionset">
+											<input type="radio" name="info[commissionset]" value="2" {if $info['commissionset']==2}checked{/if} title="单独设置提成金额" lay-filter="commissionset">
+											<input type="radio" name="info[commissionset]" value="3" {if $info['commissionset']==3}checked{/if} title="分销送{:t('积分')}" lay-filter="commissionset">
+											<span  {if $info['lvprice']==0}style="display:none"{/if} id="commissionset4input">
+											<input type="radio" name="info[commissionset]" value="4" {if $info['commissionset']==4}checked{/if} title="按差价拿{:t('佣金')}" lay-filter="commissionset">
+											</span>
+											<input type="radio" name="info[commissionset]" value="-1" {if $info['commissionset']==-1}checked{/if} title="不参与分销" lay-filter="commissionset">
+										</div>
+										<div class="layui-form-mid layui-word-aux">按照{:t('会员')}等级：按照{:t('会员')}等级中设置的提成比例进行提成分配，提成=对应{:t('会员')}等级的提成比例×{$jiesuantypeDesc}×购买数量<br>
+										单独设置提成比例：按照单独设置的提成比例进行提成分配，提成=设置的百分比×{$jiesuantypeDesc}×购买数量<br>
+										单独设置提成金额：按照单独设置的提成金额进行提成分配，提成=提成金额×购买数量<br>
+										分销送{:t('积分')}：分销提成不给{:t('佣金')}而是给{:t('积分')}，得到的积分=提成{:t('积分')}×购买数量<br>
+										<span id="commissionset4tips" {if $info['lvprice']==0}style="display:none"{/if}>按差价拿{:t('佣金')}：当开启会员价时，不同的会员等级存在价格差，如果上级与下级之间存在价格差，则此价格差作为{:t('佣金')}返给上级</span>
+										</div>
+									</div>
+									{php}
+									$commissiondata1 = json_decode($info['commissiondata1'],true);
+									if(!$commissiondata1) $commissiondata1 = [];
+									$commissiondata2 = json_decode($info['commissiondata2'],true);
+									if(!$commissiondata2) $commissiondata2 = [];
+									$commissiondata3 = json_decode($info['commissiondata3'],true);
+									if(!$commissiondata3) $commissiondata3 = [];
+									{/php}
+									<div id="commissionset1" {if $info['commissionset']!=1}style="display:none"{/if}>
+										{if !$aglevellist}
+										<div class="layui-form-item">
+											<label class="layui-form-label">提成比例：</label>
+											<div class="layui-form-mid" style="color:red">未设置具有分销权限的{:t('会员')}等级，请先在[{:t('会员')}]-[等级及分销]设置分销权限</div>
+										</div>
+										{else}
+										{foreach $aglevellist as $level}
+										<div class="layui-form-item">
+											<label class="layui-form-label">{$level.name}：</label>
+											<div class="layui-input-inline layui-module-itemL">
+												<div> 一级(%) </div>
+												<input type="text" name="commissiondata1[{$level.id}][commission1]" class="layui-input" value="{$commissiondata1[$level['id']]['commission1']}">
+											</div>
+											{if $level['can_agent']>1}
+											<div class="layui-input-inline layui-module-itemL">
+												<div>二级(%)</div>
+												<input type="text" name="commissiondata1[{$level.id}][commission2]" class="layui-input" value="{$commissiondata1[$level['id']]['commission2']}">
+											</div>
+											{/if}
+											{if $level['can_agent']>2}
+											<div class="layui-input-inline layui-module-itemL">
+												<div>三级(%)</div>
+												<input type="text" name="commissiondata1[{$level.id}][commission3]" class="layui-input" value="{$commissiondata1[$level['id']]['commission3']}">
+											</div>
+											{/if}
+										</div>
+										{/foreach}
+										{/if}
+									</div>
+									<div id="commissionset2" {if $info['commissionset']!=2}style="display:none"{/if}>
+										{if !$aglevellist}
+										<div class="layui-form-item">
+											<label class="layui-form-label">提成金额：</label>
+											<div class="layui-form-mid" style="color:red">未设置具有分销权限的{:t('会员')}等级，请先在[{:t('会员')}]-[等级及分销]设置分销权限</div>
+										</div>
+										{else}
+										{foreach $aglevellist as $level}
+										<div class="layui-form-item">
+											<label class="layui-form-label">{$level.name}：</label>
+											<div class="layui-input-inline layui-module-itemL">
+												<div> 一级(元) </div>
+												<input type="text" name="commissiondata2[{$level.id}][commission1]" class="layui-input" value="{$commissiondata2[$level['id']]['commission1']}">
+											</div>
+											{if $level['can_agent']>1}
+											<div class="layui-input-inline layui-module-itemL">
+												<div>二级(元)</div>
+												<input type="text" name="commissiondata2[{$level.id}][commission2]" class="layui-input" value="{$commissiondata2[$level['id']]['commission2']}">
+											</div>
+											{/if}
+											{if $level['can_agent']>2}
+											<div class="layui-input-inline layui-module-itemL">
+												<div>三级(元)</div>
+												<input type="text" name="commissiondata2[{$level.id}][commission3]" class="layui-input" value="{$commissiondata2[$level['id']]['commission3']}">
+											</div>
+											{/if}
+										</div>
+										{/foreach}
+										{/if}
+									</div>
+									<div id="commissionset3" {if $info['commissionset']!=3}style="display:none"{/if}>
+										{if !$aglevellist}
+										<div class="layui-form-item">
+											<label class="layui-form-label">提成{:t('积分')}：</label>
+											<div class="layui-form-mid" style="color:red">未设置具有分销权限的{:t('会员')}等级，请先在[{:t('会员')}]-[等级及分销]设置分销权限</div>
+										</div>
+										{else}
+										{foreach $aglevellist as $level}
+										<div class="layui-form-item">
+											<label class="layui-form-label">{$level.name}：</label>
+											<div class="layui-input-inline layui-module-itemL">
+												<div> 一级({:t('积分')}) </div>
+												<input type="text" name="commissiondata3[{$level.id}][commission1]" class="layui-input" value="{$commissiondata3[$level['id']]['commission1']}">
+											</div>
+											{if $level['can_agent']>1}
+											<div class="layui-input-inline layui-module-itemL">
+												<div>二级({:t('积分')})</div>
+												<input type="text" name="commissiondata3[{$level.id}][commission2]" class="layui-input" value="{$commissiondata3[$level['id']]['commission2']}">
+											</div>
+											{/if}
+											{if $level['can_agent']>2}
+											<div class="layui-input-inline layui-module-itemL">
+												<div>三级({:t('积分')})</div>
+												<input type="text" name="commissiondata3[{$level.id}][commission3]" class="layui-input" value="{$commissiondata3[$level['id']]['commission3']}">
+											</div>
+											{/if}
+										</div>
+										{/foreach}
+										{/if}
+									</div>
+									{/if}
+
+
+									{if $bid==0 && ($auth_data=='all' || in_array('gdfenhong',$auth_data) || in_array('teamfenhong',$auth_data) || in_array('areafenhong',$auth_data))}
+									<div class="layui-form-item">
+										<label class="layui-form-label">分红设置：</label>
+										<div class="layui-input-block" style="width:800px">
+											<input type="radio" name="info[fenhongset]" value="1" {if !$info['id'] || $info['fenhongset']==1}checked{/if} title="参与" lay-filter="fenhongset">
+											<input type="radio" name="info[fenhongset]" value="0" {if $info['id'] && $info['fenhongset']==0}checked{/if} title="不参与" lay-filter="fenhongset">
+										</div>
+									</div>
+									<div id="fenhongset" {if $info['id'] && $info['fenhongset']==0}style="display:none"{/if}>
+										{if $auth_data=='all' || in_array('teamfenhong',$auth_data)}
+										<div class="layui-form-item">
+											<label class="layui-form-label">团队分红：</label>
+											<div class="layui-input-block" style="width:700px">
+												<input type="radio" name="info[teamfenhongset]" value="0" {if !$info['id'] || $info['teamfenhongset']==0}checked{/if} title="按照{:t('会员')}等级" lay-filter="teamfenhongset">
+												<input type="radio" name="info[teamfenhongset]" value="1" {if $info['teamfenhongset']==1}checked{/if} title="单独设置分红比例" lay-filter="teamfenhongset">
+												<input type="radio" name="info[teamfenhongset]" value="2" {if $info['teamfenhongset']==2}checked{/if} title="单独设置分红金额" lay-filter="teamfenhongset">
+												<input type="radio" name="info[teamfenhongset]" value="-1" {if $info['teamfenhongset']==-1}checked{/if} title="不参与分红" lay-filter="teamfenhongset">
+											</div>
+											<div class="layui-form-mid layui-word-aux">开启后可以拿到团队中所有{:t('会员')}的所有商城订单的分红金额或比例，请先在[{:t('会员')}]-[等级及分销]设置分红级数</div>
+										</div>
+										{php}
+										$teamfenhongdata1 = json_decode($info['teamfenhongdata1'],true);
+										if(!$teamfenhongdata1) $teamfenhongdata1 = [];
+										$teamfenhongdata2 = json_decode($info['teamfenhongdata2'],true);
+										if(!$teamfenhongdata2) $teamfenhongdata2  = [];
+										{/php}
+										<div id="teamfenhongset1" {if $info['teamfenhongset']!=1}style="display:none"{/if}>
+											<div class="layui-form-item">
+												<label class="layui-form-label">分红比例：</label>
+												{if !$teamlevellist}<div class="layui-form-mid" style="color:red">未设置具有团队分红权限的{:t('会员')}等级，请先在[{:t('会员')}]-[等级及分销]设置</div>{/if}
+												{foreach $teamlevellist as $level}
+												<div class="layui-input-inline layui-module-itemL">
+													<div> {$level.name}(%) </div>
+													<input type="text" name="teamfenhongdata1[{$level.id}][commission]" class="layui-input" value="{$teamfenhongdata1[$level['id']]['commission']}">
+												</div>
+												{/foreach}
+											</div>
+										</div>
+										<div id="teamfenhongset2" {if $info['teamfenhongset']!=2}style="display:none"{/if}>
+											<div class="layui-form-item">
+												<label class="layui-form-label">分红金额：</label>
+												{if !$teamlevellist}<div class="layui-form-mid" style="color:red">未设置具有团队分红权限的{:t('会员')}等级，请先在[{:t('会员')}]-[等级及分销]设置</div>{/if}
+												{foreach $teamlevellist as $level}
+												<div class="layui-input-inline layui-module-itemL">
+													<div> {$level.name}(元) </div>
+													<input type="text" name="teamfenhongdata2[{$level.id}][commission]" class="layui-input" value="{$teamfenhongdata2[$level['id']]['commission']}">
+												</div>
+												{/foreach}
+											</div>
+										</div>
+										{/if}
+										{if getcustom('teamfenhong_pingji') && ($auth_data == 'all' || in_array('teamfenhong_pingji',$auth_data))}
+										<div class="layui-form-item">
+											<label class="layui-form-label">团队分红平级奖：</label>
+											<div class="layui-input-block" style="width:850px">
+												<input type="radio" name="info[teamfenhongpjset]" value="0" {if !$info['id'] || $info['teamfenhongpjset']==0}checked{/if} title="按照{:t('会员')}等级" lay-filter="diandaSwitchMulti">
+												<input type="radio" name="info[teamfenhongpjset]" value="1" {if $info['teamfenhongpjset']==1}checked{/if} title="单独设置奖励比例" lay-filter="diandaSwitchMulti">
+												<input type="radio" name="info[teamfenhongpjset]" value="2" {if $info['teamfenhongpjset']==2}checked{/if} title="单独设置奖励金额" lay-filter="diandaSwitchMulti">
+												{if getcustom('fenhong_score_percent')}
+												<input type="radio" name="info[teamfenhongpjset]" value="4" {if $info['teamfenhongpjset']==4}checked{/if} title="单独设置奖励{:t('积分')}比例" lay-filter="diandaSwitchMulti">
+												{/if}
+												<input type="radio" name="info[teamfenhongpjset]" value="-1" {if $info['teamfenhongpjset']==-1}checked{/if} title="不参与奖励" lay-filter="diandaSwitchMulti">
+											</div>
+											<div class="layui-form-mid layui-word-aux">请先在[{:t('会员')}]-[等级及分销]设置分红级数</div>
+										</div>
+										{php}
+										$teamfenhongpjdata1 = json_decode($info['teamfenhongpjdata1'],true);
+										if(!$teamfenhongpjdata1) $teamfenhongpjdata1 = [];
+										$teamfenhongpjdata2 = json_decode($info['teamfenhongpjdata2'],true);
+										if(!$teamfenhongpjdata2) $teamfenhongpjdata2  = [];
+										{/php}
+										<div diandaSwitchMulti="info[teamfenhongpjset]" data-val="1" {if $info['teamfenhongpjset']!=1}style="display:none"{/if}>
+										<div class="layui-form-item">
+											<label class="layui-form-label">奖励比例：</label>
+											{if !$teampjlevellist}<div class="layui-form-mid" style="color:red">未设置具有团队分红平级奖权限的{:t('会员')}等级，请先在[{:t('会员')}]-[等级及分销]设置</div>{/if}
+											{foreach $teampjlevellist as $level}
+											<div class="layui-input-inline layui-module-itemL mt5">
+												<div> {$level.name}(%) </div>
+												<input type="text" name="teamfenhongpjdata1[{$level.id}][commission]" class="layui-input" value="{$teamfenhongpjdata1[$level['id']]['commission']}">
+											</div>
+											{/foreach}
+										</div>
+										</div>
+										<div diandaSwitchMulti="info[teamfenhongpjset]" data-val="2" {if $info['teamfenhongpjset']!=2}style="display:none"{/if}>
+										<div class="layui-form-item">
+											<label class="layui-form-label">奖励金额：</label>
+											{if !$teampjlevellist}<div class="layui-form-mid" style="color:red">未设置具有团队分红权限的{:t('会员')}等级，请先在[{:t('会员')}]-[等级及分销]设置</div>{/if}
+											{foreach $teampjlevellist as $level}
+											<div class="layui-input-inline layui-module-itemL">
+												<div> {$level.name}(元) </div>
+												<input type="text" name="teamfenhongpjdata2[{$level.id}][commission]" class="layui-input" value="{$teamfenhongpjdata2[$level['id']]['commission']}">
+											</div>
+											{/foreach}
+										</div>
+										</div>
+										{if getcustom('fenhong_score_percent')}
+										<div diandaSwitchMulti="info[teamfenhongpjset]" data-val="4" {if $info['teamfenhongpjset']!=4}style="display:none"{/if}>
+										<div class="layui-form-item">
+											<label class="layui-form-label">奖励{:t('积分')}比例：</label>
+											{if !$teampjlevellist}<div class="layui-form-mid" style="color:red">未设置具有团队分红权限的{:t('会员')}等级，请先在[{:t('会员')}]-[等级及分销]设置</div>{/if}
+											{foreach $teampjlevellist as $level}
+											<div class="layui-input-inline layui-module-itemL">
+												<div> {$level.name}(%) </div>
+												<input type="text" name="teamfenhongpjdata1[{$level.id}][score]" class="layui-input" value="{$teamfenhongpjdata1[$level['id']]['score']}">
+											</div>
+											{/foreach}
+										</div>
+										</div>
+										{/if}
+										{/if}
+										{if $auth_data=='all' || in_array('gdfenhong',$auth_data)}
+										<div class="layui-form-item">
+											<label class="layui-form-label">股东分红：</label>
+											<div class="layui-input-block" style="width:700px">
+												<input type="radio" name="info[gdfenhongset]" value="0" {if !$info['id'] || $info['gdfenhongset']==0}checked{/if} title="按照会员等级" lay-filter="gdfenhongset">
+												<input type="radio" name="info[gdfenhongset]" value="1" {if $info['gdfenhongset']==1}checked{/if} title="单独设置分红比例" lay-filter="gdfenhongset">
+												<input type="radio" name="info[gdfenhongset]" value="2" {if $info['gdfenhongset']==2}checked{/if} title="单独设置分红金额" lay-filter="gdfenhongset">
+												<input type="radio" name="info[gdfenhongset]" value="-1" {if $info['gdfenhongset']==-1}checked{/if} title="不参与分红" lay-filter="gdfenhongset">
+											</div>
+											<div class="layui-form-mid layui-word-aux">用于股东分红或合伙人分红，开启后相应等级的所有{:t('会员')}平均分摊设置的分红金额或比例</div>
+										</div>
+										{php}
+										$gdfenhongdata1 = json_decode($info['gdfenhongdata1'],true);
+										if(!$gdfenhongdata1) $gdfenhongdata1 = [];
+										$gdfenhongdata2 = json_decode($info['gdfenhongdata2'],true);
+										if(!$gdfenhongdata2) $gdfenhongdata2  = [];
+										{/php}
+										<div id="gdfenhongset1" {if $info['gdfenhongset']!=1}style="display:none"{/if}>
+											<div class="layui-form-item">
+												<label class="layui-form-label">分红比例：</label>
+												{if !$gdlevellist}<div class="layui-form-mid" style="color:red">未设置具有股东分红权限的{:t('会员')}等级，请先在[{:t('会员')}]-[等级及分销]设置</div>{/if}
+												{foreach $gdlevellist as $level}
+												<div class="layui-input-inline layui-module-itemL">
+													<div> {$level.name}(%) </div>
+													<input type="text" name="gdfenhongdata1[{$level.id}][commission]" class="layui-input" value="{$gdfenhongdata1[$level['id']]['commission']}">
+												</div>
+												{/foreach}
+											</div>
+										</div>
+										<div id="gdfenhongset2" {if $info['gdfenhongset']!=2}style="display:none"{/if}>
+											<div class="layui-form-item">
+												<label class="layui-form-label">分红金额：</label>
+												{if !$gdlevellist}<div class="layui-form-mid" style="color:red">未设置具有股东分红权限的{:t('会员')}等级，请先在[{:t('会员')}]-[等级及分销]设置</div>{/if}
+												{foreach $gdlevellist as $level}
+												<div class="layui-input-inline layui-module-itemL">
+													<div> {$level.name}(元) </div>
+													<input type="text" name="gdfenhongdata2[{$level.id}][commission]" class="layui-input" value="{$gdfenhongdata2[$level['id']]['commission']}">
+												</div>
+												{/foreach}
+											</div>
+										</div>
+										{/if}
+										{if $auth_data=='all' || in_array('areafenhong',$auth_data)}
+										<div class="layui-form-item" style="display:none">
+											<label class="layui-form-label">区域代理分红：</label>
+											<div class="layui-input-block" style="width:700px">
+												<input type="radio" name="info[areafenhongset]" value="0" {if !$info['id'] || $info['areafenhongset']==0}checked{/if} title="按照会员等级" lay-filter="areafenhongset">
+												<input type="radio" name="info[areafenhongset]" value="1" {if $info['areafenhongset']==1}checked{/if} title="单独设置分红比例" lay-filter="areafenhongset">
+												<input type="radio" name="info[areafenhongset]" value="2" {if $info['areafenhongset']==2}checked{/if} title="单独设置分红金额" lay-filter="areafenhongset">
+												<input type="radio" name="info[areafenhongset]" value="-1" {if $info['areafenhongset']==-1}checked{/if} title="不参与分红" lay-filter="areafenhongset">
+											</div>
+											<div class="layui-form-mid layui-word-aux">设置分红比例或分红金额后该等级的同一个代理区域的人平均分摊所有商城内该区域的订单的分红提成比例或分红金额</div>
+										</div>
+										{php}
+										$areafenhongdata1 = json_decode($info['areafenhongdata1'],true);
+										if(!$areafenhongdata1) $areafenhongdata1 = [];
+										$areafenhongdata2 = json_decode($info['areafenhongdata2'],true);
+										if(!$areafenhongdata2) $areafenhongdata2  = [];
+										{/php}
+										<div id="areafenhongset1" {if $info['areafenhongset']!=1}style="display:none"{/if}>
+											<div class="layui-form-item">
+												<label class="layui-form-label">分红比例：</label>
+												{if !$areafhlevellist}<div class="layui-form-mid" style="color:red">未设置具有区域代理分红权限的{:t('会员')}等级，请先在[{:t('会员')}]-[等级及分销]设置</div>{/if}
+												{foreach $areafhlevellist as $level}
+												<div class="layui-input-inline layui-module-itemL">
+													<div> {$level.name}(%) </div>
+													<input type="text" name="areafenhongdata1[{$level.id}][commission]" class="layui-input" value="{$areafenhongdata1[$level['id']]['commission']}">
+												</div>
+												{/foreach}
+											</div>
+										</div>
+										<div id="areafenhongset2" {if $info['areafenhongset']!=2}style="display:none"{/if}>
+											<div class="layui-form-item">
+												<label class="layui-form-label">分红金额：</label>
+												{if !$areafhlevellist}<div class="layui-form-mid" style="color:red">未设置具有区域代理分红权限的{:t('会员')}等级，请先在[{:t('会员')}]-[等级及分销]设置</div>{/if}
+												{foreach $areafhlevellist as $level}
+												<div class="layui-input-inline layui-module-itemL">
+													<div> {$level.name}(元) </div>
+													<input type="text" name="areafenhongdata2[{$level.id}][commission]" class="layui-input" value="{$areafenhongdata2[$level['id']]['commission']}">
+												</div>
+												{/foreach}
+											</div>
+										</div>
+										{/if}
+									</div>
+									{/if}
+								
+
+									<div class="layui-form-item">
+										<label class="layui-form-label">预定条件：</label>
+										<div class="layui-input-inline" style="width:800px">
+											<input type="checkbox" name="info[gettj][]" value="-1" title="所有人" lay-skin="primary" {if !$info['id'] || in_array('-1',$info['gettj'])}checked{/if} lay-filter="gettjset"/>
+											<input type="checkbox" name="info[gettj][]" value="0" title="关注用户" lay-skin="primary" {if in_array('0',$info['gettj'])}checked{/if}/>
+											{foreach $levellist as $v}
+											<input type="checkbox" name="info[gettj][]" value="{$v.id}" title="{$v.name}" lay-skin="primary" {if in_array($v['id'],$info['gettj'])}checked{/if}/>
+											{/foreach}
+										</div>
+									</div>
+									<div id="gettjset" {if !$info['id'] || in_array('-1',$info['gettj'])}style="display:none"{/if}>
+										<div class="layui-form-item">
+											<div class="layui-form-label">无权限提示：</div>
+											<div class="layui-input-inline">
+												<input class="layui-input" name="info[gettjtip]" value="{if !$info['id']}您没有权限预定{else}{$info.gettjtip}{/if}"/>
+											</div>
+											<div class="layui-form-mid"></div>
+										</div>
+										<div class="layui-form-item">
+											<div class="layui-form-label">无权限跳转：</div>
+											<div class="layui-input-inline">
+												<input class="layui-input" name="info[gettjurl]" value="{$info.gettjurl}" id="gettjurl"/>
+											</div>
+											<div class="layui-btn layui-btn-primary" style="float:left" onclick="chooseUrl2('gettjurl')">选择链接</div>
+										</div>
+									</div>
+								
+									<div class="layui-form-item">
+										<label class="layui-form-label">序号：</label>
+										<div class="layui-input-inline">
+											<input type="text" name="info[sort]" value="{$info.sort|default=0}" class="layui-input">
+										</div>
+										<div class="layui-form-mid layui-word-aux">用于排序,越大越靠前</div>
+									</div>
+
+									<div class="layui-form-item">
+										<label class="layui-form-label">状态：</label>
+										<div class="layui-input-inline">
+											<input type="radio" name="info[status]" value="1" title="上架" {if !$info['id'] || $info['status']==1}checked{/if}/>
+											<input type="radio" name="info[status]" value="0" title="下架" {if $info['id'] && $info['status']==0}checked{/if}/>
+										</div>
+									</div>
+									
+									<div class="layui-form-item">
+										<label class="layui-form-label"></label>
+										<div class="layui-input-block">
+											<button class="layui-btn layui-btn-normal" onclick="gonext(2)">下一步:编辑房型详情</button>
+											<button class="layui-btn layui-btn-danger" lay-submit lay-filter="formsubmit">提 交</button>
+										</div>
+									</div>
+
+								</div>
+								<div class="layui-tab-item">
+									<!-- 详情编辑器 -->
+									<?php 
+									$pagetitle='房型详情';
+									$pagedata= $info['detail'] && json_decode($info['detail']) ? $info['detail'] : '[{"id":"M0000000000000","temp":"richtext","params":{bgcolor:"#FFFFFF",margin_x:"0",margin_y:"5",padding_x:"10",padding_y:"10","quanxian":{"all":true},"platform":{"all":true}},"data":"","other":"","content":""}]';
+									?>
+									{include file="designer_page/designer_editor" /}
+									<div class="layui-form-item">
+										<div class="layui-input-block">
+											<button class="layui-btn layui-btn-normal" onclick="gonext(1)">上一步:编辑基本信息</button>
+											<button class="layui-btn layui-btn-danger" lay-submit lay-filter="formsubmit">提 交</button>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+  </div>
+
+	<script>
+	tag = "{$info['tag']}";
+	
+	if(tag.length  ==  0){
+		tagArr = [];
+	}else{
+		tagArr = tag.split(',');
+	}
+	
+	console.log(tagArr);
+	
+    layui.config({base: '__STATIC__/admin/js/',}).use(['inputTags'], function() {
+				var inputTags = layui.inputTags;
+				var tag = inputTags.render({
+					elem: '#inputTags', //定义输入框input对象
+					content: tagArr, //默认标签
+					num:6,//限制标签数量
+					done: function(value) { //回车后的回调
+						 
+						tagdata = tag.config.content
+						// 数组转逗号分割字符串
+						tagdata = tagdata.join(',');
+						console.log(tagdata);
+						$("input[name='info[tag]']").val(tagdata);
+					}
+				})
+				 
+	})
+
+
+	layui.form.on('radio(commissionset)', function(data){
+		if(data.value == '1'){
+			$('#commissionset1').show();
+			$('#commissionset2').hide();
+			$('#commissionset3').hide();
+		}else if(data.value == '2'){
+			$('#commissionset1').hide();
+			$('#commissionset2').show();
+			$('#commissionset3').hide();
+		}else if(data.value == '3'){
+			$('#commissionset1').hide();
+			$('#commissionset2').hide();
+			$('#commissionset3').show();
+		}else{
+			$('#commissionset1').hide();
+			$('#commissionset2').hide();
+			$('#commissionset3').hide();
+		}
+	});
+	layui.form.on('radio(fenhongset)', function(data){
+		if(data.value == '1'){
+			$('#fenhongset').show();
+		}else{
+			$('#fenhongset').hide();
+		}
+	})
+	layui.form.on('radio(daypriceset)', function(data){
+		if(data.value == '1'){
+			$('#daypriceset').show();
+		}else{
+			$('#daypriceset').hide();
+		}
+	})
+	layui.form.on('radio(lvpriceset)', function(data){
+		if(data.value == '1'){
+			$('.lvpriceset').show();
+		}else{
+			$('.lvpriceset').hide();
+		}
+	})
+	layui.form.on('radio(teamfenhongset)', function(data){
+		if(data.value == '1'){
+			$('#teamfenhongset1').show();
+			$('#teamfenhongset2').hide();
+		}else if(data.value == '2'){
+			$('#teamfenhongset1').hide();
+			$('#teamfenhongset2').show();
+		}else{
+			$('#teamfenhongset1').hide();
+			$('#teamfenhongset2').hide();
+		}
+	})
+	layui.form.on('radio(gdfenhongset)', function(data){
+		if(data.value == '1'){
+			$('#gdfenhongset1').show();
+			$('#gdfenhongset2').hide();
+		}else if(data.value == '2'){
+			$('#gdfenhongset1').hide();
+			$('#gdfenhongset2').show();
+		}else{
+			$('#gdfenhongset1').hide();
+			$('#gdfenhongset2').hide();
+		}
+	})
+	layui.form.on('radio(areafenhongset)', function(data){
+		if(data.value == '1'){
+			$('#areafenhongset1').show();
+			$('#areafenhongset2').hide();
+		}else if(data.value == '2'){
+			$('#areafenhongset1').hide();
+			$('#areafenhongset2').show();
+		}else{
+			$('#areafenhongset1').hide();
+			$('#areafenhongset2').hide();
+		}
+	})
+
+	layui.form.on('radio(serviceChange)', function(data){
+		if(data.value == '1'){
+			$('#servicediv').show();
+		}else{
+			$('#servicediv').hide();
+		}
+	})
+	layui.form.on('submit(formsubmit)', function(obj){
+		var field = obj.field
+		//field['info[detail]'] = ueditor.getContent();
+		field['info[detail]'] = geteditordata();
+		//console.log(field);return;
+		var index = layer.load();
+		$.post("{:url('save')}",field,function(data){
+			layer.close(index);
+			dialog(data.msg,data.status);
+			if(data.status == 1){
+				setTimeout(function(){
+					parent.layer.closeAll();
+					parent.tableIns.reload()
+				},1000)
+			}
+		})
+	})
+	layui.form.on('radio(yajinset)', function(data){
+		if(data.value == '1'){
+			$('#yajinset').show();
+		}else if(data.value == '2'){
+			$('#yajinset').show();
+		}else{
+			$('#yajinset').hide();
+		}
+	})
+
+	layui.form.on('checkbox(gettjset)', function(data){
+		console.log(data)
+		if(data.elem.checked){
+			$('#gettjset').hide();
+		}else{
+			$('#gettjset').show();
+		}
+	});
+	var chooseUrlField = '';
+	function chooseUrl2(field){
+		chooseUrlField = field;
+		layer.open({type:2,shadeClose:true,area:['1200px', '650px'],'title':'选择链接',content:"{:url('DesignerPage/chooseurl')}&callback=chooseLink2"})
+	}
+	function chooseLink2(urlname,url){
+		$("#"+chooseUrlField).val(url);
+	}
+  </script>
+	{include file="public/copyright"/}
+</body>
+</html>

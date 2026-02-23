@@ -1,0 +1,485 @@
+<?php /*a:3:{s:63:"/www/wwwroot/gdqshop.cn/app/view/product_qrcode/statistics.html";i:1768361017;s:48:"/www/wwwroot/gdqshop.cn/app/view/public/css.html";i:1747926690;s:47:"/www/wwwroot/gdqshop.cn/app/view/public/js.html";i:1747926690;}*/ ?>
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>扫码统计</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  <link rel="stylesheet" type="text/css" href="/static/admin/layui/css/layui.css?v=20200519" media="all">
+<link rel="stylesheet" type="text/css" href="/static/admin/layui/css/modules/formSelects-v4.css?v=20200516" media="all">
+<link rel="stylesheet" type="text/css" href="/static/admin/css/admin.css?v=202406" media="all">
+<link rel="stylesheet" type="text/css" href="/static/admin/css/font-awesome.min.css?v=20200516" media="all">
+<link rel="stylesheet" type="text/css" href="/static/admin/webuploader/webuploader.css?v=<?php echo time(); ?>" media="all">
+<link rel="stylesheet" type="text/css" href="/static/admin/css/designer.css?v=202410" media="all">
+<link rel="stylesheet" type="text/css" href="/static/fonts/iconfont.css?v=20201218" media="all">
+  <style>
+    .stats-container {
+      margin: 20px 0;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    .stats-card {
+      background-color: white;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      padding: 20px;
+      text-align: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .stats-number {
+      font-size: 36px;
+      font-weight: bold;
+      color: #1890ff;
+      margin-bottom: 10px;
+    }
+    .stats-label {
+      font-size: 14px;
+      color: #666;
+    }
+    .chart-section {
+      background-color: white;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .chart-title {
+      font-size: 16px;
+      font-weight: bold;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .chart-container {
+      width: 100%;
+      height: 400px;
+    }
+  </style>
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+      <div class="layui-card layui-col-md12">
+        <div class="layui-card-header">
+          扫码统计
+          <a href="<?php echo url('ProductQrcode/index'); ?>" class="layui-btn layui-btn-sm layui-btn-primary" style="float: right;">返回列表</a>
+        </div>
+        <div class="layui-card-body" pad15>
+          <!-- 统计概览 -->
+          <div class="stats-container">
+            <div class="stats-grid">
+              <div class="stats-card">
+                <div class="stats-number" id="totalScans">0</div>
+                <div class="stats-label">总扫码次数</div>
+              </div>
+              <div class="stats-card">
+                <div class="stats-number" id="todayScans">0</div>
+                <div class="stats-label">今日扫码次数</div>
+              </div>
+              <div class="stats-card">
+                <div class="stats-number" id="weekScans">0</div>
+                <div class="stats-label">本周扫码次数</div>
+              </div>
+              <div class="stats-card">
+                <div class="stats-number" id="monthScans">0</div>
+                <div class="stats-label">本月扫码次数</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 图表区域 -->
+          <div class="chart-section">
+            <div class="chart-title">扫码趋势（最近30天）</div>
+            <div class="chart-container" id="trendChart"></div>
+          </div>
+          
+          <div class="chart-section">
+            <div class="chart-title">扫码平台分布</div>
+            <div class="chart-container" id="platformChart"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script type="text/javascript" src="/static/admin/layui/layui.all.js?v=20210226"></script>
+<script type="text/javascript" src="/static/admin/layui/lay/modules/flow.js?v=1"></script>
+<script type="text/javascript" src="/static/admin/layui/lay/modules/formSelects-v4.js"></script>
+<script type="text/javascript" src="/static/admin/js/jquery-ui.min.js?v=20200228"></script>
+<script type="text/javascript" src="/static/admin/ueditor/ueditor.js?v=20220707"></script>
+<script type="text/javascript" src="/static/admin/ueditor/135editor.js?v=20200228"></script>
+<script type="text/javascript" src="/static/admin/webuploader/webuploader.js?v=2024"></script>
+<script type="text/javascript" src="/static/admin/js/qrcode.min.js?v=20200228"></script>
+<script type="text/javascript" src="/static/admin/js/dianda.js?v=2022"></script>
+<script type="text/javascript" src="/static/admin/js/inputTags.js?v=2026"></script>
+
+<div id="NewsToolBox"></div>
+<script type="text/javascript">
+		// 解释文字浮层展示
+		$('.layui-text-popover').mouseenter(function(){
+			let pageHeight = $(window).height() + $(document).scrollTop();
+			let bottom = pageHeight - $(this).offset().top
+			let topNum = ($(this).offset().top - $(document).scrollTop()).toFixed(2);
+			let Height = $(this).find('.layui-textpopover-div').outerHeight();
+			$(this).find('.layui-textpopover-div').show()
+			let that = this;
+			setTimeout(function(){
+				if(topNum < (Height/2-15)){
+					$(that).find('.layui-textpopover-div').css({'top':-topNum+10+'px','opacity':1,'transition':'opacity .3s'})	
+				}else if(bottom < (Height/2-15)){
+					$(that).find('.layui-textpopover-div').css({'top': bottom-Height-10 +'px','opacity':1,'transition':'opacity .3s'})	
+				}else{
+					$(that).find('.layui-textpopover-div').css({'top':-(Height/2-15)+'px','opacity':1,'transition':'opacity .3s'})	
+				}
+			},100)
+		}) 
+		$('.layui-text-popover').mouseleave(function(){
+			$(this).find('.layui-textpopover-div').css({'opacity':0})	
+			$(this).find('.layui-textpopover-div').hide()
+		}) 
+		$('.layui-textpopover-div').mouseenter(function(){
+			$(this).find('.layui-textpopover-div').show()
+		})
+		$('.layui-textpopover-div').mouseleave(function(){
+			$(this).find('.layui-textpopover-div').css({'opacity':0})
+			$(this).find('.layui-textpopover-div').hide()
+		})
+		// 图片浮层展示 示例
+		$('.layui-popover').mouseenter(function(){
+			let pageHeight = $(window).height() + $(document).scrollTop();
+			let bottom = pageHeight - $(this).offset().top
+			let topNum = ($(this).offset().top - $(document).scrollTop()).toFixed(2);
+			let Height = $(this).find('.layui-popover-div').outerHeight();
+			$(this).find('.layui-popover-div').show()
+			let that = this;
+			setTimeout(function(){
+				if(topNum < (Height/2-15)){
+					$(that).find('.layui-popover-div').css({'top':-topNum+10+'px','opacity':1,'transition':'opacity .3s'})	
+				}else if(bottom < (Height/2-15)){
+					$(that).find('.layui-popover-div').css({'top': bottom-Height-10 +'px','opacity':1,'transition':'opacity .3s'})	
+				}else{
+					$(that).find('.layui-popover-div').css({'top':-(Height/2-15)+'px','opacity':1,'transition':'opacity .3s'})	
+				}
+			},100)
+		}) 
+		$('.layui-popover').mouseleave(function(){
+			$(this).find('.layui-popover-div').css({'opacity':0})	
+			$(this).find('.layui-popover-div').hide()
+		}) 
+    function copyText(text) {
+        var top = document.documentElement.scrollTop;
+        var textarea = document.createElement("textarea"); //创建input对象
+        var currentFocus = document.activeElement; //当前获得焦点的元素
+        var toolBoxwrap = document.getElementById('NewsToolBox'); //将文本框插入到NewsToolBox这个之后
+        toolBoxwrap.appendChild(textarea); //添加元素
+        textarea.value = text;
+        textarea.focus();
+        document.documentElement.scrollTop = top;
+        if (textarea.setSelectionRange) {
+            textarea.setSelectionRange(0, textarea.value.length); //获取光标起始位置到结束位置
+        } else {
+            textarea.select();
+        }
+        try {
+            var flag = document.execCommand("copy"); //执行复制
+        } catch (eo) {
+            var flag = false;
+        }
+        toolBoxwrap.removeChild(textarea); //删除元素
+        currentFocus.focus();
+        if(flag) layer.msg('复制成功');
+        return flag;
+    }
+		// 查看链接
+		function viewLink(path,url=''){
+			var pagepath = path;
+			if(!url){
+				var url = "<?php echo m_url('"+pagepath+"'); ?>"; //拼接 H5 链接
+			}
+			<?php if(!in_array('mp',$platform)): ?>
+				showwxqrcode(pagepath);
+				return;
+			<?php endif; ?>
+			var html = '';
+			html+='<div style="margin:20px">';
+			html+='	<div style="width:100%;margin:10px 0" id="urlqr"></div>';
+			<?php if(in_array('wx',$platform)): ?>
+			html+='	<div style="width:100%;text-align:center"><button class="layui-btn layui-btn-sm layui-btn-primary" onclick="showwxqrcode(\''+pagepath+'\')">查看小程序码</button></div>';
+			<?php endif; ?>
+			html+='	<div style="line-height:25px;"><div><span style="width: 70px;display: inline-block;">链接地址：</span><button class="layui-btn layui-btn-xs layui-btn-primary" onclick="copyText(\''+url+'\')">复制</button></div><div>'+url+'</div></div>';
+			html+='	<div style="height:50px;line-height:25px;"><div><span style="width: 70px;display: inline-block;">页面路径：</span><button style="box-sizing: border-box;" class="layui-btn layui-btn-xs layui-btn-primary" onclick="copyText(\'/'+pagepath+'\')">复制</button></div><div>/'+pagepath+'</div></div>';
+			html+='</div>';
+			layer.open({type:1,'title':'查看链接',area:['500px','430px'],shadeClose:true,'content':html})
+			var qrcode = new QRCode('urlqr', {
+					text: 'your content',
+					width: 200,
+					height: 200,
+					colorDark : '#000000',
+					colorLight : '#ffffff',
+					correctLevel : QRCode.CorrectLevel.L
+				});
+				qrcode.clear();
+				qrcode.makeCode(url);
+		}
+		// 查看小程序码
+		function showwxqrcode(pagepath){
+			var index = layer.load();
+			$.post("<?php echo url('DesignerPage/getwxqrcode'); ?>",{path:pagepath},function(res){
+				layer.close(index);
+				if(res.status==0){
+					layer.open({type:1,area:['300px','350px'],content:'<div style="margin:auto auto;text-align:center"><div style="color:red;width:280px;height:180px;margin-top:100px">'+res.msg+'</div><div style="height:25px;line-height:25px;">'+'/'+pagepath+'</div></div>',title:false,shadeClose:true})
+				}else{
+					layer.open({type:1,area:['300px','350px'],content:'<div style="margin:auto auto;text-align:center"><img src="'+res.url+'" style="margin-top:20px;max-width:280px;max-height:280px"/><div style="height:25px;line-height:25px;">'+'/'+pagepath+'</div></div>',title:false,shadeClose:true})
+				}
+			})
+		}
+</script>
+<!-------使用js导出excel文件--------->
+<script src="/static/admin/excel/excel.js?v=2024"></script>
+<script src="/static/admin/excel/layui_exts/excel.js"></script>
+<script>
+
+    var excel = new Excel();
+    var excel_name = '<?php echo $excel_name; ?>';
+    excel.bind(function (data,title) {
+        var excel_field = JSON.parse('<?php echo $excel_field; ?>');
+        if(title && title!=undefined){
+            //接口返回的title
+            var excel_title = title;
+        }else{
+            //excel_field.php 配置的title
+            var excel_title = JSON.parse('<?php echo $excel_title; ?>');
+        }
+        if(!excel_title || excel_title.length<=0){
+            //上面两种都没有title,读取table表格cols中的title，同时filed也更新为table表格cols中的field
+            excel_title = [];
+            excel_field = [];
+            var cols = tableIns.config.cols;
+            cols.forEach(function (cols_item, cols_index) {
+                console.log(cols_item);
+                cols_item.forEach(function (cols_item2, cols_index2) {
+                    console.log(cols_item2);
+                    if(cols_item2.title){
+                        excel_title.push(cols_item2.title)
+                        excel_field.push(cols_item2.field)
+                    }
+                })
+            })
+        }
+        // if(!excel_title || excel_title.length<=0){
+        //     layer.msg('未设置标题');
+        //     return;
+        // }
+
+        // 设置表格内容
+        data.forEach(function (item, index) {
+            var _data = [];
+            excel_title.forEach(function (title, index2) {
+                var field = excel_field[index2];
+                if(item[field] && item[field]!=undefined){
+                    //有filed 匹配field
+                    var field_val = item[field];
+                    //是整数 长度为10 字段名包含time 判定为时间戳
+                    if(parseInt(field_val) == field_val && (field_val.toString()).length==10 && field.includes('time')){
+                        field_val = date('Y-m-d H:i:s',field_val);
+                    }
+                }else{
+                    //没有filed 根据顺序来
+                    var field_val = item[index2];
+                }
+                _data.push(field_val);
+            })
+            data[index] = _data;
+        });
+        // 设置表头内容
+        if(excel_title && excel_title.length>0){
+            data.unshift(excel_title);
+        }
+        // 应用表格样式
+        return this.withStyle(data);
+
+    }, excel_name+layui.util.toDateString(Date.now(), '_yyyyMMdd_HHmmss'));
+
+</script>
+  <!-- 引入ECharts -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+  <script>
+    layui.use(['layer', 'jquery'], function() {
+      var layer = layui.layer;
+      var $ = layui.jquery;
+      
+      // 初始化图表
+      var trendChart = echarts.init(document.getElementById('trendChart'));
+      var platformChart = echarts.init(document.getElementById('platformChart'));
+      
+      // 加载统计数据
+      function loadStatsData() {
+        layer.load(2);
+        
+        // 这里应该通过AJAX请求获取实际的统计数据
+        // 目前使用模拟数据
+        var mockData = {
+          total: 1250,
+          today: 86,
+          week: 324,
+          month: 956,
+          trend: {
+            dates: Array.from({length: 30}, function(v, i) {
+              return new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            }),
+            counts: Array.from({length: 30}, function(v, i) {
+              return Math.floor(Math.random() * 50) + 10;
+            })
+          },
+          platform: {
+            '微信小程序': 720,
+            'H5': 280,
+            '支付宝小程序': 150,
+            '百度小程序': 100
+          }
+        };
+        
+        setTimeout(function() {
+          layer.closeAll('loading');
+          updateStats(mockData);
+        }, 500);
+      }
+      
+      // 更新统计数据
+      function updateStats(data) {
+        // 更新统计数字
+        $('#totalScans').text(data.total);
+        $('#todayScans').text(data.today);
+        $('#weekScans').text(data.week);
+        $('#monthScans').text(data.month);
+        
+        // 更新趋势图表
+        updateTrendChart(data.trend);
+        
+        // 更新平台分布图表
+        updatePlatformChart(data.platform);
+      }
+      
+      // 更新趋势图表
+      function updateTrendChart(trendData) {
+        var option = {
+          tooltip: {
+            trigger: 'axis',
+            axisPointer: {
+              type: 'cross',
+              label: {
+                backgroundColor: '#6a7985'
+              }
+            }
+          },
+          legend: {
+            data: ['扫码次数']
+          },
+          grid: {
+            left: '3%',
+            right: '4%',
+            bottom: '3%',
+            containLabel: true
+          },
+          xAxis: {
+            type: 'category',
+            boundaryGap: false,
+            data: trendData.dates
+          },
+          yAxis: {
+            type: 'value'
+          },
+          series: [
+            {
+              name: '扫码次数',
+              type: 'line',
+              stack: 'Total',
+              smooth: true,
+              lineStyle: {
+                width: 3,
+                color: '#1890ff'
+              },
+              areaStyle: {
+                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                  { offset: 0, color: 'rgba(24, 144, 255, 0.3)' },
+                  { offset: 1, color: 'rgba(24, 144, 255, 0.1)' }
+                ])
+              },
+              emphasis: {
+                focus: 'series'
+              },
+              data: trendData.counts
+            }
+          ]
+        };
+        
+        trendChart.setOption(option);
+      }
+      
+      // 更新平台分布图表
+      function updatePlatformChart(platformData) {
+        var option = {
+          tooltip: {
+            trigger: 'item',
+            formatter: '{a} <br/>{b}: {c} ({d}%)'
+          },
+          legend: {
+            orient: 'vertical',
+            left: 10,
+            data: Object.keys(platformData)
+          },
+          series: [
+            {
+              name: '扫码平台',
+              type: 'pie',
+              radius: ['40%', '70%'],
+              avoidLabelOverlap: false,
+              itemStyle: {
+                borderRadius: 10,
+                borderColor: '#fff',
+                borderWidth: 2
+              },
+              label: {
+                show: false,
+                position: 'center'
+              },
+              emphasis: {
+                label: {
+                  show: true,
+                  fontSize: 20,
+                  fontWeight: 'bold'
+                }
+              },
+              labelLine: {
+                show: false
+              },
+              data: Object.keys(platformData).map(function(key) {
+                return {
+                  value: platformData[key],
+                  name: key
+                };
+              })
+            }
+          ]
+        };
+        
+        platformChart.setOption(option);
+      }
+      
+      // 响应式处理
+      window.addEventListener('resize', function() {
+        trendChart.resize();
+        platformChart.resize();
+      });
+      
+      // 初始化加载数据
+      loadStatsData();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,249 @@
+<!--custom_file(map_mark)-->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>修改记录</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  {include file="public/css"/}
+	<style>
+		.layui-form-label{width:130px!important}
+		.alert{
+			position: fixed;
+			height: 100%;
+			width: 100%;
+			top: 0;
+			left: 0;
+			z-index: 5;
+			display: none;
+			background: rgba(0, 0, 0, 0.7);
+		}
+		.alert_container{
+			position: absolute;
+			height: 100%;
+			width: 100%;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+		.alert_module{
+			padding: 15px;
+			border-radius: 5px;
+			background: #fff;
+		}
+		.alert_title{
+			font-size: 18px;
+			color: #303133;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+		}
+		.alert_content{
+			width: 650px;
+			padding: 15px 0;
+			display: flex;
+		}
+		.alert_area{
+			flex: 1;
+			height: 400px;
+			overflow-y: scroll;
+		}
+		.alert_item{
+			font-size: 14px;
+			color: #333;
+			padding: 0 15px;
+			display: flex;
+			cursor: pointer;
+			min-width: 0;
+			align-items: center;
+		}
+		.alert_icon{
+			height: 18px;
+			width: 18px;
+			box-sizing: border-box;
+			border-radius: 4px;
+			border: 1px solid;
+			background: #fff;
+			border-color: #c9c9c9;
+		}
+		.alert_active{
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			background: #1e9fff;
+			border-color: #1e9fff;
+		}
+		.alert_text{
+			flex: 1;
+			padding: 10px;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+			min-width: 0;
+		}
+		.alert_item:hover{
+			background: #ebf5ff;
+		}
+		.alert_close{
+			cursor: pointer;
+		}
+		.alert_close:hover{
+			color: #1e9fff;
+		}
+		.alert_opt{
+			position: relative;
+			display: flex;
+			justify-content: flex-end;
+		}
+		.alert_opt button{
+			margin-left: 10px;
+		}
+		::-webkit-scrollbar {
+			width: 10px;
+			height: 10px;
+			background-color: #fff;
+			border-radius: 5px;
+		}
+		::-webkit-scrollbar-thumb {
+			background-color: silver;
+			border-radius: 5px;
+		}
+		::-webkit-scrollbar-track {
+			background-color: #fff;
+		}
+
+		.area{
+			position: relative;
+			display: flex;
+		}
+		.area_module{
+			padding: 5px 10px;
+			border-width: 1px;
+			border-style: solid;
+			border-color: #e6e6e6;
+			background-color: #fff;
+			border-radius: 2px;
+			display: flex;
+			align-items: center;
+			font-size: 14px;
+			cursor: pointer;
+		}
+		.area_content{
+			min-width: 150px;
+			display: flex;
+			color: #c9c9c9;
+			flex-wrap: wrap;
+		}
+		.area_item{
+			padding: 2px 10px;
+			background: #009688;
+			color: #fff;
+			display: flex;
+			align-items: center;
+			border-radius: 2px;
+			font-size: 14px;
+			margin: 2.5px;
+		}
+		.layui-input-inline{
+			height:38px;
+			line-height: 38px;
+		}
+	</style>
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+			<div class="layui-card layui-col-md12">
+				<div class="layui-card-header"><i class="fa fa-edit"></i> 修改记录<i class="layui-icon layui-icon-close" style="font-size:18px;font-weight:bold;cursor:pointer" onclick="closeself()"></i></div>
+        <div class="layui-card-body" pad15>
+					<div class="layui-form" lay-filter="form">
+						<input type="hidden" name="info[id]" value="{$info.id}"/>
+						<div class="layui-tab layui-tab-brief" lay-filter="mytab">
+							<ul class="layui-tab-title">
+								<li class="layui-this" lay-id="1">基本信息</li>
+							</ul>
+						<div class="layui-tab-content">
+						<!--基本信息start-->
+							<div class="layui-form-item">
+								<label class="layui-form-label">会员</label>
+								<div class="layui-input-inline">
+									{$info.mid}({$info.nickname})
+								</div>
+							</div>
+							<div class="layui-form-item">
+								<label class="layui-form-label">申请地图</label>
+								<div class="layui-input-inline">
+									{$info.map_name}
+								</div>
+							</div>
+
+							<div class="layui-form-item">
+								<label class="layui-form-label">支付状态</label>
+								<div class="layui-input-inline">
+									{if condition="$info['status'] eq 1"}
+									<span style="color: #0BB20C">已支付</span>
+									{else}
+									<span style="color: red">未支付</span>
+									{/if}
+								</div>
+							</div>
+							<div class="layui-form-item">
+								<label class="layui-form-label">支付费用</label>
+								<div class="layui-input-inline">
+									{$info.paynum}
+								</div>
+							</div>
+
+							<div class="layui-form-item">
+								<label class="layui-form-label">标注状态</label>
+								<div class="layui-input-inline">
+									<select name="info[mark_status]">
+										<option value="0">审核中</option>
+										<option value="1">审核通过</option>
+										<option value="2">审核拒绝</option>
+									</select>
+								</div>
+							</div>
+							<div class="layui-form-item">
+								<label class="layui-form-label">备注</label>
+								<div class="layui-input-inline">
+									<input type="text" name="info[remark]" class="layui-input" value="{$info.remark}">
+								</div>
+							</div>
+  						</div>
+					</div>
+						<div class="layui-form-item">
+							<label class="layui-form-label"></label>
+							<div class="layui-input-block">
+								<button class="layui-btn" lay-submit lay-filter="formsubmit">提 交</button>
+							</div>
+						</div>
+					</div>
+			   </div>
+			</div>
+		</div>
+	</div>
+</div>
+</div>
+  {include file="public/js"/}
+	<script>
+		layui.form.on('submit(formsubmit)', function(obj){
+			var field = obj.field
+			var index = layer.load();
+			$.post("{:url('save')}",field,function(data){
+				layer.close(index);
+				dialog(data.msg,data.status);
+				if(data.status == 1){
+					setTimeout(function(){
+						parent.layer.closeAll();
+						parent.tableIns.reload()
+					},1000)
+				}
+			})
+		})
+  </script>
+	{include file="public/copyright"/}
+</body>
+</html>

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>{$cfg['title']} - {$title}</title>
+    {include file="public/css"/}
+</head>
+<body>
+    <div class="layui-fluid">
+        <div class="layui-row layui-col-space15">
+            <div class="layui-card layui-col-md12">
+                <div class="layui-card-header">
+                    <i class="fa fa-list"></i> {$title}
+                </div>
+                <div class="layui-card-body" pad15>
+                    <!-- 搜索区域 -->
+                    <form class="layui-form" style="margin-bottom: 15px;">
+                        <div class="layui-form-item">
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('商品名称')}：</label>
+                                <div class="layui-input-inline" style="width: 200px;">
+                                    <input type="text" name="proname" id="proname" placeholder="{:t('请输入商品名称')}" class="layui-input">
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('开始日期')}：</label>
+                                <div class="layui-input-inline">
+                                    <input type="date" name="start_date" id="start_date" class="layui-input" value="{:date('Y-m-d')}">
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <label class="layui-form-label">{:t('结束日期')}：</label>
+                                <div class="layui-input-inline">
+                                    <input type="date" name="end_date" id="end_date" class="layui-input" value="{:date('Y-m-d')}">
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <button type="button" class="layui-btn layui-btn-primary" id="searchBtn">
+                                    <i class="fa fa-search"></i> {:t('搜索')}
+                                </button>
+                                <button type="button" class="layui-btn layui-btn-primary" id="resetBtn">
+                                    <i class="fa fa-refresh"></i> {:t('重置')}
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                    
+                    <!-- 出库记录列表 -->
+                    <table class="layui-hide" id="outboundLogTable" lay-filter="outboundLogTable"></table>
+                    
+                    <!-- 状态列 -->
+                    <script type="text/html" id="typeTpl">
+                        {{#  if(d.type == 'in'){ }}
+                            <span class="layui-badge layui-bg-green">{:t('入库')}</span>
+                        {{#  } else { }}
+                            <span class="layui-badge layui-bg-orange">{:t('出库')}</span>
+                        {{#  } }}
+                    </script>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部脚本 -->
+    {include file="public/js"/}
+    
+    <script>
+        layui.use(['table', 'form', 'layer'], function() {
+            var table = layui.table;
+            var form = layui.form;
+            var layer = layui.layer;
+            
+            // 渲染表单
+            form.render();
+            
+            // 渲染表格
+            var tableIns = table.render({
+                elem: '#outboundLogTable',
+                url: '{:url("BarcodeInventory/outbound_log")}',
+                page: true,
+                limit: 10,
+                limits: [10, 20, 30, 50],
+                cols: [[
+                    {field: 'id', title: 'ID', width: 80, sort: true},
+                    {field: 'ordernum', title: '{:t('出库单号')}', width: 200},
+                    {field: 'pro_name', title: '{:t('商品名称')}', minWidth: 150},
+                    {field: 'gg_name', title: '{:t('商品规格')}', minWidth: 150},
+                    {field: 'num', title: '{:t('数量')}', width: 100, sort: true},
+                    {field: 'type', title: '{:t('类型')}', width: 100, templet: '#typeTpl'},
+                    {field: 'price', title: '{:t('单价')}', width: 100, templet: function(d) { return d.price.toFixed(2); }},
+                    {field: 'createtime', title: '{:t('出库时间')}', width: 180, sort: true},
+                    {field: 'remark', title: '{:t('备注')}', minWidth: 150}
+                ]]
+            });
+            
+            // 搜索
+            $('#searchBtn').click(function() {
+                var proname = $('#proname').val();
+                var start_date = $('#start_date').val();
+                var end_date = $('#end_date').val();
+                
+                tableIns.reload({
+                    where: {
+                        proname: proname,
+                        start_date: start_date,
+                        end_date: end_date
+                    },
+                    page: {
+                        curr: 1
+                    }
+                });
+            });
+            
+            // 重置
+            $('#resetBtn').click(function() {
+                var today = new Date().toISOString().split('T')[0];
+                $('#proname').val('');
+                $('#start_date').val(today);
+                $('#end_date').val(today);
+                form.render();
+                tableIns.reload({
+                    where: {
+                        proname: '',
+                        start_date: today,
+                        end_date: today
+                    },
+                    page: {
+                        curr: 1
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,504 @@
+<!-- AI助手组件 -->
+<div id="ai-assistant-container" class="ai-assistant-container">
+    <!-- AI助手按钮 -->
+    <div class="ai-assistant-btn" onclick="toggleAiAssistant()">
+        <i class="layui-icon layui-icon-dialogue"></i>
+    </div>
+    
+    <!-- AI助手面板 -->
+    <div id="ai-assistant-panel" class="ai-assistant-panel">
+        <!-- 头部 -->
+        <div class="ai-assistant-header">
+            <div class="ai-assistant-title">家园AI助手</div>
+            <div class="ai-assistant-close" onclick="toggleAiAssistant()">
+                <i class="layui-icon layui-icon-close"></i>
+            </div>
+        </div>
+        
+        <!-- 聊天内容 -->
+        <div class="ai-assistant-content" id="ai-assistant-content">
+            <!-- 欢迎消息 -->
+            <div class="ai-message ai-message-ai" id="ai-welcome-message">
+                <div class="ai-avatar">
+                    <i class="layui-icon layui-icon-dialogue"></i>
+                </div>
+                <div class="ai-text">
+                    你好！我是家园AI助手，有什么可以帮助你的吗？
+                </div>
+            </div>
+        </div>
+        
+        <!-- 输入区域 -->
+        <div class="ai-assistant-input-area">
+            <input type="text" id="ai-input" class="ai-assistant-input" placeholder="请输入您的问题..." onkeydown="if(event.keyCode==13) sendAiMessage()" />
+            <button class="ai-assistant-send-btn" onclick="sendAiMessage()">
+                <i class="layui-icon layui-icon-send"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// AI助手状态
+var aiAssistantOpen = false;
+var aiAssistantTyping = false;
+
+// 切换AI助手面板
+function toggleAiAssistant() {
+    aiAssistantOpen = !aiAssistantOpen;
+    var panel = document.getElementById('ai-assistant-panel');
+    var btn = document.querySelector('.ai-assistant-btn');
+    
+    if (aiAssistantOpen) {
+        panel.classList.add('open');
+        btn.classList.add('active');
+        scrollToBottom();
+    } else {
+        panel.classList.remove('open');
+        btn.classList.remove('active');
+    }
+}
+
+// 发送消息
+function sendAiMessage() {
+    var input = document.getElementById('ai-input');
+    var message = input.value.trim();
+    
+    if (!message || aiAssistantTyping) return;
+    
+    // 清空输入框
+    input.value = '';
+    
+    // 添加用户消息
+    addMessage(message, true);
+    
+    // 显示正在输入
+    showTyping();
+    
+    // 发送请求获取AI回复
+    getAIReply(message);
+}
+
+// 添加消息到聊天记录
+function addMessage(content, isUser) {
+    var contentDiv = document.getElementById('ai-assistant-content');
+    var welcomeMsg = document.getElementById('ai-welcome-message');
+    
+    // 如果是第一条消息，隐藏欢迎消息
+    if (welcomeMsg && contentDiv.children.length === 1) {
+        welcomeMsg.style.display = 'none';
+    }
+    
+    // 创建消息元素
+    var messageDiv = document.createElement('div');
+    messageDiv.className = 'ai-message ' + (isUser ? 'ai-message-user' : 'ai-message-ai');
+    
+    messageDiv.innerHTML = `
+        <div class="ai-avatar">
+            ${isUser ? '<i class="layui-icon layui-icon-user"></i>' : '<i class="layui-icon layui-icon-dialogue"></i>'}
+        </div>
+        <div class="ai-text">
+            ${content}
+        </div>
+    `;
+    
+    contentDiv.appendChild(messageDiv);
+    scrollToBottom();
+}
+
+// 显示正在输入
+function showTyping() {
+    aiAssistantTyping = true;
+    var contentDiv = document.getElementById('ai-assistant-content');
+    
+    var typingDiv = document.createElement('div');
+    typingDiv.className = 'ai-message ai-message-ai';
+    typingDiv.id = 'ai-typing';
+    typingDiv.innerHTML = `
+        <div class="ai-avatar">
+            <i class="layui-icon layui-icon-dialogue"></i>
+        </div>
+        <div class="ai-text typing">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+        </div>
+    `;
+    
+    contentDiv.appendChild(typingDiv);
+    scrollToBottom();
+}
+
+// 隐藏正在输入
+function hideTyping() {
+    aiAssistantTyping = false;
+    var typingDiv = document.getElementById('ai-typing');
+    if (typingDiv) {
+        typingDiv.remove();
+    }
+}
+
+// 滚动到底部
+function scrollToBottom() {
+    var contentDiv = document.getElementById('ai-assistant-content');
+    contentDiv.scrollTop = contentDiv.scrollHeight;
+}
+
+// 获取AI回复
+function getAIReply(message) {
+    // 使用jQuery发送POST请求，添加超时处理
+    $.ajax({
+        url: "/index.php?s=ApiAiAssistant/getReply",
+        type: "POST",
+        data: { message: message },
+        dataType: "json",
+        timeout: 10000, // 设置10秒超时
+        success: function(res) {
+            hideTyping();
+            
+            if (res.status == 1) {
+                // 添加AI回复
+                addMessage(res.data.reply, false);
+            } else {
+                // 错误处理
+                addMessage('抱歉，' + (res.msg || '暂时无法回答您的问题，请稍后重试。'), false);
+            }
+        },
+        error: function(xhr, status, error) {
+            hideTyping();
+            let errorMsg = '抱歉，';
+            if (status === "timeout") {
+                errorMsg += 'AI回复超时，请稍后重试。';
+            } else if (xhr.status === 404) {
+                errorMsg += 'AI服务未找到，请检查服务配置。';
+            } else if (xhr.status === 500) {
+                errorMsg += '服务器内部错误，请检查日志。';
+            } else {
+                errorMsg += '网络出现问题，请稍后重试。';
+            }
+            addMessage(errorMsg, false);
+        }
+    });
+}
+</script>
+
+<style>
+/* AI助手容器 */
+.ai-assistant-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 9999;
+}
+
+/* AI助手按钮 */
+.ai-assistant-btn {
+    width: 64px;
+    height: 64px;
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+    border-radius: 50%;
+    box-shadow: 0 6px 25px rgba(76, 175, 80, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: #fff;
+    font-size: 28px;
+    border: 3px solid rgba(255, 255, 255, 0.8);
+}
+
+.ai-assistant-btn:hover {
+    transform: scale(1.15);
+    box-shadow: 0 8px 35px rgba(76, 175, 80, 0.5);
+}
+
+.ai-assistant-btn.active {
+    transform: rotate(90deg) scale(1.1);
+    background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+    box-shadow: 0 8px 35px rgba(255, 152, 0, 0.5);
+}
+
+/* AI助手面板 */
+.ai-assistant-panel {
+    position: fixed;
+    bottom: 100px;
+    right: 20px;
+    width: 420px;
+    height: 520px;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 15px 50px rgba(0, 0, 0, 0.15);
+    transform: translateY(100%);
+    opacity: 0;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    z-index: 9998;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.ai-assistant-panel.open {
+    transform: translateY(0);
+    opacity: 1;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+/* 头部 */
+.ai-assistant-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 24px;
+    border-bottom: 1px solid #f0f0f0;
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+    color: #fff;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 2px 10px rgba(76, 175, 80, 0.3);
+}
+
+.ai-assistant-title {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.ai-assistant-close {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.ai-assistant-close:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: rotate(90deg);
+}
+
+.ai-assistant-close i {
+    font-size: 20px;
+}
+
+/* 聊天内容 */
+.ai-assistant-content {
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+    background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+}
+
+/* 滚动条样式 */
+.ai-assistant-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.ai-assistant-content::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.ai-assistant-content::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.ai-assistant-content::-webkit-scrollbar-thumb:hover {
+    background: #a1a1a1;
+}
+
+/* 聊天消息 */
+.ai-message {
+    display: flex;
+    margin-bottom: 24px;
+    align-items: flex-start;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.ai-message-user {
+    flex-direction: row-reverse;
+}
+
+/* 头像 */
+.ai-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    overflow: hidden;
+    margin: 0 18px;
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 20px;
+    flex-shrink: 0;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
+}
+
+.ai-message-user .ai-avatar {
+    background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+}
+
+/* 消息内容 */
+.ai-text {
+    max-width: 280px;
+    padding: 14px 18px;
+    border-radius: 20px;
+    font-size: 14px;
+    line-height: 1.65;
+    word-wrap: break-word;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.ai-message-ai .ai-text {
+    background: #fff;
+    color: #333;
+    box-shadow: 0 3px 15px rgba(0, 0, 0, 0.1);
+    border-bottom-left-radius: 8px;
+}
+
+.ai-message-user .ai-text {
+    background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+    color: #fff;
+    box-shadow: 0 3px 15px rgba(33, 150, 243, 0.25);
+    border-bottom-right-radius: 8px;
+}
+
+/* 正在输入 */
+.typing {
+    display: flex;
+    align-items: center;
+    padding: 14px 18px;
+    background: #fff;
+    border-radius: 20px;
+    border-bottom-left-radius: 8px;
+    box-shadow: 0 3px 15px rgba(0, 0, 0, 0.1);
+}
+
+.typing-dot {
+    width: 10px;
+    height: 10px;
+    background: #4CAF50;
+    border-radius: 50%;
+    margin: 0 6px;
+    animation: typing 1.4s infinite ease-in-out;
+}
+
+.typing-dot:nth-child(1) {
+    animation-delay: -0.32s;
+    background: #4CAF50;
+}
+
+.typing-dot:nth-child(2) {
+    animation-delay: -0.16s;
+    background: #2196F3;
+}
+
+.typing-dot:nth-child(3) {
+    background: #ff9800;
+}
+
+@keyframes typing {
+    0%, 80%, 100% {
+        transform: scale(0);
+        opacity: 0.5;
+    }
+    40% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* 输入区域 */
+.ai-assistant-input-area {
+    display: flex;
+    padding: 20px 24px;
+    border-top: 1px solid #f0f0f0;
+    background: #fff;
+    border-radius: 0 0 16px 16px;
+    gap: 12px;
+}
+
+.ai-assistant-input {
+    flex: 1;
+    height: 44px;
+    background: #f8fafc;
+    border: 2px solid #e2e8f0;
+    border-radius: 22px;
+    padding: 0 20px;
+    font-size: 14px;
+    outline: none;
+    transition: all 0.3s ease;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.ai-assistant-input:focus {
+    background: #fff;
+    border-color: #4CAF50;
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+}
+
+.ai-assistant-send-btn {
+    width: 44px;
+    height: 44px;
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+    color: #fff;
+    font-size: 18px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+    flex-shrink: 0;
+}
+
+.ai-assistant-send-btn:hover:not(:disabled) {
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+}
+
+.ai-assistant-send-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* 欢迎消息特殊样式 */
+#ai-welcome-message {
+    margin-bottom: 30px;
+}
+
+#ai-welcome-message .ai-text {
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+    color: #fff;
+    box-shadow: 0 4px 20px rgba(76, 175, 80, 0.3);
+    border-bottom-left-radius: 8px;
+    font-size: 15px;
+    font-weight: 500;
+}
+
+#ai-welcome-message .ai-avatar {
+    background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+    font-size: 24px;
+}
+</style>

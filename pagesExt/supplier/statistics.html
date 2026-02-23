@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据统计 - 供应商发货系统</title>
+    <script src="/plugins/vue.min.js"></script>
+    <link rel="stylesheet" href="/plugins/element-ui/index.css">
+    <script src="/plugins/element-ui/index.js"></script>
+    <script src="/plugins/echarts.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f0f2f5;
+            min-height: 100vh;
+        }
+        .container {
+            padding: 20px;
+        }
+        .header {
+            background-color: #fff;
+            padding: 15px 20px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .header h3 {
+            margin: 0;
+            color: #333;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        .stats-card-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .stats-card {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .stats-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+        .stats-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 20px;
+            font-size: 24px;
+            color: white;
+        }
+        .icon-order {
+            background-color: #ff6000;
+        }
+        .icon-sales {
+            background-color: #409eff;
+        }
+        .icon-success {
+            background-color: #67c23a;
+        }
+        .icon-cancel {
+            background-color: #f56c6c;
+        }
+        .stats-info {
+            flex: 1;
+        }
+        .stats-number {
+            font-size: 24px;
+            font-weight: 600;
+            color: #303133;
+            margin-bottom: 5px;
+        }
+        .stats-label {
+            font-size: 14px;
+            color: #909399;
+        }
+        .chart-container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .chart-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #303133;
+        }
+        .chart-tabs {
+            display: flex;
+            gap: 10px;
+        }
+        .chart-tab {
+            padding: 5px 15px;
+            font-size: 14px;
+            color: #606266;
+            background-color: #f5f7fa;
+            border: 1px solid #dcdfe6;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .chart-tab.active {
+            background-color: #ff6000;
+            color: white;
+            border-color: #ff6000;
+        }
+        .chart-content {
+            height: 300px;
+        }
+        .product-table-container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .table-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #303133;
+            margin-bottom: 15px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ebeef5;
+        }
+        th {
+            background-color: #f5f7fa;
+            font-weight: 600;
+            color: #303133;
+            font-size: 14px;
+        }
+        td {
+            color: #606266;
+            font-size: 14px;
+        }
+        tr:hover {
+            background-color: #fafafa;
+        }
+        .product-image {
+            width: 60px;
+            height: 60px;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .product-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .product-info {
+            display: flex;
+            align-items: center;
+        }
+        .product-details {
+            margin-left: 12px;
+        }
+        .product-name {
+            font-size: 14px;
+            color: #303133;
+            margin-bottom: 5px;
+        }
+        .product-spec {
+            font-size: 12px;
+            color: #909399;
+        }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #909399;
+        }
+        .date-range-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .date-range-selector label {
+            font-size: 14px;
+            color: #606266;
+        }
+        .date-range-selector select {
+            padding: 6px 12px;
+            border: 1px solid #dcdfe6;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="container">
+            <div class="header">
+                <h3>数据统计</h3>
+            </div>
+            
+            <!-- 时间范围选择器 -->
+            <div class="date-range-selector">
+                <label for="dateRange">选择时间范围：</label>
+                <select id="dateRange" v-model="dateRange" @change="changeDateRange">
+                    <option value="7">近7天</option>
+                    <option value="30">近30天</option>
+                    <option value="90">近90天</option>
+                    <option value="180">近半年</option>
+                    <option value="365">近一年</option>
+                </select>
+            </div>
+            
+            <!-- 统计卡片 -->
+            <div class="stats-card-container">
+                <div class="stats-card">
+                    <div class="stats-icon icon-order">
+                        <i class="el-icon-document"></i>
+                    </div>
+                    <div class="stats-info">
+                        <div class="stats-number">{{ stats.totalOrders }}</div>
+                        <div class="stats-label">订单总数</div>
+                    </div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-icon icon-sales">
+                        <i class="el-icon-money"></i>
+                    </div>
+                    <div class="stats-info">
+                        <div class="stats-number">¥{{ stats.totalSales }}</div>
+                        <div class="stats-label">销售总额</div>
+                    </div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-icon icon-success">
+                        <i class="el-icon-circle-check"></i>
+                    </div>
+                    <div class="stats-info">
+                        <div class="stats-number">{{ stats.completedOrders }}</div>
+                        <div class="stats-label">已完成订单</div>
+                    </div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-icon icon-cancel">
+                        <i class="el-icon-circle-close"></i>
+                    </div>
+                    <div class="stats-info">
+                        <div class="stats-number">{{ stats.cancelledOrders }}</div>
+                        <div class="stats-label">已取消订单</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 图表区域 -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <div class="chart-title">订单趋势图</div>
+                    <div class="chart-tabs">
+                        <div 
+                            v-for="tab in chartTabs" 
+                            :key="tab.value" 
+                            :class="['chart-tab', { active: chartTab === tab.value }]"
+                            @click="changeChartTab(tab.value)"
+                        >
+                            {{ tab.label }}
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-content">
+                    <div id="orderChart" style="width: 100%; height: 100%;"></div>
+                </div>
+            </div>
+            
+            <!-- 热销商品表格 --<div class="product-table-container">
+                <div class="table-title">热销商品 Top 10</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th width="50">排名</th>
+                            <th width="150">商品信息</th>
+                            <th width="100">销售数量</th>
+                            <th width="100">销售金额</th>
+                            <th width="100">占比</th>
+                        </tr>
+                    </thead>
+                    <tbody v-if="topProducts.length > 0">
+                        <tr v-for="(product, index) in topProducts" :key="product.id">
+                            <td>
+                                <span :style="{ color: getRankColor(index + 1), fontWeight: '600' }">
+                                    {{ index + 1 }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="product-info">
+                                    <div class="product-image">
+                                        <img :src="product.product_image || '/static/img/default-product.png'" alt="商品图片">
+                                    </div>
+                                    <div class="product-details">
+                                        <div class="product-name">{{ product.product_name }}</div>
+                                        <div class="product-spec">{{ product.spec_name || '无规格' }}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>{{ product.sales_count }}</td>
+                            <td>¥{{ product.sales_amount }}</td>
+                            <td>{{ product.percentage }}%</td>
+                        </tr>
+                    </tbody>
+                    <tbody v-else>
+                        <tr>
+                            <td colspan="5" class="no-data">暂无商品数据</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                dateRange: '30', // 默认近30天
+                stats: {
+                    totalOrders: 0,
+                    totalSales: 0,
+                    completedOrders: 0,
+                    cancelledOrders: 0
+                },
+                chartTabs: [
+                    { label: '订单数', value: 'orders' },
+                    { label: '销售额', value: 'sales' }
+                ],
+                chartTab: 'orders', // 默认显示订单数
+                orderChart: null,
+                topProducts: []
+            },
+            created() {
+                // 检查登录状态
+                if (!localStorage.getItem('token')) {
+                    window.location.href = 'index.html';
+                }
+                // 初始化图表
+                this.$nextTick(() => {
+                    this.initOrderChart();
+                    this.getStatistics();
+                });
+            },
+            methods: {
+                // 获取统计数据
+                getStatistics() {
+                    fetch('/api/supplier/orderStats', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + localStorage.getItem('token')
+                        },
+                        body: JSON.stringify({ days: parseInt(this.dateRange) })
+                    })
+                    .then(response => response.json())
+                    .then(res => {
+                        if (res.code === 200) {
+                            // 更新统计卡片数据
+                            this.stats = res.data.summary;
+                            
+                            // 更新趋势图表
+                            this.updateOrderChart(res.data.trend_data);
+                            
+                            // 更新热销商品
+                            this.topProducts = res.data.top_products;
+                        } else {
+                            alert(res.msg || '获取统计数据失败');
+                            if (res.code === 401) {
+                                localStorage.removeItem('token');
+                                window.location.href = 'index.html';
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('获取统计数据失败:', error);
+                        alert('网络错误，请稍后重试');
+                    });
+                },
+                
+                // 初始化订单趋势图表
+                initOrderChart() {
+                    this.orderChart = echarts.init(document.getElementById('orderChart'));
+                    
+                    const option = {
+                        tooltip: {
+                            trigger: 'axis',
+                            axisPointer: {
+                                type: 'cross',
+                                label: {
+                                    backgroundColor: '#ff6000'
+                                }
+                            }
+                        },
+                        grid: {
+                            left: '3%',
+                            right: '4%',
+                            bottom: '3%',
+                            containLabel: true
+                        },
+                        xAxis: {
+                            type: 'category',
+                            boundaryGap: false,
+                            data: []
+                        },
+                        yAxis: {
+                            type: 'value'
+                        },
+                        series: [
+                            {
+                                name: this.chartTab === 'orders' ? '订单数' : '销售额',
+                                type: 'line',
+                                smooth: true,
+                                data: [],
+                                lineStyle: {
+                                    color: '#ff6000'
+                                },
+                                areaStyle: {
+                                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                                        {
+                                            offset: 0,
+                                            color: 'rgba(255, 96, 0, 0.3)'
+                                        },
+                                        {
+                                            offset: 1,
+                                            color: 'rgba(255, 96, 0, 0.1)'
+                                        }
+                                    ])
+                                },
+                                symbol: 'circle',
+                                symbolSize: 6,
+                                itemStyle: {
+                                    color: '#ff6000'
+                                }
+                            }
+                        ]
+                    };
+                    
+                    this.orderChart.setOption(option);
+                    
+                    // 响应式调整
+                    window.addEventListener('resize', () => {
+                        this.orderChart && this.orderChart.resize();
+                    });
+                },
+                
+                // 更新订单趋势图表
+                updateOrderChart(data) {
+                    if (!this.orderChart) return;
+                    
+                    const dates = data.map(item => item.date);
+                    const values = data.map(item => this.chartTab === 'orders' ? item.order_count : item.sales_amount);
+                    
+                    this.orderChart.setOption({
+                        xAxis: {
+                            data: dates
+                        },
+                        series: [{
+                            name: this.chartTab === 'orders' ? '订单数' : '销售额',
+                            data: values
+                        }]
+                    });
+                },
+                
+                // 切换图表类型
+                changeChartTab(tab) {
+                    this.chartTab = tab;
+                    this.getStatistics();
+                },
+                
+                // 切换时间范围
+                changeDateRange() {
+                    this.getStatistics();
+                },
+                
+                // 获取排名颜色
+                getRankColor(rank) {
+                    switch(rank) {
+                        case 1: return '#f56c6c'; // 红色
+                        case 2: return '#e6a23c'; // 橙色
+                        case 3: return '#67c23a'; // 绿色
+                        default: return '#909399'; // 灰色
+                    }
+                }
+            },
+            destroyed() {
+                // 清理图表实例
+                if (this.orderChart) {
+                    this.orderChart.dispose();
+                }
+                window.removeEventListener('resize', () => {
+                    this.orderChart && this.orderChart.resize();
+                });
+            }
+        });
+    </script>
+</body>
+</html>

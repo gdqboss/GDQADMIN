@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>{$cfg['title']} - {$title}</title>
+    {include file="public/css"/}
+    <style>
+        /* 美化表单样式 */
+        .layui-form-item {
+            margin-bottom: 20px;
+        }
+        
+        /* 美化搜索区域 */
+        .search-box {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        
+        /* 美化按钮 */
+        .layui-btn {
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="layui-fluid">
+        <div class="layui-row layui-col-space15">
+            <div class="layui-card layui-col-md12">
+                <div class="layui-card-header">
+                    <i class="fa fa-building"></i> {$title}
+                    <button class="layui-btn layui-btn-sm layui-btn-primary pull-right" onclick="window.location.href='/?s=/BarcodeInventory/settings'">
+                        <i class="fa fa-arrow-left"></i> {:t('返回系统设置')}
+                    </button>
+                </div>
+                <div class="layui-card-body" pad15>
+                    <!-- 搜索区域 -->
+                    <div class="search-box">
+                        <form class="layui-form" action="" method="get">
+                            <div class="layui-form-item">
+                                <div class="layui-inline">
+                                    <label class="layui-form-label">{:t('经销商名称')}：</label>
+                                    <div class="layui-input-inline">
+                                        <input type="text" name="dealer_name" id="dealer_name" placeholder="{:t('请输入经销商名称')}" class="layui-input">
+                                    </div>
+                                </div>
+                                <div class="layui-inline">
+                                    <button class="layui-btn layui-btn-primary" type="button" onclick="searchData()">
+                                        <i class="fa fa-search"></i> {:t('搜索')}
+                                    </button>
+                                    <button class="layui-btn" type="button" onclick="addDealer()">
+                                        <i class="fa fa-plus"></i> {:t('添加经销商')}
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <!-- 数据表格 -->
+                    <table class="layui-hide" id="dealerTable" lay-filter="dealerTable"></table>
+                    
+                    <!-- 操作栏模板 -->
+                    <script type="text/html" id="dealerBar">
+                        <a class="layui-btn layui-btn-xs" lay-event="edit">{:t('编辑')}</a>
+                        <a class="layui-btn layui-btn-xs layui-btn-success" lay-event="store">{:t('门店管理')}</a>
+                        <a class="layui-btn layui-btn-xs layui-btn-danger" lay-event="del">{:t('删除')}</a>
+                    </script>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部脚本 -->
+    {include file="public/js"/}
+    
+    <script>
+        layui.use(['table', 'layer'], function() {
+            var table = layui.table;
+            var layer = layui.layer;
+            
+            // 渲染表格
+            var tableIns = table.render({
+                elem: '#dealerTable',
+                url: '/?s=/BarcodeInventory/dealer_list',
+                method: 'post',
+                page: true,
+                limit: 10,
+                limits: [10, 20, 50, 100],
+                cols: [[
+                    {field: 'id', title: 'ID', width: 80, align: 'center'},
+                    {field: 'dealer_name', title: '{:t('经销商名称')}', minWidth: 150},
+                    {field: 'contact_person', title: '{:t('负责人')}', width: 120, align: 'center'},
+                    {field: 'phone', title: '{:t('联系电话')}', width: 150, align: 'center'},
+                    {field: 'address', title: '{:t('经营地址')}', minWidth: 200},
+                    {field: 'created_at', title: '{:t('创建时间')}', width: 160, align: 'center', templet: function(d) { return layui.util.toDateString(d.created_at * 1000, 'yyyy-MM-dd HH:mm:ss'); }},
+                    {field: 'updated_at', title: '{:t('更新时间')}', width: 160, align: 'center', templet: function(d) { return layui.util.toDateString(d.updated_at * 1000, 'yyyy-MM-dd HH:mm:ss'); }},
+                    {title: '{:t('操作')}', width: 180, align: 'center', toolbar: '#dealerBar'}
+                ]],
+                id: 'dealerTableReload'
+            });
+            
+            // 搜索功能
+            window.searchData = function() {
+                tableIns.reload({
+                    where: {
+                        dealer_name: $('#dealer_name').val()
+                    },
+                    page: {
+                        curr: 1
+                    }
+                });
+            };
+            
+            // 添加经销商
+            window.addDealer = function() {
+                window.location.href = '/?s=/BarcodeInventory/add_dealer';
+            };
+            
+            // 监听工具条事件
+            table.on('tool(dealerTable)', function(obj) {
+                var data = obj.data;
+                var layEvent = obj.event;
+                
+                switch(layEvent) {
+                    case 'edit':
+                        // 编辑经销商
+                        window.location.href = '/?s=/BarcodeInventory/edit_dealer&id=' + data.id;
+                        break;
+                    case 'store':
+                        // 门店管理
+                        window.location.href = '/?s=/BarcodeInventory/store_list&dealer_id=' + data.id;
+                        break;
+                    case 'del':
+                        // 删除经销商
+                        layer.confirm('{:t('确认要删除该经销商吗？删除后，该经销商下的所有门店也会被删除。')}', {
+                            icon: 3,
+                            title: '{:t('删除确认')}',
+                            btn: ['{:t('确认')}','{:t('取消')}']
+                        }, function(index) {
+                            layer.close(index);
+                            
+                            // 显示加载中
+                            var loadingIndex = layer.load(2);
+                            
+                            $.ajax({
+                                url: '/?s=/BarcodeInventory/del_dealer',
+                                type: 'POST',
+                                data: {id: data.id},
+                                dataType: 'json',
+                                success: function(res) {
+                                    layer.close(loadingIndex);
+                                    if (res.status == 1) {
+                                        layer.msg(res.msg, {icon: 1, time: 1500}, function() {
+                                            // 刷新表格
+                                            tableIns.reload();
+                                        });
+                                    } else {
+                                        layer.msg(res.msg, {icon: 2});
+                                    }
+                                },
+                                error: function() {
+                                    layer.close(loadingIndex);
+                                    layer.msg('{:t('网络错误，请稍后重试')}', {icon: 2});
+                                }
+                            });
+                        });
+                        break;
+                }
+            });
+        });
+    </script>
+</body>
+</html>

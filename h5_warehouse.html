@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>仓库管理系统</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css">
+    <style>
+        /* 全局样式重置 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f7fa;
+            color: #333;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        /* 容器样式 */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 15px;
+        }
+
+        /* 顶部导航 */
+        .header {
+            background-color: #409eff;
+            color: white;
+            padding: 15px 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 15px;
+        }
+
+        .header-title {
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .action-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: none;
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .action-btn:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+            transform: scale(1.1);
+        }
+
+        /* 统计卡片 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stat-card {
+            background-color: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .stat-title {
+            font-size: 14px;
+            color: #909399;
+            font-weight: 500;
+        }
+
+        .stat-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 18px;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .stat-change {
+            font-size: 12px;
+            color: #67c23a;
+        }
+
+        .stat-change.negative {
+            color: #f56c6c;
+        }
+
+        /* 卡片颜色 */
+        .stat-card.in .stat-icon {
+            background-color: #67c23a;
+        }
+
+        .stat-card.out .stat-icon {
+            background-color: #f56c6c;
+        }
+
+        .stat-card.inventory .stat-icon {
+            background-color: #409eff;
+        }
+
+        .stat-card.low-stock .stat-icon {
+            background-color: #e6a23c;
+        }
+
+        /* 快捷操作 */
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .action-item {
+            background-color: white;
+            border: none;
+            border-radius: 12px;
+            padding: 20px 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .action-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .action-item i {
+            font-size: 28px;
+            color: #409eff;
+        }
+
+        .action-item span {
+            font-size: 14px;
+            color: #606266;
+            font-weight: 500;
+        }
+
+        /* 内容卡片 */
+        .content-card {
+            background-color: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .card-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .btn-primary {
+            background-color: #409eff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #66b1ff;
+        }
+
+        .btn-success {
+            background-color: #67c23a;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: #85ce61;
+        }
+
+        .btn-danger {
+            background-color: #f56c6c;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #f78989;
+        }
+
+        /* 表格样式 */
+        .table-container {
+            overflow-x: auto;
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .table thead {
+            background-color: #f5f7fa;
+        }
+
+        .table th,
+        .table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .table th {
+            font-weight: bold;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .table td {
+            color: #606266;
+        }
+
+        .table tbody tr {
+            transition: all 0.3s ease;
+        }
+
+        .table tbody tr:hover {
+            background-color: #fafafa;
+        }
+
+        /* 状态标签 */
+        .status-tag {
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-tag.in {
+            background-color: #f0f9eb;
+            color: #67c23a;
+        }
+
+        .status-tag.out {
+            background-color: #fef0f0;
+            color: #f56c6c;
+        }
+
+        /* 搜索区域 */
+        .search-section {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .search-input {
+            padding: 10px 15px;
+            border: 1px solid #dcdfe6;
+            border-radius: 8px;
+            font-size: 14px;
+            width: 250px;
+            transition: all 0.3s ease;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #409eff;
+            box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .quick-actions {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .search-section {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .search-input {
+                width: 100%;
+            }
+
+            .card-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .card-actions {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .btn {
+                flex: 1;
+                justify-content: center;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .quick-actions {
+                grid-template-columns: 1fr;
+            }
+
+            .container {
+                padding: 10px;
+            }
+
+            .header-title {
+                font-size: 16px;
+            }
+        }
+
+        /* 加载动画 */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 0;
+            color: #909399;
+        }
+
+        .loading i {
+            font-size: 24px;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 无数据状态 */
+        .no-data {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 0;
+            color: #909399;
+            text-align: center;
+        }
+
+        .no-data i {
+            font-size: 64px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        /* 报表筛选 */
+        .filter-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .filter-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .filter-label {
+            font-size: 12px;
+            color: #606266;
+            font-weight: 500;
+        }
+
+        .filter-select,
+        .filter-date {
+            padding: 10px 15px;
+            border: 1px solid #dcdfe6;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        /* 打印样式 */
+        @media print {
+            .header,
+            .quick-actions,
+            .search-section,
+            .card-actions {
+                display: none !important;
+            }
+
+            .stat-card,
+            .content-card {
+                box-shadow: none;
+                border: 1px solid #e0e0e0;
+                margin: 10px 0;
+            }
+
+            body {
+                background-color: white;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶部导航 -->
+    <header class="header">
+        <div class="header-content">
+            <h1 class="header-title">
+                <i class="fa fa-warehouse"></i> 仓库管理系统
+            </h1>
+            <div class="header-actions">
+                <button class="action-btn" onclick="refreshData()" title="刷新数据">
+                    <i class="fa fa-refresh"></i>
+                </button>
+                <button class="action-btn" onclick="printReport()" title="打印报表">
+                    <i class="fa fa-print"></i>
+                </button>
+                <button class="action-btn" onclick="exportReport()" title="导出报表">
+                    <i class="fa fa-download"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主容器 -->
+    <div class="container">
+        <!-- 统计卡片 -->
+        <div class="stats-grid">
+            <div class="stat-card in" onclick="showReport('in')">
+                <div class="stat-header">
+                    <span class="stat-title">今日入库</span>
+                    <div class="stat-icon">
+                        <i class="fa fa-plus-circle"></i>
+                    </div>
+                </div>
+                <div class="stat-value" id="inCount">0</div>
+                <div class="stat-change">
+                    <i class="fa fa-arrow-up"></i> +5.2%
+                </div>
+            </div>
+
+            <div class="stat-card out" onclick="showReport('out')">
+                <div class="stat-header">
+                    <span class="stat-title">今日出库</span>
+                    <div class="stat-icon">
+                        <i class="fa fa-minus-circle"></i>
+                    </div>
+                </div>
+                <div class="stat-value" id="outCount">0</div>
+                <div class="stat-change">
+                    <i class="fa fa-arrow-up"></i> +3.8%
+                </div>
+            </div>
+
+            <div class="stat-card inventory" onclick="showInventory()">
+                <div class="stat-header">
+                    <span class="stat-title">总商品数</span>
+                    <div class="stat-icon">
+                        <i class="fa fa-bar-chart"></i>
+                    </div>
+                </div>
+                <div class="stat-value" id="totalProducts">0</div>
+                <div class="stat-change">
+                    <i class="fa fa-arrow-up"></i> +2.1%
+                </div>
+            </div>
+
+            <div class="stat-card low-stock" onclick="showLowStock()">
+                <div class="stat-header">
+                    <span class="stat-title">库存预警</span>
+                    <div class="stat-icon">
+                        <i class="fa fa-exclamation-triangle"></i>
+                    </div>
+                </div>
+                <div class="stat-value" id="lowStockCount">0</div>
+                <div class="stat-change negative">
+                    <i class="fa fa-arrow-down"></i> -1.5%
+                </div>
+            </div>
+        </div>
+
+        <!-- 快捷操作 -->
+        <div class="quick-actions">
+            <button class="action-item" onclick="showInbound()">
+                <i class="fa fa-plus-square"></i>
+                <span>商品入库</span>
+            </button>
+            <button class="action-item" onclick="showOutbound()">
+                <i class="fa fa-minus-square"></i>
+                <span>商品出库</span>
+            </button>
+            <button class="action-item" onclick="showInventory()">
+                <i class="fa fa-list"></i>
+                <span>库存查询</span>
+            </button>
+            <button class="action-item" onclick="showReport()">
+                <i class="fa fa-file-text"></i>
+                <span>报表统计</span>
+            </button>
+        </div>
+
+        <!-- 搜索区域 -->
+        <div class="search-section">
+            <input type="text" class="search-input" placeholder="搜索商品名称" id="searchInput" onkeyup="handleSearch(event)">
+            <select class="filter-select" style="width: 150px;">
+                <option value="">全部类型</option>
+                <option value="in">入库</option>
+                <option value="out">出库</option>
+            </select>
+            <button class="btn btn-primary" onclick="searchData()">
+                <i class="fa fa-search"></i> 搜索
+            </button>
+            <button class="btn btn-primary" onclick="resetSearch()">
+                <i class="fa fa-refresh"></i> 重置
+            </button>
+        </div>
+
+        <!-- 最近操作记录 -->
+        <div class="content-card">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="fa fa-history"></i> 最近操作记录
+                </h2>
+                <div class="card-actions">
+                    <button class="btn btn-primary" onclick="showAllLogs()">
+                        <i class="fa fa-list"></i> 查看全部
+                    </button>
+                </div>
+            </div>
+            <div class="table-container">
+                <table class="table" id="recentLogsTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>操作类型</th>
+                            <th>商品名称</th>
+                            <th>规格</th>
+                            <th>数量</th>
+                            <th>单价</th>
+                            <th>金额</th>
+                            <th>日期时间</th>
+                            <th>操作员</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recentLogsBody">
+                        <!-- 数据将通过JavaScript动态填充 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 库存报表 -->
+        <div class="content-card">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="fa fa-bar-chart"></i> 库存报表
+                </h2>
+                <div class="card-actions">
+                    <button class="btn btn-primary" onclick="showReport('in')">
+                        <i class="fa fa-plus"></i> 入库报表
+                    </button>
+                    <button class="btn btn-primary" onclick="showReport('out')">
+                        <i class="fa fa-minus"></i> 出库报表
+                    </button>
+                    <button class="btn btn-primary" onclick="showReport('summary')">
+                        <i class="fa fa-info-circle"></i> 库存汇总
+                    </button>
+                </div>
+            </div>
+            <div class="filter-section">
+                <div class="filter-item">
+                    <label class="filter-label">报表类型</label>
+                    <select class="filter-select" id="reportType">
+                        <option value="summary">库存汇总</option>
+                        <option value="in">入库报表</option>
+                        <option value="out">出库报表</option>
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <label class="filter-label">开始日期</label>
+                    <input type="date" class="filter-date" id="startDate" value="2026-01-01">
+                </div>
+                <div class="filter-item">
+                    <label class="filter-label">结束日期</label>
+                    <input type="date" class="filter-date" id="endDate" value="2026-01-31">
+                </div>
+                <div class="filter-item">
+                    <label class="filter-label">商品类别</label>
+                    <select class="filter-select" id="productCategory">
+                        <option value="">全部类别</option>
+                        <option value="1">类别1</option>
+                        <option value="2">类别2</option>
+                    </select>
+                </div>
+            </div>
+            <div class="table-container">
+                <table class="table" id="reportTable">
+                    <thead>
+                        <tr>
+                            <th>商品ID</th>
+                            <th>商品名称</th>
+                            <th>规格型号</th>
+                            <th>单位</th>
+                            <th>当前库存</th>
+                            <th>今日入库</th>
+                            <th>今日出库</th>
+                            <th>库存金额</th>
+                            <th>状态</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reportBody">
+                        <!-- 数据将通过JavaScript动态填充 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 模拟数据
+        const mockStats = {
+            inCount: 125,
+            outCount: 89,
+            totalProducts: 256,
+            lowStockCount: 3
+        };
+
+        const mockRecentLogs = [
+            {
+                id: 1,
+                type: 'in',
+                productName: '测试商品1',
+                spec: '规格1',
+                quantity: 10,
+                price: 120.50,
+                amount: 1205.00,
+                datetime: '2026-01-22 10:30:25',
+                operator: '管理员'
+            },
+            {
+                id: 2,
+                type: 'out',
+                productName: '测试商品2',
+                spec: '规格2',
+                quantity: 5,
+                price: 89.90,
+                amount: 449.50,
+                datetime: '2026-01-22 09:15:45',
+                operator: '管理员'
+            },
+            {
+                id: 3,
+                type: 'in',
+                productName: '测试商品3',
+                spec: '规格3',
+                quantity: 15,
+                price: 56.80,
+                amount: 852.00,
+                datetime: '2026-01-22 08:45:12',
+                operator: '管理员'
+            },
+            {
+                id: 4,
+                type: 'out',
+                productName: '测试商品1',
+                spec: '规格1',
+                quantity: 3,
+                price: 120.50,
+                amount: 361.50,
+                datetime: '2026-01-21 16:20:30',
+                operator: '管理员'
+            },
+            {
+                id: 5,
+                type: 'in',
+                productName: '测试商品4',
+                spec: '规格4',
+                quantity: 8,
+                price: 158.00,
+                amount: 1264.00,
+                datetime: '2026-01-21 14:10:15',
+                operator: '管理员'
+            }
+        ];
+
+        const mockInventoryReport = [
+            {
+                productId: 1,
+                productName: '测试商品1',
+                spec: '规格1',
+                unit: '个',
+                currentStock: 120,
+                todayIn: 10,
+                todayOut: 3,
+                amount: 14460.00,
+                status: 'normal'
+            },
+            {
+                productId: 2,
+                productName: '测试商品2',
+                spec: '规格2',
+                unit: '个',
+                currentStock: 45,
+                todayIn: 0,
+                todayOut: 5,
+                amount: 4045.50,
+                status: 'low'
+            },
+            {
+                productId: 3,
+                productName: '测试商品3',
+                spec: '规格3',
+                unit: '个',
+                currentStock: 200,
+                todayIn: 15,
+                todayOut: 0,
+                amount: 11360.00,
+                status: 'normal'
+            },
+            {
+                productId: 4,
+                productName: '测试商品4',
+                spec: '规格4',
+                unit: '个',
+                currentStock: 8,
+                todayIn: 8,
+                todayOut: 0,
+                amount: 1264.00,
+                status: 'normal'
+            }
+        ];
+
+        // 初始化页面
+        function initPage() {
+            // 更新统计数据
+            updateStats();
+            // 填充最近操作记录
+            fillRecentLogs();
+            // 填充库存报表
+            fillInventoryReport();
+        }
+
+        // 更新统计数据
+        function updateStats() {
+            Object.keys(mockStats).forEach(key => {
+                const element = document.getElementById(key);
+                if (element) {
+                    element.textContent = mockStats[key];
+                }
+            });
+        }
+
+        // 填充最近操作记录
+        function fillRecentLogs() {
+            const tbody = document.getElementById('recentLogsBody');
+            tbody.innerHTML = '';
+
+            mockRecentLogs.forEach(log => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${log.id}</td>
+                    <td><span class="status-tag ${log.type}">${log.type === 'in' ? '入库' : '出库'}</span></td>
+                    <td>${log.productName}</td>
+                    <td>${log.spec}</td>
+                    <td style="color: ${log.type === 'in' ? '#67c23a' : '#f56c6c'};">${log.type === 'in' ? '+' : '-'}${log.quantity}</td>
+                    <td>¥${log.price.toFixed(2)}</td>
+                    <td>¥${log.amount.toFixed(2)}</td>
+                    <td>${log.datetime}</td>
+                    <td>${log.operator}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // 填充库存报表
+        function fillInventoryReport() {
+            const tbody = document.getElementById('reportBody');
+            tbody.innerHTML = '';
+
+            mockInventoryReport.forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${item.productId}</td>
+                    <td>${item.productName}</td>
+                    <td>${item.spec}</td>
+                    <td>${item.unit}</td>
+                    <td style="color: ${item.status === 'low' ? '#f56c6c' : '#333'};">${item.currentStock}</td>
+                    <td style="color: #67c23a;">+${item.todayIn}</td>
+                    <td style="color: #f56c6c;">-${item.todayOut}</td>
+                    <td>¥${item.amount.toFixed(2)}</td>
+                    <td><span class="status-tag ${item.status === 'low' ? 'out' : 'in'}">${item.status === 'low' ? '库存预警' : '正常'}</span></td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // 刷新数据
+        function refreshData() {
+            // 显示加载状态
+            const loadingIcon = document.querySelector('.fa-refresh');
+            loadingIcon.style.animation = 'spin 1s linear infinite';
+
+            // 模拟数据加载
+            setTimeout(() => {
+                updateStats();
+                fillRecentLogs();
+                fillInventoryReport();
+                loadingIcon.style.animation = '';
+                alert('数据刷新成功！');
+            }, 1000);
+        }
+
+        // 搜索数据
+        function searchData() {
+            const searchText = document.getElementById('searchInput').value;
+            console.log('搜索数据:', searchText);
+            // 这里可以添加实际的搜索逻辑
+        }
+
+        // 处理搜索框回车键
+        function handleSearch(event) {
+            if (event.key === 'Enter') {
+                searchData();
+            }
+        }
+
+        // 重置搜索
+        function resetSearch() {
+            document.getElementById('searchInput').value = '';
+            // 这里可以添加实际的重置逻辑
+        }
+
+        // 显示所有日志
+        function showAllLogs() {
+            console.log('显示所有日志');
+        }
+
+        // 显示入库页面
+        function showInbound() {
+            console.log('显示入库页面');
+        }
+
+        // 显示出库页面
+        function showOutbound() {
+            console.log('显示出库页面');
+        }
+
+        // 显示库存查询
+        function showInventory() {
+            console.log('显示库存查询');
+        }
+
+        // 显示报表
+        function showReport(type) {
+            console.log('显示报表:', type);
+        }
+
+        // 显示库存预警
+        function showLowStock() {
+            console.log('显示库存预警');
+        }
+
+        // 打印报表
+        function printReport() {
+            window.print();
+        }
+
+        // 导出报表
+        function exportReport() {
+            alert('导出报表功能开发中...');
+        }
+
+        // 页面加载完成后初始化
+        window.addEventListener('DOMContentLoaded', initPage);
+    </script>
+</body>
+</html>

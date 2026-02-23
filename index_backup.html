@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>海鲜社工作台</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body { margin: 0; padding: 0; min-height: 100vh; }
+        body { 
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%); 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+        }
+        
+        /* 登录页 */
+        .login-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+        }
+        
+        .login-card {
+            background: rgba(255,255,255,0.98);
+            border-radius: 24px;
+            padding: 40px 30px;
+            width: 100%;
+            max-width: 360px;
+            box-shadow: 0 25px 80px rgba(0,0,0,0.4);
+        }
+        
+        .login-logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .login-logo .icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            margin-bottom: 15px;
+            box-shadow: 0 10px 30px rgba(102,126,234,0.4);
+        }
+        
+        .login-logo h2 {
+            color: #1a1a2e;
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+        
+        .login-logo p {
+            color: #666;
+            font-size: 14px;
+            margin: 0;
+        }
+        
+        .login-form input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #eee;
+            border-radius: 12px;
+            font-size: 15px;
+            margin-bottom: 15px;
+            transition: all 0.3s;
+        }
+        
+        .login-form input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 4px rgba(102,126,234,0.1);
+        }
+        
+        .login-form button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 10px 30px rgba(102,126,234,0.4);
+        }
+        
+        .login-form button:active {
+            transform: scale(0.98);
+        }
+        
+        .dingtalk-btn {
+            width: 100%;
+            padding: 12px;
+            background: #07C160;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            margin-top: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+        
+        .login-footer {
+            text-align: center;
+            margin-top: 25px;
+            font-size: 12px;
+            color: #999;
+        }
+        
+        /* 首页 */
+        .home-container {
+            min-height: 100vh;
+            background: #f5f6fa;
+        }
+        
+        .home-header {
+            background: linear-gradient(135deg, #0f0c29, #302b63);
+            padding: 20px;
+            color: white;
+        }
+        
+        .user-card {
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .user-avatar {
+            width: 56px;
+            height: 56px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+        }
+        
+        .user-info h5 {
+            margin: 0;
+            font-size: 18px;
+        }
+        
+        .user-info p {
+            margin: 4px 0 0;
+            font-size: 13px;
+            opacity: 0.8;
+        }
+        
+        .logout-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            margin-top: 15px;
+        }
+        
+        /* 功能卡片 */
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            padding: 15px;
+        }
+        
+        .menu-card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            transition: all 0.3s;
+            text-decoration: none;
+            display: block;
+        }
+        
+        .menu-card:active {
+            transform: scale(0.98);
+        }
+        
+        .menu-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .menu-card h6 {
+            margin: 0;
+            font-size: 14px;
+            color: #333;
+        }
+        
+        .menu-card p {
+            margin: 4px 0 0;
+            font-size: 11px;
+            color: #999;
+        }
+        
+        .lang-dropdown {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            z-index: 100;
+        }
+        
+        .lang-dropdown select {
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: none;
+            background: rgba(255,255,255,0.9);
+            font-size: 13px;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        /* 弹窗 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal.show { display: flex; }
+        
+        .modal-content {
+            background: white;
+            border-radius: 20px;
+            padding: 25px;
+            width: 90%;
+            max-width: 360px;
+        }
+        
+        .modal h5 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        
+        .modal input, .modal select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+        
+        .modal-btns {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .modal-btns button {
+            flex: 1;
+            padding: 12px;
+            border-radius: 10px;
+            border: none;
+            font-size: 14px;
+        }
+        
+        .btn-cancel { background: #eee; color: #666; }
+        .btn-save { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+        
+        .error-msg {
+            background: #fee;
+            color: #c00;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 13px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- 登录页 -->
+    <div id="loginPage" class="login-container" style="display:none">
+        <div class="login-card">
+            <div class="login-logo">
+                <div class="icon">🦐</div>
+                <h2 id="titleText">海鲜社</h2>
+                <p id="subtitleText">企业工作台</p>
+            </div>
+            
+            <div id="loginError" class="error-msg"></div>
+            
+            <form class="login-form" id="loginForm">
+                <input type="text" id="loginUsername" placeholder="用户名">
+                <input type="password" id="loginPassword" placeholder="密码">
+                <button type="submit" id="loginBtn">登录</button>
+            </form>
+            
+            <button class="dingtalk-btn" onclick="dingtalkLogin()" id="dingtalkBtn">
+                <span>📱</span> 钉钉扫码登录
+            </button>
+            
+            <div class="login-footer" id="contactText">
+                如需开通账号，请联系管理员
+            </div>
+        </div>
+    </div>
+    
+    <!-- 首页 -->
+    <div id="homePage" style="display:none">
+        <div class="home-header">
+            <div class="lang-dropdown">
+                <select id="langSelect" onchange="changeLang(this.value)">
+                    <option value="zh">🇨🇳 中文</option>
+                    <option value="en">🇺🇸 EN</option>
+                    <option value="ja">🇯🇵 JP</option>
+                    <option value="ko">🇰🇷 KR</option>
+                    <option value="id">🇮🇩 ID</option>
+                    <option value="tl">🇵🇭 PH</option>
+                    <option value="vi">🇻🇳 VN</option>
+                </select>
+            </div>
+            
+            <div class="user-card">
+                <div class="user-avatar" id="userAvatar">👤</div>
+                <div class="user-info">
+                    <h5 id="userName">用户</h5>
+                    <p id="userDept">部门</p>
+                    <p id="userCompany">海鲜社</p>
+                </div>
+            </div>
+            
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:15px">
+                <button class="logout-btn" onclick="logout()">退出登录</button>
+                <button class="logout-btn" onclick="showProfile()" style="background:rgba(255,255,255,0.1)">👤 资料</button>
+            </div>
+        </div>
+        
+        <div class="menu-grid">
+            <a href="/commune/chat.html" class="menu-card">
+                <div class="menu-icon" style="background: linear-gradient(135deg, #e8f5e9, #c8e6c9);">💬</div>
+                <h6 id="menuChat1">聊天室</h6>
+                <p>团队沟通</p>
+            </a>
+            
+            <a href="/qrcode_stats.html" class="menu-card">
+                <div class="menu-icon" style="background: linear-gradient(135deg, #e3f2fd, #bbdefb);">🏷️</div>
+                <h6 id="menuQrcode1">一物一码</h6>
+                <p>追溯系统</p>
+            </a>
+            
+            <a href="/inventory_stats.html" class="menu-card">
+                <div class="menu-icon" style="background: linear-gradient(135deg, #fce4ec, #f8bbd9);">📦</div>
+                <h6 id="menuInventory1">进销存</h6>
+                <p>库存管理</p>
+            </a>
+            
+            <a href="/commune/admin.html" class="menu-card" id="adminLink" style="display:none">
+                <div class="menu-icon" style="background: linear-gradient(135deg, #f3e5f5, #e1bee7);">⚙️</div>
+                <h6 id="menuAdmin1">管理后台</h6>
+                <p>系统管理</p>
+            </a>
+        </div>
+        
+        <!-- 签到和日志 -->
+        <div style="padding:15px">
+            <div style="display:flex;gap:10px;margin-bottom:10px">
+                <div onclick="toggleQuickAction('checkin')" style="flex:1;text-align:center;padding:12px;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:10px;color:white;cursor:pointer">
+                    <div style="font-size:20px" id="checkInIcon">📌</div>
+                    <div style="font-size:12px" id="checkInText">签到</div>
+                </div>
+                <div onclick="toggleQuickAction('worklog')" style="flex:1;text-align:center;padding:12px;background:linear-gradient(135deg,#4caf50,#2e7d32);border-radius:10px;color:white;cursor:pointer">
+                    <div style="font-size:20px">📝</div>
+                    <div style="font-size:12px">日志</div>
+                </div>
+            </div>
+            <!-- 签到面板 -->
+            <div id="checkInPanel" style="display:none;background:white;border-radius:10px;padding:12px;margin-bottom:10px">
+                <div style="text-align:center;padding:10px">
+                    <div id="checkStatusIcon" style="font-size:28px">📌</div>
+                    <div id="checkStatusText" style="font-weight:600;font-size:14px;margin:5px 0">点击签到</div>
+                    <div id="checkTimeText" style="font-size:11px;color:#999"></div>
+                </div>
+                <button id="mainCheckInBtn" class="btn btn-primary w-100" style="border-radius:6px" onclick="doCheckIn()">✅ 签到</button>
+                <div style="margin-top:10px;font-size:12px;font-weight:600">📅 最近</div>
+                <div id="checkInList" style="font-size:11px;color:#666;margin-top:5px"></div>
+            </div>
+            <!-- 日志面板 -->
+            <div id="workLogPanel" style="display:none;background:white;border-radius:10px;padding:12px;margin-bottom:10px">
+                <button class="btn btn-success w-100" style="border-radius:6px;margin-bottom:8px;font-size:13px" onclick="showAddLog()">➕ 写日志</button>
+                <div id="workLogList" style="max-height:150px;overflow-y:auto;font-size:12px"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 资料弹窗 -->
+    <div id="profileModal" class="modal">
+        <div class="modal-content">
+            <h5>👤 个人资料</h5>
+            <input type="text" id="editNickname" placeholder="昵称">
+            <input type="tel" id="editPhone" placeholder="电话">
+            <input type="text" id="editCompany" placeholder="公司">
+            <input type="text" id="editDept" placeholder="部门">
+            <input type="text" id="editPosition" placeholder="职位">
+            <input type="text" id="editAvatar" placeholder="头像URL">
+            
+            <div style="margin-top:15px;padding-top:15px;border-top:1px solid #eee">
+                <p style="font-size:12px;color:#666;margin-bottom:10px">修改密码(可选)</p>
+                <input type="password" id="oldPassword" placeholder="原密码">
+                <input type="password" id="newPassword" placeholder="新密码">
+            </div>
+            
+            <div class="modal-btns">
+                <button class="btn-cancel" onclick="closeModal()">取消</button>
+                <button class="btn-save" onclick="saveProfile()">保存</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 钉钉扫码弹窗 -->
+    <div id="dingtalkModal" class="modal">
+        <div class="modal-content" style="text-align:center">
+            <h5>📱 钉钉扫码登录</h5>
+            <img id="dingtalkQr" style="width:200px;height:200px;border-radius:10px;margin:15px 0">
+            <p style="font-size:13px;color:#666">请使用钉钉扫码</p>
+            <div class="modal-btns">
+                <button class="btn-cancel" onclick="closeDingtalk()">取消</button>
+                <button class="btn-save" onclick="mockDingtalk()">模拟扫码</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let myUsername = '';
+        let myNickname = '';
+        
+        const i18n = {
+            zh: { title: '海鲜社', subtitle: '企业工作台', username: '用户名', password: '密码', login: '登录', dingtalk: '📱 钉钉扫码登录', contact: '如需开通账号，请联系管理员', chat: '聊天室', qrcode: '一物一码', inventory: '进销存', admin: '管理后台', profile: '个人资料', logout: '退出登录', dept: '部门', company: '海鲜社' },
+            en: { title: 'Haixianshe', subtitle: 'Enterprise', username: 'Username', password: 'Password', login: 'Login', dingtalk: '📱 DingTalk Login', contact: 'Contact admin', chat: 'Chat', qrcode: 'QR Code', inventory: 'Inventory', admin: 'Admin', profile: 'Profile', logout: 'Logout', dept: 'Department', company: 'Haixianshe' },
+            ja: { title: '海鮮社', subtitle: 'ワークスペース', username: 'ユーザー名', password: 'パスワード', login: 'ログイン', dingtalk: '📱 钉钉ログイン', contact: '管理者へ', chat: 'チャット', qrcode: 'QRコード', inventory: '在庫', admin: '管理', profile: 'プロフィール', logout: 'ログアウト', dept: '部門', company: '海鮮社' },
+            ko: { title: '해산사', subtitle: '워크스페이스', username: '사용자', password: '비밀번호', login: '로그인', dingtalk: '📱 钉git登录', contact: '관리자 연락', chat: '채팅', qrcode: 'QR코드', inventory: '재고', admin: '관리자', profile: '프로필', logout: '로그아웃', dept: '부서', company: '해산사' },
+            id: { title: 'Haixianshe', subtitle: 'Workspace', username: 'Username', password: 'Password', login: 'Masuk', dingtalk: '📱 Login DingTalk', contact: 'Hubungi admin', chat: 'Obrolan', qrcode: 'QR Code', inventory: 'Inventaris', admin: 'Admin', profile: 'Profil', logout: 'Keluar', dept: 'Dept', company: 'Haixianshe' },
+            tl: { title: 'Haixianshe', subtitle: 'Workspace', username: 'Username', password: 'Password', login: 'Login', dingtalk: '📱 DingTalk Login', contact: 'Contact admin', chat: 'Chat', qrcode: 'QR Code', inventory: 'Inventory', admin: 'Admin', profile: 'Profile', logout: 'Logout', dept: 'Dept', company: 'Haixianshe' },
+            vi: { title: 'Haixianshe', subtitle: 'Workspace', username: 'Username', password: 'Password', login: 'Đăng nhập', dingtalk: '📱 Đăng nhập DingTalk', contact: 'Liên hệ admin', chat: 'Phòng chat', qrcode: 'Mã QR', inventory: 'Kho hàng', admin: 'Quản trị', profile: 'Hồ sơ', logout: 'Đăng xuất', dept: 'Phòng', company: 'Haixianshe' }
+        };
+        
+        let currentLang = 'zh';
+        
+        function changeLang(lang) {
+            currentLang = lang;
+            localStorage.setItem('lang', lang);
+            updateLabels();
+        }
+        
+        function updateLabels() {
+            const t = i18n[currentLang] || i18n.zh;
+            document.getElementById('titleText').textContent = t.title;
+            document.getElementById('subtitleText').textContent = t.subtitle;
+            document.getElementById('loginUsername').placeholder = t.username;
+            document.getElementById('loginPassword').placeholder = t.password;
+            document.getElementById('loginBtn').textContent = t.login;
+            document.getElementById('dingtalkBtn').innerHTML = t.dingtalk;
+            document.getElementById('contactText').textContent = t.contact;
+            document.getElementById('langSelect').value = currentLang;
+            
+            if (myUsername) {
+                document.getElementById('menuChat1').textContent = t.chat;
+                document.getElementById('menuQrcode1').textContent = t.qrcode;
+                document.getElementById('menuInventory1').textContent = t.inventory;
+                document.getElementById('menuAdmin1').textContent = t.admin;
+                document.getElementById('userCompany').textContent = t.company;
+            }
+        }
+        
+        function checkLogin() {
+            const stored = localStorage.getItem('commune_user');
+            if (stored) {
+                try {
+                    const u = JSON.parse(stored);
+                    if (u.username) {
+                        myUsername = u.username;
+                        myNickname = u.nickname || u.username;
+                        showHome(u);
+                        return;
+                    }
+                } catch(e) {}
+            }
+            showLogin();
+        }
+        
+        function showLogin() {
+            document.getElementById('loginPage').style.display = 'flex';
+            document.getElementById('homePage').style.display = 'none';
+        }
+        
+        function showHome(user) {
+            document.getElementById('loginPage').style.display = 'none';
+            document.getElementById('homePage').style.display = 'block';
+            
+            const t = i18n[currentLang] || i18n.zh;
+            document.getElementById('userName').textContent = user.nickname || user.username;
+            document.getElementById('userAvatar').textContent = (user.nickname || user.username).charAt(0);
+            document.getElementById('userDept').textContent = (user.department || t.dept) + ' ' + (user.position || '');
+            document.getElementById('userCompany').textContent = user.company || t.company;
+            document.getElementById('langSelect').value = user.lang || currentLang;
+            
+            if (user.role === 'admin') {
+                document.getElementById('adminLink').style.display = 'block';
+            }
+            
+            localStorage.setItem('commune_user', JSON.stringify(user));
+        }
+        
+        // 登录
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            
+            fetch('/api/commune/user.php?action=login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'username=' + encodeURIComponent(username) + '&password=' + encodeURIComponent(password)
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.code === 1) {
+                    fetch('/api/commune/profile.php?action=profile&username=' + username)
+                    .then(r => r.json())
+                    .then(profile => {
+                        if (profile.code === 1) showHome(profile.data);
+                        else showHome(data.data);
+                    });
+                } else {
+                    document.getElementById('loginError').textContent = data.msg || '登录失败';
+                    document.getElementById('loginError').style.display = 'block';
+                }
+            });
+        });
+        
+        // 钉钉登录
+        function dingtalkLogin() {
+            document.getElementById('dingtalkModal').classList.add('show');
+            fetch('/api/commune/dingtalk.php?action=get_qr')
+            .then(r => r.json())
+            .then(data => {
+                if (data.code === 1) {
+                    document.getElementById('dingtalkQr').src = data.data.qr_image;
+                }
+            });
+        }
+        
+        function mockDingtalk() {
+            const username = prompt('输入模拟用户名:', 'user' + Math.floor(Math.random()*1000));
+            if (!username) return;
+            
+            fetch('/api/commune/dingtalk.php?action=create_demo_user', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'username=' + username + '&nickname=' + username + '&company=测试公司&department=测试部门'
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.code === 1) {
+                    closeDingtalk();
+                    showHome({ username: username, nickname: username, role: 'user', company: '测试公司', department: '测试部门', lang: currentLang });
+                } else {
+                    alert(data.msg);
+                }
+            });
+        }
+        
+        function closeDingtalk() {
+            document.getElementById('dingtalkModal').classList.remove('show');
+        }
+        
+        function logout() {
+            localStorage.removeItem('commune_user');
+            location.reload();
+        }
+        
+        function showProfile() {
+            fetch('/api/commune/profile.php?action=profile&username=' + myUsername)
+            .then(r => r.json())
+            .then(data => {
+                if (data.code === 1) {
+                    const u = data.data;
+                    document.getElementById('editNickname').value = u.nickname || '';
+                    document.getElementById('editPhone').value = u.phone || '';
+                    document.getElementById('editCompany').value = u.company || '';
+                    document.getElementById('editDept').value = u.department || '';
+                    document.getElementById('editPosition').value = u.position || '';
+                    document.getElementById('editAvatar').value = u.avatar_url || '';
+                }
+            });
+            document.getElementById('profileModal').classList.add('show');
+        }
+        
+        function closeModal() {
+            document.getElementById('profileModal').classList.remove('show');
+        }
+        
+        function saveProfile() {
+            const nickname = document.getElementById('editNickname').value;
+            const phone = document.getElementById('editPhone').value;
+            const company = document.getElementById('editCompany').value;
+            const dept = document.getElementById('editDept').value;
+            const position = document.getElementById('editPosition').value;
+            const avatar_url = document.getElementById('editAvatar').value;
+            const old_password = document.getElementById('oldPassword').value;
+            const new_password = document.getElementById('newPassword').value;
+            
+            fetch('/api/commune/profile.php?action=update_my_profile', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'username=' + myUsername + 
+                    '&nickname=' + encodeURIComponent(nickname) + 
+                    '&phone=' + encodeURIComponent(phone) +
+                    '&company=' + encodeURIComponent(company) +
+                    '&department=' + encodeURIComponent(dept) +
+                    '&position=' + encodeURIComponent(position) +
+                    '&avatar_url=' + encodeURIComponent(avatar_url) +
+                    (old_password ? '&old_password=' + old_password : '') +
+                    (new_password ? '&new_password=' + new_password : '')
+            })
+            .then(r => r.json())
+            .then(data => {
+                alert(data.msg);
+                if (data.code === 1) {
+                    closeModal();
+                    myNickname = nickname;
+                    document.getElementById('userName').textContent = nickname;
+                    document.getElementById('userAvatar').textContent = nickname.charAt(0);
+                }
+            });
+        }
+        
+        // 初始化
+        currentLang = localStorage.getItem('lang') || 'zh';
+        checkLogin();
+        updateLabels();
+        
+        // 检查签到状态
+        checkTodayStatus();
+    </script>
+    
+    <script>
+        // ========== 签到和日志 ==========
+        function getUserInfo() {
+            try {
+                const stored = localStorage.getItem('commune_user');
+                if (stored) return JSON.parse(stored);
+            } catch(e) {}
+            return { id: 1, username: '用户', nickname: '用户' };
+        }
+        
+        function toggleQuickAction(type) {
+            if (type === 'checkin') {
+                const p = document.getElementById('checkInPanel');
+                p.style.display = p.style.display === 'none' ? 'block' : 'none';
+                document.getElementById('workLogPanel').style.display = 'none';
+                if (p.style.display === 'block') loadCheckIn();
+            } else if (type === 'worklog') {
+                const p = document.getElementById('workLogPanel');
+                p.style.display = p.style.display === 'none' ? 'block' : 'none';
+                document.getElementById('checkInPanel').style.display = 'none';
+                if (p.style.display === 'block') loadWorkLog();
+            }
+        }
+        
+        function checkTodayStatus() {
+            const user = getUserInfo();
+            fetch('/api/commune/attendance.php?action=today_status&user_id=' + (user.id || 1) + '&user_name=' + encodeURIComponent(user.nickname || user.username))
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1 && d.data.checked) {
+                    document.getElementById('checkInIcon').textContent = '✅';
+                    document.getElementById('checkInText').textContent = '已签到';
+                }
+            });
+        }
+        
+        function loadCheckIn() {
+            const user = getUserInfo();
+            fetch('/api/commune/attendance.php?action=today_status&user_id=' + (user.id || 1) + '&user_name=' + encodeURIComponent(user.nickname || user.username))
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1) {
+                    if (d.data.checked) {
+                        document.getElementById('checkStatusIcon').textContent = '✅';
+                        document.getElementById('checkStatusText').textContent = '已签到';
+                        document.getElementById('checkTimeText').textContent = '签到时间: ' + d.data.time;
+                        document.getElementById('mainCheckInBtn').textContent = '今日已签到';
+                        document.getElementById('mainCheckInBtn').disabled = true;
+                    } else {
+                        document.getElementById('checkStatusIcon').textContent = '📌';
+                        document.getElementById('checkStatusText').textContent = '点击签到';
+                        document.getElementById('checkTimeText').textContent = '';
+                        document.getElementById('mainCheckInBtn').textContent = '✅ 签到';
+                        document.getElementById('mainCheckInBtn').disabled = false;
+                    }
+                }
+            });
+            loadCheckInList();
+        }
+        
+        function loadCheckInList() {
+            fetch('/api/commune/attendance.php?action=attendance_list&user_id=1')
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1) {
+                    let html = '';
+                    d.data.slice(0, 5).forEach(item => {
+                        html += '<div style="padding:4px 6px;background:#f8f9fa;border-radius:4px;margin-bottom:4px">' + item.user_name + ' - ' + item.check_date + ' ✅</div>';
+                    });
+                    document.getElementById('checkInList').innerHTML = html || '<div style="color:#999">暂无记录</div>';
+                }
+            });
+        }
+        
+        function doCheckIn() {
+            const user = getUserInfo();
+            fetch('/api/commune/attendance.php?action=check_in', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'user_id=' + (user.id || 1) + '&user_name=' + encodeURIComponent(user.nickname || user.username)
+            })
+            .then(r => r.json())
+            .then(d => {
+                alert(d.msg);
+                if (d.code === 1) {
+                    loadCheckIn();
+                    checkTodayStatus();
+                }
+            });
+        }
+        
+        function loadWorkLog() {
+            fetch('/api/commune/attendance.php?action=log_list&user_id=1')
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1) {
+                    let html = '';
+                    d.data.slice(0, 10).forEach(item => {
+                        html += '<div style="padding:8px;background:#f8f9fa;border-radius:6px;margin-bottom:6px"><div style="font-weight:500;font-size:11px;color:#666">' + item.user_name + ' - ' + item.log_date + '</div><div style="font-size:12px">' + item.content + '</div></div>';
+                    });
+                    document.getElementById('workLogList').innerHTML = html || '<div style="color:#999;text-align:center;padding:15px">暂无日志</div>';
+                }
+            });
+        }
+        
+        function showAddLog() {
+            const user = getUserInfo();
+            const content = prompt('请输入工作日志内容:');
+            if (!content) return;
+            fetch('/api/commune/attendance.php?action=add_log', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'user_id=' + (user.id || 1) + '&user_name=' + encodeURIComponent(user.nickname || user.username) + '&content=' + encodeURIComponent(content)
+            })
+            .then(r => r.json())
+            .then(d => {
+                alert(d.msg);
+                if (d.code === 1) loadWorkLog();
+            });
+        }
+    </script>
+</body>
+</html>

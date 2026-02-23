@@ -1,0 +1,267 @@
+<!DOCTYPE html>  <!--custom_file(finance_trade_report)-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>营业报表</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=0">
+	<style>
+		.layui-col-md2{line-height: 40px;font-size: 16px}
+	</style>
+  {include file="public/css"/}
+</head>
+<body>
+  <div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+        <div class="layui-card layui-col-md12">
+          <div class="layui-card-header"><i class="fa fa-list"></i> 营业报表
+				{if input('param.isopen')==1}<i class="layui-icon layui-icon-close" style="font-size:18px;font-weight:bold;cursor:pointer" onclick="closeself()"></i>{/if}</div>
+			<blockquote class="layui-elem-quote">默认统计当天0点~当前时间。</blockquote>
+          <div class="layui-card-body" pad15>
+				<div class="layui-col-md2" style="padding-bottom:10px">
+<!--					<button class="layui-btn layui-btn-primary layuiadmin-btn-list" data-form-export="{:url('excel')}">导出EXCEL</button>-->
+				</div>
+			
+				<div class="layui-form layui-col-md10 layui-form-search">
+					<div class="layui-inline">
+						<label class="layui-form-label">支付方式</label>
+						<div class="layui-input-inline" style="width: 200px">
+							<select name="paytypeid" >
+								<option value="">全部</option>
+								<option value="1" {if input('param.paytypeid')==='1'}selected{/if}>余额支付</option>
+								<option value="2" {if input('param.paytypeid')==='2'}selected{/if}>微信支付</option>
+								<option value="3" {if input('param.paytypeid')==='3'}selected{/if}>支付宝支付</option>
+								<option value="4" {if input('param.paytypeid')==='4'}selected{/if}>货到付款</option>
+								{if getcustom('member_overdraft_money')}
+								<option value="38" {if input('param.paytypeid')==='38'}selected{/if}>{:t('信用额度')}支付</option>
+								{/if}
+								{if in_array('baidu',$platform)}<option value="11" {if input('param.paytypeid')==='11'}selected{/if}>百度小程序</option>{/if}
+								{if in_array('toutiao',$platform)}<option value="12" {if input('param.paytypeid')==='12'}selected{/if}>头条小程序</option>{/if}
+								{if getcustom('restaurant_shop_cashdesk')}
+									<option value="0" {if input('param.paytypeid')==='0'}selected{/if}>现金收款-餐饮收银台</option>
+								{/if}
+								{if getcustom('cashdesk_sxpay')}
+								<option value="81" {if input('param.paytypeid')==='81'}selected{/if}>随行付收款-餐饮收银台</option>
+								{/if}
+								
+								
+							
+							</select>
+						</div>
+					</div>
+
+					<div class="layui-inline" s>
+						<label class="layui-form-label">发起时间</label>
+						<div class="layui-input-inline" style="width:280px">
+							<input type="text" name="ctime" id="ctime" autocomplete="off" class="layui-input">
+						</div>
+					</div>
+
+					<div class="layui-inline">
+						<button class="layui-btn layuiadmin-btn-replys" lay-submit="" lay-filter="LAY-app-forumreply-search">
+							<i class="layui-icon layui-icon-search layuiadmin-button-btn"></i>
+						</button>
+					</div>
+				</div>
+			  <!--内容-->
+			  <div  style="width: 100%">
+				
+				  <div class="layui-row" style="margin-bottom: 20px">
+					  <div class="layui-col-md2 "> 开始时间：<span id="starttime"></span></div>
+					  <div class="layui-col-md2 ">结束时间：<span id="endtime"></span></div>
+				  </div>
+				  
+				  <span style="font-weight: 700;font-size: 16px">订单数量：<span id="total_ordercount"></span></span><hr/>
+				  <div class="layui-row" style="margin-bottom: 40px">
+					  <div class="layui-col-md2" id="cashdesk_ordercount"> </div>
+					  <div class="layui-col-md2" id="online_ordercount"> </div>
+				  </div>
+
+				  <span style="font-weight: 700;font-size: 16px">收银机营业额：<span id="cashdesk_total"></span></span> <hr/>
+				  <div class="layui-row" style="margin-bottom: 40px" id="cashdesk">
+					  <div class="layui-col-md2 paytype paytype0"></div>
+					  <div class="layui-col-md2 paytype paytype1"></div>
+					  <div class="layui-col-md2 paytype paytype2"></div>
+					  <div class="layui-col-md2 paytype paytype3"></div>
+					  {if getcustom('cashdesk_sxpay')}
+					  <div class="layui-col-md2 paytype paytype81"></div>
+					  {/if}
+					  
+					  
+					  
+				  </div>
+				  
+				  <span style="font-weight: 700;font-size: 16px">线上营业额：<span id="online_total"></span></span> <hr/>
+				  <div class="layui-row" style="margin-bottom: 40px" id="online">
+					  <div class="layui-col-md2 paytype paytype1"></div>
+					  <div class="layui-col-md2 paytype paytype2"></div>
+					  <div class="layui-col-md2 paytype paytype3"></div>
+					  <div class="layui-col-md2 paytype paytype0"></div>
+				  </div>
+				  <span style="font-weight: 700;font-size: 16px">优惠金额（不参与其他统计）：<span id="youhui_total"></span></span> <hr/>
+				  {if $bid ==0}
+				  <div id="recharge_div">
+					  <span style="font-weight: 700;font-size: 16px">会员储值 (预付款)收款小计：<span id="recharge_total"></span></span> <hr/>
+					  <div class="layui-row" style="margin-bottom: 40px" id="recharge">
+						  <div class="layui-col-md2 paytype paytype0"></div>
+						  <div class="layui-col-md2 paytype paytype2"></div>
+						  <div class="layui-col-md2 paytype paytype3"></div>
+						  {if getcustom('cashdesk_sxpay')}
+						  <div class="layui-col-md2 paytype paytype81"></div>
+						  {/if}
+					  </div>
+				  </div>
+				  {/if}
+				  <span style="font-weight: 700;font-size: 16px">退款总额：<span id="refund_total"></span></span> <hr/>
+				  <div class="layui-row" style="margin-bottom: 40px" id="refund">
+					  <div class="layui-col-md2 paytype paytype0"></div>
+					  <div class="layui-col-md2 paytype paytype1"></div>
+					  <div class="layui-col-md2 paytype paytype2"></div>
+					  <div class="layui-col-md2 paytype paytype3"></div>
+					  {if getcustom('cashdesk_sxpay')}
+					  <div class="layui-col-md2 paytype paytype81"></div>
+					  {/if}
+					  
+					  
+					  
+				  </div>
+				  {if getcustom('expend')}
+				  <span style="font-weight: 700;font-size: 16px">支出总额：<span id="expend_total"></span></span> <hr/>
+				  <div class="layui-row" style="margin-bottom: 40px" id="expend">
+<!--					  <div class="layui-col-md2 paytype paytype0"></div>-->
+				  </div>
+				  {/if}
+				  <span style="font-weight: 700;font-size: 16px">汇总（以下数据均扣除退款金额）</span> <hr/>
+				  <div class="layui-row" style="margin-bottom: 20px">
+					  <div class="layui-col-md3">营业额汇总（包含会员储值与会员消费）：<text id="all_yingyee_money"></text></div>
+					  <div class="layui-col-md3">营业额汇总（仅不含会员储值）：<text id="yingyee_money"></text></div>
+					  <div class="layui-col-md3">收款汇总（仅不含会员余额支付）：<text id="total_in_money"></text></div>
+<!--					  <div class="layui-col-md3">收款汇总：<text id="all_total_in_money"></text></div>-->
+					  <div class="layui-col-md3">余额支付汇总（线上+线下）：<text id="all_yue_money"></text></div>
+				  </div>
+			  </div>
+			  <!--内容-->
+          </div>
+        </div>
+    </div>
+  </div>
+	{include file="public/js"/}
+	<script>
+	layui.laydate.render({ 
+		elem: '#ctime',
+		trigger: 'click',
+		type: 'datetime',
+		range: '~', //或 range: '~' 来自定义分割字符
+		value:'{:date("Y-m-d H:i:s")} ~ {:date("Y-m-d 23:59:59")}'
+	});
+	//检索
+
+	layui.form.on('submit(LAY-app-forumreply-search)', function(obj){
+		var field = obj.field
+		console.log(field);
+		getbaobiaodata(field.paytypeid,field.ctime);
+	})
+    $(function () {
+		getbaobiaodata();
+	})
+	function getbaobiaodata(paytypeid='',ctime=''){
+		var index = layer.load();
+		$.post("{:url('tradereport')}",{paytypeid:paytypeid,ctime:ctime},function(res){
+			var data  = res.data;
+			$('#starttime').html(data.logintime);
+			$('#endtime').html(data.jiaobantime);
+			$('#cashdesk_ordercount').html('收银机订单数：'+data.cashdesk_ordercount);
+			$('#online_ordercount').html('线上订单数：'+data.online_ordercount);
+			$('#total_ordercount').html(data.total_ordercount);
+			
+			//收银机营业额
+			if(data.cashpay_show) {
+				$('#cashdesk .paytype0').html('现金支付：￥' + data.today_cash_money);
+			}
+			$('#cashdesk .paytype1').html('余额支付：￥' + data.today_yue_money);
+		 	$('#cashdesk .paytype2').html('微信支付：￥'+data.today_wx_money);
+		 	$('#cashdesk .paytype3').html('支付宝支付：￥'+data.today_alipay_money);
+		 	if(data.sxfpay_show){
+				$('#cashdesk .paytype81').html('随行付支付：￥'+data.today_sxf_money);
+			}
+		 	
+			
+		 	$('#cashdesk_total').html('￥'+data.today_total_money);//总
+			//自定义支付
+			
+			
+			//线上营业
+			$('#online .paytype1').html('余额支付：￥'+data.online_yue_money);
+			$('#online .paytype2').html('微信线上支付：￥'+data.online_wx_money);
+			$('#online .paytype3').html('支付宝线上支付：￥'+data.online_alipay_money);
+			$('#online .paytype0').html('后台补录：￥'+data.online_admin_money);
+			$('#online_total').html('￥'+data.online_total_money)
+			//优惠金额
+			$('#youhui_total').html('-￥'+data.youhui_total)
+				
+			//会员储值
+			$('#recharge .paytype0').html('现金支付：￥'+data.recharge_cash_money);
+			$('#recharge .paytype2').html('微信支付：￥'+data.recharge_wx_money);
+			$('#recharge .paytype3').html('支付宝支付：￥'+data.recharge_alipay_money);
+			if(data.sxfpay_show) {
+				$('#recharge .paytype81').html('随行付支付：￥' + data.recharge_sxf_money);
+			}
+			$('#recharge_total').html('￥'+data.recharge_total_money);
+			//退款
+			if(data.cashpay_show) {
+				$('#refund .paytype0').html('现金退款：￥' + data.refund_cash_money);
+			}
+			$('#refund .paytype1').html('余额退款：￥'+data.refund_yue_money);
+			$('#refund .paytype2').html('微信退款：￥'+data.refund_wx_money);
+			$('#refund .paytype3').html('支付宝退款：￥'+data.refund_alipay_money);
+			$('#refund .paytype81').html('随行付退款：￥'+data.refund_sxf_money);
+			
+			$('#refund_total').html('￥'+data.refund_total_money);//总
+			{if getcustom('expend')}
+				$('#expend_total').html('￥'+data.expend_total_money);//总
+				if(data.expend_money_cat) {
+					var expendhtml = '';
+					for (var i = 0; i<data.expend_money_cat.length; i++) {
+						expendhtml += '<div class="layui-col-md2">'+data.expend_money_cat[i].cname+'：￥'+data.expend_money_cat[i].money+'</div>';
+					}
+					$("#expend").html(expendhtml);
+				}
+
+			{/if}
+			//自定义支付
+			
+			//混合支付 只有现金的时候才显示
+			if(data.cashpay_show) {
+				$('#cashdesk #mix_pay .mix_wx').html('混合支付微信：￥'+data.mix_wx_pay);
+				$('#cashdesk #mix_pay .mix_alipay').html('混合支付支付宝：￥'+data.mix_alipay_pay);
+				{if getcustom('cashdesk_sxpay')}
+					$('#cashdesk #mix_pay .mix_sxf').html('混合支付随行付：￥'+data.mix_sxf_pay);
+					$('#refund #mix_refund .mix_sxf').html('混合支付随行付退款：￥'+data.mix_refund_sxf_pay);
+				{/if}
+				//混合支付退款
+				$('#refund #mix_refund .mix_wx').html('混合支付微信退款：￥'+data.mix_refund_wx_pay);
+				$('#refund #mix_refund .mix_alipay').html('混合支付支付宝退款：￥'+data.mix_refund_alipay_pay);
+			}
+			//汇总
+			$('#yingyee_money').html('￥'+data.yingyee_money);
+			$('#all_yingyee_money').html('￥'+data.all_yingyee_money);
+			$('#total_in_money').html('￥'+data.total_in_money);
+			$('#all_total_in_money').html('￥'+data.all_total_in_money);
+			$('#all_yue_money').html('￥'+data.all_yue_money);
+			if(paytypeid !=''){
+				$('.paytype').hide();
+				$('.paytype'+paytypeid).show();
+				//如果搜索的是现金 显示混合支付
+				if(paytypeid ==0)$('.paytype_mix').show()
+			}else{
+				$('.paytype').show();
+			}
+			layer.close(index);
+		})
+	}
+
+	</script>
+	{include file="public/copyright"/}
+</body>
+</html>
