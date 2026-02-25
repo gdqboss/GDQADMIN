@@ -339,6 +339,7 @@
     <!-- 首页 -->
     <div id="homePage" style="display:none">
         <div class="home-header">
+            <select id="langSelect" onchange="setLanguage(this.value)" style="padding:5px;border-radius:5px;border:none;margin-right:10px"><option value="zh">中文</option><option value="en">EN</option></select>
             <div class="lang-dropdown">
                 <select id="langSelect" onchange="changeLang(this.value)">
                     <option value="zh">🇨🇳 中文</option>
@@ -380,7 +381,7 @@
             </a>
             
             <a href="/inventory_stats.html" class="menu-card">
-            <a href="/tools/translate.html" class="menu-card">
+            <a href="#" onclick="alert('翻译功能已集成到系统，点击右上角切换语言')" class="menu-card">
                 <div class="menu-icon">🈶</div>
                 <h6>智能翻译</h6>
                 <p>AI翻译</p>
@@ -1433,5 +1434,5 @@ function submitLog() {
 }
 </script>
 
-</body>
+<script>
 </html>
