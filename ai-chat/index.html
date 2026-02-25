@@ -321,6 +321,7 @@ body {
         </div>
         <div class="sidebar-menu">
             <a href="#" class="active" onclick="switchRoom('all')">💬 全部助手</a>
+            <a href="#" onclick="showSettingsModal()">⚙️ 聊天室设置</a>
             <a href="#" onclick="showInviteModal()">➕ 邀请员工</a>
             <a href="#" onclick="showAssistantModal()">🤖 管理助手</a>
             <a href="#" onclick="clearMemory()">🗑️ 清空记忆</a>
@@ -364,6 +365,17 @@ body {
 </div>
 
 <!-- 助手管理弹窗 -->
+<div id="settings-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header"><span style="font-weight:600">⚙️ 聊天室设置</span><span onclick="closeModal(""settings"")" style="font-size:24px;cursor:pointer">&times;</span></div>
+        <div class="modal-body">
+            <label style="display:block;margin-bottom:5px;font-size:13px;color:#666">聊天室名称</label>
+            <input type="text" id="room-name-input" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:10px;margin-bottom:15px">
+            <button onclick="saveRoomSettings()" style="width:100%;padding:12px;background:#667eea;color:white;border:none;border-radius:10px">保存设置</button>
+        </div>
+    </div>
+</div>
+
 <div id="assistant-modal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
@@ -552,3 +564,41 @@ function clearMemory(){
 </script>
 </body>
 </html>
+<script>
+function showSettingsModal(){
+    document.getElementById('settings-modal').classList.add('show');
+    toggleMenu();
+    // 加载当前设置
+    if(currentUser){
+        fetch('/ai-chat/api/room.php?action=get_settings&user_id='+currentUser.id)
+        .then(r=>r.json()).then(d=>{
+            if(d.code===1){
+                document.getElementById('room-name-input').value = d.data.room_name || '彩美特AI聊天室';
+            }
+        });
+    }
+}
+
+function saveRoomSettings(){
+    var roomName = document.getElementById('room-name-input').value.trim();
+    if(!roomName){alert('请输入聊天室名称');return;}
+    
+    var fd = new FormData();
+    fd.append('user_id', currentUser.id);
+    fd.append('room_name', roomName);
+    
+    fetch('/ai-chat/api/room.php?action=update_settings',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{
+        alert(d.msg);
+        if(d.code===1){
+            document.getElementById('chat-title').textContent = roomName;
+            document.querySelector('.chat-header h3').textContent = roomName;
+            closeModal('settings');
+        }
+    });
+}
+
+function closeModal(id){
+    document.getElementById(id+'-modal').classList.remove('show');
+}
+</script>
