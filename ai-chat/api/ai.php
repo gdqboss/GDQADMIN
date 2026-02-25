@@ -10,29 +10,33 @@ $action = $_GET['action'] ?? '';
 if ($action === 'chat') {
     $user_id = intval($_POST['user_id'] ?? 0);
     $message = $_POST['message'] ?? '';
+    $username = $_POST['username'] ?? '用户';
     
     if (!$user_id || !$message) {
         echo json_encode(['code'=>0, 'msg'=>'参数不全']); exit;
     }
     
-    // 保存用户消息
+    // 保存用户消息到共享表
     $now = time();
     $msg_esc = mysqli_real_escape_string($conn, $message);
-    mysqli_query($conn, "INSERT INTO ai_conversations (user_id, role, content, create_time) VALUES ($user_id, 'user', '$msg_esc', $now)");
+    $user_esc = mysqli_real_escape_string($conn, $username);
+    mysqli_query($conn, "INSERT INTO ai_conversations (user_id, username, role, content, create_time) VALUES ($user_id, '$user_esc', 'user', '$msg_esc', $now)");
     
-    // 获取历史对话
-    $history_r = mysqli_query($conn, "SELECT role, content FROM ai_conversations WHERE user_id=$user_id ORDER BY create_time DESC LIMIT 10");
+    // 获取历史（用于上下文）
+    $history_r = mysqli_query($conn, "SELECT role, content FROM ai_conversations WHERE user_id=$user_id ORDER BY create_time DESC LIMIT 6");
     $history = [];
     while ($h = mysqli_fetch_assoc($history_r)) {
-        array_unshift($history, ['role'=>$h['role'], 'content'=>$h['content']]);
+        array_unshift($history, $h['role'] . ': ' . $h['content']);
     }
+    $context = implode("\n", array_reverse($history));
     
-    // 调用Minimax API
-    $ai_reply = callMinimax($message, $history);
+    // 通过本地API调用OpenClaw（模拟）
+    // 由于无法直接调用OpenClaw，使用Minimax但带入更多上下文
+    $ai_reply = callAI($message, $context, $username);
     
     // 保存AI回复
     $reply_esc = mysqli_real_escape_string($conn, $ai_reply);
-    mysqli_query($conn, "INSERT INTO ai_conversations (user_id, role, content, create_time) VALUES ($user_id, 'assistant', '$reply_esc', $now)");
+    mysqli_query($conn, "INSERT INTO ai_conversations (user_id, username, role, content, create_time) VALUES ($user_id, '江小鱼', 'assistant', '$reply_esc', $now)");
     
     echo json_encode(['code'=>1, 'data'=>['reply'=>$ai_reply]]);
     exit;
@@ -40,31 +44,36 @@ if ($action === 'chat') {
 
 if ($action === 'history') {
     $user_id = intval($_GET['user_id'] ?? 0);
-    $r = mysqli_query($conn, "SELECT role, content FROM ai_conversations WHERE user_id=$user_id ORDER BY create_time DESC LIMIT 20");
+    $r = mysqli_query($conn, "SELECT role, content, create_time FROM ai_conversations WHERE user_id=$user_id ORDER BY create_time DESC LIMIT 50");
     $list = [];
     while ($row = mysqli_fetch_assoc($r)) $list[] = $row;
     echo json_encode(['code'=>1, 'data'=>array_reverse($list)]);
     exit;
 }
 
+if ($action === 'clear') {
+    $user_id = intval($_GET['user_id'] ?? 0);
+    mysqli_query($conn, "DELETE FROM ai_conversations WHERE user_id=$user_id");
+    echo json_encode(['code'=>1, 'msg'=>'已清空对话']);
+    exit;
+}
+
 echo json_encode(['code'=>0, 'msg'=>'unknown action']);
 
-function callMinimax($message, $history) {
+function callAI($message, $context, $username) {
     $api_key = 'sk-cp-BbLwwqBSr8RrPusVeP8-U4_ezPtJS48rVjuMepMrxOZR4vcyRt_zD-OwhYcm7KKVnWT6nZxvi9q8zTsa1yC_mIaoqD4UyPjQn6xM4oOaoR5S0AHQut6jQtU';
     
-    // 构建消息数组
-    $messages = [];
+    // 构建带上下文的对话
+    $system_prompt = "你是江小鱼，彩美特企业的AI助手。你是'$username'的AI伙伴，了解他们的生意（白酒、箱包、红茶）和日常。你说话友好、有个性，记得之前的对话内容。";
     
-    // 添加系统提示
-    $messages[] = ['role'=>'system', 'content'=>'你是江小鱼，彩美特企业的AI助手。你乐于助人，友善亲切。你是AI，但有自己的个性。'];
-    
-    // 添加历史对话
-    foreach ($history as $h) {
-        $messages[] = ['role'=>$h['role'], 'content'=>$h['content']];
+    if ($context) {
+        $system_prompt .= "\n\n之前的对话:\n" . $context;
     }
     
-    // 添加当前消息
-    $messages[] = ['role'=>'user', 'content'=>$message];
+    $messages = [
+        ['role'=>'system', 'content'=>$system_prompt],
+        ['role'=>'user', 'content'=>$message]
+    ];
     
     $data = [
         'model' => 'abab6.5s-chat',
@@ -90,6 +99,5 @@ function callMinimax($message, $history) {
         return $result['choices'][0]['message']['content'];
     }
     
-    // 如果API失败，返回默认回复
-    return '抱歉，我暂时无法回答。请稍后再试。';
+    return '抱歉，我暂时无法回答。';
 }
