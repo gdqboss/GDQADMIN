@@ -3,20 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GDQ AI 聊天</title>
+    <title>彩美特 AI 聊天</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f7fa; height: 100vh; overflow: hidden; }
         
-        /* 登录页 */
         #login-page { display: flex; align-items: center; justify-content: center; height: 100vh; }
         .login-box { background: white; padding: 40px; border-radius: 16px; width: 90%; max-width: 400px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
         
-        /* 聊天页 */
         #chat-page { display: none; height: 100vh; }
         
-        /* 侧边栏 */
         .sidebar { width: 280px; background: white; border-right: 1px solid #eee; display: flex; flex-direction: column; }
         .sidebar-header { padding: 15px; border-bottom: 1px solid #eee; background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
         .sidebar-header h4 { font-size: 18px; margin: 0; }
@@ -25,42 +22,36 @@
         .user-item { display: flex; align-items: center; padding: 12px 15px; cursor: pointer; border-bottom: 1px solid #f5f5f5; }
         .user-item:hover { background: #f8f9fa; }
         .user-item.active { background: #f0f0ff; }
-        .user-avatar { width: 40px; height: 40px; border-radius: 50%; background: #667eea; color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; margin-right: 12px; }
-        .user-info { flex: 1; }
+        .user-avatar { width: 40px; height: 40px; border-radius: 50%; background: #667eea; color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; margin-right: 12px; flex-shrink: 0; }
+        .user-avatar.ai { background: linear-gradient(135deg, #f093fb, #f5576c); }
+        .user-info { flex: 1; min-width: 0; }
         .user-name { font-weight: 600; font-size: 14px; }
-        .user-status { font-size: 12px; color: #888; }
+        .user-status { font-size: 12px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         
-        /* 聊天区 */
-        .chat-area { flex: 1; display: flex; flex-direction: column; }
+        .chat-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
         .chat-header { padding: 15px; background: white; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
         .chat-header h5 { margin: 0; }
         
         .chat-messages { flex: 1; overflow-y: auto; padding: 15px; }
         .message { margin-bottom: 15px; display: flex; }
         .message.mine { flex-direction: row-reverse; }
-        .message-avatar { width: 36px; height: 36px; border-radius: 50%; background: #667eea; color: white; display: flex; align-items: center; justify-content: center; font-size: 14px; margin: 0 10px; }
+        .message-avatar { width: 36px; height: 36px; border-radius: 50%; background: #667eea; color: white; display: flex; align-items: center; justify-content: center; font-size: 14px; margin: 0 10px; flex-shrink: 0; }
         .message.mine .message-avatar { background: #4caf50; }
-        .message-content { max-width: 70%; }
-        .message-bubble { padding: 10px 15px; border-radius: 16px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .message-content { max-width: 70%; min-width: 0; }
+        .message-bubble { padding: 10px 15px; border-radius: 16px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); word-break: break-word; }
         .message.mine .message-bubble { background: #667eea; color: white; }
         .message-time { font-size: 11px; color: #999; margin-top: 5px; }
         .message.mine .message-time { text-align: right; }
         
-        /* AI消息特殊样式 */
         .message.ai .message-avatar { background: linear-gradient(135deg, #f093fb, #f5576c); }
         .message.ai .message-bubble { background: linear-gradient(135deg, #fef3c7, #fde68a); }
         
         .chat-input { padding: 15px; background: white; border-top: 1px solid #eee; display: flex; gap: 10px; }
         .chat-input input { flex: 1; padding: 12px 15px; border: 1px solid #ddd; border-radius: 24px; outline: none; }
         .chat-input input:focus { border-color: #667eea; }
-        .chat-input button { padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 24px; cursor: pointer; }
+        .chat-input button { padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 24px; cursor: pointer; white-space: nowrap; }
         .chat-input button:hover { background: #5568d3; }
         
-        /* AI助手按钮 */
-        .ai-btn { position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; font-size: 24px; cursor: pointer; box-shadow: 0 4px 15px rgba(102,126,234,0.4); }
-        .ai-btn:hover { transform: scale(1.1); }
-        
-        /* 移动端适配 */
         @media (max-width: 768px) {
             .sidebar { position: fixed; left: -100%; width: 100%; z-index: 100; transition: left 0.3s; }
             .sidebar.show { left: 0; }
@@ -72,7 +63,7 @@
     <!-- 登录页 -->
     <div id="login-page">
         <div class="login-box">
-            <h3 style="text-align:center;margin-bottom:30px">🎓 GDQ AI 聊天</h3>
+            <h3 style="text-align:center;margin-bottom:30px">特 AI🎓 彩美 聊天</h3>
             <input type="text" id="login-username" class="form-control mb-3" placeholder="用户名">
             <input type="password" id="login-password" class="form-control mb-3" placeholder="密码">
             <button class="btn btn-primary w-100 mb-3" onclick="login()">登录</button>
@@ -113,7 +104,13 @@
                     <button class="btn btn-sm btn-outline-primary" onclick="showUsers()">联系人</button>
                 </div>
             </div>
-            <div class="chat-messages" id="messages"></div>
+            <div class="chat-messages" id="messages">
+                <div style="text-align:center;color:#888;padding:50px">
+                    <div style="font-size:48px;margin-bottom:20px">🐟</div>
+                    <div>欢迎使用彩美特AI聊天</div>
+                    <div style="margin-top:10px;font-size:14px;color:#aaa">选择左侧联系人或点击"江小鱼"开始AI对话</div>
+                </div>
+            </div>
             <div class="chat-input">
                 <input type="text" id="message-input" placeholder="输入消息..." onkeypress="if(event.key==='Enter')sendMessage()">
                 <button onclick="sendMessage()">发送</button>
@@ -121,13 +118,11 @@
         </div>
     </div>
     
-    <!-- AI助手按钮 -->
-    <button class="ai-btn" onclick="openAI()">🤖</button>
-    
     <script>
     var currentUser = null;
     var currentRoom = null;
     var pollTimer = null;
+    var aiHistory = [];
     
     // 检查登录状态
     var savedUser = localStorage.getItem('gdq_user');
@@ -192,24 +187,55 @@
         startPolling();
     }
     
+    function logout() {
+        localStorage.removeItem('gdq_user');
+        location.reload();
+    }
+    
     function loadRooms() {
         fetch('/ai-chat/api/chat.php?action=rooms&user_id=' + currentUser.id)
         .then(r => r.json())
         .then(d => {
+            var html = '';
+            
+            // AI助手（江小鱼）- 始终置顶
+            html += '<div class="user-item" onclick="selectAI()" style="background:linear-gradient(135deg,#fef3c7,#fde68a)">' +
+                '<div class="user-avatar ai">🐟</div>' +
+                '<div class="user-info"><div class="user-name">江小鱼 AI助手</div>' +
+                '<div class="user-status">点击和我聊天</div></div></div>';
+            
             if (d.code === 1) {
-                var html = '';
                 d.data.forEach(r => {
                     var avatar = r.type === 'group' ? '👥' : '👤';
-                    var lastMsg = r.last_msg ? r.last_msg.substring(0, 20) : '暂无消息';
+                    var lastMsg = r.last_msg ? r.last_msg.substring(0, 15) : '暂无消息';
                     html += '<div class="user-item" onclick="selectRoom(' + r.id + ', \'' + r.name + '\')">' +
                         '<div class="user-avatar">' + avatar + '</div>' +
                         '<div class="user-info"><div class="user-name">' + r.name + '</div>' +
                         '<div class="user-status">' + lastMsg + '</div></div></div>';
                 });
-                html += '<div class="user-item" onclick="showUsers()"><div class="user-avatar">➕</div><div class="user-info"><div class="user-name">添加联系人</div></div></div>';
-                document.getElementById('room-list').innerHTML = html || '<div style="padding:20px;text-align:center;color:#888">暂无对话</div>';
             }
+            html += '<div class="user-item" onclick="showUsers()"><div class="user-avatar">➕</div><div class="user-info"><div class="user-name">添加联系人</div></div></div>';
+            document.getElementById('room-list').innerHTML = html;
         });
+    }
+    
+    function selectAI() {
+        currentRoom = { id: 0, name: '江小鱼', isAI: true };
+        document.getElementById('chat-title').textContent = '🐟 江小鱼 AI助手';
+        loadAIMessages();
+    }
+    
+    function loadAIMessages() {
+        var html = '';
+        aiHistory.forEach(h => {
+            var isMine = h.role === 'user';
+            html += '<div class="message ' + (isMine ? 'mine' : 'ai') + '">' +
+                '<div class="message-avatar">' + (isMine ? '👤' : '🐟') + '</div>' +
+                '<div class="message-content"><div class="message-bubble">' + h.content + '</div>' +
+                '<div class="message-time">' + (h.time || '') + '</div></div></div>';
+        });
+        document.getElementById('messages').innerHTML = html || '<div style="text-align:center;color:#888;padding:50px"><div style="font-size:48px;margin-bottom:20px">🐟</div><div>你好！我是江小鱼AI助手</div><div style="margin-top:10px;font-size:14px;color:#aaa">有什么可以帮你的？</div></div>';
+        document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
     }
     
     function showUsers() {
@@ -219,7 +245,7 @@
             if (d.code === 1) {
                 var html = '<div style="padding:15px;border-bottom:1px solid:#eee"><h6>选择联系人</h6></div>';
                 d.data.forEach(u => {
-                    if (u.id !== currentUser.id) {
+                    if (u.id !== currentUser.id && u.id !== 999999) {
                         var initial = u.nickname ? u.nickname[0] : u.username[0];
                         html += '<div class="user-item" onclick="startChat(' + u.id + ', \'' + (u.nickname||u.username) + '\')">' +
                             '<div class="user-avatar">' + initial.toUpperCase() + '</div>' +
@@ -232,7 +258,6 @@
     }
     
     function startChat(userId, userName) {
-        // 创建私聊房间
         var fd = new FormData();
         fd.append('name', userName);
         fd.append('type', 'private');
@@ -242,7 +267,6 @@
         .then(r => r.json())
         .then(d => {
             if (d.code === 1) {
-                // 加入房间
                 var fd2 = new FormData();
                 fd2.append('room_id', d.data.id);
                 fd2.append('user_id', userId);
@@ -276,13 +300,13 @@
     }
     
     function selectRoom(roomId, roomName) {
-        currentRoom = { id: roomId, name: roomName };
+        currentRoom = { id: roomId, name: roomName, isAI: false };
         document.getElementById('chat-title').textContent = roomName;
         loadMessages();
     }
     
     function loadMessages() {
-        if (!currentRoom) return;
+        if (!currentRoom || currentRoom.isAI) return;
         
         fetch('/ai-chat/api/chat.php?action=list&room_id=' + currentRoom.id)
         .then(r => r.json())
@@ -296,11 +320,11 @@
                     var time = new Date(m.create_time * 1000).toLocaleTimeString();
                     
                     html += '<div class="message ' + (isMine ? 'mine' : '') + ' ' + (isAI ? 'ai' : '') + '">' +
-                        '<div class="message-avatar">' + (isAI ? '🤖' : initial.toUpperCase()) + '</div>' +
+                        '<div class="message-avatar">' + (isAI ? '🐟' : initial.toUpperCase()) + '</div>' +
                         '<div class="message-content"><div class="message-bubble">' + m.content + '</div>' +
                         '<div class="message-time">' + time + '</div></div></div>';
                 });
-                document.getElementById('messages').innerHTML = html;
+                document.getElementById('messages').innerHTML = html || '<div style="text-align:center;color:#888;padding:50px">暂无消息</div>';
                 document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
             }
         });
@@ -309,60 +333,67 @@
     function sendMessage() {
         var input = document.getElementById('message-input');
         var content = input.value.trim();
-        if (!content || !currentRoom) return;
+        if (!content) return;
         
-        var fd = new FormData();
-        fd.append('room_id', currentRoom.id);
-        fd.append('user_id', currentUser.id);
-        fd.append('content', content);
-        
-        fetch('/ai-chat/api/chat.php?action=send', { method: 'POST', body: fd })
-        .then(r => r.json())
-        .then(d => {
-            if (d.code === 1) {
-                input.value = '';
-                loadMessages();
-                loadRooms();
-            }
-        });
-    }
-    
-    function openAI() {
-        var msg = prompt('对AI助手说:');
-        if (!msg) return;
-        
-        var fd = new FormData();
-        fd.append('user_id', currentUser.id);
-        fd.append('message', msg);
-        
-        // 显示等待
-        var msgs = document.getElementById('messages');
-        msgs.innerHTML += '<div class="message ai"><div class="message-avatar">🤖</div><div class="message-content"><div class="message-bubble">思考中...</div></div></div>';
-        msgs.scrollTop = msgs.scrollHeight;
-        
-        fetch('/ai-chat/api/ai.php?action=chat', { method: 'POST', body: fd })
-        .then(r => r.json())
-        .then(d => {
-            if (d.code === 1) {
-                // 显示回复
-                var reply = d.data.reply;
-                var html = '';
-                var msgs = document.getElementById('messages');
-                // 移除"思考中"
-                var old = msgs.querySelector('.message.ai:last-child');
-                if (old) old.remove();
-                
-                html += '<div class="message ai"><div class="message-avatar">🤖</div><div class="message-content"><div class="message-bubble">' + reply + '</div>' +
-                    '<div class="message-time">' + new Date().toLocaleTimeString() + '</div></div></div>';
-                msgs.innerHTML += html;
-                msgs.scrollTop = msgs.scrollHeight;
-            }
-        });
+        if (currentRoom && currentRoom.isAI) {
+            // AI聊天
+            var time = new Date().toLocaleTimeString();
+            aiHistory.push({ role: 'user', content: content, time: time });
+            
+            var html = '';
+            aiHistory.forEach(h => {
+                var isMine = h.role === 'user';
+                html += '<div class="message ' + (isMine ? 'mine' : 'ai') + '">' +
+                    '<div class="message-avatar">' + (isMine ? '👤' : '🐟') + '</div>' +
+                    '<div class="message-content"><div class="message-bubble">' + h.content + '</div>' +
+                    '<div class="message-time">' + (h.time || '') + '</div></div></div>';
+            });
+            // 添加"思考中"
+            html += '<div class="message ai" id="thinking"><div class="message-avatar">🐟</div><div class="message-content"><div class="message-bubble">思考中...</div></div></div>';
+            document.getElementById('messages').innerHTML = html;
+            document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+            input.value = '';
+            
+            // 调用AI
+            var fd = new FormData();
+            fd.append('user_id', currentUser.id);
+            fd.append('message', content);
+            
+            fetch('/ai-chat/api/ai.php?action=chat', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1) {
+                    var reply = d.data.reply;
+                    var replyTime = new Date().toLocaleTimeString();
+                    aiHistory.push({ role: 'assistant', content: reply, time: replyTime });
+                    loadAIMessages();
+                } else {
+                    alert(d.msg || 'AI响应失败');
+                }
+            });
+        } else if (currentRoom) {
+            // 普通聊天
+            var fd = new FormData();
+            fd.append('room_id', currentRoom.id);
+            fd.append('user_id', currentUser.id);
+            fd.append('content', content);
+            
+            fetch('/ai-chat/api/chat.php?action=send', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(d => {
+                if (d.code === 1) {
+                    input.value = '';
+                    loadMessages();
+                    loadRooms();
+                }
+            });
+        }
     }
     
     function startPolling() {
+        if (pollTimer) clearInterval(pollTimer);
         pollTimer = setInterval(() => {
-            if (currentRoom) loadMessages();
+            if (currentRoom && !currentRoom.isAI) loadMessages();
             loadRooms();
         }, 5000);
     }
