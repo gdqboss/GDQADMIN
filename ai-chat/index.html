@@ -8,7 +8,7 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,sans-serif;background:#f5f7fa;height:100vh}
 #login-page{display:flex;align-items:center;justify-content:center;height:100vh}
-.login-box{background:white;padding:30px;border-radius:16px;width:90%;max-width:350px;box-shadow:0 4px 20px rgba(0,0,0,0.1)}
+.login-box{background:white;padding:30px;border-radius:16px;width:90%;max-width:350px;box-shadow:0 4px 20px}
 #chat-page{display:none;height:100vh;flex-direction:column}
 .chat-header{padding:15px;background:linear-gradient(135deg,#667eea,#764ba2);color:white;display:flex;align-items:center;justify-content:space-between}
 .chat-header h3{margin:0;font-size:18px}
@@ -18,15 +18,18 @@ body{font-family:-apple-system,sans-serif;background:#f5f7fa;height:100vh}
 .message-avatar{width:36px;height:36px;border-radius:50%;background:#667eea;color:white;display:flex;align-items:center;justify-content:center;margin:0 10px;flex-shrink:0}
 .message.mine .message-avatar{background:#4caf50}
 .message-content{max-width:75%}
-.message-bubble{padding:10px 15px;border-radius:16px;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.1);word-break:break-word}
+.message-bubble{padding:10px 15px;border-radius:16px;background:white;box-shadow:0 1px 3px;word-break:break-word}
 .message.mine .message-bubble{background:#667eea;color:white}
-.message.ai .message-avatar{background:linear-gradient(135deg,#f093fb,#f5576c)}
+.message.ai .message-avatar{linear-gradient(135deg,#f093fb,#f5576c)}
 .message.ai .message-bubble{background:#fef3c7}
 .chat-input{padding:15px;background:white;display:flex;gap:10px;border-top:1px solid #eee}
 .chat-input input{flex:1;padding:12px 15px;border:1px solid #ddd;border-radius:24px;outline:none}
 .chat-input button{padding:10px 20px;background:#667eea;color:white;border:none;border-radius:24px;cursor:pointer}
-.typing{color:#999;font-size:14px}
-.clear-btn{background:none;border:none;color:white;font-size:13px;cursor:pointer}
+.btn{background:#667eea;color:white;padding:10px 20px;border:none;border-radius:8px;cursor:pointer;margin:5px}
+.btn-secondary{background:#666}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;z-index:100}
+.modal.show{display:flex}
+.modal-content{background:white;border-radius:16px;padding:20px;width:90%;max-width:400px}
 </style>
 </head>
 <body>
@@ -35,14 +38,31 @@ body{font-family:-apple-system,sans-serif;background:#f5f7fa;height:100vh}
 <h3 style="text-align:center;margin-bottom:20px">🐟 彩美特 AI 聊天</h3>
 <input type="text" id="username" class="form-control mb-2" placeholder="用户名">
 <input type="password" id="password" class="form-control mb-3" placeholder="密码">
-<button class="btn btn-primary w-100" onclick="doLogin()">登录</button>
+<button class="btn w-100" onclick="doLogin()">登录</button>
+<p style="text-align:center;margin-top:10px"><a href="#" onclick="showInvite()">使用邀请码注册</a></p>
+</div>
+</div>
+
+<!-- 邀请注册弹窗 -->
+<div id="invite-modal" class="modal">
+<div class="modal-content">
+<h4>邀请注册</h4>
+<input type="text" id="invite-code" class="form-control mb-2" placeholder="邀请码">
+<input type="text" id="reg-username" class="form-control mb-2" placeholder="用户名">
+<input type="text" id="reg-nickname" class="form-control mb-2" placeholder="昵称">
+<input type="password" id="reg-password" class="form-control mb-2" placeholder="密码">
+<button class="btn" onclick="registerWithInvite()">注册</button>
+<button class="btn btn-secondary" onclick="closeModal()">取消</button>
 </div>
 </div>
 
 <div id="chat-page">
 <div class="chat-header">
 <h3>🐟 江小鱼 AI助手</h3>
-<button onclick="clearChat()" class="clear-btn">🗑️ 清空</button>
+<div>
+<button onclick="showMyStaff()" style="background:none;border:none;color:white;font-size:14px;margin-right:10px">👥 员工</button>
+<button onclick="createInvite()" style="background:none;border:none;color:white;font-size:14px">➕ 邀请</button>
+</div>
 </div>
 <div class="chat-messages" id="messages"></div>
 <div class="chat-input">
@@ -51,128 +71,165 @@ body{font-family:-apple-system,sans-serif;background:#f5f7fa;height:100vh}
 </div>
 </div>
 
+<!-- 员工列表弹窗 -->
+<div id="staff-modal" class="modal">
+<div class="modal-content">
+<h4>我的员工</h4>
+<div id="staff-list"></div>
+<button class="btn btn-secondary" onclick="closeModal()">关闭</button>
+</div>
+</div>
+
+<!-- 邀请码弹窗 -->
+<div id="invite-result-modal" class="modal">
+<div class="modal-content">
+<h4>邀请链接</h4>
+<p id="invite-link" style="word-break:break-all;font-size:14px;color:#666"></p>
+<button class="btn btn-secondary" onclick="closeModal()">关闭</button>
+</div>
+</div>
+
 <script>
 var currentUser = null;
+var memory_file = '/tmp/gdq_shared_memory.json';
 
 var saved = localStorage.getItem('gdq_user');
 if(saved){
 currentUser = JSON.parse(saved);
 showChat();
-loadHistory();
+loadMemory();
 }
 
 function doLogin(){
 var u = document.getElementById('username').value.trim();
 var p = document.getElementById('password').value;
-if(!u || !p){alert('请输入用户名和密码');return;}
-
+if(!u||!p){alert('请输入用户名和密码');return;}
 var fd = new FormData();
-fd.append('username', u);
-fd.append('password', p);
-
+fd.append('username',u);fd.append('password',p);
 fetch('/ai-chat/api/user.php?action=login',{method:'POST',body:fd})
-.then(r => r.json())
-.then(d => {
-if(d.code === 1){
+.then(r=>r.json()).then(d=>{
+if(d.code===1){
 currentUser = d.data;
-localStorage.setItem('gdq_user', JSON.stringify(currentUser));
+localStorage.setItem('gdq_user',JSON.stringify(currentUser));
 showChat();
-loadHistory();
-}else{
-alert(d.msg);
-}
+loadMemory();
+}else{alert(d.msg);}
 });
 }
 
 function showChat(){
-document.getElementById('login-page').style.display = 'none';
-document.getElementById('chat-page').style.display = 'flex';
+document.getElementById('login-page').style.display='none';
+document.getElementById('chat-page').style.display='flex';
 document.getElementById('msg-input').focus();
 }
 
-function loadHistory(){
-if(!currentUser) return;
-fetch('/ai-chat/api/ai.php?action=history&user_id=' + currentUser.id)
-.then(r => r.json())
-.then(d => {
-if(d.code === 1 && d.data.length > 0){
-renderMessages(d.data);
+// 加载共享记忆
+function loadMemory(){
+fetch('/ai-chat/api/ai.php?action=memory')
+.then(r=>r.json()).then(d=>{
+if(d.code===1 && d.data.length>0){
+renderMemory(d.data);
 }else{
-document.getElementById('messages').innerHTML = '<div style="text-align:center;color:#888;padding:50px"><div style="font-size:48px;margin-bottom:15px">🐟</div><div>你好！我是江小鱼</div><div style="font-size:14px;color:#aaa;margin-top:10px">直接发送消息开始聊天</div></div>';
+document.getElementById('messages').innerHTML='<div style="text-align:center;color:#888;padding:50px"><div style="font-size:48px">🐟</div><div>你好！我是江小鱼</div></div>';
 }
 });
 }
 
-function renderMessages(data){
-var html = '';
-data.forEach(h => {
-var isMine = h.role === 'user';
-html += '<div class="message ' + (isMine ? 'mine' : 'ai') + '">' +
-'<div class="message-avatar">' + (isMine ? '👤' : '🐟') + '</div>' +
-'<div class="message-content"><div class="message-bubble">' + h.content + '</div></div></div>';
+function renderMemory(data){
+var html='';
+data.forEach(m=>{
+var isMine=m.role==='user';
+html+='<div class="message '+(isMine?'mine':'ai')+'">'+
+'<div class="message-avatar">'+(isMine?'👤':'🐟')+'</div>'+
+'<div class="message-content"><div class="message-bubble">'+m.content+'</div></div></div>';
 });
-document.getElementById('messages').innerHTML = html;
-document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+document.getElementById('messages').innerHTML=html;
+document.getElementById('messages').scrollTop=document.getElementById('messages').scrollHeight;
 }
 
 function doSend(){
-var input = document.getElementById('msg-input');
-var content = input.value.trim();
-if(!content) return;
-
+var input=document.getElementById('msg-input');
+var content=input.value.trim();
+if(!content)return;
 if(!currentUser){alert('请先登录');return;}
 
-// 添加用户消息
-renderSingleMessage('user', content);
-input.value = '';
-
-// 添加思考中
-var msgs = document.getElementById('messages');
-msgs.innerHTML += '<div class="message ai" id="typing"><div class="message-avatar">🐟</div><div class="message-content"><div class="message-bubble"><span class="typing">正在思考...</span></div></div></div>';
-msgs.scrollTop = msgs.scrollHeight;
+// 显示用户消息
+var html='<div class="message mine"><div class="message-avatar">👤</div><div class="message-content"><div class="message-bubble">'+content+'</div></div></div>';
+document.getElementById('messages').innerHTML+=html;
+document.getElementById('messages').scrollTop=document.getElementById('messages').scrollHeight;
+input.value='';
 
 // 调用AI
-var fd = new FormData();
-fd.append('user_id', currentUser.id);
-fd.append('username', currentUser.nickname || currentUser.username);
-fd.append('message', content);
+var fd=new FormData();
+fd.append('user_id',currentUser.id);
+fd.append('username',currentUser.nickname||currentUser.username);
+fd.append('message',content);
 
 fetch('/ai-chat/api/ai.php?action=chat',{method:'POST',body:fd})
-.then(r => r.json())
-.then(d => {
-if(d.code === 1){
-document.getElementById('typing').remove();
-renderSingleMessage('assistant', d.data.reply);
-}else{
-document.getElementById('typing').remove();
-alert('AI响应失败');
-}
-})
-.catch(e => {
-document.getElementById('typing').remove();
-alert('请求失败');
-});
-}
-
-function renderSingleMessage(role, content){
-var isMine = role === 'user';
-var html = '<div class="message ' + (isMine ? 'mine' : 'ai') + '">' +
-'<div class="message-avatar">' + (isMine ? '👤' : '🐟') + '</div>' +
-'<div class="message-content"><div class="message-bubble">' + content + '</div></div></div>';
-document.getElementById('messages').innerHTML += html;
-document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
-}
-
-function clearChat(){
-if(confirm('确定清空对话历史？')){
-fetch('/ai-chat/api/ai.php?action=clear&user_id=' + currentUser.id)
-.then(r => r.json())
-.then(d => {
-if(d.code === 1){
-document.getElementById('messages').innerHTML = '<div style="text-align:center;color:#888;padding:50px"><div style="font-size:48px;margin-bottom:15px">🐟</div><div>对话已清空</div></div>';
+.then(r=>r.json()).then(d=>{
+if(d.code===1){
+var replyHtml='<div class="message ai"><div class="message-avatar">🐟</div><div class="message-content"><div class="message-bubble">'+d.data.reply+'</div></div></div>';
+document.getElementById('messages').innerHTML+=replyHtml;
+document.getElementById('messages').scrollTop=document.getElementById('messages').scrollHeight;
 }
 });
 }
+
+// 邀请功能
+function showInvite(){
+var code=new URLSearchParams(window.location.search).get('invite');
+if(code){
+document.getElementById('invite-code').value=code;
+}
+document.getElementById('invite-modal').classList.add('show');
+}
+
+function registerWithInvite(){
+var code=document.getElementById('invite-code').value.trim();
+var u=document.getElementById('reg-username').value.trim();
+var n=document.getElementById('reg-nickname').value.trim()||u;
+var p=document.getElementById('reg-password').value;
+if(!code||!u||!p){alert('请填写完整');return;}
+var fd=new FormData();
+fd.append('invite_code',code);
+fd.append('username',u);
+fd.append('nickname',n);
+fd.append('password',p);
+fetch('/ai-chat/api/invite.php?action=register_with_invite',{method:'POST',body:fd})
+.then(r=>r.json()).then(d=>{
+alert(d.msg);
+if(d.code===1){closeModal();location.href='/ai-chat/';}
+});
+}
+
+function createInvite(){
+if(!currentUser){alert('请先登录');return;}
+var fd=new FormData();
+fd.append('inviter_id',currentUser.id);
+fetch('/ai-chat/api/invite.php?action=create_invite',{method:'POST',body:fd})
+.then(r=>r.json()).then(d=>{
+if(d.code===1){
+document.getElementById('invite-link').textContent=d.data.link;
+document.getElementById('invite-result-modal').classList.add('show');
+}
+});
+}
+
+function showMyStaff(){
+if(!currentUser){alert('请先登录');return;}
+fetch('/ai-chat/api/invite.php?action=my_staff&owner_id='+currentUser.id)
+.then(r=>r.json()).then(d=>{
+if(d.code===1){
+var html=d.data.length?'':'暂无员工';
+d.data.forEach(s=>{html+='<div style="padding:10px;border-bottom:1px solid:#eee">'+(s.nickname||s.username)+'</div>';});
+document.getElementById('staff-list').innerHTML=html;
+document.getElementById('staff-modal').classList.add('show');
+}
+});
+}
+
+function closeModal(){
+document.querySelectorAll('.modal').forEach(m=>m.classList.remove('show'));
 }
 </script>
 </body>
