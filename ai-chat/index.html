@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GDQ AI 聊天</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f7fa; height: 100vh; overflow: hidden; }
+        
+        /* 登录页 */
+        #login-page { display: flex; align-items: center; justify-content: center; height: 100vh; }
+        .login-box { background: white; padding: 40px; border-radius: 16px; width: 90%; max-width: 400px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        
+        /* 聊天页 */
+        #chat-page { display: none; height: 100vh; }
+        
+        /* 侧边栏 */
+        .sidebar { width: 280px; background: white; border-right: 1px solid #eee; display: flex; flex-direction: column; }
+        .sidebar-header { padding: 15px; border-bottom: 1px solid #eee; background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+        .sidebar-header h4 { font-size: 18px; margin: 0; }
+        
+        .user-list { flex: 1; overflow-y: auto; }
+        .user-item { display: flex; align-items: center; padding: 12px 15px; cursor: pointer; border-bottom: 1px solid #f5f5f5; }
+        .user-item:hover { background: #f8f9fa; }
+        .user-item.active { background: #f0f0ff; }
+        .user-avatar { width: 40px; height: 40px; border-radius: 50%; background: #667eea; color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; margin-right: 12px; }
+        .user-info { flex: 1; }
+        .user-name { font-weight: 600; font-size: 14px; }
+        .user-status { font-size: 12px; color: #888; }
+        
+        /* 聊天区 */
+        .chat-area { flex: 1; display: flex; flex-direction: column; }
+        .chat-header { padding: 15px; background: white; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+        .chat-header h5 { margin: 0; }
+        
+        .chat-messages { flex: 1; overflow-y: auto; padding: 15px; }
+        .message { margin-bottom: 15px; display: flex; }
+        .message.mine { flex-direction: row-reverse; }
+        .message-avatar { width: 36px; height: 36px; border-radius: 50%; background: #667eea; color: white; display: flex; align-items: center; justify-content: center; font-size: 14px; margin: 0 10px; }
+        .message.mine .message-avatar { background: #4caf50; }
+        .message-content { max-width: 70%; }
+        .message-bubble { padding: 10px 15px; border-radius: 16px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .message.mine .message-bubble { background: #667eea; color: white; }
+        .message-time { font-size: 11px; color: #999; margin-top: 5px; }
+        .message.mine .message-time { text-align: right; }
+        
+        /* AI消息特殊样式 */
+        .message.ai .message-avatar { background: linear-gradient(135deg, #f093fb, #f5576c); }
+        .message.ai .message-bubble { background: linear-gradient(135deg, #fef3c7, #fde68a); }
+        
+        .chat-input { padding: 15px; background: white; border-top: 1px solid #eee; display: flex; gap: 10px; }
+        .chat-input input { flex: 1; padding: 12px 15px; border: 1px solid #ddd; border-radius: 24px; outline: none; }
+        .chat-input input:focus { border-color: #667eea; }
+        .chat-input button { padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 24px; cursor: pointer; }
+        .chat-input button:hover { background: #5568d3; }
+        
+        /* AI助手按钮 */
+        .ai-btn { position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; font-size: 24px; cursor: pointer; box-shadow: 0 4px 15px rgba(102,126,234,0.4); }
+        .ai-btn:hover { transform: scale(1.1); }
+        
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            .sidebar { position: fixed; left: -100%; width: 100%; z-index: 100; transition: left 0.3s; }
+            .sidebar.show { left: 0; }
+            .chat-area { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <!-- 登录页 -->
+    <div id="login-page">
+        <div class="login-box">
+            <h3 style="text-align:center;margin-bottom:30px">🎓 GDQ AI 聊天</h3>
+            <input type="text" id="login-username" class="form-control mb-3" placeholder="用户名">
+            <input type="password" id="login-password" class="form-control mb-3" placeholder="密码">
+            <button class="btn btn-primary w-100 mb-3" onclick="login()">登录</button>
+            <p style="text-align:center;color:#888;font-size:13px">没有账号？<a href="#" onclick="showRegister()">注册</a></p>
+        </div>
+    </div>
+    
+    <!-- 注册弹窗 -->
+    <div id="register-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;align-items:center;justify-content:center">
+        <div style="background:white;border-radius:16px;width:90%;max-width:350px;padding:25px">
+            <h5 style="margin-bottom:20px">注册账号</h5>
+            <input type="text" id="reg-username" class="form-control mb-3" placeholder="用户名">
+            <input type="text" id="reg-nickname" class="form-control mb-3" placeholder="昵称">
+            <input type="password" id="reg-password" class="form-control mb-3" placeholder="密码">
+            <div style="display:flex;gap:10px">
+                <button class="btn btn-light flex:1" onclick="document.getElementById('register-modal').style.display='none'">取消</button>
+                <button class="btn btn-primary flex:1" onclick="register()">注册</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 聊天页 -->
+    <div id="chat-page" style="display:flex">
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h4>💬 消息</h4>
+                <div style="margin-top:15px">
+                    <button class="btn btn-light btn-sm" onclick="createGroup()">+ 新建群聊</button>
+                </div>
+            </div>
+            <div class="user-list" id="room-list"></div>
+        </div>
+        
+        <div class="chat-area">
+            <div class="chat-header">
+                <h5 id="chat-title">选择聊天</h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary" onclick="showUsers()">联系人</button>
+                </div>
+            </div>
+            <div class="chat-messages" id="messages"></div>
+            <div class="chat-input">
+                <input type="text" id="message-input" placeholder="输入消息..." onkeypress="if(event.key==='Enter')sendMessage()">
+                <button onclick="sendMessage()">发送</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- AI助手按钮 -->
+    <button class="ai-btn" onclick="openAI()">🤖</button>
+    
+    <script>
+    var currentUser = null;
+    var currentRoom = null;
+    var pollTimer = null;
+    
+    // 检查登录状态
+    var savedUser = localStorage.getItem('gdq_user');
+    if (savedUser) {
+        currentUser = JSON.parse(savedUser);
+        showChatPage();
+    }
+    
+    function showRegister() {
+        document.getElementById('register-modal').style.display = 'flex';
+    }
+    
+    function register() {
+        var username = document.getElementById('reg-username').value.trim();
+        var nickname = document.getElementById('reg-nickname').value.trim() || username;
+        var password = document.getElementById('reg-password').value;
+        
+        if (!username || !password) { alert('请填写用户名和密码'); return; }
+        
+        var fd = new FormData();
+        fd.append('username', username);
+        fd.append('nickname', nickname);
+        fd.append('password', password);
+        
+        fetch('/ai-chat/api/user.php?action=register', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(d => {
+            if (d.code === 1) {
+                alert('注册成功！请登录');
+                document.getElementById('register-modal').style.display = 'none';
+            } else {
+                alert(d.msg);
+            }
+        });
+    }
+    
+    function login() {
+        var username = document.getElementById('login-username').value.trim();
+        var password = document.getElementById('login-password').value;
+        
+        var fd = new FormData();
+        fd.append('username', username);
+        fd.append('password', password);
+        
+        fetch('/ai-chat/api/user.php?action=login', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(d => {
+            if (d.code === 1) {
+                currentUser = d.data;
+                localStorage.setItem('gdq_user', JSON.stringify(currentUser));
+                showChatPage();
+            } else {
+                alert(d.msg);
+            }
+        });
+    }
+    
+    function showChatPage() {
+        document.getElementById('login-page').style.display = 'none';
+        document.getElementById('chat-page').style.display = 'flex';
+        loadRooms();
+        startPolling();
+    }
+    
+    function loadRooms() {
+        fetch('/ai-chat/api/chat.php?action=rooms&user_id=' + currentUser.id)
+        .then(r => r.json())
+        .then(d => {
+            if (d.code === 1) {
+                var html = '';
+                d.data.forEach(r => {
+                    var avatar = r.type === 'group' ? '👥' : '👤';
+                    var lastMsg = r.last_msg ? r.last_msg.substring(0, 20) : '暂无消息';
+                    html += '<div class="user-item" onclick="selectRoom(' + r.id + ', \'' + r.name + '\')">' +
+                        '<div class="user-avatar">' + avatar + '</div>' +
+                        '<div class="user-info"><div class="user-name">' + r.name + '</div>' +
+                        '<div class="user-status">' + lastMsg + '</div></div></div>';
+                });
+                html += '<div class="user-item" onclick="showUsers()"><div class="user-avatar">➕</div><div class="user-info"><div class="user-name">添加联系人</div></div></div>';
+                document.getElementById('room-list').innerHTML = html || '<div style="padding:20px;text-align:center;color:#888">暂无对话</div>';
+            }
+        });
+    }
+    
+    function showUsers() {
+        fetch('/ai-chat/api/user.php?action=list')
+        .then(r => r.json())
+        .then(d => {
+            if (d.code === 1) {
+                var html = '<div style="padding:15px;border-bottom:1px solid:#eee"><h6>选择联系人</h6></div>';
+                d.data.forEach(u => {
+                    if (u.id !== currentUser.id) {
+                        var initial = u.nickname ? u.nickname[0] : u.username[0];
+                        html += '<div class="user-item" onclick="startChat(' + u.id + ', \'' + (u.nickname||u.username) + '\')">' +
+                            '<div class="user-avatar">' + initial.toUpperCase() + '</div>' +
+                            '<div class="user-info"><div class="user-name">' + (u.nickname || u.username) + '</div></div></div>';
+                    }
+                });
+                document.getElementById('room-list').innerHTML = html;
+            }
+        });
+    }
+    
+    function startChat(userId, userName) {
+        // 创建私聊房间
+        var fd = new FormData();
+        fd.append('name', userName);
+        fd.append('type', 'private');
+        fd.append('user_id', currentUser.id);
+        
+        fetch('/ai-chat/api/chat.php?action=create_room', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(d => {
+            if (d.code === 1) {
+                // 加入房间
+                var fd2 = new FormData();
+                fd2.append('room_id', d.data.id);
+                fd2.append('user_id', userId);
+                fetch('/ai-chat/api/chat.php?action=join_room', { method: 'POST', body: fd2 })
+                .then(r => r.json())
+                .then(() => {
+                    selectRoom(d.data.id, userName);
+                    loadRooms();
+                });
+            }
+        });
+    }
+    
+    function createGroup() {
+        var name = prompt('请输入群名称:');
+        if (!name) return;
+        
+        var fd = new FormData();
+        fd.append('name', name);
+        fd.append('type', 'group');
+        fd.append('user_id', currentUser.id);
+        
+        fetch('/ai-chat/api/chat.php?action=create_room', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(d => {
+            if (d.code === 1) {
+                loadRooms();
+                selectRoom(d.data.id, name);
+            }
+        });
+    }
+    
+    function selectRoom(roomId, roomName) {
+        currentRoom = { id: roomId, name: roomName };
+        document.getElementById('chat-title').textContent = roomName;
+        loadMessages();
+    }
+    
+    function loadMessages() {
+        if (!currentRoom) return;
+        
+        fetch('/ai-chat/api/chat.php?action=list&room_id=' + currentRoom.id)
+        .then(r => r.json())
+        .then(d => {
+            if (d.code === 1) {
+                var html = '';
+                d.data.forEach(m => {
+                    var isMine = m.user_id === currentUser.id;
+                    var isAI = m.type === 'ai';
+                    var initial = m.nickname ? m.nickname[0] : '?';
+                    var time = new Date(m.create_time * 1000).toLocaleTimeString();
+                    
+                    html += '<div class="message ' + (isMine ? 'mine' : '') + ' ' + (isAI ? 'ai' : '') + '">' +
+                        '<div class="message-avatar">' + (isAI ? '🤖' : initial.toUpperCase()) + '</div>' +
+                        '<div class="message-content"><div class="message-bubble">' + m.content + '</div>' +
+                        '<div class="message-time">' + time + '</div></div></div>';
+                });
+                document.getElementById('messages').innerHTML = html;
+                document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+            }
+        });
+    }
+    
+    function sendMessage() {
+        var input = document.getElementById('message-input');
+        var content = input.value.trim();
+        if (!content || !currentRoom) return;
+        
+        var fd = new FormData();
+        fd.append('room_id', currentRoom.id);
+        fd.append('user_id', currentUser.id);
+        fd.append('content', content);
+        
+        fetch('/ai-chat/api/chat.php?action=send', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(d => {
+            if (d.code === 1) {
+                input.value = '';
+                loadMessages();
+                loadRooms();
+            }
+        });
+    }
+    
+    function openAI() {
+        var msg = prompt('对AI助手说:');
+        if (!msg) return;
+        
+        var fd = new FormData();
+        fd.append('user_id', currentUser.id);
+        fd.append('message', msg);
+        
+        // 显示等待
+        var msgs = document.getElementById('messages');
+        msgs.innerHTML += '<div class="message ai"><div class="message-avatar">🤖</div><div class="message-content"><div class="message-bubble">思考中...</div></div></div>';
+        msgs.scrollTop = msgs.scrollHeight;
+        
+        fetch('/ai-chat/api/ai.php?action=chat', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(d => {
+            if (d.code === 1) {
+                // 显示回复
+                var reply = d.data.reply;
+                var html = '';
+                var msgs = document.getElementById('messages');
+                // 移除"思考中"
+                var old = msgs.querySelector('.message.ai:last-child');
+                if (old) old.remove();
+                
+                html += '<div class="message ai"><div class="message-avatar">🤖</div><div class="message-content"><div class="message-bubble">' + reply + '</div>' +
+                    '<div class="message-time">' + new Date().toLocaleTimeString() + '</div></div></div>';
+                msgs.innerHTML += html;
+                msgs.scrollTop = msgs.scrollHeight;
+            }
+        });
+    }
+    
+    function startPolling() {
+        pollTimer = setInterval(() => {
+            if (currentRoom) loadMessages();
+            loadRooms();
+        }, 5000);
+    }
+    </script>
+</body>
+</html>
