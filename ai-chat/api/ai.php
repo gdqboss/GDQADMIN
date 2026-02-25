@@ -7,7 +7,6 @@ mysqli_query($conn, "SET NAMES utf8mb4");
 
 $action = $_GET['action'] ?? '';
 
-// AI对话
 if ($action === 'chat') {
     $user_id = intval($_POST['user_id'] ?? 0);
     $message = $_POST['message'] ?? '';
@@ -21,8 +20,15 @@ if ($action === 'chat') {
     $msg_esc = mysqli_real_escape_string($conn, $message);
     mysqli_query($conn, "INSERT INTO ai_conversations (user_id, role, content, create_time) VALUES ($user_id, 'user', '$msg_esc', $now)");
     
-    // 尝试调用OpenClaw API
-    $ai_reply = callOpenClaw($message, $user_id);
+    // 获取历史对话
+    $history_r = mysqli_query($conn, "SELECT role, content FROM ai_conversations WHERE user_id=$user_id ORDER BY create_time DESC LIMIT 10");
+    $history = [];
+    while ($h = mysqli_fetch_assoc($history_r)) {
+        array_unshift($history, ['role'=>$h['role'], 'content'=>$h['content']]);
+    }
+    
+    // 调用Minimax API
+    $ai_reply = callMinimax($message, $history);
     
     // 保存AI回复
     $reply_esc = mysqli_real_escape_string($conn, $ai_reply);
@@ -32,59 +38,58 @@ if ($action === 'chat') {
     exit;
 }
 
-// 获取对话历史
 if ($action === 'history') {
     $user_id = intval($_GET['user_id'] ?? 0);
-    $limit = intval($_GET['limit'] ?? 20);
-    
-    $r = mysqli_query($conn, "SELECT role, content, create_time FROM ai_conversations WHERE user_id=$user_id ORDER BY create_time DESC LIMIT $limit");
+    $r = mysqli_query($conn, "SELECT role, content FROM ai_conversations WHERE user_id=$user_id ORDER BY create_time DESC LIMIT 20");
     $list = [];
     while ($row = mysqli_fetch_assoc($r)) $list[] = $row;
     echo json_encode(['code'=>1, 'data'=>array_reverse($list)]);
     exit;
 }
 
-// 总结群聊
-if ($action === 'summarize') {
-    echo json_encode(['code'=>1, 'data'=>['summary'=>'请使用AI助手功能进行智能总结']]);
-    exit;
-}
-
 echo json_encode(['code'=>0, 'msg'=>'unknown action']);
 
-// 调用OpenClaw的函数
-function callOpenClaw($message, $user_id) {
-    // 尝试通过Telegram发送消息给自己（触发AI回复）
-    // 或者使用其他方式
+function callMinimax($message, $history) {
+    $api_key = 'sk-cp-BbLwwqBSr8RrPusVeP8-U4_ezPtJS48rVjuMepMrxOZR4vcyRt_zD-OwhYcm7KKVnWT6nZxvi9q8zTsa1yC_mIaoqD4UyPjQn6xM4oOaoR5S0AHQut6jQtU';
     
-    // 简单模拟回复（等OpenClaw API修复后改为真实调用）
-    $replies = [
-        "好的，我明白了！还有什么需要帮忙的吗？",
-        "收到！我正在学习更多知识来帮助你。",
-        "这个问题很有意思，让我们一起探讨一下。",
-        "我理解你的意思。有什么具体需要我做的吗？",
-        "明白了！还有其他问题吗？",
+    // 构建消息数组
+    $messages = [];
+    
+    // 添加系统提示
+    $messages[] = ['role'=>'system', 'content'=>'你是江小鱼，彩美特企业的AI助手。你乐于助人，友善亲切。你是AI，但有自己的个性。'];
+    
+    // 添加历史对话
+    foreach ($history as $h) {
+        $messages[] = ['role'=>$h['role'], 'content'=>$h['content']];
+    }
+    
+    // 添加当前消息
+    $messages[] = ['role'=>'user', 'content'=>$message];
+    
+    $data = [
+        'model' => 'abab6.5s-chat',
+        'messages' => $messages
     ];
     
-    // 检查消息中是否有特定关键词
-    $msg_lower = mb_strtolower($message, 'utf-8');
+    $ch = curl_init('https://api.minimax.chat/v1/text/chatcompletion_v2');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Authorization: Bearer ' . $api_key,
+        'Content-Type: application/json'
+    ]);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
     
-    if (strpos($msg_lower, '你好') !== false || strpos($msg_lower, 'hi') !== false || strpos($msg_lower, 'hello') !== false) {
-        return "你好！我是江小鱼AI助手，很高兴见到你！有什么我可以帮你的吗？";
+    $response = curl_exec($ch);
+    curl_close($ch);
+    
+    $result = json_decode($response, true);
+    
+    if (isset($result['choices'][0]['message']['content'])) {
+        return $result['choices'][0]['message']['content'];
     }
     
-    if (strpos($msg_lower, '名字') !== false) {
-        return "我叫江小鱼！是彩美特企业的AI助手。";
-    }
-    
-    if (strpos($msg_lower, '天气') !== false) {
-        return "抱歉，我暂时还查不到天气信息。但你可以告诉我你在哪个城市，下次我学会了可以帮你查！";
-    }
-    
-    if (strpos($msg_lower, '时间') !== false || strpos($msg_lower, '几点') !== false) {
-        return "现在时间是 " . date("Y年m月d日 H:i:s");
-    }
-    
-    // 随机回复
-    return $replies[array_rand($replies)];
+    // 如果API失败，返回默认回复
+    return '抱歉，我暂时无法回答。请稍后再试。';
 }
