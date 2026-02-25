@@ -6,12 +6,12 @@
 <title>彩美特企业管理工作台</title>
 <style>
 * {box-sizing:border-box;margin:0;padding:0}
-body {font-family:-apple-system,sans-serif;background:linear-gradient(135deg,#667eea,#764ba2);min-height:100vh}
+body {font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:linear-gradient(135deg,#667eea,#764ba2);min-height:100vh}
 .login {padding:50px 20px}
 .login-card {background:white;border-radius:20px;padding:30px;max-width:350px;margin:0 auto;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
 .logo {width:80px;height:80px;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:20px;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;font-size:40px}
 h2 {margin-bottom:5px;color:#333}
-input {width:100%;padding:14px;border:1px solid #ddd;border-radius:10px;margin-bottom:15px;font-size:15px}
+.input {width:100%;padding:14px;border:1px solid #ddd;border-radius:10px;margin-bottom:15px;font-size:15px}
 .btn {width:100%;padding:14px;background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;border-radius:10px;font-size:16px;cursor:pointer}
 .menu {display:grid;grid-template-columns:repeat(2,1fr);gap:15px;padding:20px}
 .menu a {background:white;border-radius:16px;padding:20px;text-align:center;text-decoration:none;display:block;box-shadow:0 4px 15px rgba(0,0,0,0.1)}
@@ -20,7 +20,6 @@ input {width:100%;padding:14px;border:1px solid #ddd;border-radius:10px;margin-b
 .menu p {color:#999;font-size:11px}
 .header {background:linear-gradient(135deg,#667eea,#764ba2);color:white;padding:15px;display:flex;justify-content:space-between;align-items:center}
 .header h3 {font-size:16px}
-.lang-btn {background:none;border:1px solid white;border-radius:5px;color:white;padding:5px 10px;font-size:12px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -30,8 +29,8 @@ input {width:100%;padding:14px;border:1px solid #ddd;border-radius:10px;margin-b
 <div class="logo">🐟</div>
 <h2>彩美特企业</h2>
 <p style="color:#666;margin-bottom:20px">管理工作台</p>
-<input id="username" placeholder="用户名">
-<input id="password" type="password" placeholder="密码">
+<input id="username" class="input" placeholder="用户名">
+<input id="password" class="input" type="password" placeholder="密码">
 <button class="btn" onclick="doLogin()">登录</button>
 </div>
 </div>
@@ -40,12 +39,11 @@ input {width:100%;padding:14px;border:1px solid #ddd;border-radius:10px;margin-b
 <div class="header">
 <h3>🐟 彩美特企业</h3>
 <div>
-<select id="langSelect" onchange="setLang(this.value)" style="padding:5px;border-radius:5px;border:none">
+<select id="langSelect" onchange="setLang(this.value)" style="padding:5px;border-radius:5px">
 <option value="zh">中文</option>
 <option value="en">EN</option>
-<option value="ja">日本語</option>
 </select>
-<button onclick="logout()" style="background:none;border:none;color:white;margin-left:10px;font-size:14px">退出</button>
+<button onclick="logout()" style="background:none;border:none;color:white;margin-left:10px">退出</button>
 </div>
 </div>
 
@@ -58,37 +56,47 @@ input {width:100%;padding:14px;border:1px solid #ddd;border-radius:10px;margin-b
 </div>
 
 <script>
-var lang = localStorage.getItem('lang') || 'zh';
-document.getElementById('langSelect').value = lang;
+var savedLang = localStorage.getItem('lang') || 'zh';
+document.getElementById('langSelect').value = savedLang;
 
 function doLogin(){
-var u=document.getElementById('username').value;
-var p=document.getElementById('password').value;
-if(!u||!p){alert('请输入用户名和密码');return;}
-var fd=new FormData();
-fd.append('username',u);fd.append('password',p);
+var u = document.getElementById('username').value;
+var p = document.getElementById('password').value;
+if(!u || !p){alert('请输入用户名和密码');return;}
+var fd = new FormData();
+fd.append('username',u);
+fd.append('password',p);
 fetch('/api/commune/user.php?action=login',{method:'POST',body:fd})
-.then(r=>r.json()).then(d=>{
-if(d.code===1){localStorage.setItem('gdq_user',JSON.stringify(d.data));showHome();}
-else{alert(d.msg);}
+.then(function(r){return r.json();})
+.then(function(d){
+if(d.code===1){
+localStorage.setItem('gdq_user',JSON.stringify(d.data));
+showHome();
+}else{alert(d.msg);}
 });
 }
 
 function showHome(){
 document.getElementById('loginPage').style.display='none';
 document.getElementById('homePage').style.display='block';
-var user=JSON.parse(localStorage.getItem('gdq_user'));
-if(user.role==='admin'){document.getElementById('adminLink').style.display='block';}
+var user = JSON.parse(localStorage.getItem('gdq_user') || '{}');
+if(user.role === 'admin'){
+document.getElementById('adminLink').style.display='block';
+}
 }
 
-function logout(){localStorage.removeItem('gdq_user');location.reload();}
+function logout(){
+localStorage.removeItem('gdq_user');
+location.reload();
+}
 
 function setLang(lang){
 localStorage.setItem('lang',lang);
-alert('语言已切换为: '+(lang==='zh'?'中文':lang=='en'?'English':'日本語'));
+var txt = lang === 'zh' ? '中文' : (lang === 'en' ? 'English' : '日本語');
+alert('语言已切换为: ' + txt);
 }
 
-var user=localStorage.getItem('gdq_user');
+var user = localStorage.getItem('gdq_user');
 if(user){showHome();}
 </script>
 </body>
