@@ -7,7 +7,7 @@
 <style>
 * {box-sizing:border-box;margin:0;padding:0}
 body {font-family:-apple-system,sans-serif;background:linear-gradient(135deg,#667eea,#764ba2);min-height:100vh}
-.login {padding:50px 20px;text-align:center}
+.login {padding:50px 20px}
 .login-card {background:white;border-radius:20px;padding:30px;max-width:350px;margin:0 auto;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
 .logo {width:80px;height:80px;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:20px;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;font-size:40px}
 h2 {margin-bottom:5px;color:#333}
@@ -19,11 +19,13 @@ input {width:100%;padding:14px;border:1px solid #ddd;border-radius:10px;margin-b
 .menu h6 {color:#333;font-size:14px;margin-bottom:3px}
 .menu p {color:#999;font-size:11px}
 .header {background:linear-gradient(135deg,#667eea,#764ba2);color:white;padding:15px;display:flex;justify-content:space-between;align-items:center}
-select {padding:5px;border-radius:5px;border:none}
+.header h3 {font-size:16px}
+.lang-btn {background:none;border:1px solid white;border-radius:5px;color:white;padding:5px 10px;font-size:12px;cursor:pointer}
 </style>
 </head>
 <body>
-<div id="loginPage" class="login">
+<div id="loginPage">
+<div class="login">
 <div class="login-card">
 <div class="logo">🐟</div>
 <h2>彩美特企业</h2>
@@ -38,7 +40,11 @@ select {padding:5px;border-radius:5px;border:none}
 <div class="header">
 <h3>🐟 彩美特企业</h3>
 <div>
-<select onchange="setLang(this.value)"><option value="zh">中文</option><option value="en">EN</option></select>
+<select id="langSelect" onchange="setLang(this.value)" style="padding:5px;border-radius:5px;border:none">
+<option value="zh">中文</option>
+<option value="en">EN</option>
+<option value="ja">日本語</option>
+</select>
 <button onclick="logout()" style="background:none;border:none;color:white;margin-left:10px;font-size:14px">退出</button>
 </div>
 </div>
@@ -52,6 +58,9 @@ select {padding:5px;border-radius:5px;border:none}
 </div>
 
 <script>
+var lang = localStorage.getItem('lang') || 'zh';
+document.getElementById('langSelect').value = lang;
+
 function doLogin(){
 var u=document.getElementById('username').value;
 var p=document.getElementById('password').value;
@@ -74,7 +83,10 @@ if(user.role==='admin'){document.getElementById('adminLink').style.display='bloc
 
 function logout(){localStorage.removeItem('gdq_user');location.reload();}
 
-function setLang(lang){localStorage.setItem('lang',lang);location.reload();}
+function setLang(lang){
+localStorage.setItem('lang',lang);
+alert('语言已切换为: '+(lang==='zh'?'中文':lang=='en'?'English':'日本語'));
+}
 
 var user=localStorage.getItem('gdq_user');
 if(user){showHome();}
