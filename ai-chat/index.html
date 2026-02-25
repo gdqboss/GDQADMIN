@@ -433,7 +433,7 @@ function showChat(){
 }
 
 function loadMemory(){
-    fetch('/ai-chat/api/ai.php?action=memory')
+    fetch('/ai-chat/api/realtime.php?action=history')
     .then(r=>r.json()).then(d=>{
         if(d.code===1 && d.data.length>0){
             renderMemory(d.data);
@@ -474,7 +474,7 @@ function doSend(){
     fd.append('username',currentUser.nickname||currentUser.username);
     fd.append('message',content);
     
-    fetch('/ai-chat/api/ai.php?action=chat',{method:'POST',body:fd})
+    fetch('/ai-chat/api/realtime.php?action=chat',{method:'POST',body:fd})
     .then(r=>r.json()).then(d=>{
         if(d.code===1){
             var replyHtml = '<div class="message ai">' +
@@ -554,7 +554,7 @@ function loadAssistants(){
 
 function clearMemory(){
     if(confirm('确定清空所有对话记忆？')){
-        fetch('/ai-chat/api/ai.php?action=clear_memory')
+        fetch('/ai-chat/api/realtime.php?action=clear_memory')
         .then(r=>r.json()).then(d=>{
             alert(d.msg);
             document.getElementById('messages').innerHTML = '<div class="welcome"><div class="welcome-icon">🐟</div><h2>记忆已清空</h2></div>';
