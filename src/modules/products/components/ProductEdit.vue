@@ -44,34 +44,25 @@
         </el-select>
       </el-form-item>
 
-      <el-form-item label="采购价格" prop="purchase_price">
-        <el-input v-model="form.purchase_price" placeholder="采购价格" style="width: 140px">
-          <template #append>
-            <el-select v-model="form.purchase_currency" style="width: 90px">
-              <el-option label="CNY" value="CNY" />
-              <el-option label="USD" value="USD" />
-              <el-option label="EUR" value="EUR" />
-              <el-option label="HKD" value="HKD" />
-              <el-option label="GBP" value="GBP" />
-              <el-option label="JPY" value="JPY" />
-            </el-select>
-          </template>
-        </el-input>
+      <el-form-item label="采购价格">
+        <el-input-number v-model="form.purchase_price" :min="0" :precision="2" style="width: 150px" />
       </el-form-item>
 
-      <el-form-item label="销售价格" prop="sale_price">
-        <el-input v-model="form.sale_price" placeholder="销售价格" style="width: 140px">
-          <template #append>
-            <el-select v-model="form.sale_currency" style="width: 90px">
-              <el-option label="CNY" value="CNY" />
-              <el-option label="USD" value="USD" />
-              <el-option label="EUR" value="EUR" />
-              <el-option label="HKD" value="HKD" />
-              <el-option label="GBP" value="GBP" />
-              <el-option label="JPY" value="JPY" />
-            </el-select>
-          </template>
-        </el-input>
+      <el-form-item label="销售价格">
+        <div style="display:flex; gap:8px;">
+          <div style="display:flex;align-items:center;">
+            <span style="margin-right:4px">¥</span>
+            <el-input-number v-model="form.sale_price" :min="0" :precision="2" style="width:120px" placeholder="CNY" />
+          </div>
+          <div style="display:flex;align-items:center;">
+            <span style="margin-right:4px">$</span>
+            <el-input-number v-model="form.sale_price_usd" :min="0" :precision="2" style="width:120px" placeholder="USD" />
+          </div>
+          <div style="display:flex;align-items:center;">
+            <span style="margin-right:4px">₱</span>
+            <el-input-number v-model="form.sale_price_php" :min="0" :precision="2" style="width:120px" placeholder="PHP" />
+          </div>
+        </div>
       </el-form-item>
 
       <el-form-item label="库存" prop="stock">
@@ -145,9 +136,9 @@ const form = reactive({
   unit: '个',
   supplier_id: null,
   purchase_price: null,
-  purchase_currency: 'CNY',
   sale_price: null,
-  sale_currency: 'CNY',
+  sale_price_usd: null,
+  sale_price_php: null,
   stock: 0,
   safe_stock: 0,
   status: 'active',
@@ -209,9 +200,9 @@ const handleClose = () => {
     unit: '个',
     supplier_id: null,
     purchase_price: null,
-    purchase_currency: 'CNY',
     sale_price: null,
-    sale_currency: 'CNY',
+    sale_price_usd: null,
+    sale_price_php: null,
     stock: 0,
     safe_stock: 0,
     status: 'active',

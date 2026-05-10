@@ -46,8 +46,16 @@
       <el-table-column prop="category_name" label="分类" width="120" />
       <el-table-column prop="unit" label="单位" width="80" />
       <el-table-column prop="supplier_name" label="供应商" width="120" />
-      <el-table-column prop="stock" label="库存" width="90" align="right" />
-      <el-table-column prop="safe_stock" label="安全库存" width="100" align="right" />
+      <el-table-column prop="stock" label="库存" width="80" align="right" />
+      <el-table-column prop="sale_price" label="¥售价" width="90" align="right">
+        <template #default="{ row }">{{ row.sale_price != null ? '¥' + Number(row.sale_price).toFixed(2) : '-' }}</template>
+      </el-table-column>
+      <el-table-column prop="sale_price_usd" label="$售价" width="90" align="right">
+        <template #default="{ row }">{{ row.sale_price_usd != null ? '$' + Number(row.sale_price_usd).toFixed(2) : '-' }}</template>
+      </el-table-column>
+      <el-table-column prop="sale_price_php" label="₱售价" width="90" align="right">
+        <template #default="{ row }">{{ row.sale_price_php != null ? '₱' + Number(row.sale_price_php).toFixed(2) : '-' }}</template>
+      </el-table-column>
       <el-table-column label="状态" width="100">
         <template #default="{ row }">
           <el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">
