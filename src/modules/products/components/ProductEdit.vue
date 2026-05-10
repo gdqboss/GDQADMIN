@@ -107,7 +107,7 @@ import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getCategories } from '../../../api/categories.js'
-import { getSuppliers } from '../../../api/suppliers.js'
+import { getSupplierList } from "../../../api/suppliers.js";
 import { createProduct, updateProduct } from '../../../api/products.js'
 
 const props = defineProps({
@@ -163,7 +163,7 @@ const loadCategories = async () => {
 
 const loadSuppliers = async () => {
   try {
-    const { data } = await getSuppliers()
+    const { data } = await getSupplierList()
     supplierOptions.value = data
   } catch (e) {
     console.error('Failed to load suppliers', e)

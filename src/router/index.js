@@ -71,7 +71,9 @@ const routes = [
 
   // ===== 系统工具 =====
   { path: '/system', name: 'SystemSettings', component: () => import('../modules/system/index.vue') },
-  { path: '/qrcode', name: 'QrcodeManage', component: () => import('../modules/qrcode/index.vue') },
+  { path: '/qrcode', name: 'QrcodeManage', component: () => import('../modules/qrcode/ScanPage.vue') },
+  { path: '/scan/:code', name: 'ScanPage', component: () => import('../modules/qrcode/ScanPage.vue') },
+  { path: '/chat', name: 'CustomerChat', component: () => import('../modules/customer/chat/ChatRoom.vue') },
   { path: '/image', name: 'ImageLibrary', component: () => import('../modules/image/index.vue') },
 
   // ===== AI功能 =====
