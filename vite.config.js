@@ -18,6 +18,16 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: 'dist'
+    outDir: 'dist',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'element-plus': ['element-plus'],
+          'vue-core': ['vue', 'vue-router', 'pinia'],
+          'request': ['axios']
+        }
+      }
+    },
+    chunkSizeWarningLimit: 600
   }
 })
