@@ -10,30 +10,74 @@
 
     <!-- Nav -->
     <nav class="flex-1 overflow-y-auto py-2">
-      <div v-for="group in menuGroups" :key="group.label" class="mb-2">
-        <div v-if="group.label" class="px-4 py-2 text-xs text-gray-500 uppercase tracking-wider">{{ group.label }}</div>
-        <router-link
-          v-for="item in group.items"
-          :key="item.path"
-          :to="item.path"
-          class="flex items-center gap-3 px-4 py-2.5 mx-1 rounded text-sm transition-colors"
-          :class="isActive(item.path) ? 'bg-primary text-white font-medium' : 'hover:bg-white/10 hover:text-white'"
-        >
-          <span class="material-symbols-outlined text-lg">{{ item.icon }}</span>
-          <span>{{ item.name }}</span>
-        </router-link>
-      </div>
+      <!-- 动态菜单（优先） -->
+      <template v-if="userStore.menuLoaded && dynamicMenuGroups.length > 0">
+        <div v-for="group in dynamicMenuGroups" :key="group.label" class="mb-2">
+          <div v-if="group.label" class="px-4 py-2 text-xs text-gray-500 uppercase tracking-wider">{{ group.label }}</div>
+          <router-link
+            v-for="item in group.items"
+            :key="item.path"
+            :to="item.path"
+            class="flex items-center gap-3 px-4 py-2.5 mx-1 rounded text-sm transition-colors"
+            :class="isActive(item.path) ? 'bg-primary text-white font-medium' : 'hover:bg-white/10 hover:text-white'"
+          >
+            <span class="material-symbols-outlined text-lg">{{ item.icon || 'circle' }}</span>
+            <span>{{ item.label }}</span>
+          </router-link>
+        </div>
+      </template>
+
+      <!-- 硬编码菜单（回退） -->
+      <template v-else>
+        <div v-for="group in fallbackMenus" :key="group.label" class="mb-2">
+          <div v-if="group.label" class="px-4 py-2 text-xs text-gray-500 uppercase tracking-wider">{{ group.label }}</div>
+          <router-link
+            v-for="item in group.items"
+            :key="item.path"
+            :to="item.path"
+            class="flex items-center gap-3 px-4 py-2.5 mx-1 rounded text-sm transition-colors"
+            :class="isActive(item.path) ? 'bg-primary text-white font-medium' : 'hover:bg-white/10 hover:text-white'"
+          >
+            <span class="material-symbols-outlined text-lg">{{ item.icon }}</span>
+            <span>{{ item.name }}</span>
+          </router-link>
+        </div>
+      </template>
     </nav>
   </aside>
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
 const route = useRoute()
+const userStore = useUserStore()
 
-const menuGroups = [
+// 将 rbac_menus 树形数据按 parent_id 分组
+const dynamicMenuGroups = computed(() => {
+  if (!userStore.menus || userStore.menus.length === 0) return []
+
+  // 按 parent_id 分组
+  const topMenus = userStore.menus.filter(m => !m.parent_id && m.visible === 'show' && m.component_path)
+  const groups = []
+  for (const top of topMenus) {
+    const children = userStore.menus.filter(m => m.parent_id === top.id && m.visible === 'show' && m.component_path)
+    groups.push({
+      label: top.label,
+      items: [
+        { path: top.path, label: top.label, icon: top.icon },
+        ...children.map(c => ({ path: c.path, label: c.label, icon: c.icon }))
+      ]
+    })
+  }
+  return groups
+})
+
+// 硬编码回退菜单（原始侧边栏）
+const fallbackMenus = [
   {
     label: '',
     items: [
@@ -91,8 +135,7 @@ const isActive = (path) => {
 }
 
 const handleLogout = () => {
-  localStorage.removeItem('caimeite_token')
-  localStorage.removeItem('caimeite_user')
+  userStore.logout()
   router.push('/login')
 }
 </script>

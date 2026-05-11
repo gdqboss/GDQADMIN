@@ -83,8 +83,10 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
+const userStore = useUserStore()
 const loginForm = ref({
   account: '',
   password: '',
@@ -114,8 +116,7 @@ const handleLogin = async () => {
     })
     const data = await res.json()
     if (data.code === 0) {
-      localStorage.setItem('caimeite_token', data.data.token)
-      localStorage.setItem('caimeite_user', JSON.stringify(data.data.user))
+      await userStore.login(data.data.token, data.data.user)
       if (loginForm.value.remember) {
         localStorage.setItem('caimeite_account', loginForm.value.account)
         localStorage.setItem('caimeite_password', loginForm.value.password)

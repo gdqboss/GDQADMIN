@@ -49,7 +49,15 @@ const routes = [
       { path: 'customer/statement', name: 'CustomerStatement', component: () => import('../modules/customer/statement/index.vue') },
       { path: 'customer/feedback', name: 'FeedbackManage', component: () => import('../modules/customer/feedback/index.vue') },
       { path: 'aftersale', name: 'AftersaleManage', component: () => import('../modules/aftersale/index.vue') },
-      { path: 'system', name: 'SystemSettings', component: () => import('../modules/system/index.vue') },
+      { path: 'system', name: 'SystemSettings', component: () => import('../modules/system/index.vue'),
+        children: [
+          { path: '', redirect: 'users' },
+          { path: 'users', name: 'SystemUsers', component: () => import('../modules/system/users.vue') },
+          { path: 'permissions', name: 'SystemPermissions', component: () => import('../modules/permission/index.vue') },
+          { path: 'menus', name: 'SystemMenus', component: () => import('../modules/menu/index.vue') },
+          { path: 'roles', name: 'SystemRoles', component: () => import('../modules/role/index.vue') },
+        ]
+      },
       { path: 'qrcode', name: 'QrcodeManage', component: () => import('../modules/qrcode/ScanPage.vue') },
       { path: 'scan/:code', name: 'ScanPage', component: () => import('../modules/qrcode/ScanPage.vue') },
       { path: 'chat', name: 'CustomerChat', component: () => import('../modules/customer/chat/ChatRoom.vue') },
@@ -75,13 +83,25 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const token = localStorage.getItem('caimeite_token')
   if (to.meta.public) {
     next()
   } else if (!token) {
     next('/login')
   } else {
+    // 已登录但权限未加载，先加载
+    const userStore = (await import('@/stores/user')).useUserStore()
+    if (!userStore.menuLoaded) {
+      await userStore.loadPermissions()
+    }
+    // 检查是否有权限（如果有 meta.permission 要求）
+    if (to.meta.permission) {
+      const has = userStore.hasPermission(to.meta.permission)
+      if (!has) {
+        return next({ path: '/products', query: { unauthorized: 1 } })
+      }
+    }
     next()
   }
 })
