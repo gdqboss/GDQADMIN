@@ -1,7 +1,5 @@
 <template>
-  <el-dialog
-    v-model="visible"
-    title="SKU 管理"
+  <el-dialog v-model="visible"     title="SKU 管理"
     width="900px"
     @close="handleClose"
   >
@@ -21,9 +19,7 @@
 
       <div class="add-spec-form">
         <el-input v-model="newSpecName" placeholder="规格名称，如：颜色" style="width: 140px" />
-        <el-input
-          v-model="newSpecValues"
-          placeholder="规格值，逗号分隔，如：红,黑"
+        <el-input v-model="newSpecValues"           placeholder="规格值，逗号分隔，如：红,黑"
           style="width: 240px"
           @keyup.enter="addSpec"
         />
@@ -44,9 +40,7 @@
         shadow="hover"
       >
         <div class="sku-header">
-          <el-input
-            v-model="sku.sku_code"
-            placeholder="SKU编码"
+          <el-input v-model="sku.sku_code"             placeholder="SKU编码"
             size="small"
             style="width: 180px"
           />
@@ -72,18 +66,14 @@
         </div>
 
         <div class="sku-prices">
-          <el-input-number
-            v-model="sku.purchase_price"
-            :min="0"
+          <el-input-number v-model="sku.purchase_price"             :min="0"
             :precision="2"
             size="small"
             placeholder="采购价"
             style="width: 110px"
           />
           <span class="price-sep">/</span>
-          <el-input-number
-            v-model="sku.sale_price"
-            :min="0"
+          <el-input-number v-model="sku.sale_price"             :min="0"
             :precision="2"
             size="small"
             placeholder="售价"

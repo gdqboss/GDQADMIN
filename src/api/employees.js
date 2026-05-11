@@ -23,3 +23,5 @@ export function deleteEmployee(id) {
 export function batchDeleteEmployees(ids) {
   return request.post('/employees/batch-delete', { ids })
 }
+
+export const addEmployee = createEmployee

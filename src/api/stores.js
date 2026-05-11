@@ -23,3 +23,5 @@ export function deleteStore(id) {
 export function batchDeleteStores(ids) {
   return request.post('/stores/batch-delete', { ids })
 }
+
+export const addStore = createStore

@@ -23,3 +23,5 @@ export function deleteSupplier(id) {
 export function batchDeleteSuppliers(ids) {
   return request.post('/suppliers/batch-delete', { ids })
 }
+
+export const addSupplier = createSupplier

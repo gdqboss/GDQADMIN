@@ -157,3 +157,21 @@ export function getWarehouses(params) {
 export function getProductsSimple(params) {
   return request.get('/products', { params })
 }
+
+// ===== 通用财务CRUD (generated stub) =====
+export function getFinanceList(params) {
+  return request.get('/finance', { params })
+}
+export function addFinance(data) {
+  return request.post('/finance', data)
+}
+export function updateFinance(data) {
+  return request.put('/finance', data)
+}
+export function deleteFinance(id) {
+  return request.delete('/finance/' + id)
+}
+export const getList = getFinanceList;
+export const add = addFinance;
+export const update = updateFinance;
+export const remove = deleteFinance;

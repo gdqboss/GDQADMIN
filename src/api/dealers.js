@@ -23,3 +23,5 @@ export function deleteDealer(id) {
 export function batchDeleteDealers(ids) {
   return request.post('/dealers/batch-delete', { ids })
 }
+
+export const addDealer = createDealer

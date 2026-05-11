@@ -39,3 +39,10 @@ export function saveProductSpecs(id, specs) {
 export function getProductSpecs(id) {
   return request.get(`/products/${id}/specs`)
 }
+
+// stubs for module compatibility
+export const addProduct = createProduct
+export const getList = getProductList;
+export const update = updateProduct;
+export const remove = deleteProduct;
+export const add = createProduct;

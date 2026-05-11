@@ -1,7 +1,5 @@
 <template>
-  <el-dialog
-    v-model="visible"
-    :title="isEdit ? '编辑产品' : '新增产品'"
+  <el-dialog v-model="visible"     :title="isEdit ? '编辑产品' : '新增产品'"
     width="640px"
     @close="handleClose"
   >
@@ -19,9 +17,7 @@
       </el-form-item>
 
       <el-form-item label="产品分类" prop="category_id">
-        <el-cascader
-          v-model="form.category_id"
-          :options="categoryOptions"
+        <el-cascader v-model="form.category_id"           :options="categoryOptions"
           :props="{ checkStrictly: true, label: 'name', value: 'id' }"
           placeholder="请选择分类"
           clearable

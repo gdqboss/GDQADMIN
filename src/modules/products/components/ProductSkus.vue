@@ -4,9 +4,7 @@
       <template #header>
         <span>SKU 管理 - {{ productId }}</span>
       </template>
-      <SkuManager
-        v-model="dialogVisible"
-        :product-id="productId"
+      <SkuManager v-model="dialogVisible"         :product-id="productId"
         :initial-specs="specs"
         @success="handleSuccess"
       />

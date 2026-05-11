@@ -38,9 +38,7 @@
 
         <!-- 输入区 -->
         <div class="input-area">
-          <input 
-            v-model="inputText"
-            @keyup.enter="send"
+          <input v-model="inputText"             @keyup.enter="send"
             type="text"
             :placeholder="$t('serviceChat.inputPlaceholder')"
             :disabled="sending || connecting"

@@ -2,16 +2,12 @@
   <div class="product-list">
     <div class="toolbar">
       <div class="search-area">
-        <el-input
-          v-model="filters.keyword"
-          placeholder="搜索SKU、名称"
+        <el-input v-model="filters.keyword"           placeholder="搜索SKU、名称"
           clearable
           style="width: 200px"
           @keyup.enter="handleSearch"
         />
-        <el-select
-          v-model="filters.status"
-          placeholder="状态"
+        <el-select v-model="filters.status"           placeholder="状态"
           clearable
           style="width: 120px"
           @change="handleSearch"
@@ -84,15 +80,11 @@
       />
     </div>
 
-    <product-edit
-      v-model="editVisible"
-      :product="currentProduct"
+    <product-edit v-model="editVisible"       :product="currentProduct"
       @success="loadData"
     />
 
-    <sku-manager
-      v-model="skuManagerVisible"
-      :product-id="currentProductId"
+    <sku-manager v-model="skuManagerVisible"       :product-id="currentProductId"
     />
   </div>
 </template>
