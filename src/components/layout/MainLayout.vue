@@ -20,7 +20,7 @@
         </template>
       </AppHeader>
       <main class="content-area">
-        <slot />
+        <router-view />
       </main>
     </div>
   </div>

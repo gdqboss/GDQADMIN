@@ -1,0 +1,16 @@
+dealers
+stores
+suppliers
+employees
+finance/dashboard
+finance/receivable
+finance/payable
+finance/cashflow
+finance/profit
+finance/invoice
+attendance/manage
+attendance/summary
+attendance/rule
+shift
+schedule
+leave

@@ -1,0 +1,1048 @@
+[Mon May 11 02:52:47 PM CST 2026] 生成: dealers
+[Mon May 11 02:52:55 PM CST 2026] 完成: dealers
+[Mon May 11 02:52:57 PM CST 2026] 生成: stores
+[Mon May 11 02:53:05 PM CST 2026] 完成: stores
+[Mon May 11 02:53:07 PM CST 2026] 生成: suppliers
+[Mon May 11 02:53:15 PM CST 2026] 完成: suppliers
+
+> caimeite-refactor@1.0.0 build
+> vite build
+
+vite v5.4.21 building for production...
+transforming...
+node_modules/@vueuse/core/dist/index.js (3362:0): A comment
+
+"/* #__PURE__ */"
+
+in "node_modules/@vueuse/core/dist/index.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+node_modules/@vueuse/core/dist/index.js (5780:22): A comment
+
+"/* #__PURE__ */"
+
+in "node_modules/@vueuse/core/dist/index.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+✓ 1780 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.62 kB │ gzip:   0.39 kB
+dist/assets/ProductEdit-BVYEqZc0.css        0.09 kB │ gzip:   0.10 kB
+dist/assets/index-CS9uTbV3.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Sm1D_bRw.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DYzamG-S.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DEc6VBqv.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BLSKfK8M.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Dy2HmpWW.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CoRWNxVu.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-S7gWSkqL.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-WflbfVvo.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BQ1rhM4Z.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BTLFFD0g.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CTcs_dnK.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DKBZRY-8.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BfvHFl7i.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DmJ9YgeW.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DTPwNcpX.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CL5d6xKu.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-B6B871l5.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-C6Kgs8dq.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BnXddoxl.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CWplGbjn.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Cq9cpzd3.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Cer5a--g.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DVhWUFUf.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BD1nUlwp.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Byocw7Rf.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-oLLvCko0.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CYBxYySt.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CgC2V6jQ.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-C3MD2bYA.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-B8vHYFxJ.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-8QLvRIhR.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-r9HnJBWc.css              0.20 kB │ gzip:   0.16 kB
+dist/assets/index-CFdFMbfn.css              0.26 kB │ gzip:   0.17 kB
+dist/assets/index-u05nnPjT.css              0.26 kB │ gzip:   0.16 kB
+dist/assets/index-DD4awhi9.css              0.27 kB │ gzip:   0.16 kB
+dist/assets/index-WN-0dNjN.css              0.27 kB │ gzip:   0.16 kB
+dist/assets/index-DHZQGL2o.css              0.27 kB │ gzip:   0.17 kB
+dist/assets/MainLayout-NmMopzCO.css         0.28 kB │ gzip:   0.19 kB
+dist/assets/ProductList-CSalfPXW.css        0.34 kB │ gzip:   0.18 kB
+dist/assets/index-Clp00zvz.css              1.04 kB │ gzip:   0.39 kB
+dist/assets/index-CGLBij2l.css              1.04 kB │ gzip:   0.42 kB
+dist/assets/SkuManager-C44AabWG.css         1.11 kB │ gzip:   0.43 kB
+dist/assets/ChatRoom-DCi0wyVG.css           2.67 kB │ gzip:   0.84 kB
+dist/assets/ScanPage-ciFzRDj2.css          11.59 kB │ gzip:   2.60 kB
+dist/assets/index-RrpBTqVr.css            377.09 kB │ gzip:  52.08 kB
+dist/assets/suppliers-BFsMb_f-.js           0.28 kB │ gzip:   0.18 kB
+dist/assets/permissions-iyRetamk.js         0.30 kB │ gzip:   0.18 kB
+dist/assets/userRoles-s56--Aud.js           0.31 kB │ gzip:   0.18 kB
+dist/assets/roles-RYLVNiWV.js               0.41 kB │ gzip:   0.21 kB
+dist/assets/products-o6acFaBM.js            0.47 kB │ gzip:   0.23 kB
+dist/assets/index-BsfBNizA.js               0.52 kB │ gzip:   0.39 kB
+dist/assets/index-CZiRb-YY.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-iYMauJrf.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-Dlxnsq0e.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-BmMKyXyT.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-BUFqkH5Q.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-DI5ycodB.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-DATVKTQy.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-CVT2NY4M.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-CtH3eDSg.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-ClrkAfD1.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-DVpn7CFH.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-mwphHCj2.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-BN5ypGtw.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-39igJji0.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-CM2hIQc_.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-DT2Yf4JD.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-kZh48SKE.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-DzUycYrX.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-Ij8dmLH4.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-DGq2fSgM.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-B-14B6hb.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-C585BWr-.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/request-YY5MFXPa.js             0.53 kB │ gzip:   0.34 kB
+dist/assets/index-CgFNxOty.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-DXfQS-9g.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BZWhUj_u.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-DdLPY0bt.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-C_yagygH.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-Jnh0u8zw.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-xgM_ync1.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-CYcz1JAw.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-DGsDvjX0.js               0.54 kB │ gzip:   0.40 kB
+dist/assets/ProductNew-DHXUAPZa.js          0.89 kB │ gzip:   0.58 kB
+dist/assets/ProductSkus--yTd_TRW.js         0.93 kB │ gzip:   0.59 kB
+dist/assets/user-C45CY9QM.js                1.36 kB │ gzip:   0.73 kB
+dist/assets/index-BDzMA-oB.js               2.71 kB │ gzip:   1.11 kB
+dist/assets/index-DnlMIGk_.js               3.03 kB │ gzip:   1.15 kB
+dist/assets/index-DbougI5W.js               3.22 kB │ gzip:   1.24 kB
+dist/assets/ChatRoom-C19-GWrM.js            3.29 kB │ gzip:   1.70 kB
+dist/assets/index-ifTDnSrY.js               3.40 kB │ gzip:   1.26 kB
+dist/assets/UsersPanel-eln1did9.js          3.51 kB │ gzip:   1.71 kB
+dist/assets/PermissionsPanel-CVg49SjY.js    3.61 kB │ gzip:   1.68 kB
+dist/assets/index-Cq_dl_31.js               3.87 kB │ gzip:   1.65 kB
+dist/assets/Login-B8Qo7kBK.js               4.03 kB │ gzip:   1.93 kB
+dist/assets/MenusPanel-34b0bcKV.js          4.53 kB │ gzip:   1.88 kB
+dist/assets/index-DdAWss-x.js               4.73 kB │ gzip:   2.01 kB
+dist/assets/index-CeZh4VNa.js               4.74 kB │ gzip:   1.84 kB
+dist/assets/ProductList-pMeNlBBA.js         4.84 kB │ gzip:   2.14 kB
+dist/assets/index-BbCXqN2J.js               4.98 kB │ gzip:   2.02 kB
+dist/assets/index-H35SVXDM.js               4.99 kB │ gzip:   1.94 kB
+dist/assets/RolesPanel-mxK6XBBf.js          4.99 kB │ gzip:   2.16 kB
+dist/assets/SkuManager-CREk-nU7.js          5.12 kB │ gzip:   2.36 kB
+dist/assets/index-N-itsrAv.js               5.27 kB │ gzip:   2.05 kB
+dist/assets/index-BUt4lNnb.js               5.58 kB │ gzip:   2.24 kB
+dist/assets/ProductEdit-D0QhNOVX.js         6.51 kB │ gzip:   2.54 kB
+dist/assets/index-BRkNbC-D.js               6.76 kB │ gzip:   2.62 kB
+dist/assets/MainLayout-Wsl1Y7Xg.js          7.33 kB │ gzip:   3.07 kB
+dist/assets/ScanPage-BRG3QQ8F.js           17.21 kB │ gzip:   6.00 kB
+dist/assets/request-B8_nURbH.js            41.99 kB │ gzip:  16.56 kB
+dist/assets/index-CCWdLBik.js              71.70 kB │ gzip:  24.11 kB
+dist/assets/vue-core-DQH8Xpjn.js          111.25 kB │ gzip:  43.31 kB
+dist/assets/element-plus-BwrQ2YCr.js      921.64 kB │ gzip: 297.70 kB
+
+(!) Some chunks are larger than 600 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 16.94s
+[Mon May 11 02:53:33 PM CST 2026] Build验证完成
+[Mon May 11 02:53:35 PM CST 2026] 生成: employees
+[Mon May 11 02:53:43 PM CST 2026] 完成: employees
+[Mon May 11 02:53:45 PM CST 2026] 生成: finance/dashboard
+[Mon May 11 02:53:52 PM CST 2026] 完成: finance/dashboard
+[Mon May 11 02:53:55 PM CST 2026] 生成: finance/receivable
+[Mon May 11 02:54:02 PM CST 2026] 完成: finance/receivable
+
+> caimeite-refactor@1.0.0 build
+> vite build
+
+vite v5.4.21 building for production...
+transforming...
+node_modules/@vueuse/core/dist/index.js (3362:0): A comment
+
+"/* #__PURE__ */"
+
+in "node_modules/@vueuse/core/dist/index.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+node_modules/@vueuse/core/dist/index.js (5780:22): A comment
+
+"/* #__PURE__ */"
+
+in "node_modules/@vueuse/core/dist/index.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+✓ 1780 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.62 kB │ gzip:   0.39 kB
+dist/assets/ProductEdit-BVYEqZc0.css        0.09 kB │ gzip:   0.10 kB
+dist/assets/index-CS9uTbV3.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Sm1D_bRw.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DYzamG-S.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DEc6VBqv.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BLSKfK8M.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Dy2HmpWW.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CoRWNxVu.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-S7gWSkqL.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-WflbfVvo.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BQ1rhM4Z.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BTLFFD0g.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CTcs_dnK.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DKBZRY-8.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BfvHFl7i.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DmJ9YgeW.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DTPwNcpX.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CL5d6xKu.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-B6B871l5.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-C6Kgs8dq.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BnXddoxl.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CWplGbjn.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Cq9cpzd3.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Cer5a--g.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DVhWUFUf.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BD1nUlwp.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Byocw7Rf.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-oLLvCko0.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CYBxYySt.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CgC2V6jQ.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-C3MD2bYA.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-B8vHYFxJ.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-8QLvRIhR.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-r9HnJBWc.css              0.20 kB │ gzip:   0.16 kB
+dist/assets/index-CFdFMbfn.css              0.26 kB │ gzip:   0.17 kB
+dist/assets/index-u05nnPjT.css              0.26 kB │ gzip:   0.16 kB
+dist/assets/index-DD4awhi9.css              0.27 kB │ gzip:   0.16 kB
+dist/assets/index-WN-0dNjN.css              0.27 kB │ gzip:   0.16 kB
+dist/assets/index-DHZQGL2o.css              0.27 kB │ gzip:   0.17 kB
+dist/assets/MainLayout-NmMopzCO.css         0.28 kB │ gzip:   0.19 kB
+dist/assets/ProductList-CSalfPXW.css        0.34 kB │ gzip:   0.18 kB
+dist/assets/index-Clp00zvz.css              1.04 kB │ gzip:   0.39 kB
+dist/assets/index-CGLBij2l.css              1.04 kB │ gzip:   0.42 kB
+dist/assets/SkuManager-C44AabWG.css         1.11 kB │ gzip:   0.43 kB
+dist/assets/ChatRoom-DCi0wyVG.css           2.67 kB │ gzip:   0.84 kB
+dist/assets/ScanPage-ciFzRDj2.css          11.59 kB │ gzip:   2.60 kB
+dist/assets/index-RrpBTqVr.css            377.09 kB │ gzip:  52.08 kB
+dist/assets/suppliers-BFsMb_f-.js           0.28 kB │ gzip:   0.18 kB
+dist/assets/permissions-iyRetamk.js         0.30 kB │ gzip:   0.18 kB
+dist/assets/userRoles-s56--Aud.js           0.31 kB │ gzip:   0.18 kB
+dist/assets/roles-RYLVNiWV.js               0.41 kB │ gzip:   0.21 kB
+dist/assets/products-o6acFaBM.js            0.47 kB │ gzip:   0.23 kB
+dist/assets/index-BsfBNizA.js               0.52 kB │ gzip:   0.39 kB
+dist/assets/index-CZiRb-YY.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-iYMauJrf.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-Dlxnsq0e.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-BmMKyXyT.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-BUFqkH5Q.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-DI5ycodB.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-DATVKTQy.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-CVT2NY4M.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-CtH3eDSg.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-ClrkAfD1.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-DVpn7CFH.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-mwphHCj2.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-BN5ypGtw.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-39igJji0.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-CM2hIQc_.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-DT2Yf4JD.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-kZh48SKE.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-DzUycYrX.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-Ij8dmLH4.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-DGq2fSgM.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-B-14B6hb.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-C585BWr-.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/request-YY5MFXPa.js             0.53 kB │ gzip:   0.34 kB
+dist/assets/index-CgFNxOty.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-DXfQS-9g.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BZWhUj_u.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-DdLPY0bt.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-C_yagygH.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-Jnh0u8zw.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-xgM_ync1.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-CYcz1JAw.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-DGsDvjX0.js               0.54 kB │ gzip:   0.40 kB
+dist/assets/ProductNew-DHXUAPZa.js          0.89 kB │ gzip:   0.58 kB
+dist/assets/ProductSkus--yTd_TRW.js         0.93 kB │ gzip:   0.59 kB
+dist/assets/user-C45CY9QM.js                1.36 kB │ gzip:   0.73 kB
+dist/assets/index-BDzMA-oB.js               2.71 kB │ gzip:   1.11 kB
+dist/assets/index-DnlMIGk_.js               3.03 kB │ gzip:   1.15 kB
+dist/assets/index-DbougI5W.js               3.22 kB │ gzip:   1.24 kB
+dist/assets/ChatRoom-C19-GWrM.js            3.29 kB │ gzip:   1.70 kB
+dist/assets/index-ifTDnSrY.js               3.40 kB │ gzip:   1.26 kB
+dist/assets/UsersPanel-eln1did9.js          3.51 kB │ gzip:   1.71 kB
+dist/assets/PermissionsPanel-CVg49SjY.js    3.61 kB │ gzip:   1.68 kB
+dist/assets/index-Cq_dl_31.js               3.87 kB │ gzip:   1.65 kB
+dist/assets/Login-B8Qo7kBK.js               4.03 kB │ gzip:   1.93 kB
+dist/assets/MenusPanel-34b0bcKV.js          4.53 kB │ gzip:   1.88 kB
+dist/assets/index-DdAWss-x.js               4.73 kB │ gzip:   2.01 kB
+dist/assets/index-CeZh4VNa.js               4.74 kB │ gzip:   1.84 kB
+dist/assets/ProductList-pMeNlBBA.js         4.84 kB │ gzip:   2.14 kB
+dist/assets/index-BbCXqN2J.js               4.98 kB │ gzip:   2.02 kB
+dist/assets/index-H35SVXDM.js               4.99 kB │ gzip:   1.94 kB
+dist/assets/RolesPanel-mxK6XBBf.js          4.99 kB │ gzip:   2.16 kB
+dist/assets/SkuManager-CREk-nU7.js          5.12 kB │ gzip:   2.36 kB
+dist/assets/index-N-itsrAv.js               5.27 kB │ gzip:   2.05 kB
+dist/assets/index-BUt4lNnb.js               5.58 kB │ gzip:   2.24 kB
+dist/assets/ProductEdit-D0QhNOVX.js         6.51 kB │ gzip:   2.54 kB
+dist/assets/index-BRkNbC-D.js               6.76 kB │ gzip:   2.62 kB
+dist/assets/MainLayout-Wsl1Y7Xg.js          7.33 kB │ gzip:   3.07 kB
+dist/assets/ScanPage-BRG3QQ8F.js           17.21 kB │ gzip:   6.00 kB
+dist/assets/request-B8_nURbH.js            41.99 kB │ gzip:  16.56 kB
+dist/assets/index-CCWdLBik.js              71.70 kB │ gzip:  24.11 kB
+dist/assets/vue-core-DQH8Xpjn.js          111.25 kB │ gzip:  43.31 kB
+dist/assets/element-plus-BwrQ2YCr.js      921.64 kB │ gzip: 297.70 kB
+
+(!) Some chunks are larger than 600 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 14.85s
+[Mon May 11 02:54:18 PM CST 2026] Build验证完成
+[Mon May 11 02:54:20 PM CST 2026] 生成: finance/payable
+[Mon May 11 02:54:28 PM CST 2026] 完成: finance/payable
+[Mon May 11 02:54:30 PM CST 2026] 生成: finance/cashflow
+[Mon May 11 02:54:38 PM CST 2026] 完成: finance/cashflow
+[Mon May 11 02:54:40 PM CST 2026] 生成: finance/profit
+[Tue May 12 12:54:50 AM CST 2026] 生成: finance/profit
+[Tue May 12 12:54:57 AM CST 2026] 完成: finance/profit
+
+> caimeite-refactor@1.0.0 build
+> vite build
+
+vite v5.4.21 building for production...
+transforming...
+node_modules/@vueuse/core/dist/index.js (3362:0): A comment
+
+"/* #__PURE__ */"
+
+in "node_modules/@vueuse/core/dist/index.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+node_modules/@vueuse/core/dist/index.js (5780:22): A comment
+
+"/* #__PURE__ */"
+
+in "node_modules/@vueuse/core/dist/index.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+✓ 1780 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.62 kB │ gzip:   0.39 kB
+dist/assets/ProductEdit-BVYEqZc0.css        0.09 kB │ gzip:   0.10 kB
+dist/assets/index-CS9uTbV3.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Sm1D_bRw.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DYzamG-S.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DEc6VBqv.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BLSKfK8M.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Dy2HmpWW.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CoRWNxVu.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-S7gWSkqL.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-WflbfVvo.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BQ1rhM4Z.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BTLFFD0g.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CTcs_dnK.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DKBZRY-8.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BfvHFl7i.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DmJ9YgeW.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DTPwNcpX.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CL5d6xKu.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-B6B871l5.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-C6Kgs8dq.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BnXddoxl.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CWplGbjn.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Cq9cpzd3.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Cer5a--g.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DVhWUFUf.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BD1nUlwp.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Byocw7Rf.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-oLLvCko0.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CYBxYySt.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CgC2V6jQ.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-C3MD2bYA.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-B8vHYFxJ.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-8QLvRIhR.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-r9HnJBWc.css              0.20 kB │ gzip:   0.16 kB
+dist/assets/index-CFdFMbfn.css              0.26 kB │ gzip:   0.17 kB
+dist/assets/index-u05nnPjT.css              0.26 kB │ gzip:   0.16 kB
+dist/assets/index-DD4awhi9.css              0.27 kB │ gzip:   0.16 kB
+dist/assets/index-WN-0dNjN.css              0.27 kB │ gzip:   0.16 kB
+dist/assets/index-DHZQGL2o.css              0.27 kB │ gzip:   0.17 kB
+dist/assets/MainLayout-ZRjt5CjK.css         0.28 kB │ gzip:   0.19 kB
+dist/assets/ProductList-CSalfPXW.css        0.34 kB │ gzip:   0.18 kB
+dist/assets/index-Clp00zvz.css              1.04 kB │ gzip:   0.39 kB
+dist/assets/index-CGLBij2l.css              1.04 kB │ gzip:   0.42 kB
+dist/assets/SkuManager-C44AabWG.css         1.11 kB │ gzip:   0.43 kB
+dist/assets/ChatRoom-DCi0wyVG.css           2.67 kB │ gzip:   0.84 kB
+dist/assets/ScanPage-ciFzRDj2.css          11.59 kB │ gzip:   2.60 kB
+dist/assets/index-CWQ2CpjW.css            376.42 kB │ gzip:  52.01 kB
+dist/assets/suppliers-C1O625-S.js           0.28 kB │ gzip:   0.18 kB
+dist/assets/permissions-2_z_WrbG.js         0.30 kB │ gzip:   0.18 kB
+dist/assets/userRoles-CkkFLvG3.js           0.31 kB │ gzip:   0.17 kB
+dist/assets/roles-CHotgwdp.js               0.41 kB │ gzip:   0.20 kB
+dist/assets/products-CYMnkAW0.js            0.47 kB │ gzip:   0.22 kB
+dist/assets/index-63XXEkBh.js               0.52 kB │ gzip:   0.39 kB
+dist/assets/index-D4PC7smx.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-EVqVVuYp.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-CB-4qHRm.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-CWmhhjwk.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-D8nVf0Pg.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-ZjEmCm13.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-DhY1YUCN.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-BKfajytE.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-Df_sClzk.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-B-uPpUNi.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-DJin3OfF.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-BKzXDA6m.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-CVhHqVEk.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-B3TYJPls.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BmJfQhVV.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BpJjNuxz.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BXkrqZHD.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BIXUnfxW.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-DksGWsps.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-DDKOwXqY.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-z0L8Zio3.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BjSdzIoZ.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-B16WK3ZP.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-B9GT4M_J.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-TE5nv9T1.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BppYIsDO.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-CrBqi3zi.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-D0PgS6aM.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BVTIXbdJ.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-CZR-4Bn5.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-q-V4WkVZ.js               0.54 kB │ gzip:   0.41 kB
+dist/assets/request-BcYzhvqs.js             0.54 kB │ gzip:   0.35 kB
+dist/assets/ProductNew-CC0DhW4N.js          0.89 kB │ gzip:   0.58 kB
+dist/assets/ProductSkus-BGvaP5BF.js         0.93 kB │ gzip:   0.59 kB
+dist/assets/user-Cuqkdjz8.js                1.36 kB │ gzip:   0.73 kB
+dist/assets/index-BT9xQmQy.js               2.71 kB │ gzip:   1.11 kB
+dist/assets/index-DellROni.js               3.03 kB │ gzip:   1.15 kB
+dist/assets/index-n_C6Q-Aa.js               3.22 kB │ gzip:   1.24 kB
+dist/assets/ChatRoom-DlnkuX2c.js            3.29 kB │ gzip:   1.70 kB
+dist/assets/index-Bgq0oAbe.js               3.40 kB │ gzip:   1.26 kB
+dist/assets/UsersPanel-nLC5YlMX.js          3.50 kB │ gzip:   1.71 kB
+dist/assets/PermissionsPanel-C69drBGs.js    3.63 kB │ gzip:   1.70 kB
+dist/assets/index-CqBm_DQ4.js               3.87 kB │ gzip:   1.65 kB
+dist/assets/Login-CLM-bYGh.js               4.24 kB │ gzip:   2.00 kB
+dist/assets/MenusPanel-Dp41p-7i.js          4.52 kB │ gzip:   1.88 kB
+dist/assets/index-CFjAEi_6.js               4.73 kB │ gzip:   2.00 kB
+dist/assets/index-DVKbMaLd.js               4.74 kB │ gzip:   1.84 kB
+dist/assets/ProductList-Setahioc.js         4.84 kB │ gzip:   2.14 kB
+dist/assets/index-D6sy75UN.js               4.98 kB │ gzip:   2.02 kB
+dist/assets/index-D2fvVaNG.js               4.99 kB │ gzip:   1.94 kB
+dist/assets/RolesPanel-q_3jyS8r.js          5.01 kB │ gzip:   2.17 kB
+dist/assets/SkuManager-CHwYRgR9.js          5.12 kB │ gzip:   2.36 kB
+dist/assets/index-CfTMgA8Q.js               5.27 kB │ gzip:   2.05 kB
+dist/assets/index-DSkdfWdp.js               5.58 kB │ gzip:   2.24 kB
+dist/assets/ProductEdit-oGMOk6QN.js         6.51 kB │ gzip:   2.54 kB
+dist/assets/index-8cLF7OYn.js               6.76 kB │ gzip:   2.62 kB
+dist/assets/MainLayout-yz9yKG0H.js          7.34 kB │ gzip:   3.08 kB
+dist/assets/ScanPage-YbHqqFL1.js           17.21 kB │ gzip:   6.00 kB
+dist/assets/request-B8_nURbH.js            41.99 kB │ gzip:  16.56 kB
+dist/assets/index-D60SlMQ9.js              71.70 kB │ gzip:  24.10 kB
+dist/assets/vue-core-DQH8Xpjn.js          111.25 kB │ gzip:  43.31 kB
+dist/assets/element-plus-BwrQ2YCr.js      921.64 kB │ gzip: 297.70 kB
+
+(!) Some chunks are larger than 600 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 10.34s
+[Tue May 12 12:55:08 AM CST 2026] Build验证完成
+[Tue May 12 12:55:11 AM CST 2026] 生成: finance/invoice
+[Tue May 12 12:55:18 AM CST 2026] 完成: finance/invoice
+[Tue May 12 12:55:20 AM CST 2026] 生成: attendance/manage
+[Tue May 12 12:55:28 AM CST 2026] 完成: attendance/manage
+[Tue May 12 12:55:30 AM CST 2026] 生成: attendance/summary
+[Tue May 12 12:55:38 AM CST 2026] 完成: attendance/summary
+
+> caimeite-refactor@1.0.0 build
+> vite build
+
+vite v5.4.21 building for production...
+transforming...
+node_modules/@vueuse/core/dist/index.js (3362:0): A comment
+
+"/* #__PURE__ */"
+
+in "node_modules/@vueuse/core/dist/index.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+node_modules/@vueuse/core/dist/index.js (5780:22): A comment
+
+"/* #__PURE__ */"
+
+in "node_modules/@vueuse/core/dist/index.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+✓ 1780 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.62 kB │ gzip:   0.39 kB
+dist/assets/ProductEdit-BVYEqZc0.css        0.09 kB │ gzip:   0.10 kB
+dist/assets/index-CS9uTbV3.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Sm1D_bRw.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DYzamG-S.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DEc6VBqv.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BLSKfK8M.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Dy2HmpWW.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CoRWNxVu.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-S7gWSkqL.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-WflbfVvo.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BQ1rhM4Z.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BTLFFD0g.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CTcs_dnK.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DKBZRY-8.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BfvHFl7i.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DmJ9YgeW.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DTPwNcpX.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CL5d6xKu.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-B6B871l5.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-C6Kgs8dq.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BnXddoxl.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CWplGbjn.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Cq9cpzd3.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Cer5a--g.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DVhWUFUf.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BD1nUlwp.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Byocw7Rf.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-oLLvCko0.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CYBxYySt.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CgC2V6jQ.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-C3MD2bYA.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-B8vHYFxJ.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-8QLvRIhR.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-r9HnJBWc.css              0.20 kB │ gzip:   0.16 kB
+dist/assets/index-CFdFMbfn.css              0.26 kB │ gzip:   0.17 kB
+dist/assets/index-u05nnPjT.css              0.26 kB │ gzip:   0.16 kB
+dist/assets/index-DD4awhi9.css              0.27 kB │ gzip:   0.16 kB
+dist/assets/index-WN-0dNjN.css              0.27 kB │ gzip:   0.16 kB
+dist/assets/index-DHZQGL2o.css              0.27 kB │ gzip:   0.17 kB
+dist/assets/MainLayout-ZRjt5CjK.css         0.28 kB │ gzip:   0.19 kB
+dist/assets/ProductList-CSalfPXW.css        0.34 kB │ gzip:   0.18 kB
+dist/assets/index-Clp00zvz.css              1.04 kB │ gzip:   0.39 kB
+dist/assets/index-CGLBij2l.css              1.04 kB │ gzip:   0.42 kB
+dist/assets/SkuManager-C44AabWG.css         1.11 kB │ gzip:   0.43 kB
+dist/assets/ChatRoom-DCi0wyVG.css           2.67 kB │ gzip:   0.84 kB
+dist/assets/ScanPage-ciFzRDj2.css          11.59 kB │ gzip:   2.60 kB
+dist/assets/index-CWQ2CpjW.css            376.42 kB │ gzip:  52.01 kB
+dist/assets/suppliers-C1O625-S.js           0.28 kB │ gzip:   0.18 kB
+dist/assets/permissions-2_z_WrbG.js         0.30 kB │ gzip:   0.18 kB
+dist/assets/userRoles-CkkFLvG3.js           0.31 kB │ gzip:   0.17 kB
+dist/assets/roles-CHotgwdp.js               0.41 kB │ gzip:   0.20 kB
+dist/assets/products-CYMnkAW0.js            0.47 kB │ gzip:   0.22 kB
+dist/assets/index-63XXEkBh.js               0.52 kB │ gzip:   0.39 kB
+dist/assets/index-D4PC7smx.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-EVqVVuYp.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-CB-4qHRm.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-CWmhhjwk.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-D8nVf0Pg.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-ZjEmCm13.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-DhY1YUCN.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-BKfajytE.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-Df_sClzk.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-B-uPpUNi.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-DJin3OfF.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-BKzXDA6m.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-CVhHqVEk.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-B3TYJPls.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BmJfQhVV.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BpJjNuxz.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BXkrqZHD.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BIXUnfxW.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-DksGWsps.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-DDKOwXqY.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-z0L8Zio3.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BjSdzIoZ.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-B16WK3ZP.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-B9GT4M_J.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-TE5nv9T1.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BppYIsDO.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-CrBqi3zi.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-D0PgS6aM.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BVTIXbdJ.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-CZR-4Bn5.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-q-V4WkVZ.js               0.54 kB │ gzip:   0.41 kB
+dist/assets/request-BcYzhvqs.js             0.54 kB │ gzip:   0.35 kB
+dist/assets/ProductNew-CC0DhW4N.js          0.89 kB │ gzip:   0.58 kB
+dist/assets/ProductSkus-BGvaP5BF.js         0.93 kB │ gzip:   0.59 kB
+dist/assets/user-Cuqkdjz8.js                1.36 kB │ gzip:   0.73 kB
+dist/assets/index-BT9xQmQy.js               2.71 kB │ gzip:   1.11 kB
+dist/assets/index-DellROni.js               3.03 kB │ gzip:   1.15 kB
+dist/assets/index-n_C6Q-Aa.js               3.22 kB │ gzip:   1.24 kB
+dist/assets/ChatRoom-DlnkuX2c.js            3.29 kB │ gzip:   1.70 kB
+dist/assets/index-Bgq0oAbe.js               3.40 kB │ gzip:   1.26 kB
+dist/assets/UsersPanel-nLC5YlMX.js          3.50 kB │ gzip:   1.71 kB
+dist/assets/PermissionsPanel-C69drBGs.js    3.63 kB │ gzip:   1.70 kB
+dist/assets/index-CqBm_DQ4.js               3.87 kB │ gzip:   1.65 kB
+dist/assets/Login-CLM-bYGh.js               4.24 kB │ gzip:   2.00 kB
+dist/assets/MenusPanel-Dp41p-7i.js          4.52 kB │ gzip:   1.88 kB
+dist/assets/index-CFjAEi_6.js               4.73 kB │ gzip:   2.00 kB
+dist/assets/index-DVKbMaLd.js               4.74 kB │ gzip:   1.84 kB
+dist/assets/ProductList-Setahioc.js         4.84 kB │ gzip:   2.14 kB
+dist/assets/index-D6sy75UN.js               4.98 kB │ gzip:   2.02 kB
+dist/assets/index-D2fvVaNG.js               4.99 kB │ gzip:   1.94 kB
+dist/assets/RolesPanel-q_3jyS8r.js          5.01 kB │ gzip:   2.17 kB
+dist/assets/SkuManager-CHwYRgR9.js          5.12 kB │ gzip:   2.36 kB
+dist/assets/index-CfTMgA8Q.js               5.27 kB │ gzip:   2.05 kB
+dist/assets/index-DSkdfWdp.js               5.58 kB │ gzip:   2.24 kB
+dist/assets/ProductEdit-oGMOk6QN.js         6.51 kB │ gzip:   2.54 kB
+dist/assets/index-8cLF7OYn.js               6.76 kB │ gzip:   2.62 kB
+dist/assets/MainLayout-yz9yKG0H.js          7.34 kB │ gzip:   3.08 kB
+dist/assets/ScanPage-YbHqqFL1.js           17.21 kB │ gzip:   6.00 kB
+dist/assets/request-B8_nURbH.js            41.99 kB │ gzip:  16.56 kB
+dist/assets/index-D60SlMQ9.js              71.70 kB │ gzip:  24.10 kB
+dist/assets/vue-core-DQH8Xpjn.js          111.25 kB │ gzip:  43.31 kB
+dist/assets/element-plus-BwrQ2YCr.js      921.64 kB │ gzip: 297.70 kB
+
+(!) Some chunks are larger than 600 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 10.45s
+[Tue May 12 12:55:49 AM CST 2026] Build验证完成
+[Tue May 12 12:55:51 AM CST 2026] 生成: attendance/rule
+[Tue May 12 12:55:59 AM CST 2026] 完成: attendance/rule
+[Tue May 12 12:56:01 AM CST 2026] 生成: shift
+[Tue May 12 12:56:10 AM CST 2026] 完成: shift
+[Tue May 12 12:56:12 AM CST 2026] 生成: schedule
+[Tue May 12 12:56:20 AM CST 2026] 完成: schedule
+
+> caimeite-refactor@1.0.0 build
+> vite build
+
+vite v5.4.21 building for production...
+transforming...
+node_modules/@vueuse/core/dist/index.js (3362:0): A comment
+
+"/* #__PURE__ */"
+
+in "node_modules/@vueuse/core/dist/index.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+node_modules/@vueuse/core/dist/index.js (5780:22): A comment
+
+"/* #__PURE__ */"
+
+in "node_modules/@vueuse/core/dist/index.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+✓ 1780 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.62 kB │ gzip:   0.39 kB
+dist/assets/ProductEdit-BVYEqZc0.css        0.09 kB │ gzip:   0.10 kB
+dist/assets/index-CS9uTbV3.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Sm1D_bRw.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DYzamG-S.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DEc6VBqv.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BLSKfK8M.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Dy2HmpWW.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CoRWNxVu.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-S7gWSkqL.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-WflbfVvo.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BQ1rhM4Z.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BTLFFD0g.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CTcs_dnK.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DKBZRY-8.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BfvHFl7i.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DmJ9YgeW.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DTPwNcpX.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CL5d6xKu.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-B6B871l5.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-C6Kgs8dq.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BnXddoxl.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CWplGbjn.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Cq9cpzd3.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Cer5a--g.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DVhWUFUf.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BD1nUlwp.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Byocw7Rf.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-oLLvCko0.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CYBxYySt.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CgC2V6jQ.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-C3MD2bYA.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-B8vHYFxJ.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-8QLvRIhR.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-r9HnJBWc.css              0.20 kB │ gzip:   0.16 kB
+dist/assets/index-CFdFMbfn.css              0.26 kB │ gzip:   0.17 kB
+dist/assets/index-u05nnPjT.css              0.26 kB │ gzip:   0.16 kB
+dist/assets/index-DD4awhi9.css              0.27 kB │ gzip:   0.16 kB
+dist/assets/index-WN-0dNjN.css              0.27 kB │ gzip:   0.16 kB
+dist/assets/index-DHZQGL2o.css              0.27 kB │ gzip:   0.17 kB
+dist/assets/MainLayout-ZRjt5CjK.css         0.28 kB │ gzip:   0.19 kB
+dist/assets/ProductList-CSalfPXW.css        0.34 kB │ gzip:   0.18 kB
+dist/assets/index-Clp00zvz.css              1.04 kB │ gzip:   0.39 kB
+dist/assets/index-CGLBij2l.css              1.04 kB │ gzip:   0.42 kB
+dist/assets/SkuManager-C44AabWG.css         1.11 kB │ gzip:   0.43 kB
+dist/assets/ChatRoom-DCi0wyVG.css           2.67 kB │ gzip:   0.84 kB
+dist/assets/ScanPage-ciFzRDj2.css          11.59 kB │ gzip:   2.60 kB
+dist/assets/index-CWQ2CpjW.css            376.42 kB │ gzip:  52.01 kB
+dist/assets/suppliers-C1O625-S.js           0.28 kB │ gzip:   0.18 kB
+dist/assets/permissions-2_z_WrbG.js         0.30 kB │ gzip:   0.18 kB
+dist/assets/userRoles-CkkFLvG3.js           0.31 kB │ gzip:   0.17 kB
+dist/assets/roles-CHotgwdp.js               0.41 kB │ gzip:   0.20 kB
+dist/assets/products-CYMnkAW0.js            0.47 kB │ gzip:   0.22 kB
+dist/assets/index-63XXEkBh.js               0.52 kB │ gzip:   0.39 kB
+dist/assets/index-D4PC7smx.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-EVqVVuYp.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-CB-4qHRm.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-CWmhhjwk.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-D8nVf0Pg.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-ZjEmCm13.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-DhY1YUCN.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-BKfajytE.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-Df_sClzk.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-B-uPpUNi.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-DJin3OfF.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-BKzXDA6m.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-CVhHqVEk.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-B3TYJPls.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BmJfQhVV.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BpJjNuxz.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BXkrqZHD.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BIXUnfxW.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-DksGWsps.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-DDKOwXqY.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-z0L8Zio3.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BjSdzIoZ.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-B16WK3ZP.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-B9GT4M_J.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-TE5nv9T1.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BppYIsDO.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-CrBqi3zi.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-D0PgS6aM.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BVTIXbdJ.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-CZR-4Bn5.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-q-V4WkVZ.js               0.54 kB │ gzip:   0.41 kB
+dist/assets/request-BcYzhvqs.js             0.54 kB │ gzip:   0.35 kB
+dist/assets/ProductNew-CC0DhW4N.js          0.89 kB │ gzip:   0.58 kB
+dist/assets/ProductSkus-BGvaP5BF.js         0.93 kB │ gzip:   0.59 kB
+dist/assets/user-Cuqkdjz8.js                1.36 kB │ gzip:   0.73 kB
+dist/assets/index-BT9xQmQy.js               2.71 kB │ gzip:   1.11 kB
+dist/assets/index-DellROni.js               3.03 kB │ gzip:   1.15 kB
+dist/assets/index-n_C6Q-Aa.js               3.22 kB │ gzip:   1.24 kB
+dist/assets/ChatRoom-DlnkuX2c.js            3.29 kB │ gzip:   1.70 kB
+dist/assets/index-Bgq0oAbe.js               3.40 kB │ gzip:   1.26 kB
+dist/assets/UsersPanel-nLC5YlMX.js          3.50 kB │ gzip:   1.71 kB
+dist/assets/PermissionsPanel-C69drBGs.js    3.63 kB │ gzip:   1.70 kB
+dist/assets/index-CqBm_DQ4.js               3.87 kB │ gzip:   1.65 kB
+dist/assets/Login-CLM-bYGh.js               4.24 kB │ gzip:   2.00 kB
+dist/assets/MenusPanel-Dp41p-7i.js          4.52 kB │ gzip:   1.88 kB
+dist/assets/index-CFjAEi_6.js               4.73 kB │ gzip:   2.00 kB
+dist/assets/index-DVKbMaLd.js               4.74 kB │ gzip:   1.84 kB
+dist/assets/ProductList-Setahioc.js         4.84 kB │ gzip:   2.14 kB
+dist/assets/index-D6sy75UN.js               4.98 kB │ gzip:   2.02 kB
+dist/assets/index-D2fvVaNG.js               4.99 kB │ gzip:   1.94 kB
+dist/assets/RolesPanel-q_3jyS8r.js          5.01 kB │ gzip:   2.17 kB
+dist/assets/SkuManager-CHwYRgR9.js          5.12 kB │ gzip:   2.36 kB
+dist/assets/index-CfTMgA8Q.js               5.27 kB │ gzip:   2.05 kB
+dist/assets/index-DSkdfWdp.js               5.58 kB │ gzip:   2.24 kB
+dist/assets/ProductEdit-oGMOk6QN.js         6.51 kB │ gzip:   2.54 kB
+dist/assets/index-8cLF7OYn.js               6.76 kB │ gzip:   2.62 kB
+dist/assets/MainLayout-yz9yKG0H.js          7.34 kB │ gzip:   3.08 kB
+dist/assets/ScanPage-YbHqqFL1.js           17.21 kB │ gzip:   6.00 kB
+dist/assets/request-B8_nURbH.js            41.99 kB │ gzip:  16.56 kB
+dist/assets/index-D60SlMQ9.js              71.70 kB │ gzip:  24.10 kB
+dist/assets/vue-core-DQH8Xpjn.js          111.25 kB │ gzip:  43.31 kB
+dist/assets/element-plus-BwrQ2YCr.js      921.64 kB │ gzip: 297.70 kB
+
+(!) Some chunks are larger than 600 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 9.99s
+[Tue May 12 12:56:30 AM CST 2026] Build验证完成
+[Tue May 12 12:56:32 AM CST 2026] 生成: leave
+[Tue May 12 12:56:40 AM CST 2026] 完成: leave
+[Tue May 12 12:56:42 AM CST 2026] 生成: approval/list
+[Tue May 12 10:57:02 AM CST 2026] 生成: approval/list
+[Tue May 12 10:57:02 AM CST 2026] 失败: approval/list - {
+    "error": {
+        "message": "Invalid model identifier \"qwen3.5-9B\". Please specify a valid downloaded model (e.g., qwen/qwen3-vl-8b@q4_k_m, qwen/qwen3-vl-8b, qwen3-vl-8b-instruct).",
+        "type": "invalid_request_error",
+        "param": "model",
+        "code": "model_not_found"
+    }
+}
+[Tue May 12 10:57:04 AM CST 2026] 生成: approval/create
+[Tue May 12 10:57:04 AM CST 2026] 失败: approval/create - {
+    "error": {
+        "message": "Invalid model identifier \"qwen3.5-9B\". Please specify a valid downloaded model (e.g., qwen/qwen3-vl-8b@q4_k_m, qwen/qwen3-vl-8b, qwen3-vl-8b-instruct).",
+        "type": "invalid_request_error",
+        "param": "model",
+        "code": "model_not_found"
+    }
+}
+[Tue May 12 10:57:06 AM CST 2026] 生成: approval/detail
+[Tue May 12 10:57:06 AM CST 2026] 失败: approval/detail - {
+    "error": {
+        "message": "Invalid model identifier \"qwen3.5-9B\". Please specify a valid downloaded model (e.g., qwen/qwen3-vl-8b@q4_k_m, qwen/qwen3-vl-8b, qwen3-vl-8b-instruct).",
+        "type": "invalid_request_error",
+        "param": "model",
+        "code": "model_not_found"
+    }
+}
+[Tue May 12 10:57:08 AM CST 2026] 生成: approval/manage
+[Tue May 12 10:57:08 AM CST 2026] 失败: approval/manage - {
+    "error": {
+        "message": "Invalid model identifier \"qwen3.5-9B\". Please specify a valid downloaded model (e.g., qwen/qwen3-vl-8b@q4_k_m, qwen/qwen3-vl-8b, qwen3-vl-8b-instruct).",
+        "type": "invalid_request_error",
+        "param": "model",
+        "code": "model_not_found"
+    }
+}
+[Tue May 12 10:57:10 AM CST 2026] 生成: approval/settings
+[Tue May 12 10:57:11 AM CST 2026] 失败: approval/settings - {
+    "error": {
+        "message": "Invalid model identifier \"qwen3.5-9B\". Please specify a valid downloaded model (e.g., qwen/qwen3-vl-8b@q4_k_m, qwen/qwen3-vl-8b, qwen3-vl-8b-instruct).",
+        "type": "invalid_request_error",
+        "param": "model",
+        "code": "model_not_found"
+    }
+}
+[Tue May 12 10:57:13 AM CST 2026] 生成: report/center
+[Tue May 12 10:57:13 AM CST 2026] 失败: report/center - {
+    "error": {
+        "message": "Invalid model identifier \"qwen3.5-9B\". Please specify a valid downloaded model (e.g., qwen/qwen3-vl-8b@q4_k_m, qwen/qwen3-vl-8b, qwen3-vl-8b-instruct).",
+        "type": "invalid_request_error",
+        "param": "model",
+        "code": "model_not_found"
+    }
+}
+[Tue May 12 10:57:15 AM CST 2026] 生成: report/excel
+[Tue May 12 10:57:15 AM CST 2026] 失败: report/excel - {
+    "error": {
+        "message": "Invalid model identifier \"qwen3.5-9B\". Please specify a valid downloaded model (e.g., qwen/qwen3-vl-8b@q4_k_m, qwen/qwen3-vl-8b, qwen3-vl-8b-instruct).",
+        "type": "invalid_request_error",
+        "param": "model",
+        "code": "model_not_found"
+    }
+}
+[Tue May 12 10:57:17 AM CST 2026] 生成: report/bi
+[Tue May 12 10:57:17 AM CST 2026] 失败: report/bi - {
+    "error": {
+        "message": "Invalid model identifier \"qwen3.5-9B\". Please specify a valid downloaded model (e.g., qwen/qwen3-vl-8b@q4_k_m, qwen/qwen3-vl-8b, qwen3-vl-8b-instruct).",
+        "type": "invalid_request_error",
+        "param": "model",
+        "code": "model_not_found"
+    }
+}
+[Tue May 12 10:57:19 AM CST 2026] 生成: system
+[Tue May 12 10:57:19 AM CST 2026] 失败: system - {
+    "error": {
+        "message": "Invalid model identifier \"qwen3.5-9B\". Please specify a valid downloaded model (e.g., qwen/qwen3-vl-8b@q4_k_m, qwen/qwen3-vl-8b, qwen3-vl-8b-instruct).",
+        "type": "invalid_request_error",
+        "param": "model",
+        "code": "model_not_found"
+    }
+}
+[Tue May 12 10:57:21 AM CST 2026] 生成: image
+[Tue May 12 10:57:21 AM CST 2026] 失败: image - {
+    "error": {
+        "message": "Invalid model identifier \"qwen3.5-9B\". Please specify a valid downloaded model (e.g., qwen/qwen3-vl-8b@q4_k_m, qwen/qwen3-vl-8b, qwen3-vl-8b-instruct).",
+        "type": "invalid_request_error",
+        "param": "model",
+        "code": "model_not_found"
+    }
+}
+[Tue May 12 10:57:23 AM CST 2026] 生成: sales/revenues
+[Tue May 12 10:57:23 AM CST 2026] 失败: sales/revenues - {
+    "error": {
+        "message": "Invalid model identifier \"qwen3.5-9B\". Please specify a valid downloaded model (e.g., qwen/qwen3-vl-8b@q4_k_m, qwen/qwen3-vl-8b, qwen3-vl-8b-instruct).",
+        "type": "invalid_request_error",
+        "param": "model",
+        "code": "model_not_found"
+    }
+}
+[Tue May 12 10:57:25 AM CST 2026] 生成: sales/retail
+[Tue May 12 10:57:26 AM CST 2026] 失败: sales/retail - {
+    "error": {
+        "message": "Invalid model identifier \"qwen3.5-9B\". Please specify a valid downloaded model (e.g., qwen/qwen3-vl-8b@q4_k_m, qwen/qwen3-vl-8b, qwen3-vl-8b-instruct).",
+        "type": "invalid_request_error",
+        "param": "model",
+        "code": "model_not_found"
+    }
+}
+[Tue May 12 10:57:28 AM CST 2026] 生成: sales/returns
+[Tue May 12 10:57:28 AM CST 2026] 失败: sales/returns - {
+    "error": {
+        "message": "Invalid model identifier \"qwen3.5-9B\". Please specify a valid downloaded model (e.g., qwen/qwen3-vl-8b@q4_k_m, qwen/qwen3-vl-8b, qwen3-vl-8b-instruct).",
+        "type": "invalid_request_error",
+        "param": "model",
+        "code": "model_not_found"
+    }
+}
+[Tue May 12 10:57:30 AM CST 2026] 生成: stock/alerts
+[Tue May 12 10:57:30 AM CST 2026] 失败: stock/alerts - {
+    "error": {
+        "message": "Invalid model identifier \"qwen3.5-9B\". Please specify a valid downloaded model (e.g., qwen/qwen3-vl-8b@q4_k_m, qwen/qwen3-vl-8b, qwen3-vl-8b-instruct).",
+        "type": "invalid_request_error",
+        "param": "model",
+        "code": "model_not_found"
+    }
+}
+[Tue May 12 10:57:32 AM CST 2026] 生成: stock/inout
+[Tue May 12 10:57:32 AM CST 2026] 失败: stock/inout - {
+    "error": {
+        "message": "Invalid model identifier \"qwen3.5-9B\". Please specify a valid downloaded model (e.g., qwen/qwen3-vl-8b@q4_k_m, qwen/qwen3-vl-8b, qwen3-vl-8b-instruct).",
+        "type": "invalid_request_error",
+        "param": "model",
+        "code": "model_not_found"
+    }
+}
+[Tue May 12 10:57:34 AM CST 2026] 生成: stock/costs
+[Tue May 12 10:57:34 AM CST 2026] 失败: stock/costs - {
+    "error": {
+        "message": "Invalid model identifier \"qwen3.5-9B\". Please specify a valid downloaded model (e.g., qwen/qwen3-vl-8b@q4_k_m, qwen/qwen3-vl-8b, qwen3-vl-8b-instruct).",
+        "type": "invalid_request_error",
+        "param": "model",
+        "code": "model_not_found"
+    }
+}
+[Tue May 12 10:57:36 AM CST 2026] 生成: customer/statement
+[Tue May 12 10:57:36 AM CST 2026] 失败: customer/statement - {
+    "error": {
+        "message": "Invalid model identifier \"qwen3.5-9B\". Please specify a valid downloaded model (e.g., qwen/qwen3-vl-8b@q4_k_m, qwen/qwen3-vl-8b, qwen3-vl-8b-instruct).",
+        "type": "invalid_request_error",
+        "param": "model",
+        "code": "model_not_found"
+    }
+}
+[Tue May 12 10:57:38 AM CST 2026] 生成: customer/feedback
+[Tue May 12 10:57:38 AM CST 2026] 失败: customer/feedback - {
+    "error": {
+        "message": "Invalid model identifier \"qwen3.5-9B\". Please specify a valid downloaded model (e.g., qwen/qwen3-vl-8b@q4_k_m, qwen/qwen3-vl-8b, qwen3-vl-8b-instruct).",
+        "type": "invalid_request_error",
+        "param": "model",
+        "code": "model_not_found"
+    }
+}
+
+> caimeite-refactor@1.0.0 build
+> vite build
+
+vite v5.4.21 building for production...
+transforming...
+node_modules/@vueuse/core/dist/index.js (3362:0): A comment
+
+"/* #__PURE__ */"
+
+in "node_modules/@vueuse/core/dist/index.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+node_modules/@vueuse/core/dist/index.js (5780:22): A comment
+
+"/* #__PURE__ */"
+
+in "node_modules/@vueuse/core/dist/index.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+✓ 1780 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.62 kB │ gzip:   0.39 kB
+dist/assets/ProductEdit-BVYEqZc0.css        0.09 kB │ gzip:   0.10 kB
+dist/assets/index-CS9uTbV3.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Sm1D_bRw.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DYzamG-S.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DEc6VBqv.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BLSKfK8M.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Dy2HmpWW.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CoRWNxVu.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-S7gWSkqL.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-WflbfVvo.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BQ1rhM4Z.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BTLFFD0g.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CTcs_dnK.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DKBZRY-8.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BfvHFl7i.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DmJ9YgeW.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DTPwNcpX.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CL5d6xKu.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-B6B871l5.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-C6Kgs8dq.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BnXddoxl.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CWplGbjn.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Cq9cpzd3.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Cer5a--g.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-DVhWUFUf.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-BD1nUlwp.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-Byocw7Rf.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-oLLvCko0.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CYBxYySt.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-CgC2V6jQ.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-C3MD2bYA.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-B8vHYFxJ.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-8QLvRIhR.css              0.11 kB │ gzip:   0.10 kB
+dist/assets/index-r9HnJBWc.css              0.20 kB │ gzip:   0.16 kB
+dist/assets/index-CFdFMbfn.css              0.26 kB │ gzip:   0.17 kB
+dist/assets/index-u05nnPjT.css              0.26 kB │ gzip:   0.16 kB
+dist/assets/index-DD4awhi9.css              0.27 kB │ gzip:   0.16 kB
+dist/assets/index-WN-0dNjN.css              0.27 kB │ gzip:   0.16 kB
+dist/assets/index-DHZQGL2o.css              0.27 kB │ gzip:   0.17 kB
+dist/assets/MainLayout-ZRjt5CjK.css         0.28 kB │ gzip:   0.19 kB
+dist/assets/ProductList-CSalfPXW.css        0.34 kB │ gzip:   0.18 kB
+dist/assets/index-Clp00zvz.css              1.04 kB │ gzip:   0.39 kB
+dist/assets/index-CGLBij2l.css              1.04 kB │ gzip:   0.42 kB
+dist/assets/SkuManager-C44AabWG.css         1.11 kB │ gzip:   0.43 kB
+dist/assets/ChatRoom-DCi0wyVG.css           2.67 kB │ gzip:   0.84 kB
+dist/assets/ScanPage-ciFzRDj2.css          11.59 kB │ gzip:   2.60 kB
+dist/assets/index-CWQ2CpjW.css            376.42 kB │ gzip:  52.01 kB
+dist/assets/suppliers-C1O625-S.js           0.28 kB │ gzip:   0.18 kB
+dist/assets/permissions-2_z_WrbG.js         0.30 kB │ gzip:   0.18 kB
+dist/assets/userRoles-CkkFLvG3.js           0.31 kB │ gzip:   0.17 kB
+dist/assets/roles-CHotgwdp.js               0.41 kB │ gzip:   0.20 kB
+dist/assets/products-CYMnkAW0.js            0.47 kB │ gzip:   0.22 kB
+dist/assets/index-63XXEkBh.js               0.52 kB │ gzip:   0.39 kB
+dist/assets/index-D4PC7smx.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-EVqVVuYp.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-CB-4qHRm.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-CWmhhjwk.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-D8nVf0Pg.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-ZjEmCm13.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-DhY1YUCN.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-BKfajytE.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-Df_sClzk.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-B-uPpUNi.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-DJin3OfF.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-BKzXDA6m.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-CVhHqVEk.js               0.52 kB │ gzip:   0.40 kB
+dist/assets/index-B3TYJPls.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BmJfQhVV.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BpJjNuxz.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BXkrqZHD.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BIXUnfxW.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-DksGWsps.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-DDKOwXqY.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-z0L8Zio3.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BjSdzIoZ.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-B16WK3ZP.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-B9GT4M_J.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-TE5nv9T1.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BppYIsDO.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-CrBqi3zi.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-D0PgS6aM.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-BVTIXbdJ.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-CZR-4Bn5.js               0.53 kB │ gzip:   0.40 kB
+dist/assets/index-q-V4WkVZ.js               0.54 kB │ gzip:   0.41 kB
+dist/assets/request-BcYzhvqs.js             0.54 kB │ gzip:   0.35 kB
+dist/assets/ProductNew-CC0DhW4N.js          0.89 kB │ gzip:   0.58 kB
+dist/assets/ProductSkus-BGvaP5BF.js         0.93 kB │ gzip:   0.59 kB
+dist/assets/user-Cuqkdjz8.js                1.36 kB │ gzip:   0.73 kB
+dist/assets/index-BT9xQmQy.js               2.71 kB │ gzip:   1.11 kB
+dist/assets/index-DellROni.js               3.03 kB │ gzip:   1.15 kB
+dist/assets/index-n_C6Q-Aa.js               3.22 kB │ gzip:   1.24 kB
+dist/assets/ChatRoom-DlnkuX2c.js            3.29 kB │ gzip:   1.70 kB
+dist/assets/index-Bgq0oAbe.js               3.40 kB │ gzip:   1.26 kB
+dist/assets/UsersPanel-nLC5YlMX.js          3.50 kB │ gzip:   1.71 kB
+dist/assets/PermissionsPanel-C69drBGs.js    3.63 kB │ gzip:   1.70 kB
+dist/assets/index-CqBm_DQ4.js               3.87 kB │ gzip:   1.65 kB
+dist/assets/Login-CLM-bYGh.js               4.24 kB │ gzip:   2.00 kB
+dist/assets/MenusPanel-Dp41p-7i.js          4.52 kB │ gzip:   1.88 kB
+dist/assets/index-CFjAEi_6.js               4.73 kB │ gzip:   2.00 kB
+dist/assets/index-DVKbMaLd.js               4.74 kB │ gzip:   1.84 kB
+dist/assets/ProductList-Setahioc.js         4.84 kB │ gzip:   2.14 kB
+dist/assets/index-D6sy75UN.js               4.98 kB │ gzip:   2.02 kB
+dist/assets/index-D2fvVaNG.js               4.99 kB │ gzip:   1.94 kB
+dist/assets/RolesPanel-q_3jyS8r.js          5.01 kB │ gzip:   2.17 kB
+dist/assets/SkuManager-CHwYRgR9.js          5.12 kB │ gzip:   2.36 kB
+dist/assets/index-CfTMgA8Q.js               5.27 kB │ gzip:   2.05 kB
+dist/assets/index-DSkdfWdp.js               5.58 kB │ gzip:   2.24 kB
+dist/assets/ProductEdit-oGMOk6QN.js         6.51 kB │ gzip:   2.54 kB
+dist/assets/index-8cLF7OYn.js               6.76 kB │ gzip:   2.62 kB
+dist/assets/MainLayout-yz9yKG0H.js          7.34 kB │ gzip:   3.08 kB
+dist/assets/ScanPage-YbHqqFL1.js           17.21 kB │ gzip:   6.00 kB
+dist/assets/request-B8_nURbH.js            41.99 kB │ gzip:  16.56 kB
+dist/assets/index-D60SlMQ9.js              71.70 kB │ gzip:  24.10 kB
+dist/assets/vue-core-DQH8Xpjn.js          111.25 kB │ gzip:  43.31 kB
+dist/assets/element-plus-BwrQ2YCr.js      921.64 kB │ gzip: 297.70 kB
+
+(!) Some chunks are larger than 600 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 9.96s
+[Tue May 12 10:57:51 AM CST 2026] 全部完成！最终Build完成

@@ -1,32 +1,40 @@
 <template>
   <div class="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 to-blue-50">
+    <!-- Language toggle -->
+    <div class="absolute top-4 right-4 z-10">
+      <button
+        class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+        @click="toggleLocale"
+      >
+        <span class="material-symbols-outlined text-base">language</span>
+        <span>{{ locale === 'zh' ? 'EN' : '中' }}</span>
+      </button>
+    </div>
+
     <main class="flex-grow flex items-center justify-center p-4">
       <div class="w-full max-w-md bg-white rounded-xl shadow-card overflow-hidden">
         <!-- Header -->
-        <div class="pt-6 sm:pt-8 md:pt-10 pb-3 sm:pb-4 md:pb-6 px-4 sm:px-6 md:px-8 text-center">
-          <span class="material-symbols-outlined text-4xl text-primary mb-2">inventory_2 </span>
-          <h1 class="text-lg sm:text-xl md:text-2xl font-bold text-slate-900">彩美特管理系统</h1>
-          <p class="text-xs sm:text-sm text-slate-500 mt-1">企业品牌管理平台</p>
+        <div class="pt-8 pb-6 px-6 text-center">
+          <span class="material-symbols-outlined text-4xl text-primary mb-2">inventory_2</span>
+          <h1 class="text-xl font-bold text-slate-900">彩美特管理系统</h1>
         </div>
 
         <!-- Form -->
-        <form @submit.prevent="handleLogin" class="px-4 sm:px-6 md:px-8 pb-6 sm:pb-8 md:pb-10 space-y-4">
+        <form @submit.prevent="handleLogin" class="px-6 pb-8 space-y-4">
           <!-- Account -->
           <div>
-            <label class="block text-xs sm:text-sm font-medium text-slate-700 mb-1">邮箱或手机号</label>
-            <div class="relative">
-              <input
-                v-model="loginForm.account"
-                type="text"
-                placeholder="请输入邮箱或手机号"
-                class="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none text-sm"
-              />
-            </div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">邮箱或手机号</label>
+            <input
+              v-model="loginForm.account"
+              type="text"
+              placeholder="请输入邮箱或手机号"
+              class="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none text-sm"
+            />
           </div>
 
           <!-- Password -->
           <div>
-            <label class="block text-xs sm:text-sm font-medium text-slate-700 mb-1">密码</label>
+            <label class="block text-sm font-medium text-slate-700 mb-1">密码</label>
             <div class="relative">
               <input
                 v-model="loginForm.password"
@@ -48,13 +56,13 @@
           <div class="flex items-center justify-between">
             <label class="flex items-center cursor-pointer">
               <input type="checkbox" v-model="loginForm.remember" class="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary" />
-              <span class="ml-2 text-xs sm:text-sm text-slate-600">记住账号密码</span>
+              <span class="ml-2 text-sm text-slate-600">记住账号密码</span>
             </label>
-            <button type="button" @click="showForgot = true" class="text-xs sm:text-sm text-blue-600 hover:text-blue-700">忘记密码？</button>
+            <button type="button" class="text-sm text-blue-600 hover:text-blue-700">忘记密码?</button>
           </div>
 
           <!-- Error -->
-          <div v-if="errorMsg" class="text-xs text-red-500 bg-red-50 py-2 px-3 rounded-lg text-center">
+          <div v-if="errorMsg" class="text-sm text-red-500 bg-red-50 py-2 px-3 rounded-lg text-center">
             {{ errorMsg }}
           </div>
 
@@ -69,8 +77,8 @@
 
           <!-- Register -->
           <div class="text-center pt-2">
-            <button type="button" class="text-xs sm:text-sm text-slate-500 hover:text-slate-700">
-              还没有账号？联系管理员
+            <button type="button" class="text-sm text-slate-500 hover:text-slate-700">
+              员工注册申请
             </button>
           </div>
         </form>
@@ -80,10 +88,18 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, getCurrentInstance } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+
+const { proxy } = getCurrentInstance()
+const locale = ref(proxy.$locale || 'zh')
+const toggleLocale = () => {
+  locale.value = locale.value === 'zh' ? 'en' : 'zh'
+  proxy.$locale = locale.value
+  localStorage.setItem('caimeite_locale', locale.value)
+}
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -95,7 +111,6 @@ const loginForm = ref({
 const showPassword = ref(false)
 const loading = ref(false)
 const errorMsg = ref('')
-const showForgot = ref(false)
 
 const handleLogin = async () => {
   if (!loginForm.value.account || !loginForm.value.password) {
@@ -105,7 +120,6 @@ const handleLogin = async () => {
   loading.value = true
   errorMsg.value = ''
   try {
-    // 调用登录接口
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

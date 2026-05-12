@@ -49,15 +49,12 @@ const routes = [
       { path: 'customer/statement', name: 'CustomerStatement', component: () => import('../modules/customer/statement/index.vue') },
       { path: 'customer/feedback', name: 'FeedbackManage', component: () => import('../modules/customer/feedback/index.vue') },
       { path: 'aftersale', name: 'AftersaleManage', component: () => import('../modules/aftersale/index.vue') },
-      { path: 'system', name: 'SystemSettings', component: () => import('../modules/system/index.vue'),
-        children: [
-          { path: '', redirect: 'users' },
-          { path: 'users', name: 'SystemUsers', component: () => import('../modules/system/users.vue') },
-          { path: 'permissions', name: 'SystemPermissions', component: () => import('../modules/permission/index.vue') },
-          { path: 'menus', name: 'SystemMenus', component: () => import('../modules/menu/index.vue') },
-          { path: 'roles', name: 'SystemRoles', component: () => import('../modules/role/index.vue') },
-        ]
-      },
+      // 系统设置 - 扁平路由（/system 重定向到 /system/users）
+      { path: 'system', redirect: '/system/users' },
+      { path: 'system/users', name: 'SystemUsers', component: () => import('../modules/system/UsersPanel.vue') },
+      { path: 'system/roles', name: 'SystemRoles', component: () => import('../modules/system/RolesPanel.vue') },
+      { path: 'system/permissions', name: 'SystemPermissions', component: () => import('../modules/system/PermissionsPanel.vue') },
+      { path: 'system/menus', name: 'SystemMenus', component: () => import('../modules/system/MenusPanel.vue') },
       { path: 'qrcode', name: 'QrcodeManage', component: () => import('../modules/qrcode/ScanPage.vue') },
       { path: 'scan/:code', name: 'ScanPage', component: () => import('../modules/qrcode/ScanPage.vue') },
       { path: 'chat', name: 'CustomerChat', component: () => import('../modules/customer/chat/ChatRoom.vue') },

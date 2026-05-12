@@ -90,11 +90,11 @@ async function loadUsers() {
     const params = { page: 1, pageSize: 200 }
     if (searchForm.keyword) params.keyword = searchForm.keyword
     const res = await request.get('/users', { params })
-    users.value = res.data.list || res.data || []
+    users.value = res.list || res || []
     for (const u of users.value) {
       try {
         const roleRes = await getUserRoles(u.id)
-        u._roles = roleRes.data || []
+        u._roles = roleRes || []
       } catch { u._roles = [] }
     }
   } catch (e) {
@@ -106,7 +106,7 @@ async function loadUsers() {
 
 async function loadRoles() {
   const res = await getRoleList()
-  allRoles.value = res.data
+  allRoles.value = res
 }
 
 function openRoleDialog(user) {
