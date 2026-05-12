@@ -647,9 +647,10 @@ const templateFormRef = ref(null)
 const isEditingLog = ref(false)
 const isEditingTemplate = ref(false)
 
-// Admin check
+// Admin check - userStore.userRole is a string ('admin'|'operator'|etc)
 const isAdmin = computed(() => {
-  return userStore.roles?.some(r => r.name === 'admin' || r.name === 'administrator') || false
+  const role = userStore.userRole || userStore.userInfo?.role || ''
+  return role === 'admin' || role === 'administrator' || role === '超级管理员'
 })
 
 // Available tabs
