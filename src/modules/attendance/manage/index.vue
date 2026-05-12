@@ -1,211 +1,347 @@
 <template>
-  <div class="module-page module-attendance-manage">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <span class="module-title">考勤管理</span>
-          <div class="header-actions">
-            <el-button type="primary" @click="handleImport">导入考勤</el-button>
-            <el-button type="success" @click="handleSync">同步设备</el-button>
-            <el-button type="warning" @click="handleExport">导出记录</el-button>
-          </div>
+  <div class="attendance-manage-container">
+    <!-- Header -->
+    <div class="page-header">
+      <h2>考勤管理</h2>
+      <div class="header-actions">
+        <el-button type="primary" @click="handleClockIn">打卡</el-button>
+      </div>
+    </div>
+
+    <!-- My Today Card -->
+    <el-card class="today-card" v-if="myToday">
+      <div class="today-info">
+        <div class="today-date">{{ today }}</div>
+        <div class="clock-buttons">
+          <el-button 
+            type="success" 
+            size="large" 
+            :disabled="!!myToday.clock_in"
+            @click="handleClock('in')"
+          >
+            上班打卡 {{ myToday.clock_in || '' }}
+          </el-button>
+          <el-button 
+            type="warning" 
+            size="large" 
+            :disabled="!myToday.clock_in || !!myToday.clock_out"
+            @click="handleClock('out')"
+          >
+            下班打卡 {{ myToday.clock_out || '' }}
+          </el-button>
         </div>
-      </template>
-
-      <!-- 筛选区域 -->
-      <div class="filter-section">
-        <el-form :inline="true" :model="filterForm">
-          <el-form-item label="部门">
-            <el-select v-model="filterForm.department" placeholder="请选择部门" clearable style="width: 150px">
-              <el-option label="销售部" value="sales" />
-              <el-option label="技术部" value="tech" />
-              <el-option label="行政部" value="admin" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="日期">
-            <el-date-picker v-model="filterForm.dateRange" type="daterange" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" style="width: 240px" />
-          </el-form-item>
-          <el-form-item label="状态">
-            <el-select v-model="filterForm.status" placeholder="请选择状态" clearable style="width: 120px">
-              <el-option label="正常" value="normal" />
-              <el-option label="迟到" value="late" />
-              <el-option label="早退" value="early" />
-              <el-option label="缺勤" value="absent" />
-              <el-option label="请假" value="leave" />
-            </el-select>
-          </el-form-item>
-          <el-form-item>
-            <el-button type="primary" @click="handleSearch">查询</el-button>
-            <el-button @click="handleReset">重置</el-button>
-          </el-form-item>
-        </el-form>
+        <div class="status-badge" v-if="myToday.status !== 'normal'">
+          <el-tag :type="myToday.status === 'late' ? 'warning' : 'danger'">
+            {{ statusText(myToday.status) }}
+          </el-tag>
+        </div>
       </div>
+    </el-card>
 
-      <!-- 统计卡片 -->
-      <div class="stats-cards">
-        <el-row :gutter="16">
-          <el-col :span="6">
-            <div class="stat-card normal">
-              <div class="stat-value">{{ stats.normal }}</div>
-              <div class="stat-label">正常</div>
-            </div>
-          </el-col>
-          <el-col :span="6">
-            <div class="stat-card late">
-              <div class="stat-value">{{ stats.late }}</div>
-              <div class="stat-label">迟到</div>
-            </div>
-          </el-col>
-          <el-col :span="6">
-            <div class="stat-card early">
-              <div class="stat-value">{{ stats.early }}</div>
-              <div class="stat-label">早退</div>
-            </div>
-          </el-col>
-          <el-col :span="6">
-            <div class="stat-card absent">
-              <div class="stat-value">{{ stats.absent }}</div>
-              <div class="stat-label">缺勤</div>
-            </div>
-          </el-col>
-        </el-row>
-      </div>
+    <!-- Summary Stats -->
+    <el-row :gutter="20" class="summary-row">
+      <el-col :span="6">
+        <el-card shadow="hover">
+          <div class="stat-item">
+            <div class="stat-value">{{ summary.should_attend || 0 }}</div>
+            <div class="stat-label">应打卡</div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card shadow="hover">
+          <div class="stat-item">
+            <div class="stat-value">{{ summary.checked_in || 0 }}</div>
+            <div class="stat-label">实打卡</div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card shadow="hover">
+          <div class="stat-item warning">
+            <div class="stat-value">{{ summary.late_count || 0 }}</div>
+            <div class="stat-label">迟到</div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="6">
+        <el-card shadow="hover">
+          <div class="stat-item danger">
+            <div class="stat-value">{{ summary.absent_count || 0 }}</div>
+            <div class="stat-label">旷工</div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
 
-      <!-- 数据表格 -->
-      <el-table :data="tableData" stripe style="width: 100%" v-loading="loading">
-        <el-table-column prop="employeeName" label="员工姓名" width="100" />
-        <el-table-column prop="employeeNo" label="工号" width="100" />
-        <el-table-column prop="department" label="部门" width="100" />
+    <!-- Search Form -->
+    <el-card class="search-card">
+      <el-form :inline="true" :model="searchForm">
+        <el-form-item label="日期">
+          <el-date-picker
+            v-model="searchForm.date"
+            type="date"
+            placeholder="选择日期"
+            value-format="YYYY-MM-DD"
+            @change="loadData"
+          />
+        </el-form-item>
+        <el-form-item label="员工">
+          <el-input v-model="searchForm.user_name" placeholder="员工姓名" clearable @change="loadData" />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="searchForm.status" placeholder="全部" clearable @change="loadData">
+            <el-option label="正常" value="normal" />
+            <el-option label="迟到" value="late" />
+            <el-option label="早退" value="early" />
+            <el-option label="旷工" value="absent" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="loadData">查询</el-button>
+          <el-button @click="resetSearch">重置</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <!-- Data Table -->
+    <el-card class="data-card">
+      <el-table v-loading="loading" :data="list" stripe border>
         <el-table-column prop="date" label="日期" width="120" />
-        <el-table-column prop="checkInTime" label="签到时间" width="100" />
-        <el-table-column prop="checkOutTime" label="签退时间" width="100" />
-        <el-table-column prop="workingHours" label="工时" width="80" />
-        <el-table-column prop="status" label="状态" width="80">
+        <el-table-column prop="user_name" label="姓名" width="100" />
+        <el-table-column prop="department" label="部门" width="120" />
+        <el-table-column prop="clock_in" label="上班打卡" width="120">
           <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)">{{ getStatusText(row.status) }}</el-tag>
+            <span :class="row.status === 'late' ? 'text-warning' : ''">{{ row.clock_in || '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="150" />
+        <el-table-column prop="clock_out" label="下班打卡" width="120">
+          <template #default="{ row }">
+            <span :class="row.status === 'early' ? 'text-warning' : ''">{{ row.clock_out || '-' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="status" label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="getStatusType(row.status)" size="small">
+              {{ statusText(row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="location" label="打卡位置" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="is_auto_clock" label="打卡方式" width="100">
+          <template #default="{ row }">
+            <el-tag v-if="row.is_auto_clock" type="info" size="small">自动</el-tag>
+            <span v-else>手动</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="handleDetail(row)">详情</el-button>
-            <el-button link type="warning" size="small" @click="handleEdit(row)">补录</el-button>
+            <el-button link type="primary" size="small" @click="handleExplain(row)">说明</el-button>
+            <el-button link type="danger" size="small" @click="handleApprove(row)" v-if="isAdmin">审批</el-button>
           </template>
         </el-table-column>
       </el-table>
 
-      <!-- 分页 -->
-      <div class="pagination-wrapper">
+      <div class="pagination-container">
         <el-pagination
           v-model:current-page="pagination.page"
-          v-model:page-size="pagination.pageSize"
+          v-model:page-size="pagination.size"
           :page-sizes="[10, 20, 50, 100]"
           :total="pagination.total"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="handleSizeChange"
-          @current-change="handlePageChange"
+          layout="total, sizes, prev, pager, next"
+          @size-change="loadData"
+          @current-change="loadData"
         />
       </div>
     </el-card>
 
-    <!-- 详情对话框 -->
-    <el-dialog v-model="detailDialogVisible" title="考勤详情" width="600px">
-      <el-descriptions :column="2" border v-if="currentRow">
-        <el-descriptions-item label="员工姓名">{{ currentRow.employeeName }}</el-descriptions-item>
-        <el-descriptions-item label="工号">{{ currentRow.employeeNo }}</el-descriptions-item>
-        <el-descriptions-item label="部门">{{ currentRow.department }}</el-descriptions-item>
-        <el-descriptions-item label="日期">{{ currentRow.date }}</el-descriptions-item>
-        <el-descriptions-item label="签到时间">{{ currentRow.checkInTime }}</el-descriptions-item>
-        <el-descriptions-item label="签退时间">{{ currentRow.checkOutTime }}</el-descriptions-item>
-        <el-descriptions-item label="工作时长">{{ currentRow.workingHours }}小时</el-descriptions-item>
-        <el-descriptions-item label="状态">
-          <el-tag :type="getStatusType(currentRow.status)">{{ getStatusText(currentRow.status) }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="备注" :span="2">{{ currentRow.remark }}</el-descriptions-item>
-      </el-descriptions>
+    <!-- Explain Dialog -->
+    <el-dialog v-model="explainDialogVisible" title="提交异常说明" width="500px">
+      <el-form :model="explainForm" label-width="80px">
+        <el-form-item label="异常原因">
+          <el-input v-model="explainForm.reason" type="textarea" rows="3" placeholder="请输入异常说明" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="explainDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitExplain">提交</el-button>
+      </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, reactive, onMounted, computed } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { 
+  getMyAttendanceToday, 
+  getAttendanceTodaySummary, 
+  getAttendanceList, 
+  explainAttendance,
+  approveAttendance,
+  clockIn 
+} from '@/api/oa'
 
 const loading = ref(false)
-const detailDialogVisible = ref(false)
-const currentRow = ref(null)
+const list = ref([])
+const myToday = ref(null)
+const summary = ref({})
+const today = new Date().toLocaleDateString('zh-CN')
 
-const filterForm = reactive({
-  department: '',
-  dateRange: [],
+const searchForm = reactive({
+  date: new Date().toISOString().slice(0, 10),
+  user_name: '',
   status: ''
-})
-
-const stats = reactive({
-  normal: 156,
-  late: 12,
-  early: 8,
-  absent: 3
 })
 
 const pagination = reactive({
   page: 1,
-  pageSize: 20,
-  total: 179
+  size: 10,
+  total: 0
 })
 
-const tableData = ref([
-  { employeeName: '张三', employeeNo: 'E001', department: '销售部', date: '2026-05-10', checkInTime: '08:55', checkOutTime: '18:05', workingHours: 9.2, status: 'normal', remark: '' },
-  { employeeName: '李四', employeeNo: 'E002', department: '技术部', date: '2026-05-10', checkInTime: '09:15', checkOutTime: '18:00', workingHours: 8.8, status: 'late', remark: '早高峰堵车' },
-  { employeeName: '王五', employeeNo: 'E003', department: '行政部', date: '2026-05-10', checkInTime: '08:30', checkOutTime: '17:30', workingHours: 9.0, status: 'early', remark: '提前下班开会' },
-  { employeeName: '赵六', employeeNo: 'E004', department: '销售部', date: '2026-05-10', checkInTime: '--:--', checkOutTime: '--:--', workingHours: 0, status: 'absent', remark: '请假已批准' }
-])
+const explainDialogVisible = ref(false)
+const explainForm = reactive({ reason: '', id: null })
+const explainLoading = ref(false)
+
+const isAdmin = computed(() => {
+  const user = JSON.parse(localStorage.getItem('caimeite_user') || '{}')
+  return user.role === 'admin'
+})
+
+const statusText = (status) => {
+  const map = { normal: '正常', late: '迟到', early: '早退', absent: '旷工' }
+  return map[status] || '未知'
+}
 
 const getStatusType = (status) => {
-  const map = { normal: 'success', late: 'warning', early: 'warning', absent: 'danger', leave: 'info' }
+  const map = { normal: 'success', late: 'warning', early: 'warning', absent: 'danger' }
   return map[status] || 'info'
 }
 
-const getStatusText = (status) => {
-  const map = { normal: '正常', late: '迟到', early: '早退', absent: '缺勤', leave: '请假' }
-  return map[status] || status
+const loadMyToday = async () => {
+  try {
+    const data = await getMyAttendanceToday()
+    myToday.value = data
+  } catch (e) {
+    console.error(e)
+  }
 }
 
-const handleSearch = () => {
+const loadSummary = async () => {
+  try {
+    const data = await getAttendanceTodaySummary()
+    summary.value = data
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+const loadData = async () => {
   loading.value = true
-  setTimeout(() => { loading.value = false }, 500)
-  ElMessage.success('查询成功')
+  try {
+    const params = {
+      ...searchForm,
+      page: pagination.page,
+      size: pagination.size
+    }
+    const data = await getAttendanceList(params)
+    list.value = data.list || []
+    pagination.total = data.total || 0
+  } catch (e) {
+    ElMessage.error('加载数据失败')
+  } finally {
+    loading.value = false
+  }
 }
 
-const handleReset = () => {
-  filterForm.department = ''
-  filterForm.dateRange = []
-  filterForm.status = ''
-  ElMessage.info('已重置')
+const resetSearch = () => {
+  searchForm.date = new Date().toISOString().slice(0, 10)
+  searchForm.user_name = ''
+  searchForm.status = ''
+  pagination.page = 1
+  loadData()
 }
 
-const handleImport = () => ElMessage.info('导入考勤功能')
-const handleSync = () => ElMessage.info('同步设备功能')
-const handleExport = () => ElMessage.info('导出记录功能')
-const handleDetail = (row) => { currentRow.value = row; detailDialogVisible.value = true }
-const handleEdit = (row) => ElMessage.info(`补录 ${row.employeeName} 的考勤`)
-const handleSizeChange = (val) => { pagination.pageSize = val; pagination.page = 1 }
-const handlePageChange = (val) => { pagination.page = val }
+const handleClock = async (type) => {
+  try {
+    const data = await clockIn({ type })
+    ElMessage.success(data.message || '打卡成功')
+    loadMyToday()
+    loadSummary()
+    loadData()
+  } catch (e) {
+    ElMessage.error(e.message || '打卡失败')
+  }
+}
+
+const handleClockIn = () => {
+  handleClock('in')
+}
+
+const handleExplain = (row) => {
+  explainForm.id = row.id
+  explainForm.reason = ''
+  explainDialogVisible.value = true
+}
+
+const submitExplain = async () => {
+  if (!explainForm.reason.trim()) {
+    ElMessage.warning('请输入异常说明')
+    return
+  }
+  explainLoading.value = true
+  try {
+    await explainAttendance(explainForm.id, { reason: explainForm.reason })
+    ElMessage.success('提交成功')
+    explainDialogVisible.value = false
+    loadData()
+  } catch (e) {
+    ElMessage.error(e.message || '提交失败')
+  } finally {
+    explainLoading.value = false
+  }
+}
+
+const handleApprove = async (row) => {
+  try {
+    await ElMessageBox.confirm('确认审批通过该考勤记录？', '提示', { type: 'warning' })
+    await approveAttendance(row.id, { status: 'normal', approved: true })
+    ElMessage.success('审批成功')
+    loadData()
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error(e.message || '审批失败')
+  }
+}
+
+onMounted(() => {
+  loadMyToday()
+  loadSummary()
+  loadData()
+})
 </script>
 
 <style scoped>
-.module-page { padding: 20px; }
-.card-header { display: flex; justify-content: space-between; align-items: center; }
-.module-title { font-size: 18px; font-weight: 600; }
-.header-actions { display: flex; gap: 8px; }
-.filter-section { margin-bottom: 20px; padding: 16px; background: #f5f7fa; border-radius: 4px; }
-.stats-cards { margin-bottom: 20px; }
-.stat-card { padding: 20px; border-radius: 8px; text-align: center; color: #fff; }
-.stat-card.normal { background: linear-gradient(135deg, #67c23a, #85ce61); }
-.stat-card.late { background: linear-gradient(135deg, #e6a23c, #f5c67a); }
-.stat-card.early { background: linear-gradient(135deg, #f56c6c, #f89a9a); }
-.stat-card.absent { background: linear-gradient(135deg, #909399, #a6a9ad); }
-.stat-value { font-size: 32px; font-weight: bold; }
-.stat-label { font-size: 14px; margin-top: 4px; }
-.pagination-wrapper { margin-top: 20px; display: flex; justify-content: flex-end; }
+.attendance-manage-container { padding: 20px; }
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.page-header h2 { margin: 0; }
+
+.today-card { margin-bottom: 20px; }
+.today-info { display: flex; align-items: center; gap: 30px; }
+.today-date { font-size: 18px; font-weight: 500; }
+.clock-buttons { display: flex; gap: 10px; }
+.status-badge { margin-left: auto; }
+
+.summary-row { margin-bottom: 20px; }
+.stat-item { text-align: center; padding: 10px 0; }
+.stat-value { font-size: 28px; font-weight: bold; color: #409eff; }
+.stat-item.warning .stat-value { color: #e6a23c; }
+.stat-item.danger .stat-value { color: #f56c6c; }
+.stat-label { font-size: 14px; color: #909399; margin-top: 5px; }
+
+.search-card { margin-bottom: 20px; }
+.data-card { margin-bottom: 20px; }
+
+.pagination-container { margin-top: 20px; display: flex; justify-content: flex-end; }
+.text-warning { color: #e6a23c; font-weight: 500; }
 </style>

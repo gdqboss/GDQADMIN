@@ -33,8 +33,8 @@ export const useUserStore = defineStore('user', () => {
         getUserPermissions(userInfo.value.id),
         getUserMenus(userInfo.value.id)
       ])
-      permissions.value = permRes.data.map(p => p.name)
-      menus.value = menuRes.data
+      permissions.value = permRes.map(p => p.name)
+      menus.value = menuRes
       menuLoaded.value = true
     } catch (e) {
       console.warn('加载权限失败，使用空权限集', e)

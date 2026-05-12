@@ -83,6 +83,7 @@ const fallbackMenus = [
     items: [
       { path: '/', name: '工作台', icon: 'dashboard' },
       { path: '/oa', name: 'OA办公', icon: 'badge' },
+      { path: '/oa/work-logs', name: '工作日志', icon: 'description' },
       { path: '/finance', name: '财务管理', icon: 'payments' },
       { path: '/tasks', name: '任务管理', icon: 'task_alt' },
       { path: '/qrcode', name: '一物一码', icon: 'qr_code_2' },

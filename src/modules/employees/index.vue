@@ -1,24 +1,24 @@
 <template>
   <div>
     <el-form :model="searchForm" inline>
-      <el-form-item label="Name">
-        <el-input v-model="searchForm.name" placeholder="Name" />
+      <el-form-item :label="$t('employees.name')">
+        <el-input v-model="searchForm.name" :placeholder="$t('employees.searchPlaceholder')" />
       </el-form-item>
-      <el-form-item label="Email">
-        <el-input v-model="searchForm.email" placeholder="Email" />
+      <el-form-item :label="$t('employees.email')">
+        <el-input v-model="searchForm.email" :placeholder="$t('employees.email')" />
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="handleSearch">Search</el-button>
+        <el-button type="primary" @click="handleSearch">{{ $t('employees.search') }}</el-button>
       </el-form-item>
     </el-form>
     <el-table :data="list" v-loading="loading" border>
-      <el-table-column prop="id" label="ID" />
-      <el-table-column prop="name" label="Name" />
-      <el-table-column prop="email" label="Email" />
-      <el-table-column label="Operations">
+      <el-table-column prop="id" :label="$t('employees.id')" />
+      <el-table-column prop="name" :label="$t('employees.name')" />
+      <el-table-column prop="email" :label="$t('employees.email')" />
+      <el-table-column :label="$t('employees.operations')">
         <template #default="scope">
-          <el-button type="primary" @click="handleEdit(scope.row)">Edit</el-button>
-          <el-button type="danger" @click="handleDelete(scope.row.id)">Delete</el-button>
+          <el-button type="primary" @click="handleEdit(scope.row)">{{ $t('employees.editBtn') }}</el-button>
+          <el-button type="danger" @click="handleDelete(scope.row.id)">{{ $t('employees.delete') }}</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -30,27 +30,31 @@
       @size-change="loadData"
       layout="total, sizes, prev, pager, next, jumper"
     />
-    <el-dialog v-model="dialogVisible" title="Employee" width="500px">
+    <el-dialog v-model="dialogVisible" :title="isEdit ? $t('employees.edit') : $t('employees.add')" width="500px">
       <el-form v-model="formData" label-width="80px">
-        <el-form-item label="Name">
+        <el-form-item :label="$t('employees.name')">
           <el-input v-model="formData.name" />
         </el-form-item>
-        <el-form-item label="Email">
+        <el-form-item :label="$t('employees.email')">
           <el-input v-model="formData.email" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">Cancel</el-button>
-        <el-button type="primary" @click="dialogSubmit">Submit</el-button>
+        <el-button @click="dialogVisible = false">{{ $t('employees.cancel') }}</el-button>
+        <el-button type="primary" @click="dialogSubmit">{{ $t('employees.submit') }}</el-button>
       </template>
     </el-dialog>
-    <el-button type="primary" @click="handleAdd">Add</el-button>
+    <el-button type="primary" @click="handleAdd">{{ $t('employees.add') }}</el-button>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive } from 'vue'
 import { getEmployeeList, addEmployee, updateEmployee, deleteEmployee } from "@/api/employees";
+import { ElMessage, ElMessageBox } from 'element-plus'
+import i18n from '@/i18n'
+
+const { t } = i18n.global
 
 const list = ref([])
 const total = ref(0)
@@ -62,6 +66,7 @@ const searchForm = reactive({
   pageSize: 10,
 })
 const dialogVisible = ref(false)
+const isEdit = ref(false)
 const formData = reactive({
   id: 0,
   name: '',
@@ -70,10 +75,15 @@ const formData = reactive({
 
 const loadData = async () => {
   loading.value = true
-  const { data } = await getEmployeeList(searchForm)
-  list.value = data.list
-  total.value = data.total
-  loading.value = false
+  try {
+    const { data } = await getEmployeeList(searchForm)
+    list.value = data.list
+    total.value = data.total
+  } catch (e) {
+    ElMessage.error(t('employees.loadFailed'))
+  } finally {
+    loading.value = false
+  }
 }
 
 const handleSearch = () => {
@@ -82,6 +92,7 @@ const handleSearch = () => {
 }
 
 const handleAdd = () => {
+  isEdit.value = false
   dialogVisible.value = true
   formData.id = 0
   formData.name = ''
@@ -89,6 +100,7 @@ const handleAdd = () => {
 }
 
 const handleEdit = (row) => {
+  isEdit.value = true
   dialogVisible.value = true
   formData.id = row.id
   formData.name = row.name
@@ -96,18 +108,39 @@ const handleEdit = (row) => {
 }
 
 const handleDelete = async (id) => {
-  await deleteEmployee(id)
-  loadData()
+  try {
+    await ElMessageBox.confirm(t('employees.confirmDelete'), t('employees.delete'), {
+      confirmButtonText: t('employees.submit'),
+      cancelButtonText: t('employees.cancel'),
+      type: 'warning'
+    })
+    await deleteEmployee(id)
+    ElMessage.success(t('employees.deleteSuccess'))
+    loadData()
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(t('employees.deleteFailed'))
+    }
+  }
 }
 
 const dialogSubmit = async () => {
-  if (formData.id === 0) {
-    await addEmployee(formData)
-  } else {
-    await updateEmployee(formData)
+  loading.value = true
+  try {
+    if (formData.id === 0) {
+      await addEmployee(formData)
+      ElMessage.success(t('employees.addSuccess'))
+    } else {
+      await updateEmployee(formData)
+      ElMessage.success(t('employees.updateSuccess'))
+    }
+    dialogVisible.value = false
+    loadData()
+  } catch (e) {
+    ElMessage.error(isEdit.value ? t('employees.updateFailed') : t('employees.addFailed'))
+  } finally {
+    loading.value = false
   }
-  dialogVisible.value = false
-  loadData()
 }
 
 loadData()

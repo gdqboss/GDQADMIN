@@ -2,33 +2,33 @@
   <div class="dealers-container">
     <el-card class="search-card">
       <el-form :model="searchForm" inline>
-        <el-form-item label="经销商名称">
-          <el-input v-model="searchForm.name" placeholder="请输入" clearable />
+        <el-form-item :label="$t('dealers.dealerName')">
+          <el-input v-model="searchForm.name" :placeholder="$t('dealers.pleaseInputDealerName')" clearable />
         </el-form-item>
-        <el-form-item label="联系人">
-          <el-input v-model="searchForm.contact" placeholder="请输入" clearable />
+        <el-form-item :label="$t('dealers.contact')">
+          <el-input v-model="searchForm.contact" :placeholder="$t('dealers.contact')" clearable />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="handleSearch">查询</el-button>
-          <el-button @click="resetSearch">重置</el-button>
+          <el-button type="primary" @click="handleSearch">{{ $t('dealers.search') }}</el-button>
+          <el-button @click="resetSearch">{{ $t('dealers.reset') }}</el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
     <el-card class="table-card">
       <div class="table-header">
-        <el-button type="primary" @click="handleAdd">新增经销商</el-button>
+        <el-button type="primary" @click="handleAdd">{{ $t('dealers.add') }}</el-button>
       </div>
       <el-table :data="list" v-loading="loading" stripe border>
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="name" label="经销商名称" min-width="150" />
-        <el-table-column prop="contact" label="联系人" width="120" />
-        <el-table-column prop="phone" label="联系电话" width="140" />
-        <el-table-column prop="address" label="地址" min-width="200" show-overflow-tooltip />
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column prop="id" :label="$t('dealers.id')" width="80" />
+        <el-table-column prop="name" :label="$t('dealers.dealerName')" min-width="150" />
+        <el-table-column prop="contact" :label="$t('dealers.contact')" width="120" />
+        <el-table-column prop="phone" :label="$t('dealers.phone')" width="140" />
+        <el-table-column prop="address" :label="$t('dealers.address')" min-width="200" show-overflow-tooltip />
+        <el-table-column :label="$t('dealers.operations')" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
-            <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
+            <el-button type="primary" link @click="handleEdit(row)">{{ $t('dealers.editBtn') }}</el-button>
+            <el-button type="danger" link @click="handleDelete(row)">{{ $t('dealers.delete') }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -45,24 +45,24 @@
       </div>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑经销商' : '新增经销商'" width="600px">
+    <el-dialog v-model="dialogVisible" :title="isEdit ? $t('dealers.edit') : $t('dealers.add')" width="600px">
       <el-form v-model="formData" label-width="100px">
-        <el-form-item label="经销商名称" required>
-          <el-input v-model="formData.name" placeholder="请输入" />
+        <el-form-item :label="$t('dealers.dealerName')" required>
+          <el-input v-model="formData.name" :placeholder="$t('dealers.pleaseInputDealerName')" />
         </el-form-item>
-        <el-form-item label="联系人">
-          <el-input v-model="formData.contact" placeholder="请输入" />
+        <el-form-item :label="$t('dealers.contact')">
+          <el-input v-model="formData.contact" :placeholder="$t('dealers.contact')" />
         </el-form-item>
-        <el-form-item label="联系电话">
-          <el-input v-model="formData.phone" placeholder="请输入" />
+        <el-form-item :label="$t('dealers.phone')">
+          <el-input v-model="formData.phone" :placeholder="$t('dealers.phone')" />
         </el-form-item>
-        <el-form-item label="地址">
-          <el-input v-model="formData.address" type="textarea" :rows="3" placeholder="请输入" />
+        <el-form-item :label="$t('dealers.address')">
+          <el-input v-model="formData.address" type="textarea" :rows="3" :placeholder="$t('dealers.address')" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="dialogSubmit" :loading="loading">确定</el-button>
+        <el-button @click="dialogVisible = false">{{ $t('dealers.cancel') }}</el-button>
+        <el-button type="primary" @click="dialogSubmit" :loading="loading">{{ $t('dealers.submit') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -72,6 +72,9 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getDealerList, addDealer, updateDealer, deleteDealer } from "@/api/dealers";
+import i18n from '@/i18n'
+
+const { t } = i18n.global
 
 const list = ref([])
 const total = ref(0)
@@ -107,7 +110,7 @@ const loadData = async () => {
     list.value = res.data.list
     total.value = res.data.total
   } catch (e) {
-    ElMessage.error('获取经销商列表失败')
+    ElMessage.error(t('dealers.loadFailed'))
   } finally {
     loading.value = false
   }
@@ -145,39 +148,39 @@ const handleEdit = (row) => {
 }
 
 const handleDelete = (row) => {
-  ElMessageBox.confirm('确定删除该经销商吗？', '提示', {
-    confirmButtonText: '确定',
-    cancelButtonText: '取消',
+  ElMessageBox.confirm(t('dealers.confirmDelete'), t('dealers.delete'), {
+    confirmButtonText: t('dealers.submit'),
+    cancelButtonText: t('dealers.cancel'),
     type: 'warning'
   }).then(async () => {
     try {
       await deleteDealer(row.id)
-      ElMessage.success('删除成功')
+      ElMessage.success(t('dealers.deleteSuccess'))
       loadData()
     } catch (e) {
-      ElMessage.error('删除失败')
+      ElMessage.error(t('dealers.deleteFailed'))
     }
   }).catch(() => {})
 }
 
 const dialogSubmit = async () => {
   if (!formData.name) {
-    ElMessage.warning('请输入经销商名称')
+    ElMessage.warning(t('dealers.pleaseInputDealerName'))
     return
   }
   loading.value = true
   try {
     if (isEdit.value) {
       await updateDealer(formData)
-      ElMessage.success('更新成功')
+      ElMessage.success(t('dealers.updateSuccess'))
     } else {
       await addDealer(formData)
-      ElMessage.success('新增成功')
+      ElMessage.success(t('dealers.addSuccess'))
     }
     dialogVisible.value = false
     loadData()
   } catch (e) {
-    ElMessage.error(isEdit.value ? '更新失败' : '新增失败')
+    ElMessage.error(isEdit.value ? t('dealers.updateFailed') : t('dealers.addFailed'))
   } finally {
     loading.value = false
   }

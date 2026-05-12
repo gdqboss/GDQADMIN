@@ -1,0 +1,669 @@
+<template>
+  <div class="bi-dashboard">
+    <div class="bi-header">
+      <h1>📊 BI分析中心</h1>
+      <div class="bi-actions">
+        <button class="btn" @click="loadData">🔄 刷新</button>
+        <button class="btn btn-primary" @click="exportReport">📥 导出报表</button>
+      </div>
+    </div>
+
+    <!-- 总览卡片 -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon">📦</div>
+        <div class="stat-info">
+          <div class="stat-value">{{ stats.total_products || 0 }}</div>
+          <div class="stat-label">商品总数</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🏭</div>
+        <div class="stat-info">
+          <div class="stat-value">{{ stats.total_stock || 0 }}</div>
+          <div class="stat-label">总库存</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">💰</div>
+        <div class="stat-info">
+          <div class="stat-value">¥{{ formatMoney(stats.total_stock_value) }}</div>
+          <div class="stat-label">库存价值</div>
+        </div>
+      </div>
+      <div class="stat-card" :class="{ alert: stats.alert_count > 0 }">
+        <div class="stat-icon">⚠️</div>
+        <div class="stat-info">
+          <div class="stat-value">{{ stats.alert_count || 0 }}</div>
+          <div class="stat-label">库存预警</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 库存健康度 -->
+    <div class="health-bar">
+      <div class="health-info">
+        <span>库存健康度</span>
+        <span class="health-rate">{{ healthRate }}%</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill healthy" :style="{ width: healthRate + '%' }"></div>
+        <div class="progress-fill warning" :style="{ width: lowStockRate + '%' }"></div>
+        <div class="progress-fill danger" :style="{ width: outOfStockRate + '%' }"></div>
+      </div>
+      <div class="health-legend">
+        <span class="legend-item"><span class="dot healthy"></span>正常 {{ healthCount }}</span>
+        <span class="legend-item"><span class="dot warning"></span>低库存 {{ lowStockCount }}</span>
+        <span class="legend-item"><span class="dot danger"></span>缺货 {{ outOfStockCount }}</span>
+      </div>
+    </div>
+
+    <!-- Tab切换 -->
+    <div class="tabs">
+      <button v-for="tab in tabs" :key="tab.key" 
+        class="tab" :class="{ active: activeTab === tab.key }"
+        @click="activeTab = tab.key">
+        {{ tab.icon }} {{ tab.label }}
+      </button>
+    </div>
+
+    <!-- 总览 -->
+    <div v-if="activeTab === 'overview'" class="tab-content">
+      <div class="overview-grid">
+        <div class="chart-card">
+          <h3>📊 商品分类分布</h3>
+          <div class="category-list">
+            <div v-for="cat in categoryData" :key="cat.category" class="category-item">
+              <div class="category-info">
+                <span class="category-name">{{ cat.category }}</span>
+                <span class="category-count">{{ cat.product_count }}个商品</span>
+              </div>
+              <div class="progress-bar small">
+                <div class="progress-fill" :style="{ width: cat.percentage + '%' }"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3>⚠️ 库存预警</h3>
+          <div class="alert-summary">
+            <div class="alert-item danger">
+              <span class="count">{{ outOfStockCount }}</span>
+              <span class="label">缺货商品</span>
+            </div>
+            <div class="alert-item warning">
+              <span class="count">{{ lowStockCount }}</span>
+              <span class="label">低库存商品</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 库存预警 -->
+    <div v-if="activeTab === 'inventory'" class="tab-content">
+      <div v-if="outOfStockCount > 0" class="alert-box danger">
+        🔴 缺货产品：{{ outOfStockCount }}个，需要立即补货！
+      </div>
+      <div v-if="lowStockCount > 0" class="alert-box warning">
+        🟡 低于安全库存：{{ lowStockCount }}个，建议尽快补货
+      </div>
+      <div class="table-card">
+        <h3>📦 库存预警列表</h3>
+        <table class="data-table">
+          <thead>
+            <tr><th>商品名称</th><th>SKU</th><th>分类</th><th>当前库存</th><th>安全库存</th><th>状态</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in inventoryAlert" :key="row.id">
+              <td>{{ row.name }}</td>
+              <td>{{ row.sku }}</td>
+              <td>{{ row.category }}</td>
+              <td :class="row.stock <= 0 ? 'danger' : 'warning'">{{ row.stock }}</td>
+              <td>{{ row.safe_stock }}</td>
+              <td><span class="tag" :class="row.stock <= 0 ? 'danger' : 'warning'">{{ row.alert_level }}</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 补货建议 -->
+    <div v-if="activeTab === 'replenish'" class="tab-content">
+      <div class="summary-card">
+        <h3>💰 补货汇总</h3>
+        <div class="summary-stats">
+          <div class="summary-item">
+            <span class="label">需补货商品</span>
+            <span class="value">{{ replenishSummary.product_count }}个</span>
+          </div>
+          <div class="summary-item">
+            <span class="label">预计补货金额</span>
+            <span class="value highlight">¥{{ replenishSummary.total_suggest_amount }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="table-card">
+        <h3>📋 补货清单</h3>
+        <table class="data-table">
+          <thead>
+            <tr><th>商品</th><th>SKU</th><th>当前库存</th><th>安全库存</th><th>建议补货</th><th>采购成本</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in replenishData" :key="row.id">
+              <td>{{ row.name }}</td>
+              <td>{{ row.sku }}</td>
+              <td>{{ row.stock }}</td>
+              <td>{{ row.safe_stock }}</td>
+              <td class="warning">{{ row.suggest_quantity }}</td>
+              <td class="money">¥{{ formatMoney(row.suggest_amount) }}</td>
+            </tr>
+            <tr v-if="replenishData.length === 0">
+              <td colspan="6" class="empty">暂无补货建议</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 滞销预警 -->
+    <div v-if="activeTab === 'slow'" class="tab-content">
+      <div class="table-card">
+        <h3>📉 滞销预警</h3>
+        <table class="data-table">
+          <thead>
+            <tr><th>商品</th><th>SKU</th><th>库存</th><th>久未更新</th><th>状态</th><th>建议</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in slowProducts" :key="row.id">
+              <td>{{ row.name }}</td>
+              <td>{{ row.sku }}</td>
+              <td>{{ row.stock }}</td>
+              <td :class="row.days_since_update >= 30 ? 'warning' : ''">{{ row.days_since_update }}天</td>
+              <td><span class="tag" :class="row.slow_level.includes('滞销') ? 'danger' : 'warning'">{{ row.slow_level }}</span></td>
+              <td>{{ row.action }}</td>
+            </tr>
+            <tr v-if="slowProducts.length === 0">
+              <td colspan="6" class="empty">暂无滞销商品</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 分类分析 -->
+    <div v-if="activeTab === 'category'" class="tab-content">
+      <div class="table-card">
+        <h3>🏷️ 分类分析</h3>
+        <table class="data-table">
+          <thead>
+            <tr><th>分类</th><th>商品数</th><th>总库存</th><th>库存价值</th><th>均价</th><th>平均成本</th><th>占比</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in categoryData" :key="row.category">
+              <td>{{ row.category }}</td>
+              <td>{{ row.product_count }}</td>
+              <td>{{ row.total_stock }}</td>
+              <td class="money">¥{{ formatMoney(row.stock_value) }}</td>
+              <td>¥{{ formatMoney(row.avg_price) }}</td>
+              <td>¥{{ formatMoney(row.avg_cost) }}</td>
+              <td>{{ row.percentage }}%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 商品列表 -->
+    <div v-if="activeTab === 'products'" class="tab-content">
+      <div class="table-card">
+        <h3>📦 商品列表</h3>
+        <table class="data-table">
+          <thead>
+            <tr><th>商品名称</th><th>SKU</th><th>分类</th><th>库存</th><th>安全库存</th><th>采购价</th><th>售价</th><th>状态</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in products" :key="row.id">
+              <td>{{ row.name }}</td>
+              <td>{{ row.sku }}</td>
+              <td>{{ row.category }}</td>
+              <td :class="row.stock <= 0 ? 'danger' : row.stock < row.safe_stock ? 'warning' : ''">{{ row.stock }}</td>
+              <td>{{ row.safe_stock }}</td>
+              <td>¥{{ formatMoney(row.purchase_price) }}</td>
+              <td>¥{{ formatMoney(row.sale_price) }}</td>
+              <td><span class="tag" :class="row.status === 'active' ? 'success' : ''">{{ row.status }}</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+
+const activeTab = ref('overview')
+
+const tabs = [
+  { key: 'overview', label: '总览', icon: '📊' },
+  { key: 'inventory', label: '库存预警', icon: '⚠️' },
+  { key: 'replenish', label: '补货建议', icon: '📝' },
+  { key: 'slow', label: '滞销预警', icon: '📉' },
+  { key: 'category', label: '分类分析', icon: '🏷️' },
+  { key: 'products', label: '商品列表', icon: '📦' }
+]
+
+// 数据
+const stats = ref({})
+const health = ref({})
+const inventoryAlert = ref([])
+const replenishData = ref([])
+const replenishSummary = ref({})
+const slowProducts = ref([])
+const categoryData = ref([])
+const products = ref([])
+
+// 计算属性
+const outOfStockCount = computed(() => health.value.out_of_stock || 0)
+const lowStockCount = computed(() => health.value.low_stock || 0)
+const healthyCount = computed(() => health.value.healthy || 0)
+const totalCount = computed(() => health.value.total || 1)
+
+const healthRate = computed(() => {
+  return totalCount.value > 0 ? ((healthyCount.value / totalCount.value) * 100).toFixed(1) : 0
+})
+const lowStockRate = computed(() => {
+  return totalCount.value > 0 ? ((lowStockCount.value / totalCount.value) * 100).toFixed(1) : 0
+})
+const outOfStockRate = computed(() => {
+  return totalCount.value > 0 ? ((outOfStockCount.value / totalCount.value) * 100).toFixed(1) : 0
+})
+
+function formatMoney(val) {
+  if (!val) return '0.00'
+  return parseFloat(val).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+async function callApi(url) {
+  const token = localStorage.getItem('caimeite_token')
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` }
+  })
+  const data = await response.json()
+  if (data.code === 0) {
+    return data
+  }
+  throw new Error(data.message)
+}
+
+async function loadData() {
+  try {
+    const [dashboard, healthData, inventory, replenish, slow, category, productList] = await Promise.all([
+      callApi('/api/bi/dashboard'),
+      callApi('/api/bi/inventory-health'),
+      callApi('/api/bi/inventory-alert'),
+      callApi('/api/bi/replenish-suggest'),
+      callApi('/api/bi/slow-products'),
+      callApi('/api/bi/sales-by-category'),
+      callApi('/api/bi/products?limit=100')
+    ])
+
+    stats.value = dashboard.data
+    health.value = healthData.data
+    inventoryAlert.value = inventory.data
+    replenishData.value = replenish.data
+    replenishSummary.value = replenish.summary
+    slowProducts.value = slow.data
+    categoryData.value = category.data
+    products.value = productList.data
+  } catch (err) {
+    console.error('Load data error:', err)
+    alert('加载数据失败: ' + err.message)
+  }
+}
+
+async function exportReport() {
+  try {
+    window.open('/api/bi/export-report?type=products&format=csv', '_blank')
+  } catch (err) {
+    alert('导出失败')
+  }
+}
+
+onMounted(() => {
+  loadData()
+})
+</script>
+
+<style scoped>
+.bi-dashboard {
+  padding: 20px;
+  background: #f5f7fa;
+  min-height: 100vh;
+}
+
+.bi-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.bi-header h1 {
+  margin: 0;
+  font-size: 24px;
+  color: #303133;
+}
+
+.bi-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.btn {
+  padding: 8px 16px;
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-primary {
+  background: #409eff;
+  color: white;
+  border-color: #409eff;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+}
+
+.stat-card.alert {
+  background: #fff5f5;
+  border: 1px solid #fde2e2;
+}
+
+.stat-icon {
+  font-size: 36px;
+  margin-right: 15px;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: bold;
+  color: #303133;
+}
+
+.stat-label {
+  font-size: 14px;
+  color: #909399;
+}
+
+.health-bar {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+}
+
+.health-info {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-weight: bold;
+}
+
+.health-rate {
+  color: #67c23a;
+  font-size: 18px;
+}
+
+.progress-bar {
+  height: 24px;
+  background: #eee;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+}
+
+.progress-fill {
+  height: 100%;
+  transition: width 0.3s;
+}
+
+.progress-fill.healthy { background: #67c23a; }
+.progress-fill.warning { background: #e6a23c; }
+.progress-fill.danger { background: #f56c6c; }
+
+.progress-bar.small {
+  height: 8px;
+  border-radius: 4px;
+}
+
+.progress-bar.small .progress-fill {
+  background: #409eff;
+}
+
+.health-legend {
+  display: flex;
+  gap: 20px;
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.dot.healthy { background: #67c23a; }
+.dot.warning { background: #e6a23c; }
+.dot.danger { background: #f56c6c; }
+
+.tabs {
+  display: flex;
+  gap: 5px;
+  background: white;
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.tab {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #606266;
+}
+
+.tab:hover { background: #f5f7fa; }
+.tab.active { background: #409eff; color: white; }
+
+.tab-content {
+  animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.chart-card, .table-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+}
+
+.chart-card h3, .table-card h3 {
+  margin: 0 0 15px 0;
+  font-size: 16px;
+  color: #303133;
+}
+
+.category-list { display: flex; flex-direction: column; gap: 12px; }
+.category-item { padding: 8px 0; }
+.category-info { display: flex; justify-content: space-between; margin-bottom: 5px; }
+.category-count { color: #909399; font-size: 12px; }
+
+.alert-summary {
+  display: flex;
+  gap: 20px;
+}
+
+.alert-item {
+  flex: 1;
+  padding: 20px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.alert-item.danger { background: #fef0f0; }
+.alert-item.warning { background: #fdf6ec; }
+
+.alert-item .count {
+  display: block;
+  font-size: 36px;
+  font-weight: bold;
+}
+
+.alert-item.danger .count { color: #f56c6c; }
+.alert-item.warning .count { color: #e6a23c; }
+
+.alert-item .label {
+  color: #909399;
+  font-size: 14px;
+}
+
+.alert-box {
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+.alert-box.danger {
+  background: #fef0f0;
+  color: #f56c6c;
+  border: 1px solid #fde2e2;
+}
+
+.alert-box.warning {
+  background: #fdf6ec;
+  color: #e6a23c;
+  border: 1px solid #fdf6d6;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th, .data-table td {
+  padding: 12px 8px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.data-table th {
+  background: #fafafa;
+  font-weight: 600;
+  color: #606266;
+  font-size: 13px;
+}
+
+.data-table tbody tr:hover { background: #fafafa; }
+
+.money { color: #f56c6c; font-weight: bold; }
+.warning { color: #e6a23c; }
+.danger { color: #f56c6c; }
+
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  background: #eee;
+}
+
+.tag.success { background: #f0f9eb; color: #67c23a; }
+.tag.warning { background: #fdf6ec; color: #e6a23c; }
+.tag.danger { background: #fef0f0; color: #f56c6c; }
+
+.summary-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+  max-width: 400px;
+  margin-bottom: 20px;
+}
+
+.summary-stats {
+  display: flex;
+  gap: 30px;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.summary-item .label {
+  color: #909399;
+  font-size: 14px;
+}
+
+.summary-item .value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #303133;
+}
+
+.summary-item .value.highlight {
+  color: #f56c6c;
+}
+
+.empty {
+  text-align: center;
+  color: #909399;
+  padding: 40px !important;
+}
+
+@media (max-width: 1200px) {
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .overview-grid { grid-template-columns: 1fr; }
+}
+</style>

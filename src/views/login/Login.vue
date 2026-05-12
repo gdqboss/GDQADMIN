@@ -1,85 +1,75 @@
 <template>
-  <div class="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 to-blue-50">
+  <div class="login-container">
     <!-- Language toggle -->
-    <div class="absolute top-4 right-4 z-10">
-      <button
-        class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-        @click="toggleLocale"
-      >
-        <span class="material-symbols-outlined text-base">language</span>
+    <div class="lang-toggle">
+      <button class="lang-btn" @click="toggleLocale">
+        <span class="material-symbols-outlined">language</span>
         <span>{{ locale === 'zh' ? 'EN' : '中' }}</span>
       </button>
     </div>
 
-    <main class="flex-grow flex items-center justify-center p-4">
-      <div class="w-full max-w-md bg-white rounded-xl shadow-card overflow-hidden">
+    <main class="login-main">
+      <div class="login-card">
         <!-- Header -->
-        <div class="pt-8 pb-6 px-6 text-center">
-          <span class="material-symbols-outlined text-4xl text-primary mb-2">inventory_2</span>
-          <h1 class="text-xl font-bold text-slate-900">彩美特管理系统</h1>
+        <div class="login-header">
+          <span class="material-symbols-outlined login-icon">inventory_2</span>
+          <h1 class="login-title">🛒 彩美特管理系统</h1>
         </div>
 
         <!-- Form -->
-        <form @submit.prevent="handleLogin" class="px-6 pb-8 space-y-4">
+        <form @submit.prevent="handleLogin" class="login-form">
           <!-- Account -->
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">邮箱或手机号</label>
-            <input
-              v-model="loginForm.account"
-              type="text"
+          <div class="form-item">
+            <label class="form-label">邮箱或手机号</label>
+            <el-input
+              v-model="loginForm.email"
               placeholder="请输入邮箱或手机号"
-              class="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none text-sm"
+              prefix-icon="User"
+              size="large"
             />
           </div>
 
           <!-- Password -->
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">密码</label>
-            <div class="relative">
-              <input
-                v-model="loginForm.password"
-                :type="showPassword ? 'text' : 'password'"
-                placeholder="请输入密码"
-                class="w-full px-3 py-2.5 pr-10 border border-slate-300 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none text-sm"
-              />
-              <button
-                type="button"
-                @click="showPassword = !showPassword"
-                class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                <span class="material-symbols-outlined text-lg">{{ showPassword ? 'visibility' : 'visibility_off' }}</span>
-              </button>
-            </div>
+          <div class="form-item">
+            <label class="form-label">密码</label>
+            <el-input
+              v-model="loginForm.password"
+              :type="showPassword ? 'text' : 'password'"
+              placeholder="请输入密码"
+              prefix-icon="Lock"
+              size="large"
+              show-password
+            />
           </div>
 
           <!-- Options -->
-          <div class="flex items-center justify-between">
-            <label class="flex items-center cursor-pointer">
-              <input type="checkbox" v-model="loginForm.remember" class="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary" />
-              <span class="ml-2 text-sm text-slate-600">记住账号密码</span>
+          <div class="form-options">
+            <label class="remember-label">
+              <input type="checkbox" v-model="loginForm.remember" class="remember-checkbox" />
+              <span>记住账号密码</span>
             </label>
-            <button type="button" class="text-sm text-blue-600 hover:text-blue-700">忘记密码?</button>
+            <button type="button" class="forgot-btn">忘记密码?</button>
           </div>
 
           <!-- Error -->
-          <div v-if="errorMsg" class="text-sm text-red-500 bg-red-50 py-2 px-3 rounded-lg text-center">
+          <div v-if="errorMsg" class="error-msg">
             {{ errorMsg }}
           </div>
 
           <!-- Submit -->
-          <button
-            type="submit"
-            :disabled="loading"
-            class="w-full py-2.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50 transition-colors"
+          <el-button
+            type="primary"
+            :loading="loading"
+            class="submit-btn"
+            size="large"
+            @click="handleLogin"
           >
             {{ loading ? '登录中...' : '登录' }}
-          </button>
+          </el-button>
 
           <!-- Register -->
-          <div class="text-center pt-2">
-            <button type="button" class="text-sm text-slate-500 hover:text-slate-700">
-              员工注册申请
-            </button>
+          <div class="register-link">
+            <button type="button" class="text-btn">员工注册申请</button>
           </div>
         </form>
       </div>
@@ -104,7 +94,7 @@ const toggleLocale = () => {
 const router = useRouter()
 const userStore = useUserStore()
 const loginForm = ref({
-  account: '',
+  email: '',
   password: '',
   remember: false
 })
@@ -113,7 +103,7 @@ const loading = ref(false)
 const errorMsg = ref('')
 
 const handleLogin = async () => {
-  if (!loginForm.value.account || !loginForm.value.password) {
+  if (!loginForm.value.email || !loginForm.value.password) {
     errorMsg.value = '请输入账号和密码'
     return
   }
@@ -124,7 +114,7 @@ const handleLogin = async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: loginForm.value.account,
+        email: loginForm.value.email,
         password: loginForm.value.password
       })
     })
@@ -132,7 +122,7 @@ const handleLogin = async () => {
     if (data.code === 0) {
       await userStore.login(data.data.token, data.data.user)
       if (loginForm.value.remember) {
-        localStorage.setItem('caimeite_account', loginForm.value.account)
+        localStorage.setItem('caimeite_account', loginForm.value.email)
         localStorage.setItem('caimeite_password', loginForm.value.password)
         localStorage.setItem('caimeite_remember', 'true')
       }
@@ -148,3 +138,168 @@ const handleLogin = async () => {
   }
 }
 </script>
+
+<style scoped>
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+}
+
+.lang-toggle {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+}
+
+.lang-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.lang-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.lang-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.login-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.login-header {
+  padding: 32px 24px 24px;
+  text-align: center;
+}
+
+.login-icon {
+  font-size: 40px;
+  color: #667eea;
+  margin-bottom: 8px;
+}
+
+.login-title {
+  font-size: 20px;
+  font-weight: bold;
+  color: #1a1a2e;
+  margin: 0;
+}
+
+.login-form {
+  padding: 0 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #475569;
+}
+
+.form-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.remember-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.remember-checkbox {
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  accent-color: #667eea;
+}
+
+.forgot-btn {
+  font-size: 14px;
+  color: #667eea;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.forgot-btn:hover {
+  color: #764ba2;
+}
+
+.error-msg {
+  font-size: 14px;
+  color: #ef4444;
+  background: #fef2f2;
+  padding: 10px 12px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.submit-btn {
+  width: 100%;
+  height: 44px;
+  background: linear-gradient(135deg, #667eea, #764ba2) !important;
+  border: none !important;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.submit-btn:hover {
+  opacity: 0.9;
+}
+
+.register-link {
+  text-align: center;
+  padding-top: 8px;
+}
+
+.text-btn {
+  font-size: 14px;
+  color: #94a3b8;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.text-btn:hover {
+  color: #64748b;
+}
+</style>

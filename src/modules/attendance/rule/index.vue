@@ -1,35 +1,49 @@
 <template>
-  <div class="module-page module-attendance-rule">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <span class="module-title">考勤规则</span>
-          <el-button type="primary" @click="handleAdd">新增规则</el-button>
-        </div>
-      </template>
+  <div class="attendance-rule-container">
+    <!-- Header -->
+    <div class="page-header">
+      <h2>考勤规则</h2>
+      <div class="header-actions">
+        <el-button type="primary" @click="handleAdd">新增规则</el-button>
+      </div>
+    </div>
 
-      <!-- 规则列表 -->
-      <el-table :data="ruleList" stripe style="width: 100%">
-        <el-table-column prop="ruleName" label="规则名称" width="180" />
-        <el-table-column prop="ruleType" label="规则类型" width="120">
+    <!-- Rules List -->
+    <el-card class="data-card">
+      <el-table v-loading="loading" :data="list" stripe border>
+        <el-table-column prop="name" label="规则名称" min-width="150" />
+        <el-table-column prop="clock_in_start" label="上班开始" width="100">
           <template #default="{ row }">
-            <el-tag>{{ getRuleTypeText(row.ruleType) }}</el-tag>
+            {{ row.clock_in_start || '09:00' }}
           </template>
         </el-table-column>
-        <el-table-column prop="workStartTime" label="上班时间" width="100" />
-        <el-table-column prop="workEndTime" label="下班时间" width="100" />
-        <el-table-column prop="lateThreshold" label="迟到阈值" width="100">
-          <template #default="{ row }">{{ row.lateThreshold }}分钟</template>
-        </el-table-column>
-        <el-table-column prop="earlyThreshold" label="早退阈值" width="100">
-          <template #default="{ row }">{{ row.earlyThreshold }}分钟</template>
-        </el-table-column>
-        <el-table-column prop="status" label="状态" width="80">
+        <el-table-column prop="clock_in_end" label="上班截止" width="100">
           <template #default="{ row }">
-            <el-switch v-model="row.status" active-text="启用" inactive-text="停用" @change="handleStatusChange(row)" />
+            {{ row.clock_in_end || '09:30' }}
           </template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="150" />
+        <el-table-column prop="clock_out_start" label="下班开始" width="100">
+          <template #default="{ row }">
+            {{ row.clock_out_start || '18:00' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="late_rule" label="迟到规则" min-width="150">
+          <template #default="{ row }">
+            超过{{ row.clock_in_end || '09:30' }}记迟到
+          </template>
+        </el-table-column>
+        <el-table-column prop="early_rule" label="早退规则" min-width="150">
+          <template #default="{ row }">
+            早于{{ row.clock_out_start || '18:00' }}记早退
+          </template>
+        </el-table-column>
+        <el-table-column prop="status" label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">
+              {{ row.status === 'active' ? '启用' : '禁用' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
@@ -39,102 +53,138 @@
       </el-table>
     </el-card>
 
-    <!-- 新增/编辑对话框 -->
+    <!-- Add/Edit Dialog -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑规则' : '新增规则'" width="500px">
-      <el-form :model="ruleForm" label-width="100px">
-        <el-form-item label="规则名称">
-          <el-input v-model="ruleForm.ruleName" placeholder="请输入规则名称" />
+      <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
+        <el-form-item label="规则名称" prop="name">
+          <el-input v-model="form.name" placeholder="请输入规则名称" />
         </el-form-item>
-        <el-form-item label="规则类型">
-          <el-select v-model="ruleForm.ruleType" placeholder="请选择规则类型">
-            <el-option label="固定班次" value="fixed" />
-            <el-option label="弹性班次" value="flexible" />
-            <el-option label="综合工时" value="comprehensive" />
-          </el-select>
+        <el-form-item label="上班开始时间" prop="clock_in_start">
+          <el-time-picker v-model="form.clock_in_start" placeholder="选择时间" format="HH:mm" value-format="HH:mm" />
         </el-form-item>
-        <el-form-item label="上班时间">
-          <el-time-picker v-model="ruleForm.workStartTime" format="HH:mm" value-format="HH:mm" placeholder="选择上班时间" style="width: 100%" />
+        <el-form-item label="上班截止时间" prop="clock_in_end">
+          <el-time-picker v-model="form.clock_in_end" placeholder="选择时间" format="HH:mm" value-format="HH:mm" />
         </el-form-item>
-        <el-form-item label="下班时间">
-          <el-time-picker v-model="ruleForm.workEndTime" format="HH:mm" value-format="HH:mm" placeholder="选择下班时间" style="width: 100%" />
+        <el-form-item label="下班开始时间" prop="clock_out_start">
+          <el-time-picker v-model="form.clock_out_start" placeholder="选择时间" format="HH:mm" value-format="HH:mm" />
         </el-form-item>
-        <el-form-item label="迟到阈值">
-          <el-input-number v-model="ruleForm.lateThreshold" :min="0" :max="120" /> 分钟
+        <el-form-item label="下班截止时间" prop="clock_out_end">
+          <el-time-picker v-model="form.clock_out_end" placeholder="选择时间" format="HH:mm" value-format="HH:mm" />
         </el-form-item>
-        <el-form-item label="早退阈值">
-          <el-input-number v-model="ruleForm.earlyThreshold" :min="0" :max="120" /> 分钟
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input v-model="ruleForm.remark" type="textarea" :rows="3" placeholder="请输入备注" />
+        <el-form-item label="状态" prop="status">
+          <el-radio-group v-model="form.status">
+            <el-radio label="active">启用</el-radio>
+            <el-radio label="inactive">禁用</el-radio>
+          </el-radio-group>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSave">保存</el-button>
+        <el-button type="primary" @click="submitForm" :loading="submitting">确定</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { getAttendanceRules, createAttendanceRule, updateAttendanceRule, deleteAttendanceRule } from '@/api/oa'
 
+const loading = ref(false)
+const list = ref([])
 const dialogVisible = ref(false)
+const submitting = ref(false)
 const isEdit = ref(false)
+const formRef = ref(null)
 
-const ruleList = ref([
-  { ruleName: '标准工时制', ruleType: 'fixed', workStartTime: '09:00', workEndTime: '18:00', lateThreshold: 15, earlyThreshold: 15, status: true, remark: '默认考勤规则' },
-  { ruleName: '弹性工作制', ruleType: 'flexible', workStartTime: '10:00', workEndTime: '19:00', lateThreshold: 30, earlyThreshold: 30, status: true, remark: '适用于技术部' },
-  { ruleName: '销售外勤制', ruleType: 'comprehensive', workStartTime: '08:00', workEndTime: '20:00', lateThreshold: 0, earlyThreshold: 0, status: false, remark: '外勤人员使用' },
-  { ruleName: '行政班次', ruleType: 'fixed', workStartTime: '08:30', workEndTime: '17:30', lateThreshold: 10, earlyThreshold: 10, status: true, remark: '行政人员专用' }
-])
-
-const ruleForm = reactive({
-  ruleName: '',
-  ruleType: 'fixed',
-  workStartTime: '',
-  workEndTime: '',
-  lateThreshold: 15,
-  earlyThreshold: 15,
-  remark: ''
+const form = reactive({
+  id: null,
+  name: '',
+  clock_in_start: '09:00',
+  clock_in_end: '09:30',
+  clock_out_start: '18:00',
+  clock_out_end: '23:59',
+  status: 'active'
 })
 
-const getRuleTypeText = (type) => {
-  const map = { fixed: '固定班次', flexible: '弹性班次', comprehensive: '综合工时' }
-  return map[type] || type
+const rules = {
+  name: [{ required: true, message: '请输入规则名称', trigger: 'blur' }]
+}
+
+const loadData = async () => {
+  loading.value = true
+  try {
+    const data = await getAttendanceRules()
+    list.value = data || []
+  } catch (e) {
+    ElMessage.error('加载数据失败')
+  } finally {
+    loading.value = false
+  }
 }
 
 const handleAdd = () => {
   isEdit.value = false
-  Object.assign(ruleForm, { ruleName: '', ruleType: 'fixed', workStartTime: '', workEndTime: '', lateThreshold: 15, earlyThreshold: 15, remark: '' })
+  Object.assign(form, {
+    id: null,
+    name: '',
+    clock_in_start: '09:00',
+    clock_in_end: '09:30',
+    clock_out_start: '18:00',
+    clock_out_end: '23:59',
+    status: 'active'
+  })
   dialogVisible.value = true
 }
 
 const handleEdit = (row) => {
   isEdit.value = true
-  Object.assign(ruleForm, row)
+  Object.assign(form, row)
   dialogVisible.value = true
 }
 
-const handleSave = () => {
-  if (!ruleForm.ruleName) { ElMessage.warning('请输入规则名称'); return }
-  ElMessage.success(isEdit.value ? '修改成功' : '添加成功')
-  dialogVisible.value = false
-}
-
 const handleDelete = async (row) => {
-  await ElMessageBox.confirm(`确定删除规则 "${row.ruleName}" 吗？`, '提示', { type: 'warning' })
-  ElMessage.success('删除成功')
+  try {
+    await ElMessageBox.confirm('确认删除该规则？', '提示', { type: 'warning' })
+    await deleteAttendanceRule(row.id)
+    ElMessage.success('删除成功')
+    loadData()
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error(e.message || '删除失败')
+  }
 }
 
-const handleStatusChange = (row) => {
-  ElMessage.success(`${row.ruleName} 已${row.status ? '启用' : '停用'}`)
+const submitForm = async () => {
+  if (!formRef.value) return
+  await formRef.value.validate()
+  
+  submitting.value = true
+  try {
+    if (isEdit.value) {
+      await updateAttendanceRule(form.id, form)
+      ElMessage.success('更新成功')
+    } else {
+      await createAttendanceRule(form)
+      ElMessage.success('创建成功')
+    }
+    dialogVisible.value = false
+    loadData()
+  } catch (e) {
+    ElMessage.error(e.message || '操作失败')
+  } finally {
+    submitting.value = false
+  }
 }
+
+onMounted(() => {
+  loadData()
+})
 </script>
 
 <style scoped>
-.module-page { padding: 20px; }
-.card-header { display: flex; justify-content: space-between; align-items: center; }
-.module-title { font-size: 18px; font-weight: 600; }
+.attendance-rule-container { padding: 20px; }
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.page-header h2 { margin: 0; }
+.data-card { margin-bottom: 20px; }
 </style>

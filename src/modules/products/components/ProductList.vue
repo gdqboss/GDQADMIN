@@ -125,9 +125,9 @@ const loadData = async () => {
       keyword: filters.keyword || undefined,
       status: filters.status || undefined
     }
-    const { data } = await getProductList(params)
-    tableData.value = data.items || data.list || data
-    pagination.total = data.total || 0
+    const data = await getProductList(params)
+    tableData.value = Array.isArray(data) ? data : (data.items || data.list || [])
+    pagination.total = data.total || data.length || 0
   } catch (e) {
     console.error('Failed to load product list', e)
     ElMessage.error('加载数据失败')

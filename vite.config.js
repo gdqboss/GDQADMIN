@@ -20,6 +20,7 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    cssCodeSplit: false,
     rollupOptions: {
       output: {
         manualChunks: {

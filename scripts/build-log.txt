@@ -1046,3 +1046,12 @@ dist/assets/element-plus-BwrQ2YCr.js      921.64 kB │ gzip: 297.70 kB
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
 ✓ built in 9.96s
 [Tue May 12 10:57:51 AM CST 2026] 全部完成！最终Build完成
+fatal: The current branch main has no upstream branch.
+To push the current branch and set the remote as upstream, use
+
+    git push --set-upstream origin main
+
+To have this happen automatically for branches without a tracking
+upstream, see 'push.autoSetupRemote' in 'git help config'.
+
+[Tue May 12 10:57:51 AM CST 2026] Git推送完成

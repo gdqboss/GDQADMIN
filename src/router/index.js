@@ -11,7 +11,8 @@ const routes = [
     path: '/',
     component: () => import('../components/layout/MainLayout.vue'),
     children: [
-      { path: '', redirect: '/products' },
+      { path: '', redirect: '/dashboard' },
+      { path: 'dashboard', name: 'Dashboard', component: () => import('../modules/dashboard/index.vue') },
       { path: 'products', name: 'Products', component: () => import('../modules/products/components/ProductList.vue') },
       { path: 'products/new', name: 'ProductNew', component: () => import('../modules/products/components/ProductNew.vue') },
       { path: 'products/:id/edit', name: 'ProductEdit', component: () => import('../modules/products/components/ProductEdit.vue') },
@@ -42,7 +43,6 @@ const routes = [
       { path: 'approval/create', name: 'ApprovalCreate', component: () => import('../modules/approval/create/index.vue') },
       { path: 'approval/detail/:id', name: 'ApprovalDetail', component: () => import('../modules/approval/detail/index.vue') },
       { path: 'approval/manage', name: 'ApprovalManage', component: () => import('../modules/approval/manage/index.vue') },
-      { path: 'approval/settings', name: 'ApprovalSettings', component: () => import('../modules/approval/settings/index.vue') },
       { path: 'report/center', name: 'ReportCenter', component: () => import('../modules/report/center/index.vue') },
       { path: 'report/excel', name: 'ExcelReportManage', component: () => import('../modules/report/excel/index.vue') },
       { path: 'report/bi', name: 'BiDashboard', component: () => import('../modules/report/bi/index.vue') },
@@ -69,6 +69,7 @@ const routes = [
       { path: 'aver', name: 'Aver', component: () => import('../modules/tools/aver/index.vue') },
       { path: 'excel-analyzer', name: 'ExcelAnalyzer', component: () => import('../modules/tools/excelanalyzer/index.vue') },
       { path: 'excel-merge', name: 'ExcelMerge', component: () => import('../modules/tools/excelmerge/index.vue') },
+      { path: 'oa/work-logs', name: 'WorkLogManage', component: () => import('../views/oa/WorkLogManage.vue') },
     ]
   },
   { path: '/:pathMatch(.*)*', redirect: '/products' }

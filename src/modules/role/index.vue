@@ -23,7 +23,7 @@
         <template #default="{ row }">
           <el-button link type="primary" @click="handleAssignPerm(row)">分配权限</el-button>
           <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
-          <el-button link type="danger" :disabled="row.is_system" @click="handleDelete(row)">删除</el-button>
+          <el-button link type="danger" :disabled="row.id === 1" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
