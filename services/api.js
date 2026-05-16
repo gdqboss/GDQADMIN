@@ -38,6 +38,11 @@ api.interceptors.request.use(config => {
   if (token && token !== 'null' && token !== 'undefined') {
     config.headers.Authorization = `Bearer ${token}`
   }
+  // Auto-append lang=en for English locale (triggers backend translation)
+  const locale = localStorage.getItem('caimeite_locale')
+  if (locale === 'en' && !config.url.includes('lang=')) {
+    config.url += (config.url.includes('?') ? '&' : '?') + 'lang=en'
+  }
   return config
 })
 

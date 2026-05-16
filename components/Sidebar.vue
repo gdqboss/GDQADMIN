@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useWecomStore } from '../stores/wecom'
 import { useI18n } from 'vue-i18n'
+import { ROLES } from '../constants/roles.js'
 import api from '../services/api.js'
 
 const emit = defineEmits(['close'])
@@ -21,9 +22,10 @@ const giftApprovalCount = ref(0)
 // Pages accessible by each preset role (fallback if API fails)
 const ROLE_PAGES = {
   admin: null, // null = all pages
-  manager: ['dashboard','wecom','ai-automation','excel-analyzer','oa','finance','qrcode','products','in-out','warehouses','alerts','transfer','returns','retail','gift-approvals','aftersale','reports','suppliers','dealers','stores','work-logs','visit-logs','share-logs','feedback','tasks'],
-  operator: ['dashboard','oa','gift-approvals','work-logs','visit-logs','share-logs','feedback','settings'],
+  manager: ['dashboard','wecom','ai-automation','excel-analyzer','oa','finance','qrcode','products','in-out','warehouses','alerts','transfer','returns','retail','gift-approvals','aftersale','reports','suppliers','dealers','stores','tasks'],
+  operator: ['dashboard','oa','gift-approvals','settings'],
   warehouse: ['dashboard','in-out','warehouses','alerts','products','qrcode','retail','suppliers','dealers','stores'],
+  member: ['dashboard'],  // 兜底：只显示工作台
 }
 
 // Dynamic permissions loaded from the API, keyed by role name
@@ -35,8 +37,14 @@ onMounted(async () => {
     if (res.code === 0 && Array.isArray(res.data)) {
       const map = {}
       res.data.forEach(r => {
-        if (r.name && Array.isArray(r.permissions)) {
-          map[r.name] = r.permissions
+        if (r.name) {
+          let perms = r.permissions
+          if (typeof perms === 'string') {
+            try { perms = JSON.parse(perms) } catch { perms = [] }
+          }
+          if (Array.isArray(perms)) {
+            map[r.name] = perms
+          }
         }
       })
       rolePermissions.value = map
@@ -105,13 +113,6 @@ const allNavItems = computed(() => [
   { key: 'reports',       label: t('nav.reports'),       icon: 'bar_chart',      to: '/reports' },
 ])
 
-const allLogItems = computed(() => [
-  { key: 'work-logs',  label: t('nav.workLogs'),  icon: 'description',    to: '/logs/work-logs' },
-  { key: 'visit-logs', label: t('nav.visitLogs'), icon: 'location_on',    to: '/logs/visit-logs' },
-  { key: 'share-logs', label: t('nav.shareLogs'), icon: 'share',          to: '/logs/share-logs' },
-  { key: 'feedback',   label: t('nav.feedback'),  icon: 'feedback',       to: '/logs/feedback' },
-])
-
 const allPartnerItems = computed(() => [
   { key: 'suppliers', label: t('nav.suppliers'), icon: 'local_shipping', to: '/suppliers' },
   { key: 'dealers',   label: t('nav.dealers'),   icon: 'handshake',      to: '/dealers' },
@@ -119,9 +120,8 @@ const allPartnerItems = computed(() => [
 ])
 
 const navItems     = computed(() => allNavItems.value.filter(i => canAccess(i.key)))
-const logItems     = computed(() => allLogItems.value.filter(i => canAccess(i.key)))
 const partnerItems = computed(() => allPartnerItems.value.filter(i => canAccess(i.key)))
-const showSettings = computed(() => userStore.userRole === 'admin')
+const showSettings = computed(() => userStore.userRole === ROLES.ADMIN)
 
 function isActive(to) {
   if (to === '/') return route.path === '/'
@@ -162,23 +162,6 @@ function handleLogout() {
           </router-link>
         </li>
 
-        <template v-if="logItems.length">
-          <li class="mt-4 sm:mt-6 px-3 sm:px-4 pb-2 text-xs font-bold text-gray-500 uppercase tracking-wider">{{ t('nav.logs') }}</li>
-          <li v-for="item in logItems" :key="item.to">
-            <router-link
-              :to="item.to"
-              @click="$emit('close')"
-              :class="[
-                'flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded transition-colors text-sm sm:text-base',
-                isActive(item.to) ? 'bg-primary text-white font-medium' : 'text-gray-300 hover:text-white hover:bg-[#1890ff]/20'
-              ]"
-            >
-              <span class="material-symbols-outlined text-[18px] sm:text-[20px]">{{ item.icon }}</span>
-              <span>{{ item.label }}</span>
-            </router-link>
-          </li>
-        </template>
-
         <template v-if="partnerItems.length">
           <li class="mt-4 sm:mt-6 px-3 sm:px-4 pb-2 text-xs font-bold text-gray-500 uppercase tracking-wider">{{ t('nav.partners') }}</li>
           <li v-for="item in partnerItems" :key="item.to">
@@ -204,37 +187,11 @@ function handleLogout() {
               @click="$emit('close')"
               :class="[
                 'flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded transition-colors text-sm sm:text-base',
-                isActive('/settings') && !isActive('/settings/') ? 'bg-primary text-white font-medium' : 'text-gray-300 hover:text-white hover:bg-[#1890ff]/20'
+                isActive('/settings') ? 'bg-primary text-white font-medium' : 'text-gray-300 hover:text-white hover:bg-[#1890ff]/20'
               ]"
             >
               <span class="material-symbols-outlined text-[18px] sm:text-[20px]">settings</span>
               <span>{{ t('nav.settings') }}</span>
-            </router-link>
-          </li>
-          <li>
-            <router-link
-              to="/settings/users"
-              @click="$emit('close')"
-              :class="[
-                'flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded transition-colors text-sm sm:text-base',
-                isActive('/settings/users') ? 'bg-primary text-white font-medium' : 'text-gray-300 hover:text-white hover:bg-[#1890ff]/20'
-              ]"
-            >
-              <span class="material-symbols-outlined text-[18px] sm:text-[20px]">people</span>
-              <span>{{ $t('nav.userManagement') }}</span>
-            </router-link>
-          </li>
-          <li>
-            <router-link
-              to="/settings/job-responsibilities"
-              @click="$emit('close')"
-              :class="[
-                'flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded transition-colors text-sm sm:text-base',
-                isActive('/settings/job-responsibilities') ? 'bg-primary text-white font-medium' : 'text-gray-300 hover:text-white hover:bg-[#1890ff]/20'
-              ]"
-            >
-              <span class="material-symbols-outlined text-[18px] sm:text-[20px]">assignment</span>
-              <span>{{ $t('nav.jobResponsibilities') }}</span>
             </router-link>
           </li>
         </template>

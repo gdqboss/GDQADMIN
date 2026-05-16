@@ -6,13 +6,67 @@ import StatusTag from '../../components/StatusTag.vue'
 import Pagination from '../../components/Pagination.vue'
 import api from '../../services/api.js'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const searchQuery = ref('')
 const selectedCategoryId = ref('')
 const products = ref([])
 const categories = ref([])
 const suppliers = ref([])
+
+const isEnglish = computed(() => locale.value === 'en')
+
+// Category translation map (zh → en), aligned with Singapore DB
+const categoryMap = {
+  "电子产品": "Electronic products",
+  "日用品": "Daily necessities",
+  "办公用品": "Office supplies",
+  "旅行箱包": "Travel luggage",
+  "品牌酒类": "Brand liquor",
+  "茶叶咖啡": "Tea and coffee",
+  "软件AI": "Software AI",
+  "数码配件": "Digital accessories",
+  "手机配件": "Mobile phone accessories",
+  "家居日用": "Home daily necessities",
+  "高端电子": "High-end electronics",
+  "品牌周边": "Brand merchandise",
+  "白酒": "Baijiu",
+  "红酒": "Red wine",
+  "啤酒": "Beer",
+  "红茶": "Black tea",
+  "绿茶": "Green tea",
+  "白茶": "White tea",
+  "黑茶": "Dark tea",
+  "乌龙茶": "Oolong tea",
+  "普洱茶": "Pu'er tea",
+  "智能助手": "Smart assistant",
+  "微信小程序": "WeChat Mini Program",
+  "微信公众号": "WeChat Official Account",
+  "商业管理系统": "Business management system",
+  "鼠标/键盘": "Mouse/Keyboard",
+  "扩展坞/HUB": "Docking station/HUB",
+  "耳机/音频": "Headphones/Audio",
+  "手机壳": "Phone case",
+  "贴膜": "Screen protector",
+  "数据线/充电": "Data cable/charging",
+  "收纳整理": "Storage and organization",
+  "浓香型": "Strong aroma type",
+  "酱香型": "Sauce-aroma type",
+  "清香型": "Light fragrance type",
+  "凤香型": "Fengxiang type",
+  "大红袍": "Da Hong Pao",
+  "铁观音": "Tieguanyin",
+  "单枞茶": "Dancong tea",
+}
+
+// Products with category translated when in English mode
+const translatedProducts = computed(() => {
+  if (!isEnglish.value) return products.value
+  return products.value.map(p => ({
+    ...p,
+    category: categoryMap[p.category] || p.category
+  }))
+})
 
 // ─── Batch Delete ───────────────────────────────────────────────────────────────
 const selectedProducts = ref([])
@@ -127,7 +181,7 @@ onMounted(async () => {
   await Promise.all([fetchProducts(), fetchCategories(), fetchSuppliers()])
 })
 
-const filteredProducts = computed(() => products.value)
+const filteredProducts = computed(() => translatedProducts.value)
 // ─── Supplier options ──────────────────────────────────────────────────────────
 const supplierOptions = computed(() => [
   { value: '', label: t('product.noSupplier') },
@@ -539,6 +593,361 @@ async function handleDelete(id) {
   }
 }
 
+// ─── Material Calculator ─────────────────────────────────────────────────────────
+const showCalcModal = ref(false)
+const calcProduct = ref(null)
+const calcQuantity = ref(1)
+const calcResult = ref([])           // [{material_name, unit, quantity, total}]
+const calcPerSku = ref(false)       // 按SKU分别显示
+const productSkusMap = ref({})      // {productId: [{id, sku, specs, sku_key}]}
+
+async function openMaterialCalculator() {
+  calcProduct.value = null
+  calcQuantity.value = 1
+  calcResult.value = []
+  calcPerSku.value = false
+  showCalcModal.value = true
+}
+
+async function fetchProductSkus(productId) {
+  if (productSkusMap.value[productId]) return
+  try {
+    const res = await api.get(`/materials/product/${productId}/skus`)
+    if (res.code === 0 || res.success) {
+      productSkusMap.value = { ...productSkusMap.value, [productId]: res.data || [] }
+    }
+  } catch (e) { /* ignore */ }
+}
+
+async function doCalculate() {
+  if (!calcProduct.value) { calcResult.value = []; return }
+  try {
+    const pid = calcProduct.value.id
+    // 如果有SKU，先获取SKU列表
+    await fetchProductSkus(pid)
+    const skus = productSkusMap.value[pid] || []
+    const hasSkus = skus.length > 0
+
+    if (!hasSkus) {
+      // 无SKU商品：直接查共用配方
+      const res = await api.get(`/materials/product/${pid}`)
+      if ((res.code === 0 || res.success) && res.data?.length) {
+        calcResult.value = res.data.map(m => ({
+          sku_id: null,
+          sku_label: t('product.allSkusShared'),
+          material_name: m.material_name,
+          unit: m.unit,
+          quantity: m.quantity,
+          total: (m.quantity || 0) * calcQuantity.value
+        }))
+      } else {
+        calcResult.value = []
+      }
+      return
+    }
+
+    // 多SKU商品
+    if (calcPerSku.value) {
+      // 按SKU分别显示：每个SKU单独请求
+      const results = []
+      for (const sku of skus) {
+        const res = await api.get(`/materials/product/${pid}?sku_id=${sku.id}`)
+        const mats = (res.code === 0 || res.success) ? res.data || [] : []
+        const skuQty = (calcQuantity.value / skus.length) // 平均分配
+        for (const m of mats) {
+          results.push({
+            sku_id: sku.id,
+            sku_label: sku.sku_key || sku.sku || `#${sku.id}`,
+            material_name: m.material_name,
+            unit: m.unit,
+            quantity: m.quantity,
+            total: (m.quantity || 0) * skuQty
+          })
+        }
+        if (mats.length === 0) {
+          results.push({
+            sku_id: sku.id,
+            sku_label: sku.sku_key || sku.sku || `#${sku.id}`,
+            material_name: t('product.noMaterialsForProduct'),
+            unit: '-', quantity: '-', total: '-'
+          })
+        }
+      }
+      calcResult.value = results
+    } else {
+      // 汇总：优先查共用配方，如果没有再合并各SKU
+      const res = await api.get(`/materials/product/${pid}`)
+      const mats = (res.code === 0 || res.success) ? res.data || [] : []
+      if (mats.length) {
+        calcResult.value = mats.map(m => ({
+          sku_id: m.sku_id,
+          sku_label: m.sku_id ? (m.sku_key || m.sku_code || `#${m.sku_id}`) : t('product.allSkusShared'),
+          material_name: m.material_name,
+          unit: m.unit,
+          quantity: m.quantity,
+          total: (m.quantity || 0) * calcQuantity.value
+        }))
+      } else {
+        calcResult.value = []
+      }
+    }
+  } catch (e) {
+    calcResult.value = []
+  }
+}
+
+function groupBySku(results) {
+  const groups = {}
+  for (const r of results) {
+    const label = r.sku_label || '其他'
+    if (!groups[label]) groups[label] = []
+    groups[label].push(r)
+  }
+  return groups
+}
+
+watch([calcProduct, calcQuantity, calcPerSku], () => {
+  if (calcProduct.value && calcQuantity.value > 0) {
+    doCalculate()
+  } else {
+    calcResult.value = []
+  }
+})
+
+// ─── Material management ───────────────────────────────────────────────────────
+const showMaterialModal = ref(false)
+const materialMode = ref('manage')   // 'manage' | 'edit'
+const materialProduct = ref(null)
+const editingMat = ref(null)        // 当前编辑的材料类目（manage模式）
+const newMatName = ref('')
+const newMatUnit = ref('')
+const newMatRemark = ref('')
+const materialCategories = ref([])
+const productMaterials = ref([])
+const matLoading = ref(false)
+
+async function fetchMaterials() {
+  try {
+    const res = await api.get('/materials/categories')
+    if (res.code === 0 || res.success) {
+      materialCategories.value = res.data || []
+    }
+  } catch (e) {
+    console.error('fetchMaterials error', e)
+  }
+}
+
+// 打开材料管理（基础数据管理，不关联商品）
+async function openMaterialManage() {
+  materialMode.value = 'manage'
+  materialProduct.value = null
+  editingMat.value = null
+  newMatName.value = ''
+  newMatUnit.value = ''
+  newMatRemark.value = ''
+  await fetchMaterials()
+  showMaterialModal.value = true
+}
+// 打开商品配方编辑
+async function openMaterialEdit(p) {
+  materialMode.value = 'edit'
+  materialProduct.value = p
+  productMaterials.value = []
+  activeSkuTab.value = 'shared'
+  skuMaterialsMap.value = {}
+  await fetchMaterials()
+  await fetchEditProductSkus(p.id)
+  showMaterialModal.value = true
+  await fetchProductMaterials(p.id)
+}
+
+const activeSkuTab = ref('shared')   // 'shared' | 'per-sku'
+const skuMaterialsMap = ref({})      // {sku_id: [{material_id, material_name, unit, quantity}]}
+
+async function fetchEditProductSkus(productId) {
+  try {
+    const res = await api.get(`/materials/product/${productId}/skus`)
+    if (res.code === 0 || res.success) {
+      skuMaterialsMap.value = { ...skuMaterialsMap.value, [productId]: res.data || [] }
+    }
+  } catch (e) { /* ignore */ }
+}
+
+async function fetchProductMaterials(productId) {
+  try {
+    const res = await api.get(`/materials/product/${productId}`)
+    if (res.code === 0 || res.success) {
+      productMaterials.value = res.data || []
+    } else {
+      productMaterials.value = []
+    }
+  } catch (e) {
+    productMaterials.value = []
+  }
+}
+
+async function addMaterialCategory() {
+  if (!newMatName.value.trim()) return
+  try {
+    const res = await api.post('/materials/categories', {
+      name: newMatName.value.trim(),
+      unit: newMatUnit.value,
+      remark: newMatRemark.value
+    })
+    if (res.code === 0 || res.success) {
+      newMatName.value = ''
+      newMatUnit.value = ''
+      newMatRemark.value = ''
+      await fetchMaterials()
+    }
+  } catch (e) {
+    alert(e.message || '添加失败')
+  }
+}
+
+async function deleteMaterialCategory(id) {
+  if (!confirm('确定删除该材料类目？')) return
+  try {
+    const res = await api.delete(`/materials/categories/${id}`)
+    if (res.code === 0 || res.success) {
+      await fetchMaterials()
+    }
+  } catch (e) {
+    alert(e.message || '删除失败')
+  }
+}
+
+function startEditMat(cat) {
+  editingMat.value = cat
+  newMatName.value = cat.name
+  newMatUnit.value = cat.unit || ''
+  newMatRemark.value = cat.remark || ''
+}
+
+function cancelEditMat() {
+  editingMat.value = null
+  newMatName.value = ''
+  newMatUnit.value = ''
+  newMatRemark.value = ''
+}
+
+async function saveMatCategory() {
+  if (!newMatName.value.trim()) {
+    alert('请输入材料名称')
+    return
+  }
+  matLoading.value = true
+  try {
+    const payload = {
+      name: newMatName.value.trim(),
+      unit: newMatUnit.value || '',
+      remark: newMatRemark.value || ''
+    }
+    if (editingMat.value) {
+      await api.put(`/materials/categories/${editingMat.value.id}`, payload)
+    } else {
+      await api.post('/materials/categories', payload)
+    }
+    cancelEditMat()
+    await fetchMaterials()
+  } catch (e) {
+    alert(e.message || '保存失败')
+  } finally {
+    matLoading.value = false
+  }
+}
+
+async function saveProductMaterials() {
+  if (!materialProduct.value) return
+  matLoading.value = true
+  try {
+    const pid = materialProduct.value.id
+    const skus = skuMaterialsMap.value[pid] || []
+    
+    // 共用配方（sku_id=null）
+    const sharedMaterials = productMaterials.value
+      .filter(pm => !pm.sku_id)
+      .map(pm => ({
+        material_id: pm.material_id,
+        quantity: pm.quantity
+      }))
+    
+    // 按SKU配方
+    const skuMaterials = []
+    for (const [skuId, mats] of Object.entries(skuMaterialsMap.value)) {
+      if (skuId === String(pid)) continue  // SKU列表不是配方
+      const validMats = (mats || [])
+        .filter(pm => pm.material_id && pm.quantity > 0)
+        .map(pm => ({
+          material_id: pm.material_id,
+          quantity: pm.quantity
+        }))
+      if (validMats.length > 0) {
+        skuMaterials.push({ sku_id: Number(skuId), materials: validMats })
+      }
+    }
+    
+    await api.post(`/materials/product/${pid}/batch`, {
+      shared_materials: sharedMaterials,
+      sku_materials: skuMaterials
+    })
+    showMaterialModal.value = false
+  } catch (e) {
+    alert(e.message || '保存失败')
+  } finally {
+    matLoading.value = false
+  }
+}
+
+// 旧函数保留兼容（只加到共用配方）
+function addMaterialToProduct(cat) { addMaterialToShared(cat) }
+
+function addMaterialToShared(cat) {
+  const exists = productMaterials.value.find(pm => pm.material_id === cat.id && !pm.sku_id)
+  if (exists) return
+  productMaterials.value.push({
+    material_id: cat.id,
+    material_name: cat.name,
+    unit: cat.unit || '',
+    quantity: 1,
+    sku_id: null
+  })
+}
+
+function addMaterialToSku(skuId, cat) {
+  const key = `${materialProduct.value.id}_${skuId}`
+  if (!skuMaterialsMap.value[key]) skuMaterialsMap.value[key] = []
+  const exists = skuMaterialsMap.value[key].find(pm => pm.material_id === cat.id)
+  if (exists) return
+  skuMaterialsMap.value[key].push({
+    material_id: cat.id,
+    material_name: cat.name,
+    unit: cat.unit || '',
+    quantity: 1,
+    sku_id: skuId
+  })
+  // 触发响应式更新
+  skuMaterialsMap.value = { ...skuMaterialsMap.value }
+}
+
+function removeMaterialFromProduct(idx, mode) {
+  if (mode === 'shared') {
+    // 从 productMaterials 里删（sku_id=null）
+    const toRemove = productMaterials.value.filter(pm => !pm.sku_id)
+    if (toRemove[idx]) {
+      const realIdx = productMaterials.value.indexOf(toRemove[idx])
+      productMaterials.value.splice(realIdx, 1)
+    }
+  } else if (mode && mode.startsWith('per-sku-')) {
+    const skuId = mode.replace('per-sku-', '')
+    const key = `${materialProduct.value.id}_${skuId}`
+    skuMaterialsMap.value[key]?.splice(idx, 1)
+    skuMaterialsMap.value = { ...skuMaterialsMap.value }
+  } else {
+    productMaterials.value.splice(idx, 1)
+  }
+}
+
 // ─── Category management modal ─────────────────────────────────────────────────
 const showCatModal = ref(false)
 const newCatName = ref('')
@@ -649,11 +1058,19 @@ async function deleteCategory(cat) {
         </div>
         <select v-model="selectedCategoryId" @change="() => {}" class="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-text-primary focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
           <option value="">{{ $t('product.allCategories') }}</option>
-          <option v-for="cat in categoriesOrdered" :key="cat.id" :value="cat.id">{{ '　'.repeat(cat._depth) }}{{ cat.name }}</option>
+          <option v-for="cat in categoriesOrdered" :key="cat.id" :value="cat.id">{{ '　'.repeat(cat._depth) }}{{ isEnglish ? (categoryMap[cat.name] || cat.name) : cat.name }}</option>
         </select>
         <button @click="showCatModal = true; fetchCategories()" class="flex items-center gap-1.5 border border-gray-200 text-text-secondary hover:text-text-primary hover:border-gray-300 px-3 py-2 rounded-lg text-sm transition-colors">
           <span class="material-symbols-outlined text-[18px]">category</span>
           {{ $t('product.manageCategories') }}
+        </button>
+        <button @click="openMaterialManage()" class="flex items-center gap-1.5 border border-gray-200 text-text-secondary hover:text-text-primary hover:border-gray-300 px-3 py-2 rounded-lg text-sm transition-colors">
+          <span class="material-symbols-outlined text-[18px]">inventory_2</span>
+          {{ $t('product.materialManagement') }}
+        </button>
+        <button @click="openMaterialCalculator" class="flex items-center gap-1.5 border border-gray-200 text-text-secondary hover:text-text-primary hover:border-gray-300 px-3 py-2 rounded-lg text-sm transition-colors">
+          <span class="material-symbols-outlined text-[18px]">calculate</span>
+          {{ $t('product.materialCalculator') }}
         </button>
         <div class="ml-auto">
           <button @click="openAdd" class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
@@ -715,6 +1132,7 @@ async function deleteCategory(cat) {
               </td>
               <td class="px-4 py-3 text-right">
                 <button @click="openEdit(p)" class="text-primary hover:text-primary-hover text-xs font-medium mr-3">{{ $t('common.edit') }}</button>
+                <button @click="openMaterialEdit(p)" class="text-primary hover:text-primary-hover text-xs font-medium mr-3">{{ $t('product.materialEdit') }}</button>
                 <button @click="handleDelete(p.id)" class="text-danger hover:text-red-700 text-xs font-medium">{{ $t('common.delete') }}</button>
               </td>
             </tr>
@@ -784,7 +1202,7 @@ async function deleteCategory(cat) {
                 <!-- Selected path -->
                 <div v-if="form.category" class="flex items-center gap-2 mb-2 bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
                   <span class="material-symbols-outlined text-primary text-[15px]">category</span>
-                  <span class="text-sm text-primary flex-1">{{ form.category }}</span>
+                  <span class="text-sm text-primary flex-1">{{ isEnglish ? (categoryMap[form.category] || form.category) : form.category }}</span>
                   <button @click="clearCascader" class="text-text-secondary hover:text-danger transition-colors">
                     <span class="material-symbols-outlined text-[15px]">close</span>
                   </button>
@@ -803,7 +1221,7 @@ async function deleteCategory(cat) {
                         cascaderSelected[pIdx] === node.id ? 'bg-primary/10 text-primary font-medium' : 'text-text-primary'
                       ]"
                     >
-                      <span>{{ node.name }}</span>
+                      <span>{{ isEnglish ? (categoryMap[node.name] || node.name) : node.name }}</span>
                       <span v-if="node.children?.length" class="material-symbols-outlined text-[14px] text-text-secondary shrink-0">chevron_right</span>
                     </div>
                   </div>
@@ -1179,6 +1597,290 @@ async function deleteCategory(cat) {
               <button @click="addCategory" class="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium transition-colors">{{ $t('product.addBtn') }}</button>
             </div>
             <p v-if="catError" class="text-xs text-danger mt-2">{{ catError }}</p>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ── Material Management / Edit Modal ── -->
+    <Teleport to="body">
+      <div v-if="showMaterialModal" class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40" @click.self="showMaterialModal = false">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col">
+          <div class="flex items-center justify-between px-5 py-4 border-b shrink-0">
+            <h3 class="font-bold text-text-primary">
+              {{ materialMode === 'manage' ? $t('product.materialManagement') : $t('product.editMaterial') }}
+              <span v-if="materialProduct" class="font-normal text-text-secondary"> - {{ materialProduct.name }}</span>
+            </h3>
+            <button @click="showMaterialModal = false" class="text-text-secondary hover:text-text-primary">
+              <span class="material-symbols-outlined text-[20px]">close</span>
+            </button>
+          </div>
+
+          <div class="flex-1 overflow-y-auto p-5">
+            <!-- 基础数据管理模式：材料类目增删改 -->
+            <div v-if="materialMode === 'manage'">
+              <p class="text-sm text-text-secondary mb-3">{{ $t('product.materialCategoriesDesc') }}</p>
+
+              <!-- 已有材料列表 -->
+              <div class="space-y-2 mb-4">
+                <div v-for="cat in materialCategories" :key="cat.id" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <div class="font-medium text-sm text-text-primary">{{ cat.name }}</div>
+                    <div class="text-xs text-text-secondary mt-0.5">
+                      {{ $t('product.unit') }}: {{ cat.unit || $t('product.none') }} |
+                      {{ $t('product.remarkOptional') }}: {{ cat.remark || $t('product.none') }}
+                    </div>
+                  </div>
+                  <div class="flex gap-2">
+                    <button @click="startEditMat(cat)" class="text-blue-600 hover:text-blue-800 text-sm">{{ $t('common.edit') }}</button>
+                    <button @click="deleteMaterialCategory(cat.id)" class="text-red-500 hover:text-red-700 text-sm">{{ $t('common.delete') }}</button>
+                  </div>
+                </div>
+                <div v-if="!materialCategories.length" class="text-sm text-text-secondary text-center py-6">
+                  {{ $t('product.noMaterialsYet') }}
+                </div>
+              </div>
+
+              <!-- 新增/编辑材料表单 -->
+              <div class="border border-gray-200 rounded-lg p-4 bg-blue-50/50">
+                <h4 class="text-sm font-medium text-text-primary mb-3">
+                  {{ editingMat ? $t('product.editMaterial') : $t('product.addMaterial') }}
+                </h4>
+                <div class="space-y-2">
+                  <input v-model="newMatName" :placeholder="$t('product.materialName')" class="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+                  <div class="flex gap-2">
+                    <input v-model="newMatUnit" :placeholder="$t('product.unit')" class="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+                    <input v-model="newMatRemark" :placeholder="$t('product.remarkOptional')" class="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+                  </div>
+                  <div class="flex gap-2">
+                    <button @click="saveMatCategory" class="flex-1 py-1.5 bg-primary hover:bg-primary-hover text-white rounded text-sm font-medium">
+                      {{ $t('common.save') }}
+                    </button>
+                    <button v-if="editingMat" @click="cancelEditMat" class="px-3 py-1.5 border border-gray-200 rounded text-sm hover:bg-gray-50">
+                      {{ $t('common.cancel') }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 商品配方编辑模式：给商品配置材料 -->
+            <div v-else>
+              <!-- SKU tabs -->
+              <div v-if="(skuMaterialsMap[materialProduct?.id] || []).length > 0" class="flex border-b bg-gray-50 rounded-t-lg -mt-5 mb-4">
+                <button @click="activeSkuTab = 'shared'" :class="['px-5 py-3 text-sm font-medium border-b-2 transition-colors', activeSkuTab === 'shared' ? 'border-primary text-primary' : 'border-transparent text-text-secondary hover:text-text-primary']">
+                  {{ $t('product.sharedMaterials') }}
+                </button>
+                <button @click="activeSkuTab = 'per-sku'" :class="['px-5 py-3 text-sm font-medium border-b-2 transition-colors', activeSkuTab === 'per-sku' ? 'border-primary text-primary' : 'border-transparent text-text-secondary hover:text-text-primary']">
+                  {{ $t('product.perSkuMaterials') }}
+                </button>
+              </div>
+
+              <!-- 共用配方 -->
+              <div v-show="activeSkuTab === 'shared'">
+                <div class="mb-6">
+                  <h4 class="text-sm font-medium text-text-primary mb-3">{{ $t('product.selectMaterialToAdd') }}</h4>
+                  <div class="space-y-2 max-h-48 overflow-y-auto border border-gray-100 rounded-lg p-3 bg-gray-50">
+                    <div v-for="cat in materialCategories" :key="cat.id" class="flex items-center justify-between py-1.5 px-2 hover:bg-white rounded">
+                      <div class="flex-1">
+                        <span class="text-sm text-text-primary">{{ cat.name }}</span>
+                        <span v-if="cat.unit" class="text-xs text-text-secondary ml-2">({{ cat.unit }})</span>
+                      </div>
+                      <button @click="addMaterialToShared(cat)" class="text-xs text-primary hover:text-primary-hover font-medium">{{ $t('product.addToProduct') }}</button>
+                    </div>
+                    <div v-if="!materialCategories.length" class="text-sm text-text-secondary text-center py-4">{{ $t('product.noMaterialsYet') }}</div>
+                  </div>
+                </div>
+                <div>
+                  <h4 class="text-sm font-medium text-text-primary mb-3">{{ $t('product.sharedMaterials') }} ({{ materialProduct?.name }})</h4>
+                  <div class="border border-gray-100 rounded-lg overflow-hidden">
+                    <table class="w-full text-sm">
+                      <thead class="bg-gray-50">
+                        <tr>
+                          <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('product.materialName') }}</th>
+                          <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('product.unit') }}</th>
+                          <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('product.quantity') }}</th>
+                          <th class="px-3 py-2 text-right text-xs font-medium text-text-secondary">{{ $t('common.action') }}</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-gray-100">
+                        <tr v-for="(pm, idx) in productMaterials.filter(pm => !pm.sku_id)" :key="pm.material_id">
+                          <td class="px-3 py-2 text-text-primary">{{ pm.material_name }}</td>
+                          <td class="px-3 py-2 text-text-secondary">{{ pm.unit || '-' }}</td>
+                          <td class="px-3 py-2">
+                            <input type="number" v-model.number="pm.quantity" min="0" class="w-20 border border-gray-200 rounded px-2 py-1 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+                          </td>
+                          <td class="px-3 py-2 text-right">
+                            <button @click="removeMaterialFromProduct(idx, 'shared')" class="text-danger hover:text-red-700 text-xs">{{ $t('common.delete') }}</button>
+                          </td>
+                        </tr>
+                        <tr v-if="!productMaterials.filter(pm => !pm.sku_id).length">
+                          <td colspan="4" class="px-3 py-6 text-center text-text-secondary text-sm">{{ $t('product.noProductMaterial') }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 按SKU配方 -->
+              <div v-show="activeSkuTab === 'per-sku'">
+                <div v-for="sku in (skuMaterialsMap[materialProduct?.id] || [])" :key="sku.id" class="mb-6">
+                  <h4 class="text-sm font-medium text-text-primary mb-3 flex items-center gap-2">
+                    <span class="bg-blue-100 text-blue-600 text-xs px-2 py-0.5 rounded">{{ sku.sku_key || sku.sku || '#'+sku.id }}</span>
+                  </h4>
+                  <div class="border border-gray-100 rounded-lg overflow-hidden mb-3">
+                    <table class="w-full text-sm">
+                      <thead class="bg-gray-50">
+                        <tr>
+                          <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('product.materialName') }}</th>
+                          <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('product.unit') }}</th>
+                          <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('product.quantity') }}</th>
+                          <th class="px-3 py-2 text-right text-xs font-medium text-text-secondary">{{ $t('common.action') }}</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-gray-100">
+                        <tr v-for="(pm, idx) in (skuMaterialsMap[`${materialProduct?.id}_${sku.id}`] || [])" :key="pm.material_id">
+                          <td class="px-3 py-2 text-text-primary">{{ pm.material_name }}</td>
+                          <td class="px-3 py-2 text-text-secondary">{{ pm.unit || '-' }}</td>
+                          <td class="px-3 py-2">
+                            <input type="number" v-model.number="pm.quantity" min="0" class="w-20 border border-gray-200 rounded px-2 py-1 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+                          </td>
+                          <td class="px-3 py-2 text-right">
+                            <button @click="removeMaterialFromProduct(idx, `per-sku-${sku.id}`)" class="text-danger hover:text-red-700 text-xs">{{ $t('common.delete') }}</button>
+                          </td>
+                        </tr>
+                        <tr v-if="!(skuMaterialsMap[`${materialProduct?.id}_${sku.id}`] || []).length">
+                          <td colspan="4" class="px-3 py-4 text-center text-text-secondary text-sm">{{ $t('product.noMaterialsForSku') || $t('product.noMaterialsForProduct') }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="space-y-2 max-h-40 overflow-y-auto border border-gray-100 rounded-lg p-3 bg-gray-50">
+                    <div v-for="cat in materialCategories" :key="cat.id" class="flex items-center justify-between py-1 px-2 hover:bg-white rounded">
+                      <div class="flex-1">
+                        <span class="text-sm text-text-primary">{{ cat.name }}</span>
+                        <span v-if="cat.unit" class="text-xs text-text-secondary ml-2">({{ cat.unit }})</span>
+                      </div>
+                      <button @click="addMaterialToSku(sku.id, cat)" class="text-xs text-primary hover:text-primary-hover font-medium">{{ $t('product.addToProduct') }}</button>
+                    </div>
+                  </div>
+                </div>
+                <div v-if="!(skuMaterialsMap[materialProduct?.id] || []).length" class="text-center py-8 text-text-secondary text-sm">
+                  {{ $t('product.noSkusForProduct') }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-5 py-4 border-t shrink-0 flex justify-end gap-3">
+            <button v-if="materialMode === 'edit'" @click="showMaterialModal = false" class="px-4 py-2 border border-gray-200 text-text-secondary hover:text-text-primary rounded-lg text-sm transition-colors">{{ $t('common.cancel') }}</button>
+            <button v-if="materialMode === 'edit'" @click="saveProductMaterials" :disabled="matLoading" class="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50">{{ $t('common.saveChanges') }}</button>
+            <button v-else @click="showMaterialModal = false" class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors">{{ $t('common.close') }}</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ── Material Calculator Modal ── -->
+    <Teleport to="body">
+      <div v-if="showCalcModal" class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40" @click.self="showCalcModal = false">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+          <div class="flex items-center justify-between px-5 py-4 border-b shrink-0">
+            <h3 class="font-bold text-text-primary">{{ $t('product.materialCalculator') }}</h3>
+            <button @click="showCalcModal = false" class="text-text-secondary hover:text-text-primary">
+              <span class="material-symbols-outlined text-[20px]">close</span>
+            </button>
+          </div>
+
+          <div class="flex-1 overflow-y-auto p-5">
+            <!-- Product & Quantity selector -->
+            <div class="mb-6">
+              <h4 class="text-sm font-medium text-text-primary mb-3">{{ $t('product.selectProductForCalc') }}</h4>
+              <div class="flex gap-3 items-end">
+                <div class="flex-1">
+                  <label class="block text-xs text-text-secondary mb-1.5">{{ $t('product.product') }}</label>
+                  <select v-model="calcProduct" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+                    <option :value="null" disabled>{{ $t('product.selectProductPlaceholder') }}</option>
+                    <option v-for="p in products" :key="p.id" :value="p">{{ p.name }} ({{ p.sku || $t('product.noSku') }})</option>
+                  </select>
+                </div>
+                <div class="w-32">
+                  <label class="block text-xs text-text-secondary mb-1.5">{{ $t('product.productionQuantity') }}</label>
+                  <input type="number" v-model.number="calcQuantity" min="1" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+                </div>
+              </div>
+              <!-- 按SKU显示切换（仅当商品有SKU时显示） -->
+              <div v-if="calcProduct && (skuMaterialsMap[calcProduct.id] || []).length > 0" class="mt-3 flex items-center gap-2">
+                <input type="checkbox" id="calcPerSkuChk" v-model="calcPerSku" class="rounded border-gray-300 text-primary focus:ring-primary" />
+                <label for="calcPerSkuChk" class="text-sm text-text-secondary cursor-pointer select-none">{{ $t('product.showPerSku') }}</label>
+              </div>
+            </div>
+
+            <!-- Calculation result -->
+            <div v-if="calcResult.length > 0">
+              <h4 class="text-sm font-medium text-text-primary mb-3">
+                {{ $t('product.calcResult') }} ({{ $t('product.quantityPrefix') }}{{ calcQuantity }}{{ $t('product.quantitySuffix') }})
+                <span v-if="calcPerSku && calcProduct" class="ml-2 text-xs text-text-secondary">({{ $t('product.perSkuView') }})</span>
+              </h4>
+              <!-- 有SKU分组 -->
+              <template v-if="calcResult.some(r => r.sku_id) && calcPerSku">
+                <div v-for="(group, gIdx) in Object.entries(groupBySku(calcResult))" :key="gIdx" class="mb-4">
+                  <div class="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mb-2">
+                    <span class="text-xs font-medium text-blue-600">{{ group[0] }}</span>
+                    <span class="text-xs text-blue-400 ml-2">×{{ calcQuantity }}</span>
+                  </div>
+                  <div class="border border-gray-100 rounded-lg overflow-hidden">
+                    <table class="w-full text-sm">
+                      <thead class="bg-gray-50">
+                        <tr>
+                          <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('product.materialName') }}</th>
+                          <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('product.unit') }}</th>
+                          <th class="px-3 py-2 text-right text-xs font-medium text-text-secondary">{{ $t('product.perUnit') }}</th>
+                          <th class="px-3 py-2 text-right text-xs font-medium text-text-secondary">{{ $t('product.totalRequired') }}</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-gray-100">
+                        <tr v-for="r in group[1]" :key="r.material_name">
+                          <td class="px-3 py-2 text-text-primary">{{ r.material_name }}</td>
+                          <td class="px-3 py-2 text-text-secondary">{{ r.unit || '-' }}</td>
+                          <td class="px-3 py-2 text-right text-text-secondary">{{ r.quantity }}</td>
+                          <td class="px-3 py-2 text-right font-medium text-primary">{{ typeof r.total === 'number' ? r.total.toFixed(2) : r.total }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </template>
+              <!-- 无分组（共用配方列表） -->
+              <div v-else class="border border-gray-100 rounded-lg overflow-hidden">
+                <table class="w-full text-sm">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('product.materialName') }}</th>
+                      <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('product.unit') }}</th>
+                      <th class="px-3 py-2 text-right text-xs font-medium text-text-secondary">{{ $t('product.perUnit') }}</th>
+                      <th class="px-3 py-2 text-right text-xs font-medium text-text-secondary">{{ $t('product.totalRequired') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100">
+                    <tr v-for="r in calcResult" :key="r.material_name + (r.sku_id || '')">
+                      <td class="px-3 py-2 text-text-primary">{{ r.material_name }}</td>
+                      <td class="px-3 py-2 text-text-secondary">{{ r.unit || '-' }}</td>
+                      <td class="px-3 py-2 text-right text-text-secondary">{{ r.quantity }}</td>
+                      <td class="px-3 py-2 text-right font-medium text-primary">{{ typeof r.total === 'number' ? r.total.toFixed(2) : r.total }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div v-else-if="calcProduct && calcQuantity > 0" class="text-center py-8 text-text-secondary text-sm">
+              {{ $t('product.noMaterialsForProduct') }}
+            </div>
+          </div>
+
+          <div class="px-5 py-4 border-t shrink-0 flex justify-end">
+            <button @click="showCalcModal = false" class="px-4 py-2 border border-gray-200 text-text-secondary hover:text-text-primary rounded-lg text-sm transition-colors">{{ $t('common.close') }}</button>
           </div>
         </div>
       </div>

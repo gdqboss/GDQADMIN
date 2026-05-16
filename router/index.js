@@ -76,7 +76,6 @@ const routes = [
       { path: 'wecom', name: 'WeCom', component: lazyLoad(() => import('../views/wecom/WeComChat.vue')), meta: { title: '企业微信', parent: '消息' } },
       { path: 'oa', name: 'OaCenter', component: lazyLoad(() => import('../views/oa/OaCenter.vue')), meta: { title: 'OA 办公' } },
       { path: 'oa/attendance', name: 'AttendanceManage', component: lazyLoad(() => import('../views/oa/AttendanceManage.vue')), meta: { title: '考勤管理' } },
-      { path: 'oa/work-logs', name: 'OaWorkLogManage', component: lazyLoad(() => import('../views/oa/WorkLogManage.vue')), meta: { title: '工作日志' } },
       { path: 'oa/my-responsibility', name: 'MyResponsibility', component: lazyLoad(() => import('../views/oa/MyResponsibility.vue')), meta: { title: '我的权责' } },
       { path: 'oa/approvals', name: 'OaApprovalManage', component: lazyLoad(() => import('../views/oa/ApprovalManage.vue')), meta: { title: '审批管理' } },
       { path: 'oa/approvals/create', name: 'ApprovalCreate', component: lazyLoad(() => import('../views/oa/ApprovalCreate.vue')), meta: { title: '发起审批' } },

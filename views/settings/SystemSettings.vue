@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../../components/PageHeader.vue'
 import StatusTag from '../../components/StatusTag.vue'
@@ -8,6 +9,7 @@ import { useChatStore } from '../../stores/chat.js'
 import { useWecomStore } from '../../stores/wecom.js'
 
 const { t } = useI18n()
+const route = useRoute()
 const chatStore = useChatStore()
 const wecomStore = useWecomStore()
 
@@ -495,28 +497,93 @@ function saveWecomSettings() {
   setTimeout(() => wecomSaveSuccess.value = false, 2000)
 }
 
-const activeTab = ref('users')
+const activeTab = ref(route.query.tab || 'users')
 const tabs = computed(() => [
-  { key: 'users',         label: t('settings.userList'),           icon: 'people' },
-  { key: 'pending-users', label: t('settings.pendingUsers'),                icon: 'person_add' },
-  { key: 'departments',   label: t('settings.deptManage'),                  icon: 'corporate_fare' },
-  { key: 'job-levels',    label: t('settings.levelManage'),                 icon: 'military_tech' },
-  { key: 'categories',    label: t('settings.categoryManage'),              icon: 'category' },
-  { key: 'manage-roles',  label: t('settings.roleManage'),                  icon: 'shield' },
-  { key: 'warehouses',    label: t('settings.warehouseSettings'),  icon: 'warehouse' },
-  { key: 'dingtalk',      label: t('settings.dingtalConfig'),      icon: 'link' },
-  { key: 'wecom',         label: t('settings.wecomConfig'),        icon: 'chat' },
-  { key: 'openclaw',      label: 'OpenClaw',                       icon: 'smart_toy' },
-  { key: 'ai',            label: t('settings.aiAssistantConfig'),  icon: 'psychology' },
+  { key: 'users',                label: t('settings.userList'),            icon: 'people' },
+  { key: 'departments',          label: t('settings.deptManage'),          icon: 'corporate_fare' },
+  { key: 'job-levels',           label: t('settings.levelManage'),         icon: 'military_tech' },
+  { key: 'job-responsibilities', label: t('nav.jobResponsibilities'),      icon: 'assignment' },
+  { key: 'manage-roles',         label: t('settings.roleManage'),          icon: 'shield' },
+  { key: 'payment',              label: t('settings.paymentSettings'),     icon: 'payments' },
 ])
 
 // Load tab-specific data on tab change
 function switchTab(key) {
   activeTab.value = key
-  if (key === 'categories' && categories.value.length === 0) loadCategories()
   if (key === 'manage-roles' && roles.value.length === 0) loadRoles()
   if (key === 'departments' && departments.value.length === 0) loadDepartments()
   if (key === 'job-levels' && jobLevels.value.length === 0) loadJobLevels()
+}
+
+// ─── Payment Settings ─────────────────────────────────────────────────────────
+const paymentConfig = ref({
+  wechat: { enabled: false, appId: '', mchId: '', apiKey: '' },
+  alipay: { enabled: false, appId: '', privateKey: '', alipayPublicKey: '' },
+  paypal: { enabled: false, clientId: '', secret: '', environment: 'sandbox' },
+})
+
+async function savePaymentConfig() {
+  try {
+    const res = await api.post('/settings/payment-config', paymentConfig.value)
+    if (res.code === 0) {
+      alert(t('common.saveSuccess'))
+    } else {
+      alert(res.message || t('settings.savePaymentFailed'))
+    }
+  } catch (e) {
+    alert(e.message || t('settings.savePaymentFailed'))
+  }
+}
+
+// ─── Job Responsibilities (from JobResponsibilities.vue logic) ─────────────────
+const filterJobLevel = ref('')
+const filterDepartment = ref('')
+
+function flattenDepartments(depts, result = [], level = 0) {
+  for (const dept of depts) {
+    result.push({ ...dept, displayName: '　'.repeat(level) + dept.name, _level: level })
+    if (dept.children && dept.children.length > 0) flattenDepartments(dept.children, result, level + 1)
+  }
+  return result
+}
+
+const flatDepartments = computed(() => flattenDepartments(departments.value))
+
+const filteredResponsibilities = computed(() => {
+  return responsibilities.value.filter(r => {
+    if (filterJobLevel.value && String(r.jobLevelId) !== String(filterJobLevel.value)) return false
+    if (filterDepartment.value && String(r.departmentId) !== String(filterDepartment.value)) return false
+    return true
+  })
+})
+
+async function openAddResponsibility() {
+  const name = prompt(t('settings.enterResponsibilityName'))
+  if (!name?.trim()) return
+  try {
+    const res = await api.post('/responsibilities', { name, departmentId: filterDepartment.value || undefined, jobLevelId: filterJobLevel.value || undefined })
+    if (res.code === 0) { await loadResponsibilities(); alert(t('common.addSuccess')) }
+    else alert(res.message || t('settings.addResponsibilityFailed'))
+  } catch (e) { alert(e.message || t('settings.addResponsibilityFailed')) }
+}
+
+async function openEditResponsibility(resp) {
+  const name = prompt(t('settings.enterResponsibilityName'), resp.name)
+  if (!name?.trim()) return
+  try {
+    const res = await api.put(`/responsibilities/${resp.id}`, { name })
+    if (res.code === 0) { await loadResponsibilities(); alert(t('common.updateSuccess')) }
+    else alert(res.message || t('settings.updateResponsibilityFailed'))
+  } catch (e) { alert(e.message || t('settings.updateResponsibilityFailed')) }
+}
+
+async function deleteResponsibility(resp) {
+  if (!confirm(t('settings.confirmDeleteResponsibility'))) return
+  try {
+    const res = await api.delete(`/responsibilities/${resp.id}`)
+    if (res.code === 0) { await loadResponsibilities(); alert(t('common.deleteSuccess')) }
+    else alert(res.message || t('settings.deleteResponsibilityFailed'))
+  } catch (e) { alert(e.message || t('settings.deleteResponsibilityFailed')) }
 }
 
 // ─── Warehouse Management ──────────────────────────────────────────────────────
@@ -1212,53 +1279,167 @@ async function deleteUser(user) {
         </div>
       </div>
 
-      <!-- ── Warehouses ── -->
-      <div v-if="activeTab === 'warehouses'" class="p-6">
+      <!-- ── Job Responsibilities ── -->
+      <div v-if="activeTab === 'job-responsibilities'" class="p-6">
         <div class="flex justify-between items-center mb-4">
-          <h3 class="font-bold text-text-primary">{{ $t('settings.warehouseSettings') }}</h3>
-          <div class="flex items-center gap-2">
-            <button v-if="selectedWarehouses.length > 0" @click="batchDeleteWarehouses" class="flex items-center gap-1 px-3 py-2 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600 transition-colors">
-              <span class="material-symbols-outlined text-[16px]">delete</span>
-              {{ $t('settings.batchDelete') }} ({{ selectedWarehouses.length }})
-            </button>
-            <button @click="openAddWarehouse" class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-              <span class="material-symbols-outlined text-[18px]">add</span>
-              {{ $t('settings.addWarehouse') }}
-            </button>
-          </div>
+          <h3 class="font-bold text-text-primary">{{ $t('nav.jobResponsibilities') }}</h3>
+          <button @click="openAddResponsibility" class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            <span class="material-symbols-outlined text-[18px]">add</span>
+            {{ $t('settings.addResponsibility') }}
+          </button>
+        </div>
+        <div class="mb-4 flex gap-3 flex-wrap">
+          <select v-model="filterJobLevel" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+            <option value="">{{ $t('settings.allJobLevels') }}</option>
+            <option v-for="jl in jobLevels" :key="jl.id" :value="jl.id">{{ jl.name }}</option>
+          </select>
+          <select v-model="filterDepartment" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+            <option value="">{{ $t('settings.allDepartments') }}</option>
+            <option v-for="dept in flatDepartments" :key="dept.id" :value="dept.id">{{ dept.displayName }}</option>
+          </select>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-left text-sm">
             <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
               <tr>
-                <th class="px-4 py-3 font-medium w-12">
-                  <input type="checkbox" v-model="selectAllWarehouses" @change="toggleSelectAllWarehouses" class="rounded border-gray-300 text-primary focus:ring-primary" />
-                </th>
-                <th class="px-4 py-3 font-medium">{{ $t('settings.warehouseName') }}</th>
-                <th class="px-4 py-3 font-medium">{{ $t('common.address') }}</th>
-                <th class="px-4 py-3 font-medium">{{ $t('settings.type') }}</th>
-                <th class="px-4 py-3 font-medium">{{ $t('settings.manager') }}</th>
+                <th class="px-4 py-3 font-medium">{{ $t('settings.responsibilityName') }}</th>
+                <th class="px-4 py-3 font-medium">{{ $t('settings.deptManage') }}</th>
+                <th class="px-4 py-3 font-medium">{{ $t('settings.levelManage') }}</th>
                 <th class="px-4 py-3 font-medium text-center">{{ $t('common.status') }}</th>
                 <th class="px-4 py-3 font-medium text-right">{{ $t('common.action') }}</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
-              <tr v-for="wh in warehouses" :key="wh.id" class="hover:bg-gray-50 transition-colors">
-                <td class="px-4 py-3">
-                  <input type="checkbox" :checked="selectedWarehouses.includes(wh.id)" @change="toggleSelectWarehouse(wh.id)" class="rounded border-gray-300 text-primary focus:ring-primary" />
-                </td>
-                <td class="px-4 py-3 font-medium text-text-primary">{{ wh.name }}</td>
-                <td class="px-4 py-3 text-text-secondary text-xs">{{ wh.address }}</td>
-                <td class="px-4 py-3"><StatusTag type="primary" :text="wh.type" /></td>
-                <td class="px-4 py-3 text-text-primary">{{ wh.manager }}</td>
+              <tr v-for="resp in filteredResponsibilities" :key="resp.id" class="hover:bg-gray-50 transition-colors">
+                <td class="px-4 py-3 font-medium text-text-primary">{{ resp.name }}</td>
+                <td class="px-4 py-3 text-text-secondary">{{ getDepartmentName(resp.departmentId) }}</td>
+                <td class="px-4 py-3"><StatusTag type="info" :text="resp.jobLevelName || resp.jobLevelId" /></td>
                 <td class="px-4 py-3 text-center"><StatusTag type="success" :text="$t('common.active')" /></td>
                 <td class="px-4 py-3 text-right">
-                  <button @click="openEditWarehouse(wh)" class="text-primary hover:text-primary-hover text-xs font-medium mr-3">{{ $t('common.edit') }}</button>
-                  <button @click="deleteWarehouse(wh)" class="text-danger hover:text-red-700 text-xs font-medium">{{ $t('common.delete') }}</button>
+                  <button @click="openEditResponsibility(resp)" class="text-primary hover:text-primary-hover text-xs font-medium mr-3">{{ $t('common.edit') }}</button>
+                  <button @click="deleteResponsibility(resp)" class="text-danger hover:text-red-700 text-xs font-medium">{{ $t('common.delete') }}</button>
                 </td>
+              </tr>
+              <tr v-if="filteredResponsibilities.length === 0">
+                <td colspan="5" class="px-4 py-8 text-center text-text-secondary text-sm">{{ $t('common.noData') }}</td>
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- ── Payment Settings ── -->
+      <div v-if="activeTab === 'payment'" class="p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-bold text-text-primary">{{ $t('settings.paymentSettings') }}</h3>
+        </div>
+        <div class="max-w-2xl space-y-6">
+          <!-- WeChat Pay -->
+          <div class="bg-white border border-gray-200 rounded-xl p-5">
+            <div class="flex items-center gap-3 mb-4">
+              <div class="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center">
+                <span class="material-symbols-outlined text-white text-xl">qr_code</span>
+              </div>
+              <div>
+                <h4 class="font-semibold text-text-primary">微信支付</h4>
+                <p class="text-xs text-text-secondary">WeChat Pay</p>
+              </div>
+              <div class="ml-auto">
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" v-model="paymentConfig.wechat.enabled" class="sr-only peer">
+                  <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-200 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                </label>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 gap-3">
+              <div>
+                <label class="block text-sm font-medium text-text-primary mb-1">AppID</label>
+                <input v-model="paymentConfig.wechat.appId" type="text" :placeholder="$t('settings.enterAppId')" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-text-primary mb-1">MchID</label>
+                <input v-model="paymentConfig.wechat.mchId" type="text" :placeholder="$t('settings.enterMchId')" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-text-primary mb-1">API Key</label>
+                <input v-model="paymentConfig.wechat.apiKey" type="password" :placeholder="$t('settings.enterApiKey')" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+              </div>
+            </div>
+          </div>
+          <!-- Alipay -->
+          <div class="bg-white border border-gray-200 rounded-xl p-5">
+            <div class="flex items-center gap-3 mb-4">
+              <div class="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                <span class="material-symbols-outlined text-white text-xl">account_balance_wallet</span>
+              </div>
+              <div>
+                <h4 class="font-semibold text-text-primary">支付宝</h4>
+                <p class="text-xs text-text-secondary">Alipay</p>
+              </div>
+              <div class="ml-auto">
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" v-model="paymentConfig.alipay.enabled" class="sr-only peer">
+                  <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-200 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                </label>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 gap-3">
+              <div>
+                <label class="block text-sm font-medium text-text-primary mb-1">AppID</label>
+                <input v-model="paymentConfig.alipay.appId" type="text" :placeholder="$t('settings.enterAppId')" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-text-primary mb-1">Private Key</label>
+                <textarea v-model="paymentConfig.alipay.privateKey" rows="3" :placeholder="$t('settings.enterPrivateKey')" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none resize-none"></textarea>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-text-primary mb-1">Alipay Public Key</label>
+                <textarea v-model="paymentConfig.alipay.alipayPublicKey" rows="3" :placeholder="$t('settings.enterAlipayPublicKey')" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none resize-none"></textarea>
+              </div>
+            </div>
+          </div>
+          <!-- PayPal -->
+          <div class="bg-white border border-gray-200 rounded-xl p-5">
+            <div class="flex items-center gap-3 mb-4">
+              <div class="w-10 h-10 bg-blue-700 rounded-lg flex items-center justify-center">
+                <span class="material-symbols-outlined text-white text-xl">public</span>
+              </div>
+              <div>
+                <h4 class="font-semibold text-text-primary">PayPal</h4>
+                <p class="text-xs text-text-secondary">International Payments</p>
+              </div>
+              <div class="ml-auto">
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" v-model="paymentConfig.paypal.enabled" class="sr-only peer">
+                  <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-200 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                </label>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 gap-3">
+              <div>
+                <label class="block text-sm font-medium text-text-primary mb-1">Client ID</label>
+                <input v-model="paymentConfig.paypal.clientId" type="text" :placeholder="$t('settings.enterClientId')" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-text-primary mb-1">Secret</label>
+                <input v-model="paymentConfig.paypal.secret" type="password" :placeholder="$t('settings.enterSecret')" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-text-primary mb-1">Environment</label>
+                <select v-model="paymentConfig.paypal.environment" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+                  <option value="sandbox">Sandbox</option>
+                  <option value="live">Live</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <!-- Save -->
+          <div class="flex justify-end">
+            <button @click="savePaymentConfig" class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-colors">
+              <span class="material-symbols-outlined text-[18px]">save</span>
+              {{ $t('common.save') }}
+            </button>
+          </div>
         </div>
       </div>
 
