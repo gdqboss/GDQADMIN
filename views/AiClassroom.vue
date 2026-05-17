@@ -20,9 +20,9 @@ const canAccess = (key) => {
   return Array.isArray(perms) && perms.includes(key)
 }
 
-// Tab 可见性：知识库管理 / 记忆管理
-const showKnowledgeTab = computed(() => canAccess('knowledge-base'))
-const showMemoryTab = computed(() => canAccess('memory-management'))
+// Tab 可见性：知识库管理 / 记忆管理（admin 始终可见，member 按角色权限）
+const showKnowledgeTab = computed(() => isAdmin.value || canAccess('knowledge-base'))
+const showMemoryTab = computed(() => isAdmin.value || canAccess('memory-management'))
 
 // ─── Tab ─────────────────────────────────────────────────────────────────────
 const activeTab = ref('chat')
@@ -240,12 +240,12 @@ const memoryForm = ref({ content: '', memory_type: 'fact' })
 const memoryFormRef = ref(null)
 const memorySaving = ref(false)
 
-const memoryTypeOptions = [
-  { value: 'fact', label: $t('aiClassroom.fact') },
-  { value: 'preference', label: $t('aiClassroom.preference') },
-  { value: 'context', label: $t('aiClassroom.context') },
-  { value: 'summary', label: $t('aiClassroom.summary') },
-]
+const memoryTypeOptions = computed(() => [
+  { value: 'fact', label: t('aiClassroom.fact') },
+  { value: 'preference', label: t('aiClassroom.preference') },
+  { value: 'context', label: t('aiClassroom.context') },
+  { value: 'summary', label: t('aiClassroom.summary') },
+])
 
 const memoryRules = {
   content: [{ required: true, message: '请输入记忆内容', trigger: 'blur' }],
@@ -337,7 +337,6 @@ onMounted(() => {
     <!-- Tabs -->
     <div class="tab-container">
       <el-tabs v-model="activeTab" class="ai-tabs">
-// Tab1: AI Chat
         <el-tab-pane :label="$t('aiClassroom.chatTab')" name="chat">
           <div class="chat-panel">
             <!-- Chat Header -->
@@ -395,7 +394,7 @@ onMounted(() => {
         </el-tab-pane>
 
         <!-- Tab2: 知识库管理 -->
-        <el-tab-pane v-if="showKnowledgeTab" label="知识库管理" name="knowledge">
+        <el-tab-pane v-if="showKnowledgeTab" :label="$t('aiClassroom.knowledgeTab')" name="knowledge">
           <div class="knowledge-panel">
             <!-- Toolbar -->
             <div class="panel-toolbar">
@@ -515,11 +514,11 @@ onMounted(() => {
     <!-- 知识库弹窗 -->
     <el-dialog v-model="knowledgeDialogVisible" :title="knowledgeForm.id ? $t('aiClassroom.editKnowledge') : $t('aiClassroom.addKnowledge')" width="560px" destroy-on-close>
       <el-form ref="knowledgeFormRef" :model="knowledgeForm" :rules="knowledgeRules" label-width="80px" class="ai-form">
-        <el-form-item :label="$t('aiClassroom.title')" prop="title">
-          <el-input v-model="knowledgeForm.title" placeholder="{{ $t('aiClassroom.enterTitle') }}" />
+        <el-form-item :label="$t('aiClassroom.title_field')" prop="title">
+          <el-input v-model="knowledgeForm.title" :placeholder="$t('aiClassroom.enterTitle')" />
         </el-form-item>
         <el-form-item :label="$t('aiClassroom.content')" prop="content">
-          <el-input v-model="knowledgeForm.content" type="textarea" :rows="4" placeholder="{{ $t('aiClassroom.enterContent') }}" />
+          <el-input v-model="knowledgeForm.content" type="textarea" :rows="4" :placeholder="$t('aiClassroom.enterContent')" />
         </el-form-item>
         <el-form-item :label="$t('aiClassroom.type')" prop="doc_type">
           <el-select v-model="knowledgeForm.doc_type" class="full-width">
@@ -545,7 +544,7 @@ onMounted(() => {
           </el-select>
         </el-form-item>
         <el-form-item :label="$t('aiClassroom.content')" prop="content">
-          <el-input v-model="memoryForm.content" type="textarea" :rows="4" placeholder="{{ $t('aiClassroom.enterMemoryContent') }}" />
+          <el-input v-model="memoryForm.content" type="textarea" :rows="4" :placeholder="$t('aiClassroom.enterMemoryContent')" />
         </el-form-item>
       </el-form>
       <template #footer>

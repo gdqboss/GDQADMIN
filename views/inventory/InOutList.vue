@@ -319,8 +319,40 @@ function openDetail(record) {
 }
 
 // ─── Print ────────────────────────────────────────────────────────────────────
-function doPrint(record) {
+const showPrintPreview = ref(false)
+const printForm = ref({
+  remark: '',
+  customer: '',
+  operator: '',
+  includeSignature: true,
+  includeQrcode: true,
+})
+
+function openPrintPreview(record) {
   printRecord.value = record
+  printForm.value = {
+    remark: record.remark || '',
+    customer: record.customer || '',
+    operator: record.operator || operatorName.value || '',
+    includeSignature: true,
+    includeQrcode: true,
+  }
+  showPrintPreview.value = true
+}
+
+function closePrintPreview() {
+  showPrintPreview.value = false
+}
+
+function confirmPrint() {
+  // Merge edited fields into printRecord for printing
+  printRecord.value = {
+    ...printRecord.value,
+    remark: printForm.value.remark,
+    customer: printForm.value.customer,
+    operator: printForm.value.operator,
+  }
+  showPrintPreview.value = false
   nextTick(() => {
     window.print()
   })
@@ -453,7 +485,7 @@ async function handleDeleteRecord() {
                   {{ $t('common.detail') }}
                 </button>
                 <button
-                  @click="doPrint(r)"
+                  @click="openPrintPreview(r)"
                   class="text-text-secondary hover:text-text-primary text-xs font-medium mr-3"
                 >
                   {{ $t('inout.print') }}
@@ -833,7 +865,7 @@ async function handleDeleteRecord() {
             </button>
             <div class="flex gap-3 ml-auto">
               <button
-                @click="doPrint(detailRecord); showDetail = false"
+                @click="openPrintPreview(detailRecord); showDetail = false"
                 class="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-text-primary hover:bg-gray-50 transition-colors"
               >
                 <span class="material-symbols-outlined text-[16px]">print</span>
@@ -846,6 +878,176 @@ async function handleDeleteRecord() {
                 {{ $t('common.close') }}
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ─── Print Preview Modal ─────────────────────────────────────────────── -->
+    <Teleport to="body">
+      <div v-if="showPrintPreview && printRecord" class="fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-black/30" @click="closePrintPreview"></div>
+        <div class="relative bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+          <div class="flex items-center justify-between px-6 py-4 border-b">
+            <h3 class="text-lg font-bold text-text-primary">{{ $t('inout.printPreview') || '打印预览' }}</h3>
+            <button @click="closePrintPreview" class="text-text-secondary hover:text-text-primary">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+
+          <!-- Editable fields -->
+          <div class="overflow-y-auto flex-1 p-6 space-y-4 border-b">
+            <div class="text-sm text-text-secondary mb-3">{{ $t('inout.printEditHint') || '可编辑打印内容' }}</div>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-medium text-text-secondary mb-1">
+                  {{ activeTab === 'outbound' ? $t('inout.printCustomer') : $t('inout.printSupplier') }}
+                </label>
+                <input
+                  v-model="printForm.customer"
+                  type="text"
+                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-text-secondary mb-1">{{ $t('inout.printOperator') }}</label>
+                <input
+                  v-model="printForm.operator"
+                  type="text"
+                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+                />
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-text-secondary mb-1">{{ $t('inout.printRemark') }}</label>
+              <textarea
+                v-model="printForm.remark"
+                rows="2"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+              ></textarea>
+            </div>
+            <div class="flex gap-6">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" v-model="printForm.includeSignature" class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" />
+                <span class="text-sm text-text-primary">{{ $t('inout.printIncludeSignature') || '包含签名栏' }}</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" v-model="printForm.includeQrcode" class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" />
+                <span class="text-sm text-text-primary">{{ $t('inout.printIncludeQrcode') || '包含二维码' }}</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Print preview area -->
+          <div class="overflow-y-auto max-h-[50vh] p-6 bg-gray-50">
+            <div id="print-preview-area">
+              <template v-if="printRecord">
+                <div style="width:148mm; padding:12mm; font-family:sans-serif; font-size:12px; color:#111; background:white; border:1px solid #ddd;">
+                  <!-- Header -->
+                  <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #111; padding-bottom:8px; margin-bottom:12px;">
+                    <div>
+                      <h1 style="font-size:18px; font-weight:bold; margin:0 0 4px 0;">彩美特智慧管理系统</h1>
+                      <p style="margin:0; font-size:11px; color:#555;">
+                        {{ activeTab === 'inbound' ? '入库单' : activeTab === 'outbound' ? '出库单' : '退货单' }}
+                      </p>
+                    </div>
+                    <div style="text-align:right; font-size:11px; color:#555;">
+                      <p style="margin:0;">单号: {{ printRecord.record_no }}</p>
+                      <p style="margin:4px 0 0 0;">日期: {{ formatDate(printRecord.created_at) }}</p>
+                    </div>
+                  </div>
+
+                  <!-- Info grid -->
+                  <table style="width:100%; border-collapse:collapse; margin-bottom:12px;">
+                    <tbody>
+                      <tr>
+                        <td style="padding:3px 6px 3px 0; color:#555; width:30%;">仓库</td>
+                        <td style="padding:3px 0;">{{ printRecord.warehouse_name || '—' }}</td>
+                        <td style="padding:3px 6px 3px 12px; color:#555; width:30%;">
+                          {{ activeTab === 'inbound' ? '供应商' : activeTab === 'outbound' ? '客户' : '来源' }}
+                        </td>
+                        <td style="padding:3px 0;">{{ printForm.customer || printRecord.customer || printRecord.supplier || printRecord.source || '—' }}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding:3px 6px 3px 0; color:#555;">操作员</td>
+                        <td style="padding:3px 0;">{{ printForm.operator || operatorName || '—' }}</td>
+                        <td style="padding:3px 6px 3px 12px; color:#555;">总数量</td>
+                        <td style="padding:3px 0; font-weight:bold;">{{ printRecord.total_qty }}</td>
+                      </tr>
+                      <tr v-if="printForm.remark">
+                        <td style="padding:3px 6px 3px 0; color:#555;">备注</td>
+                        <td colspan="3" style="padding:3px 0;">{{ printForm.remark }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <!-- Items table -->
+                  <table style="width:100%; border-collapse:collapse; margin-bottom:16px;">
+                    <thead>
+                      <tr style="background:#f3f4f6;">
+                        <th style="padding:6px 8px; text-align:left; border:1px solid #ddd; font-size:11px;">商品名称</th>
+                        <th style="padding:6px 8px; text-align:center; border:1px solid #ddd; font-size:11px;">SKU</th>
+                        <th style="padding:6px 8px; text-align:center; border:1px solid #ddd; font-size:11px;">数量</th>
+                        <th v-if="printForm.includeQrcode && printRecord.items && printRecord.items.some(i => i.qrcode_id)" style="padding:6px 8px; text-align:left; border:1px solid #ddd; font-size:11px;">二维码</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template v-if="printRecord.items && printRecord.items.length">
+                        <tr v-for="(item, idx) in printRecord.items" :key="idx">
+                          <td style="padding:6px 8px; border:1px solid #ddd;">{{ item.product_name || item.name || '—' }}</td>
+                          <td style="padding:6px 8px; border:1px solid #ddd; text-align:center; font-family:monospace; font-size:10px;">{{ item.sku || '—' }}</td>
+                          <td style="padding:6px 8px; border:1px solid #ddd; text-align:center; font-weight:bold;">{{ item.quantity }}</td>
+                          <td v-if="printForm.includeQrcode && printRecord.items.some(i => i.qrcode_id)" style="padding:6px 8px; border:1px solid #ddd; font-family:monospace; font-size:10px;">{{ item.qrcode_id || '—' }}</td>
+                        </tr>
+                      </template>
+                      <tr v-else>
+                        <td colspan="4" style="padding:6px 8px; border:1px solid #ddd; text-align:center; color:#999;">暂无商品明细</td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <!-- Signature row -->
+                  <div v-if="printForm.includeSignature" style="display:flex; gap:32px; margin-top:24px; padding-top:12px; border-top:1px dashed #ccc;">
+                    <div style="flex:1;">
+                      <p style="margin:0 0 24px 0; color:#555; font-size:11px;">制单人</p>
+                      <div style="border-bottom:1px solid #aaa; margin-bottom:4px;"></div>
+                      <p style="margin:0; font-size:10px; color:#888; text-align:center;">签字</p>
+                    </div>
+                    <div style="flex:1;">
+                      <p style="margin:0 0 24px 0; color:#555; font-size:11px;">审核人</p>
+                      <div style="border-bottom:1px solid #aaa; margin-bottom:4px;"></div>
+                      <p style="margin:0; font-size:10px; color:#888; text-align:center;">签字</p>
+                    </div>
+                    <div style="flex:1;">
+                      <p style="margin:0 0 24px 0; color:#555; font-size:11px;">收货人</p>
+                      <div style="border-bottom:1px solid #aaa; margin-bottom:4px;"></div>
+                      <p style="margin:0; font-size:10px; color:#888; text-align:center;">签字</p>
+                    </div>
+                  </div>
+
+                  <p style="margin-top:16px; font-size:10px; color:#aaa; text-align:center;">
+                    彩美特智慧管理系统 {{ new Date().toLocaleString('zh-CN') }}
+                  </p>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="px-6 py-4 border-t flex gap-3 justify-end bg-white rounded-b-xl">
+            <button
+              @click="closePrintPreview"
+              class="px-4 py-2 border border-gray-200 rounded-lg text-sm text-text-primary hover:bg-gray-50 transition-colors"
+            >
+              {{ $t('common.cancel') }}
+            </button>
+            <button
+              @click="confirmPrint"
+              class="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              <span class="material-symbols-outlined text-[18px]">print</span>
+              {{ $t('inout.confirmPrint') || '确认打印' }}
+            </button>
           </div>
         </div>
       </div>
@@ -956,6 +1158,7 @@ async function handleDeleteRecord() {
 <style scoped>
 @media print {
   body > * { display: none; }
-  #print-area { display: block !important; }
+  #print-area, #print-preview-area { display: block !important; }
+  #print-preview-area > * { display: block !important; }
 }
 </style>
