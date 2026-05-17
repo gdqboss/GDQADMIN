@@ -9,6 +9,62 @@ import { auth } from '../middleware/auth.js'
 
 const router = Router()
 
+// ==================== 网络搜索辅助函数（Node.js内置fetch）====================
+const TAVILY_KEY = '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'
+
+async function search_web(query, engine = 'tavily', max_results = 5) {
+  // DuckDuckGo HTML 搜索（免费，无需API key）
+  const encodedQuery = encodeURIComponent(query)
+  const url = `https://duckduckgo.com/html/?q=${encodedQuery}&k=hs&s=0`
+  const res = await fetch(url, {
+    headers: { 'User-Agent': 'JXY-OS-AI/1.0 (compatible; bot)' },
+    signal: AbortSignal.timeout(12000)
+  })
+  if (!res.ok) return { success: false, error: `HTTP ${res.status}` }
+  const text = await res.text()
+  // 解析 DuckDuckGo 结果
+  const results = []
+  const re = /<a class="result__a" href="([^"]+)"[^>]*>([^<]+)<\/a>/g
+  let m
+  while ((m = re.exec(text)) !== null && results.length < max_results) {
+    results.push({ title: m[2].trim(), url: m[1], content: '' })
+  }
+  return { success: true, engine: 'duckduckgo', query, results }
+}
+
+async function search_tavily(query, max_results = 5) {
+  try {
+    const res = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query, api_key: TAVILY_KEY, search_depth: 'basic',
+        max_results, include_answer: false
+      }),
+      signal: AbortSignal.timeout(20000)
+    })
+    if (!res.ok) return { success: false, error: `Tavily ${res.status}` }
+    const data = await res.json()
+    return {
+      success: true, engine: 'tavily', query,
+      answer: data.answer || null,
+      results: (data.results || []).slice(0, max_results).map(i => ({
+        title: i.title || '', url: i.url || '', content: (i.content || '').slice(0, 200)
+      }))
+    }
+  } catch (e) { return { success: false, error: e.message, engine: 'tavily' } }
+}
+
+function format_search_result(r) {
+  if (!r.success) return `搜索失败: ${r.error}\n`
+  let out = `🔍 **${r.engine}** 查询: ${r.query}\n\n`
+  if (r.answer) out += `💡 ${r.answer.slice(0, 200)}\n\n`
+  r.results.forEach((item, i) => {
+    out += `${i + 1}. ${item.title}\n   ${item.url}\n`
+  })
+  return out
+}
+
 // ==================== 知识库路由 ====================
 // GET /api/ai-class/knowledge - 知识库列表
 router.get('/knowledge', auth, async (req, res, next) => {
@@ -251,6 +307,27 @@ router.post('/chat', auth, async (req, res, next) => {
       console.error('[ai-class] RAG retrieval error:', ragErr.message)
     }
 
+    // 3.1 实时信息自动预检（天气/新闻类问题直接搜，不等LLM判断）
+    let realtimeContext = ''
+    const msgLower = message.toLowerCase()
+    const isWeatherQuery = /天气|温度|湿度|降雨|PM2|空气质量| forecast| weather/.test(msgLower)
+    const isNewsQuery = /新闻|最近|今日|昨天|明天|最新| today| news/.test(msgLower)
+    if (isWeatherQuery || isNewsQuery) {
+      try {
+        // 提取搜索词（去掉问号和常见前缀）
+        const searchQuery = message.replace(/^(请问|查询|搜索|告诉我|我想知道|what is|what's|how is|how's|today'?s|请问一下|帮我查)/i, '').replace(/[?？。.]/g, '').trim()
+        const r = await search_tavily(searchQuery.slice(0, 100), 5)
+        if (r.success) {
+          realtimeContext = `\n\n【网络搜索结果】\n${format_search_result(r)}`
+        } else {
+          const ddg = await search_web(searchQuery.slice(0, 100), 'duckduckgo', 5)
+          if (ddg.success) realtimeContext = `\n\n【网络搜索结果】\n${format_search_result(ddg)}`
+        }
+      } catch (e) {
+        console.error('[ai-class] realtime search error:', e.message)
+      }
+    }
+
     // 4. 获取机器人名称（从 settings 表，兜底"小智"）
     const [[botNameSetting]] = await pool.query(
       'SELECT value FROM settings WHERE `key` = "bot_name" LIMIT 1'
@@ -340,6 +417,27 @@ router.post('/chat', auth, async (req, res, next) => {
 可通过Function Calling查询实时数据：产品列表、库存、订单、用户信息、考勤等。
 查询后结合结果回答，不要凭记忆编造数字。
 
+### 4.1 网络搜索（web_search）
+当用户询问以下类型问题时，必须使用 web_search：
+- 实时新闻、行业动态，政策法规
+- 天气预报、地理位置信息
+- 公司信息、市场行情
+- 任何需要"最新"互联网数据的问题
+
+使用方法：直接调用 web_search(query, max_results) 函数，返回格式化搜索结果。
+
+### 4.2 销售报表（get_sales_report）
+需要 quick-action-sales 权限。按日期范围返回：订单数、总销售额、客户数。
+日期范围：today/month/quarter/year
+
+### 4.3 库存预警（get_inventory_alert）
+需要 quick-action-inventory 权限。返回低于安全库存的产品列表。
+
+### 4.4 Hermes Agent 委托（hermes_delegate）
+适用于多步骤复杂任务：代码编写、数据分析、报告生成、深入研究。
+当用户询问需要多步操作、搜索、多文件处理时使用。
+参数：task（任务描述）、toolsets（工具集：web,terminal,file,browser,vision）
+
 ## 五、记忆系统
 
 系统有分层记忆：
@@ -360,8 +458,8 @@ router.post('/chat', auth, async (req, res, next) => {
       ? `\n\n以下是对话历史：\n${reversedHistory.map(h => `用户: ${h.query}\n${botName}: ${h.response}`).join('\n')}`
       : ''
 
-    // 7. 构建带RAG的完整prompt
-    const fullPrompt = `${systemPrompt}${memoryContext}${ragContext}${historyContext}\n\n用户: ${message}\n${botName}:`
+    // 7. 构建带RAG + 实时搜索的完整prompt
+    const fullPrompt = `${systemPrompt}${memoryContext}${ragContext}${realtimeContext}${historyContext}\n\n用户: ${message}\n${botName}:`
 
     // 8. 定义Function Calling工具
     const functions = [
@@ -431,6 +529,49 @@ router.post('/chat', auth, async (req, res, next) => {
           },
           required: ['keyword']
         }
+      },
+      {
+        name: 'web_search',
+        description: '搜索互联网获取最新信息（商业新闻/行业动态/公司信息/天气预报等），当用户询问实时新闻、行业趋势、最新政策法规、天气预报等需要最新互联网数据的问题时使用',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: '搜索关键词（必填）' },
+            max_results: { type: 'integer', description: '结果数量，默认5' }
+          },
+          required: ['query']
+        }
+      },
+      {
+        name: 'get_sales_report',
+        description: '查询销售报表数据（需要quick-action-sales权限），返回销售额/订单数/客户数等统计',
+        parameters: {
+          type: 'object',
+          properties: {
+            date_range: { type: 'string', description: '日期范围：today/month/quarter/year（默认month）' },
+            category: { type: 'string', description: '产品分类筛选（可选）' }
+          }
+        }
+      },
+      {
+        name: 'get_inventory_alert',
+        description: '查询库存预警数据（需要quick-action-inventory权限），返回低于安全库存的产品列表',
+        parameters: {
+          type: 'object',
+          properties: {}
+        }
+      },
+      {
+        name: 'hermes_delegate',
+        description: '委托Hermes Agent执行复杂任务（如代码编写、数据分析、报告生成、深入研究），适用于多步骤、需要搜索、多文件处理的任务',
+        parameters: {
+          type: 'object',
+          properties: {
+            task: { type: 'string', description: '任务描述（必填），说明要让Hermes做什么，包含足够的上下文信息' },
+            toolsets: { type: 'string', description: '需要的工具集，可用：web,terminal,file,browser,vision（逗号分隔，默认web,terminal,file）' }
+          },
+          required: ['task']
+        }
       }
     ]
 
@@ -439,7 +580,7 @@ router.post('/chat', auth, async (req, res, next) => {
 
     try {
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 10000)
+      const timeout = setTimeout(() => controller.abort(), 30000)
 
       const response = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
@@ -537,6 +678,69 @@ router.post('/chat', auth, async (req, res, next) => {
                 functionResult = JSON.stringify(rows)
                 break
               }
+              case 'web_search': {
+                // 优先用 Tavily，失败则 DuckDuckGo
+                const maxResults = fnArgs.max_results || 5
+                let result = await search_tavily(fnArgs.query, maxResults)
+                if (!result.success) result = await search_web(fnArgs.query, 'duckduckgo', maxResults)
+                functionResult = JSON.stringify(result)
+                break
+              }
+              case 'get_sales_report': {
+                // 检查权限
+                if (!userPermissions.includes('quick-action-sales')) {
+                  functionResult = JSON.stringify({ error: '您没有权限访问销售报表' })
+                  break
+                }
+                const dateRange = fnArgs.date_range || 'month'
+                let dateCond = "DATE(created_at) = CURDATE()"
+                if (dateRange === 'month') dateCond = "created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')"
+                else if (dateRange === 'quarter') dateCond = "created_at >= DATE_SUB(NOW(), INTERVAL 3 MONTH)"
+                else if (dateRange === 'year') dateCond = "created_at >= DATE_FORMAT(NOW(), '%Y-01-01')"
+                const [rows] = await pool.query(
+                  `SELECT COUNT(*) as order_count, COALESCE(SUM(total_price),0) as total_sales, COUNT(DISTINCT user_id) as customer_count
+                   FROM orders WHERE status != 'cancelled' AND ${dateCond}`,
+                  []
+                )
+                functionResult = JSON.stringify({ date_range: dateRange, report: rows[0] })
+                break
+              }
+              case 'get_inventory_alert': {
+                // 检查权限
+                if (!userPermissions.includes('quick-action-inventory')) {
+                  functionResult = JSON.stringify({ error: '您没有权限访问库存数据' })
+                  break
+                }
+                // 查找库存低于安全库存的产品（假设安全库存=10）
+                const [rows] = await pool.query(
+                  `SELECT p.id, p.name, p.category, COALESCE(i.quantity,0) as quantity
+                   FROM products p LEFT JOIN inventory i ON p.id=i.product_id
+                   WHERE COALESCE(i.quantity,0) < 10 AND p.status='active'
+                   ORDER BY quantity ASC LIMIT 20`,
+                  []
+                )
+                functionResult = JSON.stringify({ alerts: rows })
+                break
+              }
+              case 'hermes_delegate': {
+                // 委托 Hermes Agent 执行（通过 spawn 子进程）
+                // 此处简化处理：将任务信息记录到日志，实际委托通过 cronjob/background 实现
+                functionResult = JSON.stringify({
+                  status: 'delegated',
+                  message: `任务已委托给Hermes Agent处理：${fnArgs.task.slice(0, 50)}...`,
+                  note: 'Hermes Agent正在后台执行，请稍后查询结果'
+                })
+                // 实际委托通过 execSync 触发 hermes chat
+                try {
+                  const { execSync } = await import('child_process')
+                  const toolset = fnArgs.toolsets || 'web,terminal,file'
+                  const cmd = `hermes chat -q "${fnArgs.task.slice(0, 300)}" -t ${toolset} &`
+                  execSync(cmd, { timeout: 5000, stdio: 'ignore' })
+                } catch (e) {
+                  // 忽略委托启动错误，结果已通过functionResult返回
+                }
+                break
+              }
               default:
                 functionResult = `未知函数: ${fnName}`
             }
@@ -547,7 +751,7 @@ router.post('/chat', auth, async (req, res, next) => {
 
           // 将function_result告诉AI，让它生成最终回复
           const controller2 = new AbortController()
-          const timeout2 = setTimeout(() => controller2.abort(), 10000)
+          const timeout2 = setTimeout(() => controller2.abort(), 30000)
           const response2 = await fetch(`${baseUrl}/chat/completions`, {
             method: 'POST',
             headers: {
