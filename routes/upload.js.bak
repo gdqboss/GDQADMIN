@@ -1,0 +1,109 @@
+import { Router } from 'express'
+import sharp from 'sharp'
+import fs from 'fs'
+import { upload, uploadTask } from '../middleware/upload.js'
+
+const router = Router()
+const uploadDir = '/home/gdq/server/uploads/products'
+
+// 确保上传目录存在
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true })
+}
+
+// POST /api/upload/product-image - 带压缩
+router.post('/product-image', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ code: 400, message: '未收到文件' })
+  
+  const filePath = uploadDir + '/' + req.file.filename
+  try {
+    await sharp(filePath)
+      .resize(1280, null, { withoutEnlargement: true })
+      .jpeg({ quality: 80 })
+      .toFile(filePath.replace(/\.[^.]+$/, '_compressed.jpg'))
+    
+    fs.unlinkSync(filePath)
+    const newPath = filePath.replace(/\.[^.]+$/, '.jpg')
+    fs.renameSync(filePath.replace(/\.[^.]+$/, '_compressed.jpg'), newPath)
+    req.file.filename = req.file.filename.replace(/\.[^.]+$/, '.jpg')
+  } catch(e) {
+    console.error('压缩失败:', e)
+  }
+  
+  const url = '/uploads/products/' + req.file.filename
+  res.json({ code: 0, data: { url }, message: 'ok' })
+})
+
+// POST /api/upload/task-attachment
+router.post('/task-attachment', uploadTask.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ code: 400, message: '未上传文件' })
+    }
+    const fileUrl = '/uploads/tasks/' + req.file.filename
+    res.json({ code: 0, data: { url: fileUrl }, message: 'ok' })
+  } catch (error) {
+    console.error('Upload error:', error)
+    res.status(500).json({ code: 500, message: '上传失败' })
+  }
+})
+
+// POST /api/upload - 通用图片上传
+router.post('/', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ code: 400, message: '未收到文件' })
+  }
+  
+  const fileUrl = '/uploads/products/' + req.file.filename
+  res.json({
+    code: 0,
+    data: { url: fileUrl },
+    message: '上传成功'
+  })
+})
+
+// POST /api/upload/image - 通用图片上传
+router.post('/image', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ code: 400, message: '未收到文件' })
+  }
+  
+  const fileUrl = '/uploads/products/' + req.file.filename
+  res.json({
+    code: 0,
+    data: { url: fileUrl },
+    message: '上传成功'
+  })
+})
+
+export default router
+
+// POST /api/upload/cert - 上传微信支付证书
+const certDir = '/home/gdq/server/uploads/certs'
+if (!fs.existsSync(certDir)) {
+  fs.mkdirSync(certDir, { recursive: true })
+}
+
+router.post('/cert', uploadTask.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ code: 400, message: '请选择文件' })
+    }
+    
+    const certPath = certDir + '/' + req.file.filename
+    const url = '/uploads/certs/' + req.file.filename
+    
+    res.json({
+      code: 0,
+      data: {
+        path: certPath,
+        url: url,
+        filename: req.file.originalname
+      },
+      message: '上传成功'
+    })
+  } catch (err) {
+    console.error('[Cert Upload Error]', err)
+    res.status(500).json({ code: 500, message: '上传失败' })
+  }
+})
