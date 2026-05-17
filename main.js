@@ -1,5 +1,6 @@
 import { createApp, nextTick } from 'vue'
 import { createPinia } from 'pinia'
+import ElementPlus from 'element-plus'
 import App from './App.vue'
 import router from './router'
 import i18n from './i18n'
@@ -13,6 +14,7 @@ const app = createApp(App)
 app.use(createPinia())
 app.use(router)
 app.use(i18n)
+app.use(ElementPlus)
 
 // 全局 Vue 错误处理：静默处理，不弹 alert
 app.config.errorHandler = (err, instance, info) => {

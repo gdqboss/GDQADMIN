@@ -72,6 +72,7 @@ const routes = [
       { path: 'inventory/returns', name: 'ReturnList', component: lazyLoad(() => import('../views/inventory/ReturnList.vue')), meta: { title: '退货记录', parent: '库存管理' } },
       { path: 'h5/my-team', name: 'MyTeam', component: lazyLoad(() => import('../views/h5/MyTeam.vue')), meta: { public: true, title: '我的团队' } },
       { path: 'ai-automation', name: 'AiAutomation', component: lazyLoad(() => import('../views/automation/AiAutomation.vue')), meta: { title: 'AI 自动化', parent: 'OpenClaw' } },
+      { path: 'ai-classroom', name: 'AiClassroom', component: lazyLoad(() => import('../views/AiClassroom.vue')), meta: { title: 'AI 课堂' } },
       { path: 'excel-analyzer', name: 'ExcelAnalyzer', component: lazyLoad(() => import('../views/bi/ExcelAnalyzer.vue')), meta: { title: 'Excel 分析器', parent: 'BI' } },
       { path: 'wecom', name: 'WeCom', component: lazyLoad(() => import('../views/wecom/WeComChat.vue')), meta: { title: '企业微信', parent: '消息' } },
       { path: 'oa', name: 'OaCenter', component: lazyLoad(() => import('../views/oa/OaCenter.vue')), meta: { title: 'OA 办公' } },

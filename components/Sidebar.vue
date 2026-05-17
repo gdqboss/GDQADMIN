@@ -22,7 +22,7 @@ const giftApprovalCount = ref(0)
 // Pages accessible by each preset role (fallback if API fails)
 const ROLE_PAGES = {
   admin: null, // null = all pages
-  manager: ['dashboard','wecom','ai-automation','excel-analyzer','oa','finance','qrcode','products','in-out','warehouses','alerts','transfer','returns','retail','gift-approvals','aftersale','reports','suppliers','dealers','stores','tasks'],
+  manager: ['dashboard','wecom','ai-classroom','excel-analyzer','oa','finance','qrcode','products','in-out','warehouses','alerts','transfer','returns','retail','gift-approvals','aftersale','reports','suppliers','dealers','stores','tasks'],
   operator: ['dashboard','oa','gift-approvals','settings'],
   warehouse: ['dashboard','in-out','warehouses','alerts','products','qrcode','retail','suppliers','dealers','stores'],
   member: ['dashboard'],  // 兜底：只显示工作台
@@ -95,7 +95,7 @@ function canAccess(pageKey) {
 const allNavItems = computed(() => [
   { key: 'dashboard',     label: t('nav.dashboard'),     icon: 'dashboard',      to: '/' },
   // { key: 'wecom',         label: t('nav.wecom'),         icon: 'chat',           to: '/wecom', badge: wecomStore.totalUnread || 0 },
-  { key: 'ai-automation', label: t('nav.aiAutomation'),  icon: 'smart_toy',      to: '/ai-automation' },
+  { key: 'ai-classroom', label: t('nav.aiClassroom'),  icon: 'school',      to: '/ai-classroom' },
   { key: 'excel-analyzer', label: t('nav.excelAnalyzer'),  icon: 'table_chart',   to: '/excel-analyzer' },
   { key: 'oa',            label: t('nav.oa'),            icon: 'badge',          to: '/oa' },
   { key: 'finance', label: t('nav.finance'),      icon: 'payments',       to: '/finance' },

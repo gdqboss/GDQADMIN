@@ -5,12 +5,11 @@ import { useI18n } from 'vue-i18n'
 import PageHeader from '../../components/PageHeader.vue'
 import StatusTag from '../../components/StatusTag.vue'
 import api from '../../services/api.js'
-import { useChatStore } from '../../stores/chat.js'
+import { NAV_PERMISSION_KEYS } from '../../constants/navPermission.js'
 import { useWecomStore } from '../../stores/wecom.js'
 
 const { t } = useI18n()
 const route = useRoute()
-const chatStore = useChatStore()
 const wecomStore = useWecomStore()
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -50,26 +49,11 @@ onMounted(async () => {
 })
 
 // ─── Role definitions ──────────────────────────────────────────────────────────
-const ALL_PAGES = computed(() => [
-  { key: 'dashboard',       label: t('settings.pageDashboard') },
-  { key: 'products',        label: t('settings.pageProductsView') },
-  { key: 'products_write',  label: t('settings.pageProductsEdit') },
-  { key: 'in-out',          label: t('settings.pageInOut') },
-  { key: 'warehouses',      label: t('settings.pageWarehouses') },
-  { key: 'alerts',          label: t('settings.pageAlerts') },
-  { key: 'approvals',       label: t('settings.pageApprovals') },
-  { key: 'qrcode',          label: t('settings.pageQrcodeView') },
-  { key: 'qrcodes_write',   label: t('settings.pageQrcodeEdit') },
-  { key: 'retail',          label: t('settings.pageRetail') },
-  { key: 'aftersale',       label: t('settings.pageAftersale') },
-  { key: 'reports',         label: t('settings.pageReports') },
-  { key: 'suppliers',       label: t('settings.pageSuppliers') },
-  { key: 'dealers',         label: t('settings.pageDealers') },
-  { key: 'stores',          label: t('settings.pageStores') },
-  { key: 'oa',              label: t('settings.pageOa') },
-  { key: 'wecom',           label: t('settings.pageWecom') },
-  { key: 'ai-automation',   label: t('settings.pageAiAutomation') },
-])
+// ALL_PAGES 由 NAV_PERMISSION_KEYS 驱动，与 Sidebar 导航栏 100% 同步
+// 新增模块只需在 constants/navPermission.js 添加一行
+const ALL_PAGES = computed(() =>
+  NAV_PERMISSION_KEYS.map(p => ({ key: p.key, label: t(p.labelKey) }))
+)
 
 const ROLE_LABELS = computed(() => ({ admin: t('settings.roleAdmin'), manager: t('settings.roleManager'), operator: t('settings.roleOperator'), member: t('settings.roleMember'), warehouse: t('settings.roleWarehouse'), custom: t('settings.roleCustom') }))
 const ROLE_COLORS = { admin: 'danger', manager: 'primary', operator: 'info', member: 'success', warehouse: 'warning', custom: 'warning' }
@@ -469,23 +453,89 @@ async function deleteRole(r) {
   } catch (e) { alert(e.message || t('settings.requestFailed')) }
 }
 
-// ─── Tabs & other settings ─────────────────────────────────────────────────────
-const showApiKey = ref(false)
-const aiKeyInput = ref(chatStore.apiKey)
-const aiModelInput = ref(chatStore.model)
-const aiModels = computed(() => [
-  { value: 'glm-4-flash', label: t('settings.modelFlash') },
-  { value: 'glm-4', label: t('settings.modelStandard') },
-  { value: 'glm-4-plus', label: t('settings.modelPlus') },
-])
-function saveAiSettings() {
-  chatStore.setApiKey(aiKeyInput.value)
-  chatStore.setModel(aiModelInput.value)
-  aiSaveSuccess.value = true
-  setTimeout(() => aiSaveSuccess.value = false, 2000)
-}
-const aiSaveSuccess = ref(false)
+// ─── AI 配置 ────────────────────────────────────────────────────────────────
+const aiConfigs = ref([])
+const botName = ref('')
+const botNameLoading = ref(false)
+const botNameSuccess = ref(false)
 
+async function loadAiConfigs() {
+  try {
+    const res = await api.get('/ai-config')
+    if (res.code === 0) aiConfigs.value = res.data || []
+    // 加载机器人名称（从第一个配置取 provider 作为名称，或从 settings 表取）
+    const botRes = await api.get('/settings')
+    if (botRes.code === 0) {
+      botName.value = botRes.data.bot_name || ''
+    }
+  } catch (e) { /* ignore */ }
+}
+
+async function saveBotName() {
+  botNameLoading.value = true
+  try {
+    await api.put('/settings', { bot_name: botName.value })
+    botNameSuccess.value = true
+    setTimeout(() => botNameSuccess.value = false, 2000)
+  } catch (e) { alert(e.message) }
+  finally { botNameLoading.value = false }
+}
+
+// 模型配置弹窗
+const showModelModal = ref(false)
+const editingModel = ref(null)
+const modelForm = ref({ provider: '', model: '', api_key: '', base_url: '', is_default: false })
+const modelLoading = ref(false)
+const modelError = ref('')
+
+function openAddModel() {
+  editingModel.value = null
+  modelForm.value = { provider: '', model: '', api_key: '', base_url: '', is_default: false }
+  modelError.value = ''
+  showModelModal.value = true
+}
+
+function openEditModel(cfg) {
+  editingModel.value = cfg
+  modelForm.value = { provider: cfg.provider, model: cfg.model, api_key: '', base_url: cfg.base_url || '', is_default: cfg.is_default === 1 }
+  modelError.value = ''
+  showModelModal.value = true
+}
+
+async function saveModel() {
+  if (!modelForm.value.provider || !modelForm.value.model) {
+    modelError.value = t('settings.providerModelRequired')
+    return
+  }
+  modelLoading.value = true
+  try {
+    const payload = { ...modelForm.value }
+    let res
+    if (editingModel.value) {
+      res = await api.put(`/ai-config/${editingModel.value.id}`, payload)
+    } else {
+      res = await api.post('/ai-config', payload)
+    }
+    if (res.code === 0) {
+      showModelModal.value = false
+      await loadAiConfigs()
+    } else {
+      modelError.value = res.message || t('settings.saveFailed')
+    }
+  } catch (e) { modelError.value = e.message }
+  finally { modelLoading.value = false }
+}
+
+async function deleteModel(id) {
+  if (!confirm(t('settings.confirmDeleteModel'))) return
+  try {
+    const res = await api.delete(`/ai-config/${id}`)
+    if (res.code === 0) await loadAiConfigs()
+    else alert(res.message)
+  } catch (e) { alert(e.message) }
+}
+
+// ─── WeCom ───────────────────────────────────────────────────────────────────
 const wecomCorpId = ref(wecomStore.corpId)
 const wecomAgentId = ref(wecomStore.agentId)
 const wecomSecret = ref(wecomStore.secret)
@@ -505,14 +555,15 @@ const tabs = computed(() => [
   { key: 'job-responsibilities', label: t('nav.jobResponsibilities'),      icon: 'assignment' },
   { key: 'manage-roles',         label: t('settings.roleManage'),          icon: 'shield' },
   { key: 'payment',              label: t('settings.paymentSettings'),     icon: 'payments' },
+  { key: 'ai-config',            label: t('settings.aiConfig'),            icon: 'smart_toy' },
 ])
 
-// Load tab-specific data on tab change
 function switchTab(key) {
   activeTab.value = key
   if (key === 'manage-roles' && roles.value.length === 0) loadRoles()
   if (key === 'departments' && departments.value.length === 0) loadDepartments()
   if (key === 'job-levels' && jobLevels.value.length === 0) loadJobLevels()
+  if (key === 'ai-config' && aiConfigs.value.length === 0) loadAiConfigs()
 }
 
 // ─── Payment Settings ─────────────────────────────────────────────────────────
@@ -1500,30 +1551,92 @@ async function deleteUser(user) {
         </div>
       </div>
 
-      <!-- ── AI Assistant ── -->
-      <div v-if="activeTab === 'ai'" class="p-6">
-        <h3 class="font-bold text-text-primary mb-4">{{ $t('settings.aiAssistantConfig') }}</h3>
-        <div class="max-w-2xl space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-text-primary mb-1">GLM API Key</label>
-            <div class="relative">
-              <input v-model="aiKeyInput" :type="showApiKey ? 'text' : 'password'" :placeholder="$t('settings.glmKeyPlaceholder')" class="w-full border border-gray-200 rounded-lg px-3 py-2 pr-10 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
-              <button @click="showApiKey = !showApiKey" class="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary transition-colors">
-                <span class="material-symbols-outlined text-[18px]">{{ showApiKey ? 'visibility_off' : 'visibility' }}</span>
+      <!-- ── AI 配置 ── -->
+      <div v-if="activeTab === 'ai-config'" class="p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-bold text-text-primary">{{ $t('settings.aiConfig') }}</h3>
+        </div>
+        <div class="max-w-3xl space-y-6">
+
+          <!-- 机器人名称 -->
+          <div class="bg-white border border-gray-200 rounded-xl p-5">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                <span class="material-symbols-outlined text-primary text-xl">smart_toy</span>
+              </div>
+              <div>
+                <h4 class="font-semibold text-text-primary">{{ $t('settings.botName') }}</h4>
+                <p class="text-xs text-text-secondary">{{ $t('settings.botNameHint') }}</p>
+              </div>
+            </div>
+            <input v-model="botName" type="text" :placeholder="$t('settings.botNamePlaceholder')" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+          </div>
+
+          <!-- 模型配置列表 -->
+          <div class="bg-white border border-gray-200 rounded-xl p-5">
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
+                  <span class="material-symbols-outlined text-blue-500 text-xl">psychology</span>
+                </div>
+                <div>
+                  <h4 class="font-semibold text-text-primary">{{ $t('settings.modelList') }}</h4>
+                  <p class="text-xs text-text-secondary">{{ $t('settings.modelListHint') }}</p>
+                </div>
+              </div>
+              <button @click="openAddModel" class="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-xs px-3 py-1.5 rounded-lg transition-colors">
+                <span class="material-symbols-outlined text-[14px]">add</span>{{ $t('common.add') }}
               </button>
             </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-sm">
+                <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
+                  <tr>
+                    <th class="px-3 py-2 font-medium">{{ $t('settings.provider') }}</th>
+                    <th class="px-3 py-2 font-medium">{{ $t('settings.modelName') }}</th>
+                    <th class="px-3 py-2 font-medium">{{ $t('settings.modelKey') }}</th>
+                    <th class="px-3 py-2 font-medium text-center">{{ $t('common.status') }}</th>
+                    <th class="px-3 py-2 font-medium text-center">{{ $t('common.default') }}</th>
+                    <th class="px-3 py-2 font-medium text-right">{{ $t('common.action') }}</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  <tr v-for="cfg in aiConfigs" :key="cfg.id" class="hover:bg-gray-50">
+                    <td class="px-3 py-3 font-medium text-text-primary">{{ cfg.provider }}</td>
+                    <td class="px-3 py-3 text-text-secondary">{{ cfg.model }}</td>
+                    <td class="px-3 py-3 font-mono text-xs text-text-secondary">{{ cfg.api_key ? '••••' + cfg.api_key.slice(-4) : '—' }}</td>
+                    <td class="px-3 py-3 text-center">
+                      <span v-if="cfg.status === 1" class="inline-flex items-center gap-1 text-xs text-success">
+                        <span class="w-1.5 h-1.5 bg-success rounded-full"></span>{{ $t('common.active') }}
+                      </span>
+                      <span v-else class="inline-flex items-center gap-1 text-xs text-text-secondary">
+                        <span class="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>{{ $t('common.inactive') }}
+                      </span>
+                    </td>
+                    <td class="px-3 py-3 text-center">
+                      <span v-if="cfg.is_default === 1" class="text-xs text-primary font-medium">✓</span>
+                      <span v-else class="text-xs text-gray-300">—</span>
+                    </td>
+                    <td class="px-3 py-3 text-right">
+                      <button @click="openEditModel(cfg)" class="text-primary hover:text-primary-hover text-xs font-medium mr-3">{{ $t('common.edit') }}</button>
+                      <button @click="deleteModel(cfg.id)" class="text-danger hover:text-red-700 text-xs font-medium">{{ $t('common.delete') }}</button>
+                    </td>
+                  </tr>
+                  <tr v-if="aiConfigs.length === 0">
+                    <td colspan="6" class="px-3 py-8 text-center text-text-secondary text-sm">{{ $t('common.noData') }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('settings.modelSelection') }}</label>
-            <select v-model="aiModelInput" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none bg-white">
-              <option v-for="m in aiModels" :key="m.value" :value="m.value">{{ m.label }}</option>
-            </select>
-          </div>
+
+          <!-- 全局保存（机器人名称） -->
           <div class="flex items-center gap-3">
-            <button @click="saveAiSettings" class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-              <span class="material-symbols-outlined text-[18px]">save</span>{{ $t('settings.saveConfig') }}
+            <button @click="saveBotName" :disabled="botNameLoading" class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
+              <span class="material-symbols-outlined text-[18px]">save</span>{{ $t('settings.saveBotName') }}
             </button>
-            <span v-if="aiSaveSuccess" class="text-sm text-success flex items-center gap-1">
+            <span v-if="botNameSuccess" class="text-sm text-success flex items-center gap-1">
               <span class="material-symbols-outlined text-[16px]">check_circle</span>{{ $t('settings.saved') }}
             </span>
           </div>
@@ -1695,19 +1808,7 @@ async function deleteUser(user) {
           <div>
             <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('settings.role') }} <span class="text-danger">*</span></label>
             <select v-model="userForm.role" @change="onRoleChange" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
-              <optgroup :label="$t('settings.presetRoles')">
-                <option value="admin">{{ $t('settings.roleAdmin') }}</option>
-                <option value="manager">{{ $t('settings.roleManager') }}</option>
-                <option value="operator">{{ $t('settings.roleOperator') }}</option>
-              </optgroup>
-              <optgroup :label="$t('settings.customRoles')" v-if="roles.length > 0">
-                <option v-for="role in roles" :key="role.id" :value="role.name">
-                  {{ role.label }}
-                </option>
-              </optgroup>
-              <optgroup :label="$t('settings.otherGroup')">
-                <option value="custom">{{ $t('settings.customPermTemp') }}</option>
-              </optgroup>
+              <option v-for="role in roles" :key="role.id" :value="role.name">{{ role.label }}</option>
             </select>
             <p class="text-xs text-text-secondary mt-1">
               {{ $t('settings.roleInheritHint') }}
@@ -1808,6 +1909,47 @@ async function deleteUser(user) {
           <button @click="showRoleModal = false" class="px-4 py-2 text-sm text-text-secondary border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">{{ $t('common.cancel') }}</button>
           <button @click="saveRole" :disabled="roleLoading" class="px-4 py-2 text-sm text-white bg-primary hover:bg-primary-hover rounded-lg transition-colors disabled:opacity-50">
             {{ roleLoading ? $t('common.saving') : $t('common.saveChanges') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Model Config Modal ── -->
+    <div v-if="showModelModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" @click.self="showModelModal = false">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-md">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h3 class="font-bold text-text-primary">{{ editingModel ? $t('settings.editModel') : $t('settings.addModel') }}</h3>
+          <button @click="showModelModal = false" class="text-text-secondary hover:text-text-primary">
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <div class="px-6 py-4 space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('settings.provider') }} <span class="text-danger">*</span></label>
+            <input v-model="modelForm.provider" type="text" :placeholder="$t('settings.providerPlaceholder')" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('settings.modelName') }} <span class="text-danger">*</span></label>
+            <input v-model="modelForm.model" type="text" :placeholder="$t('settings.modelNamePlaceholder')" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('settings.modelKey') }} <span v-if="editingModel" class="text-xs text-text-secondary font-normal">{{ $t('settings.leaveBlankKeep') }}</span></label>
+            <input v-model="modelForm.api_key" type="password" :placeholder="editingModel ? $t('settings.keyKeepExisting') : $t('settings.enterModelKey')" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('settings.baseUrl') }} <span class="text-xs text-text-secondary font-normal">{{ $t('settings.baseUrlOptional') }}</span></label>
+            <input v-model="modelForm.base_url" type="text" :placeholder="$t('settings.baseUrlPlaceholder')" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+          </div>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" v-model="modelForm.is_default" class="w-4 h-4 text-primary rounded" />
+            <span class="text-sm text-text-primary">{{ $t('settings.setAsDefault') }}</span>
+          </label>
+          <div v-if="modelError" class="text-sm text-danger bg-red-50 px-3 py-2 rounded-lg">{{ modelError }}</div>
+        </div>
+        <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+          <button @click="showModelModal = false" class="px-4 py-2 text-sm text-text-secondary border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">{{ $t('common.cancel') }}</button>
+          <button @click="saveModel" :disabled="modelLoading" class="px-4 py-2 text-sm text-white bg-primary hover:bg-primary-hover rounded-lg transition-colors disabled:opacity-50">
+            {{ modelLoading ? $t('common.saving') : $t('common.saveChanges') }}
           </button>
         </div>
       </div>
