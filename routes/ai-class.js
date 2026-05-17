@@ -339,8 +339,10 @@ router.post('/chat', auth, async (req, res, next) => {
       'SELECT * FROM ai_config WHERE is_default = 1 AND category = "llm" LIMIT 1'
     )
 
-    const baseUrl = llmConfig?.base_url || 'http://100.74.233.52:1234/v1'
-    const model = llmConfig?.model || 'qwen/qwen3-vl-8b'
+    // MiniMax-M2.7 配置（波哥订阅，高速+Function Calling，优先使用）
+    const baseUrl = 'https://api.minimax.chat/v1'
+    const model = 'MiniMax-M2.7'
+    const miniMaxKey = 'sk-cp-BbLwwqBSr8RrPusVeP8-U4_ezPtJS48rVjuMepMrxOZR4vcyRt_zD-OwhYcm7KKVnWT6nZxvi9q8zTsa1yC_mIaoqD4UyPjQn6xM4oOaoR5S0AHQut6jQtU'
 
     // 6. 获取用户权限（用于AI智能过滤）
     const [[userRow]] = await pool.query(
@@ -445,7 +447,16 @@ router.post('/chat', auth, async (req, res, next) => {
 - 【用户相关事实】：该用户的历史信息（姓名、职位、公司等）
 - 【用户偏好】：用户的个人偏好设置
 
-## 六、欢迎语规范
+## 七、MiniMax M2.7 输出规范（重要！）
+
+MiniMax M2.7 是思考型模型，回复中可能包含大量推理过程文字。请严格遵循：
+1. 回复内容只包含直接回答，不要包含类似「让我想想」「根据搜索结果」等引导语
+2. 不要输出类似「<think>...</think>」的推理过程
+3. 结构化回答时用简洁的列表/分段，不要加粗或特殊markdown
+4. 回答结束时直接结束，不要加「还有其他需要帮助的吗」等套话
+5. 如果回答的事实信息，用一句话概括即可，不要展开解释
+
+## 八、欢迎语规范
 
 根据是否有用户姓名判断：
 - 有姓名：使用"您好，{姓名}！我是{botName}，有什么可以帮您？"
@@ -586,7 +597,7 @@ router.post('/chat', auth, async (req, res, next) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(llmConfig?.api_key ? { 'Authorization': `Bearer ${llmConfig.api_key}` } : {})
+          'Authorization': `Bearer ${miniMaxKey}`
         },
         body: JSON.stringify({
           model: model,
@@ -606,10 +617,11 @@ router.post('/chat', auth, async (req, res, next) => {
         const assistantMessage = data.choices?.[0]?.message
 
         // 处理Function Calling响应
-        if (assistantMessage?.function_call) {
-          const fnCall = assistantMessage.function_call
-          const fnName = fnCall.name
-          const fnArgs = JSON.parse(fnCall.arguments || '{}')
+        if (assistantMessage?.function_call || assistantMessage?.tool_calls?.length) {
+          // MiniMax用tool_calls格式，OpenAI旧版用function_call
+          const toolCall = assistantMessage.function_call || assistantMessage.tool_calls?.[0]
+          const fnName = toolCall.function?.name || toolCall.name
+          const fnArgs = JSON.parse(toolCall.function?.arguments || toolCall.arguments || '{}')
 
           let functionResult = '执行失败'
           try {
@@ -756,7 +768,7 @@ router.post('/chat', auth, async (req, res, next) => {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              ...(llmConfig?.api_key ? { 'Authorization': `Bearer ${llmConfig.api_key}` } : {})
+              'Authorization': `Bearer ${miniMaxKey}`
             },
             body: JSON.stringify({
               model: model,
