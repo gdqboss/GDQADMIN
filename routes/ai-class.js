@@ -339,10 +339,10 @@ router.post('/chat', auth, async (req, res, next) => {
       'SELECT * FROM ai_config WHERE is_default = 1 AND category = "llm" LIMIT 1'
     )
 
-    // MiniMax-M2.7 配置（波哥订阅，高速+Function Calling，优先使用）
+// MiniMax-M2.7 配置（荣订阅，高速+Function Calling，优先使用）
     const baseUrl = 'https://api.minimax.chat/v1'
     const model = 'MiniMax-M2.7'
-    const miniMaxKey = 'sk-cp-BbLwwqBSr8RrPusVeP8-U4_ezPtJS48rVjuMepMrxOZR4vcyRt_zD-OwhYcm7KKVnWT6nZxvi9q8zTsa1yC_mIaoqD4UyPjQn6xM4oOaoR5S0AHQut6jQtU'
+    const miniMaxKey = 'sk-cp-watsOmxIaIG7QXlRhtaUckuwof61boMsF1qdRIjhgmqzc_iq5XdFgrTlq4TzDvJofn65llrWGd3pXPMNkZnbYueV-zyWAE9-nIRHDog5zGK3gmSYEyPtbMg'
 
     // 6. 获取用户权限（用于AI智能过滤）
     const [[userRow]] = await pool.query(
