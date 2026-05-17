@@ -108,9 +108,14 @@ const breadcrumbs = computed(() => {
   return items
 })
 
-function toggleLocale() {
-  i18n.global.locale.value = i18n.global.locale.value === 'zh' ? 'en' : 'zh'
-  localStorage.setItem('caimeite_locale', i18n.global.locale.value)
+async function toggleLocale() {
+  const newLocale = i18n.global.locale.value === 'zh' ? 'en' : 'zh'
+  if (i18n.setLocaleMessage) {
+    await i18n.setLocaleMessage(newLocale)
+  } else {
+    i18n.global.locale.value = newLocale
+  }
+  localStorage.setItem('caimeite_locale', newLocale)
 }
 
 const fetchUnreadCount = async () => {
