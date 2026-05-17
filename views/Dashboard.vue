@@ -1,11 +1,13 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useUserStore } from '../stores/user'
 import api from '../services/api.js'
 
 const router = useRouter()
 const userStore = useUserStore()
+const { t } = useI18n()
 
 // ─── State ─────────────────────────────────────────────────────────────────────
 const loading = ref(true)
@@ -38,14 +40,14 @@ const giftCheckLoading = ref(false)
 
 // ─── Quick Actions ───────────────────────────────────────────────────────────────────
 const quickActions = [
-  { name: '考勤打卡', icon: 'schedule', color: 'success', route: '/oa/attendance',   permission: 'quick-action-attendance' },
-  { name: '工作日志', icon: 'description', color: 'primary', route: '/logs/work-logs', permission: 'quick-action-worklog' },
-  { name: '我的任务', icon: 'task_alt', color: 'info', route: '/tasks',              permission: 'quick-action-task' },
-  { name: '扫码销售', icon: 'qr_code_scanner', color: 'warning', action: 'scan',     permission: 'quick-action-scan' },
-  { name: '我的权责', icon: 'assignment', color: 'blue', route: '/oa/my-responsibility', permission: 'quick-action-responsibility' },
-  { name: '报销申请', icon: 'receipt_long', color: 'danger', route: '/oa/approvals/create?type=expense', permission: 'quick-action-expense' },
-  { name: '个人信息', icon: 'person', color: 'purple', route: '/profile',            permission: 'quick-action-profile' },
-  { name: '二维码管理', icon: 'qr_code', color: 'teal', route: '/qrcode',           permission: 'quick-action-qrcode' },
+  { name: () => t('dashboard.quickAttendance'), icon: 'schedule', color: 'success', route: '/oa/attendance',   permission: 'quick-action-attendance' },
+  { name: () => t('dashboard.quickWorkLog'), icon: 'description', color: 'primary', route: '/logs/work-logs', permission: 'quick-action-worklog' },
+  { name: () => t('dashboard.quickMyTasks'), icon: 'task_alt', color: 'info', route: '/tasks',              permission: 'quick-action-task' },
+  { name: () => t('dashboard.quickScanSale'), icon: 'qr_code_scanner', color: 'warning', action: 'scan',     permission: 'quick-action-scan' },
+  { name: () => t('dashboard.quickMyDuties'), icon: 'assignment', color: 'blue', route: '/oa/my-responsibility', permission: 'quick-action-responsibility' },
+  { name: () => t('dashboard.quickExpense'), icon: 'receipt_long', color: 'danger', route: '/oa/approvals/create?type=expense', permission: 'quick-action-expense' },
+  { name: () => t('dashboard.quickProfile'), icon: 'person', color: 'purple', route: '/profile',            permission: 'quick-action-profile' },
+  { name: () => t('dashboard.quickQrcode'), icon: 'qr_code', color: 'teal', route: '/qrcode',           permission: 'quick-action-qrcode' },
 ]
 
 // 按权限过滤显示的快捷操作
@@ -307,18 +309,18 @@ onUnmounted(() => { stopCameraScanner() })
         <div class="flex justify-between items-center mb-3 sm:mb-4">
           <h4 class="text-sm sm:text-base font-bold text-text-primary flex items-center gap-2">
             <span class="material-symbols-outlined text-primary text-base sm:text-lg">bolt</span>
-            快捷操作
+            {{ $t('dashboard.quickActions') }}
           </h4>
         </div>
         <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
           <button
             v-for="action in visibleQuickActions"
-            :key="action.name"
+            :key="action.permission"
             @click="handleQuickAction(action)"
             class="flex flex-col items-center gap-2 p-3 sm:p-4 rounded-lg border border-gray-200 hover:border-primary hover:bg-primary/5 transition-all group"
           >
             <span :class="['material-symbols-outlined text-2xl sm:text-3xl group-hover:scale-110 transition-transform', `text-${action.color}`]">{{ action.icon }}</span>
-            <span class="text-xs sm:text-sm font-medium text-text-primary text-center">{{ action.name }}</span>
+            <span class="text-xs sm:text-sm font-medium text-text-primary text-center">{{ action.name() }}</span>
           </button>
         </div>
       </div>
@@ -328,7 +330,7 @@ onUnmounted(() => { stopCameraScanner() })
         <div class="flex justify-between items-center mb-3 sm:mb-4">
           <h4 class="text-sm sm:text-base font-bold text-text-primary flex items-center gap-2">
             <span class="material-symbols-outlined text-primary text-base sm:text-lg">assignment</span>
-            我的权责
+            {{ $t('dashboard.myResponsibilities') }}
           </h4>
         </div>
         <div class="space-y-3">

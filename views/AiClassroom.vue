@@ -1,10 +1,12 @@
 <script setup>
 import { ref, onMounted, nextTick, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useUserStore } from '../stores/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../services/api.js'
 
 const userStore = useUserStore()
+const { t } = useI18n()
 const currentUser = computed(() => userStore.user)
 const userRole = computed(() => userStore.userRole)
 const userPermissions = computed(() => userStore.user?.permissions || null)
@@ -103,7 +105,7 @@ const sendMessage = async () => {
       messages.value.push({ role: 'assistant', content: '抱歉，发生了错误。' })
     }
   } catch (e) {
-    ElMessage.error(e.message || '发送失败')
+    ElMessage.error(e.message || $t('aiClassroom.sendFailed'))
     messages.value.push({ role: 'assistant', content: '抱歉，发生了错误。' })
   } finally {
     sending.value = false
@@ -121,7 +123,7 @@ const clearMessages = () => {
   })
   sessionId.value = newSid
   localStorage.setItem(SESSION_KEY, newSid)
-  ElMessage.success('对话已清空')
+  ElMessage.success($t('aiClassroom.chatCleared'))
 }
 
 // ─── Tab2: 知识库管理 ─────────────────────────────────────────────────────────
@@ -134,12 +136,11 @@ const knowledgeForm = ref({ id: null, title: '', content: '', doc_type: 'general
 const knowledgeFormRef = ref(null)
 const knowledgeSaving = ref(false)
 
-const docTypeOptions = [
-  { value: 'general', label: '通用' },
-  { value: 'product', label: '产品' },
-  { value: 'faq', label: 'FAQ' },
-  { value: 'manual', label: '手册' },
-]
+const docTypeOptions = computed(() => [
+  { value: 'general', label: t('aiClassroom.general') },
+  { value: 'product', label: t('aiClassroom.product') },
+  { value: 'manual', label: t('aiClassroom.manual') },
+])
 
 const knowledgeRules = {
   title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
@@ -161,7 +162,7 @@ const loadKnowledge = async () => {
       knowledgeTotal.value = res.data.total || 0
     }
   } catch (e) {
-    ElMessage.error('加载知识库失败')
+    ElMessage.error($t('aiClassroom.loadKnowledgeFailed'))
   } finally {
     knowledgeLoading.value = false
   }
@@ -201,11 +202,11 @@ const saveKnowledge = async () => {
         res = await api.post('/ai-class/knowledge', payload)
       }
       if (res.code === 0) {
-        ElMessage.success('保存成功')
+        ElMessage.success($t('aiClassroom.saveSuccess'))
         knowledgeDialogVisible.value = false
         loadKnowledge()
       } else {
-        ElMessage.error(res.message || '保存失败')
+        ElMessage.error(res.message || $t('aiClassroom.saveFailed'))
       }
     } catch (e) {
       ElMessage.error(e.message || '保存失败')
@@ -217,10 +218,10 @@ const saveKnowledge = async () => {
 
 const deleteKnowledge = async (row) => {
   try {
-    await ElMessageBox.confirm('确定要删除这条知识吗？', '提示', { type: 'warning' })
+    await ElMessageBox.confirm($t('aiClassroom.confirmDeleteKnowledge'), $t('aiClassroom.confirm'), { type: 'warning' })
     const res = await api.delete(`/ai-class/knowledge/${row.id}`)
     if (res.code === 0) {
-      ElMessage.success('删除成功')
+      ElMessage.success($t('aiClassroom.deleteSuccess'))
       loadKnowledge()
     } else {
       ElMessage.error(res.message || '删除失败')
@@ -240,10 +241,10 @@ const memoryFormRef = ref(null)
 const memorySaving = ref(false)
 
 const memoryTypeOptions = [
-  { value: 'fact', label: '事实' },
-  { value: 'preference', label: '偏好' },
-  { value: 'context', label: '上下文' },
-  { value: 'summary', label: '摘要' },
+  { value: 'fact', label: $t('aiClassroom.fact') },
+  { value: 'preference', label: $t('aiClassroom.preference') },
+  { value: 'context', label: $t('aiClassroom.context') },
+  { value: 'summary', label: $t('aiClassroom.summary') },
 ]
 
 const memoryRules = {
@@ -260,7 +261,7 @@ const loadMemories = async () => {
     if (publicRes.code === 0) publicMemories.value = publicRes.data || []
     if (privateRes.code === 0) privateMemories.value = privateRes.data || []
   } catch (e) {
-    ElMessage.error('加载记忆失败')
+    ElMessage.error($t('aiClassroom.loadMemoryFailed'))
   } finally {
     memoryLoading.value = false
   }
@@ -282,7 +283,7 @@ const saveMemory = async () => {
         content: memoryForm.value.content,
       })
       if (res.code === 0) {
-        ElMessage.success('添加成功')
+        ElMessage.success($t('aiClassroom.addSuccess'))
         memoryDialogVisible.value = false
         loadMemories()
       } else {
@@ -298,10 +299,10 @@ const saveMemory = async () => {
 
 const deleteMemory = async (row) => {
   try {
-    await ElMessageBox.confirm('确定要删除这条记忆吗？', '提示', { type: 'warning' })
+    await ElMessageBox.confirm($t('aiClassroom.confirmDeleteMemory'), $t('aiClassroom.confirm'), { type: 'warning' })
     const res = await api.delete(`/ai-class/memory/${row.id}`)
     if (res.code === 0) {
-      ElMessage.success('删除成功')
+      ElMessage.success($t('aiClassroom.deleteSuccess'))
       loadMemories()
     } else {
       ElMessage.error(res.message || '删除失败')
@@ -312,7 +313,7 @@ const deleteMemory = async (row) => {
 }
 
 const getMemoryTypeLabel = (type) => {
-  const map = { fact: '事实', preference: '偏好', context: '上下文', summary: '摘要' }
+  const map = { fact: t('aiClassroom.fact'), preference: t('aiClassroom.preference'), context: t('aiClassroom.context'), summary: t('aiClassroom.summary') }
   return map[type] || type
 }
 
@@ -329,21 +330,21 @@ onMounted(() => {
     <!-- Header -->
     <div class="page-header">
       <div class="header-left">
-        <h2 class="page-title">AI 课堂</h2>
+        <h2 class="page-title">{{ $t('nav.aiClassroom') }}</h2>
       </div>
     </div>
 
     <!-- Tabs -->
     <div class="tab-container">
       <el-tabs v-model="activeTab" class="ai-tabs">
-        <!-- Tab1: AI对话 -->
-        <el-tab-pane label="AI 对话" name="chat">
+// Tab1: AI Chat
+        <el-tab-pane :label="$t('aiClassroom.chatTab')" name="chat">
           <div class="chat-panel">
             <!-- Chat Header -->
             <div class="chat-header">
               <div class="user-info">
                 <span class="material-symbols-outlined">person</span>
-                <span>{{ currentUser?.name || '未登录' }}</span>
+                <span>{{ currentUser?.name || $t('aiClassroom.notLoggedIn') }}</span>
               </div>
               <button class="btn-clear" @click="clearMessages">
                 <span class="material-symbols-outlined">delete_sweep</span>
@@ -454,13 +455,13 @@ onMounted(() => {
         </el-tab-pane>
 
         <!-- Tab3: 记忆管理 -->
-        <el-tab-pane v-if="showMemoryTab" label="记忆管理" name="memory">
+        <el-tab-pane v-if="showMemoryTab" :label="$t('aiClassroom.memoryTab')" name="memory">
           <div class="memory-panel">
             <!-- Toolbar -->
             <div class="panel-toolbar">
-              <h4 class="section-title">记忆管理</h4>
+              <h4 class="section-title">{{ $t('aiClassroom.memoryManagement') }}</h4>
               <el-button type="primary" @click="openMemoryAdd">
-                <span class="material-symbols-outlined">add</span> 新增记忆
+                <span class="material-symbols-outlined">add</span> {{ $t('aiClassroom.addMemory') }}
               </el-button>
             </div>
 
@@ -470,10 +471,10 @@ onMounted(() => {
               <div class="memory-col">
                 <div class="col-header">
                   <span class="material-symbols-outlined">public</span>
-                  公共记忆
+                  {{ $t('aiClassroom.publicMemory') }}
                 </div>
                 <div v-loading="memoryLoading" class="memory-list">
-                  <div v-if="publicMemories.length === 0" class="memory-empty">暂无公共记忆</div>
+                  <div v-if="publicMemories.length === 0" class="memory-empty">{{ $t('aiClassroom.noPublicMemory') }}</div>
                   <div v-for="item in publicMemories" :key="item.id" class="memory-card">
                     <div class="memory-card-header">
                       <span class="memory-type-tag">{{ getMemoryTypeLabel(item.memory_type) }}</span>
@@ -490,10 +491,10 @@ onMounted(() => {
               <div class="memory-col">
                 <div class="col-header">
                   <span class="material-symbols-outlined">person</span>
-                  我的私人记忆
+                  {{ $t('aiClassroom.privateMemory') }}
                 </div>
                 <div v-loading="memoryLoading" class="memory-list">
-                  <div v-if="privateMemories.length === 0" class="memory-empty">暂无私人记忆</div>
+                  <div v-if="privateMemories.length === 0" class="memory-empty">{{ $t('aiClassroom.noPrivateMemory') }}</div>
                   <div v-for="item in privateMemories" :key="item.id" class="memory-card">
                     <div class="memory-card-header">
                       <span class="memory-type-tag">{{ getMemoryTypeLabel(item.memory_type) }}</span>
@@ -512,44 +513,44 @@ onMounted(() => {
     </div>
 
     <!-- 知识库弹窗 -->
-    <el-dialog v-model="knowledgeDialogVisible" :title="knowledgeForm.id ? '编辑知识' : '新增知识'" width="560px" destroy-on-close>
+    <el-dialog v-model="knowledgeDialogVisible" :title="knowledgeForm.id ? $t('aiClassroom.editKnowledge') : $t('aiClassroom.addKnowledge')" width="560px" destroy-on-close>
       <el-form ref="knowledgeFormRef" :model="knowledgeForm" :rules="knowledgeRules" label-width="80px" class="ai-form">
-        <el-form-item label="标题" prop="title">
-          <el-input v-model="knowledgeForm.title" placeholder="请输入标题" />
+        <el-form-item :label="$t('aiClassroom.title')" prop="title">
+          <el-input v-model="knowledgeForm.title" placeholder="{{ $t('aiClassroom.enterTitle') }}" />
         </el-form-item>
-        <el-form-item label="内容" prop="content">
-          <el-input v-model="knowledgeForm.content" type="textarea" :rows="4" placeholder="请输入内容" />
+        <el-form-item :label="$t('aiClassroom.content')" prop="content">
+          <el-input v-model="knowledgeForm.content" type="textarea" :rows="4" placeholder="{{ $t('aiClassroom.enterContent') }}" />
         </el-form-item>
-        <el-form-item label="类型" prop="doc_type">
+        <el-form-item :label="$t('aiClassroom.type')" prop="doc_type">
           <el-select v-model="knowledgeForm.doc_type" class="full-width">
             <el-option v-for="opt in docTypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
           </el-select>
         </el-form-item>
-        <el-form-item label="是否公开" prop="is_public">
+        <el-form-item :label="$t('aiClassroom.isPublic')" prop="is_public">
           <el-switch v-model="knowledgeForm.is_public" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="knowledgeDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="knowledgeSaving" @click="saveKnowledge">保存</el-button>
+        <el-button @click="knowledgeDialogVisible = false">{{ $t('aiClassroom.cancel') }}</el-button>
+        <el-button type="primary" :loading="knowledgeSaving" @click="saveKnowledge">{{ $t('aiClassroom.save') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 记忆弹窗 -->
-    <el-dialog v-model="memoryDialogVisible" title="新增记忆" width="500px" destroy-on-close>
+    <el-dialog v-model="memoryDialogVisible" :title="$t('aiClassroom.addMemory')" width="500px" destroy-on-close>
       <el-form ref="memoryFormRef" :model="memoryForm" :rules="memoryRules" label-width="80px" class="ai-form">
-        <el-form-item label="记忆类型" prop="memory_type">
+        <el-form-item :label="$t('aiClassroom.memoryType')" prop="memory_type">
           <el-select v-model="memoryForm.memory_type" class="full-width">
             <el-option v-for="opt in memoryTypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
           </el-select>
         </el-form-item>
-        <el-form-item label="内容" prop="content">
-          <el-input v-model="memoryForm.content" type="textarea" :rows="4" placeholder="请输入记忆内容" />
+        <el-form-item :label="$t('aiClassroom.content')" prop="content">
+          <el-input v-model="memoryForm.content" type="textarea" :rows="4" placeholder="{{ $t('aiClassroom.enterMemoryContent') }}" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="memoryDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="memorySaving" @click="saveMemory">保存</el-button>
+        <el-button @click="memoryDialogVisible = false">{{ $t('aiClassroom.cancel') }}</el-button>
+        <el-button type="primary" :loading="memorySaving" @click="saveMemory">{{ $t('aiClassroom.save') }}</el-button>
       </template>
     </el-dialog>
   </div>
