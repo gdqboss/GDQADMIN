@@ -265,6 +265,14 @@ router.post('/chat', auth, async (req, res, next) => {
     const baseUrl = llmConfig?.base_url || 'http://100.74.233.52:1234/v1'
     const model = llmConfig?.model || 'qwen/qwen3-vl-8b'
 
+    // 6. 获取用户权限（用于AI智能过滤）
+    const [[userRow]] = await pool.query(
+      'SELECT name, permissions FROM users WHERE id = ?',
+      [userId]
+    )
+    const userPermissions = userRow?.permissions ? JSON.parse(userRow.permissions) : []
+    const userName = userRow?.name || ''
+
     // 6. 增强的System Prompt（>500字，通用多租户系统）
     const systemPrompt = `你是${botName}，一个通用的企业管理助手，服务于多个企业客户。
 
@@ -275,27 +283,71 @@ router.post('/chat', auth, async (req, res, next) => {
 3. **使用用户的真实称呼**：在记忆中找到用户姓名则用姓名称呼，否则用"您"；不要假设用户是任何人。
 4. **保护隐私**：不主动询问隐私，不透露其他用户信息。
 5. **多轮对话连贯**：结合历史对话和记忆，避免重复询问已确认的信息。
+6. **权限智能过滤**：如果用户询问的功能没有对应权限，明确告知"您没有权限访问该功能"。
 
-## 二、知识库系统
+## 二、系统模块知识（彩美特管理系统功能覆盖）
+
+当用户询问以下功能时，请主动使用对应的Function Calling查询数据：
+
+### 2.1 考勤打卡（attendance）
+- 打卡记录表字段：user_id, date, clock_in, clock_out, status(normal/late/early/absent/leave), late_minutes, early_minutes, overtime_hours, location, device_info, check_in_time, check_out_time
+- 查询今日考勤：SELECT * FROM attendance WHERE user_id=? AND date=CURDATE()
+- 查询本月考勤：SELECT * FROM attendance WHERE user_id=? AND date BETWEEN DATE_FORMAT(NOW(),'%Y-%m-01') AND LAST_DAY(NOW())
+- 注意：没有quick-action-check-in权限的用户不能使用打卡功能
+
+### 2.2 工作日志（work_logs）
+- 字段：id, user_id, title, content, work_date, status, created_at, updated_at
+- 查询用户日志：SELECT * FROM work_logs WHERE user_id=? ORDER BY work_date DESC LIMIT 10
+- 没有quick-action-worklog权限的用户不能使用工作日志功能
+
+### 2.3 任务管理（tasks）
+- 字段：id, title, description, assignee_id, creator_id, status, priority, due_date, created_at
+- 查询我的任务：SELECT * FROM tasks WHERE assignee_id=? ORDER BY created_at DESC LIMIT 10
+- 没有quick-action-task权限的用户不能使用任务管理功能
+
+### 2.4 报销申请（expense_records）
+- 字段：id, user_id, amount, category, description, status, created_at
+- 查询我的报销：SELECT * FROM expense_records WHERE user_id=? ORDER BY created_at DESC LIMIT 10
+- 没有quick-action-reimbursement权限的用户不能使用报销功能
+
+### 2.5 产品与库存
+- products表：id, name, category, price, unit, status
+- inventory表：product_id, quantity, warehouse_id
+- 可用Function：get_products, get_inventory
+
+### 2.6 权限说明
+当前用户的权限列表：${userPermissions.length > 0 ? userPermissions.join(', ') : '（无 explicit 权限，按角色默认）'}
+
+权限key格式说明：
+- quick-action-check-in = 考勤打卡
+- quick-action-worklog = 工作日志
+- quick-action-task = 我的任务
+- quick-action-reimbursement = 报销申请
+- quick-action-attendance = 考勤记录查看（管理员）
+- quick-action-profile = 个人信息
+
+如果用户询问某个功能，先检查权限列表，如果没有对应权限权限，告知用户。
+
+## 三、知识库系统
 
 知识库存放各企业的产品和业务信息。回答时：
 - 优先从知识库检索相关企业/产品/客服内容
 - 如果知识库中没有该企业的信息，明确告知用户"当前企业知识库中暂无此信息"
 - 知识库是动态的，每个企业不同，不要假设企业业务
 
-## 三、系统数据查询
+## 四、系统数据查询
 
-可通过Function Calling查询实时数据：产品列表、库存、订单、用户信息等。
+可通过Function Calling查询实时数据：产品列表、库存、订单、用户信息、考勤等。
 查询后结合结果回答，不要凭记忆编造数字。
 
-## 四、记忆系统
+## 五、记忆系统
 
 系统有分层记忆：
 - 【系统公共记忆】：所有企业共享的基础信息
 - 【用户相关事实】：该用户的历史信息（姓名、职位、公司等）
 - 【用户偏好】：用户的个人偏好设置
 
-## 五、欢迎语规范
+## 六、欢迎语规范
 
 根据是否有用户姓名判断：
 - 有姓名：使用"您好，{姓名}！我是{botName}，有什么可以帮您？"
@@ -356,6 +408,17 @@ router.post('/chat', auth, async (req, res, next) => {
             user_id: { type: 'integer', description: '用户ID（必填）' }
           },
           required: ['user_id']
+        }
+      },
+      {
+        name: 'get_attendance',
+        description: '查询用户的考勤打卡记录',
+        parameters: {
+          type: 'object',
+          properties: {
+            user_id: { type: 'integer', description: '用户ID（可选，默认当前用户）' },
+            date_range: { type: 'string', description: '日期范围：today/today/month/all（默认today）' }
+          }
         }
       },
       {
@@ -448,6 +511,22 @@ router.post('/chat', auth, async (req, res, next) => {
                   [fnArgs.user_id]
                 )
                 functionResult = JSON.stringify(rows[0] || { message: '未找到用户信息' })
+                break
+              }
+              case 'get_attendance': {
+                const targetUserId = fnArgs.user_id || userId
+                let dateCondition = "date = CURDATE()"
+                if (fnArgs.date_range === 'month') {
+                  dateCondition = "date BETWEEN DATE_FORMAT(NOW(),'%Y-%m-01') AND LAST_DAY(NOW())"
+                } else if (fnArgs.date_range === 'all') {
+                  dateCondition = '1=1'
+                }
+                const [rows] = await pool.query(
+                  `SELECT id, date, clock_in, clock_out, status, late_minutes, early_minutes, overtime_hours, location, check_in_time, check_out_time 
+                   FROM attendance WHERE user_id = ? AND ${dateCondition} ORDER BY date DESC LIMIT 20`,
+                  [targetUserId]
+                )
+                functionResult = JSON.stringify(rows)
                 break
               }
               case 'search_knowledge': {
