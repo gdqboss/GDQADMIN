@@ -87,6 +87,22 @@ export default {
     workLogs: '工作日志',
     visitLogs: '拜访日志',
     shareLogs: '分享日志',
+    knowledgeBase: '知识库管理',
+    memoryManagement: '记忆管理',
+    // 工作台快捷操作
+    qaAttendance: '考勤打卡',
+    qaWorklog: '工作日志',
+    qaTask: '我的任务',
+    qaScan: '扫码销售',
+    qaResponsibility: '我的权责',
+    qaExpense: '报销申请',
+    qaProfile: '个人信息',
+    qaQrcode: '二维码管理',
+    // 权限分组
+    pagePermissions: '页面模块',
+    partners: '合作伙伴',
+    aiSubModules: 'AI子模块',
+    quickActions: '工作台快捷操作',
     feedback: '投诉建议',
     giftApprovals: '赠送审批',
     // Breadcrumb titles

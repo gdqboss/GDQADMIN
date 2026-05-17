@@ -6,7 +6,21 @@ import api from '../services/api.js'
 
 const userStore = useUserStore()
 const currentUser = computed(() => userStore.user)
-const isAdmin = computed(() => userStore.userRole === 'admin')
+const userRole = computed(() => userStore.userRole)
+const userPermissions = computed(() => userStore.user?.permissions || null)
+
+// admin 始终有全部权限；其他角色按 permissions 数组判断
+const isAdmin = computed(() => userRole.value === 'admin')
+
+const canAccess = (key) => {
+  if (isAdmin.value) return true
+  const perms = userPermissions.value
+  return Array.isArray(perms) && perms.includes(key)
+}
+
+// Tab 可见性：知识库管理 / 记忆管理
+const showKnowledgeTab = computed(() => canAccess('knowledge-base'))
+const showMemoryTab = computed(() => canAccess('memory-management'))
 
 // ─── Tab ─────────────────────────────────────────────────────────────────────
 const activeTab = ref('chat')
@@ -16,6 +30,7 @@ const messages = ref([])
 const inputMessage = ref('')
 const sending = ref(false)
 const chatContainer = ref(null)
+const conversationLoaded = ref(false)
 
 const SESSION_KEY = 'ai_classroom_session_id'
 
@@ -39,6 +54,34 @@ const scrollToBottom = () => {
       chatContainer.value.scrollTop = chatContainer.value.scrollHeight
     }
   })
+}
+
+// 加载历史对话
+const loadConversations = async () => {
+  if (conversationLoaded.value) return
+  try {
+    const res = await api.get(`/ai-class/conversations?session_id=${sessionId.value}`)
+    if (res.code === 0 && Array.isArray(res.data)) {
+      messages.value = res.data.map(m => ({
+        role: 'user',
+        content: m.query,
+        time: m.created_at
+      }))
+      // 追加 AI 回复
+      res.data.forEach(m => {
+        messages.value.push({
+          role: 'assistant',
+          content: m.response,
+          time: m.created_at
+        })
+      })
+      scrollToBottom()
+    }
+  } catch (e) {
+    console.error('[AI课堂] 加载对话历史失败:', e)
+  } finally {
+    conversationLoaded.value = true
+  }
 }
 
 const sendMessage = async () => {
@@ -70,6 +113,7 @@ const sendMessage = async () => {
 
 const clearMessages = () => {
   messages.value = []
+  conversationLoaded.value = false
   // generate new session
   const newSid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = Math.random() * 16 | 0
@@ -276,6 +320,7 @@ const getMemoryTypeLabel = (type) => {
 onMounted(() => {
   loadKnowledge()
   loadMemories()
+  loadConversations()
 })
 </script>
 
@@ -349,7 +394,7 @@ onMounted(() => {
         </el-tab-pane>
 
         <!-- Tab2: 知识库管理 -->
-        <el-tab-pane v-if="isAdmin" label="知识库管理" name="knowledge">
+        <el-tab-pane v-if="showKnowledgeTab" label="知识库管理" name="knowledge">
           <div class="knowledge-panel">
             <!-- Toolbar -->
             <div class="panel-toolbar">
@@ -409,7 +454,7 @@ onMounted(() => {
         </el-tab-pane>
 
         <!-- Tab3: 记忆管理 -->
-        <el-tab-pane v-if="isAdmin" label="记忆管理" name="memory">
+        <el-tab-pane v-if="showMemoryTab" label="记忆管理" name="memory">
           <div class="memory-panel">
             <!-- Toolbar -->
             <div class="panel-toolbar">

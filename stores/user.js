@@ -53,6 +53,14 @@ export const useUserStore = defineStore('user', () => {
     } catch { /* token invalid, will redirect */ }
   }
 
+  const isAdmin = computed(() => user.value?.role === 'admin')
+
+  const canAccess = (key) => {
+    if (isAdmin.value) return true
+    const perms = userPermissions.value
+    return Array.isArray(perms) && perms.includes(key)
+  }
+
   const userId = computed(() => user.value?.id || null)
-  return { user, userId, token, isLoggedIn, userName, userRole, userPermissions, login, logout, fetchMe }
+  return { user, userId, token, isLoggedIn, userName, userRole, userPermissions, isAdmin, canAccess, login, logout, fetchMe }
 })

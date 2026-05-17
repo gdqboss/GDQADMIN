@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { ElCollapse, ElCollapseItem } from 'element-plus'
 import PageHeader from '../../components/PageHeader.vue'
 import StatusTag from '../../components/StatusTag.vue'
 import api from '../../services/api.js'
@@ -48,12 +49,62 @@ onMounted(async () => {
   } catch (e) { /* ignore */ }
 })
 
-// ─── Role definitions ──────────────────────────────────────────────────────────
-// ALL_PAGES 由 NAV_PERMISSION_KEYS 驱动，与 Sidebar 导航栏 100% 同步
-// 新增模块只需在 constants/navPermission.js 添加一行
-const ALL_PAGES = computed(() =>
-  NAV_PERMISSION_KEYS.map(p => ({ key: p.key, label: t(p.labelKey) }))
-)
+// 权限分组定义（用于角色编辑弹窗的层级展示）
+const PERMISSION_GROUPS = [
+  {
+    label: 'nav.pagePermissions', // 页面模块
+    children: [
+      { key: 'dashboard',       labelKey: 'nav.dashboard' },
+      { key: 'ai-classroom',   labelKey: 'nav.aiClassroom' },
+      { key: 'excel-analyzer',  labelKey: 'nav.excelAnalyzer' },
+      { key: 'oa',              labelKey: 'nav.oa' },
+      { key: 'finance',         labelKey: 'nav.finance' },
+      { key: 'tasks',           labelKey: 'nav.tasks' },
+      { key: 'qrcode',          labelKey: 'nav.qrcode' },
+      { key: 'products',        labelKey: 'nav.products' },
+      { key: 'in-out',          labelKey: 'nav.inout' },
+      { key: 'warehouses',      labelKey: 'nav.warehouses' },
+      { key: 'alerts',          labelKey: 'nav.alerts' },
+      { key: 'transfer',        labelKey: 'nav.transfer' },
+      { key: 'returns',         labelKey: 'nav.returns' },
+      { key: 'retail',          labelKey: 'nav.retail' },
+      { key: 'gift-approvals',  labelKey: 'nav.giftApprovals' },
+      { key: 'aftersale',       labelKey: 'nav.aftersale' },
+      { key: 'reports',         labelKey: 'nav.reports' },
+    ]
+  },
+  {
+    label: 'nav.partners',
+    children: [
+      { key: 'suppliers', labelKey: 'nav.suppliers' },
+      { key: 'dealers',   labelKey: 'nav.dealers' },
+      { key: 'stores',    labelKey: 'nav.stores' },
+    ]
+  },
+  {
+    label: 'nav.aiSubModules',
+    children: [
+      { key: 'knowledge-base',      labelKey: 'nav.knowledgeBase' },
+      { key: 'memory-management',   labelKey: 'nav.memoryManagement' },
+    ]
+  },
+  {
+    label: 'nav.quickActions',
+    children: [
+      { key: 'quick-action-attendance',   labelKey: 'nav.qaAttendance' },
+      { key: 'quick-action-worklog',      labelKey: 'nav.qaWorklog' },
+      { key: 'quick-action-task',         labelKey: 'nav.qaTask' },
+      { key: 'quick-action-scan',         labelKey: 'nav.qaScan' },
+      { key: 'quick-action-responsibility', labelKey: 'nav.qaResponsibility' },
+      { key: 'quick-action-expense',      labelKey: 'nav.qaExpense' },
+      { key: 'quick-action-profile',      labelKey: 'nav.qaProfile' },
+      { key: 'quick-action-qrcode',       labelKey: 'nav.qaQrcode' },
+    ]
+  },
+]
+
+// ALL_PAGES: 扁平化的所有权限项（用于权限标签展示）
+const ALL_PAGES = PERMISSION_GROUPS.flatMap(g => g.children.map(c => ({ key: c.key, label: c.labelKey })))
 
 const ROLE_LABELS = computed(() => ({ admin: t('settings.roleAdmin'), manager: t('settings.roleManager'), operator: t('settings.roleOperator'), member: t('settings.roleMember'), warehouse: t('settings.roleWarehouse'), custom: t('settings.roleCustom') }))
 const ROLE_COLORS = { admin: 'danger', manager: 'primary', operator: 'info', member: 'success', warehouse: 'warning', custom: 'warning' }
@@ -368,6 +419,17 @@ const editingRole = ref(null)
 const roleForm = ref({ name: '', label: '', permissions: [] })
 const roleLoading = ref(false)
 const roleError = ref('')
+// 权限弹窗折叠状态：默认全部展开
+const activePermissionGroups = ref(PERMISSION_GROUPS.map(g => g.label))
+
+// 统一解析角色权限字段（可能是 JSON 字符串或数组）
+function parsePermissions(perm) {
+  if (Array.isArray(perm)) return perm
+  if (typeof perm === 'string') {
+    try { return JSON.parse(perm) } catch { return [] }
+  }
+  return []
+}
 
 async function loadRoles() {
   rolesLoading.value = true
@@ -391,7 +453,7 @@ function openEditRole(r) {
   roleForm.value = {
     name: r.name,
     label: r.label,
-    permissions: Array.isArray(r.permissions) ? [...r.permissions] : []
+    permissions: [...parsePermissions(r.permissions)]
   }
   roleError.value = ''
   showRoleModal.value = true
@@ -1311,16 +1373,17 @@ async function deleteUser(user) {
               </div>
             </div>
 
-            <div class="mb-3">
+<div class="mb-3">
               <span class="text-xs text-text-secondary">
-                {{ $t('settings.permissionCount') }}{{ Array.isArray(r.permissions) ? r.permissions.length : 0 }}{{ $t('settings.permissionUnit') }}
+                {{ $t('settings.permissionCount') }}{{ parsePermissions(r.permissions).length }}{{ $t('settings.permissionUnit') }}
               </span>
             </div>
 
             <div class="flex flex-wrap gap-1.5">
-              <template v-if="Array.isArray(r.permissions) && r.permissions.length">
+              <template v-if="parsePermissions(r.permissions).length">
                 <span
-                  v-for="pkey in r.permissions" :key="pkey"
+                  v-for="pkey in parsePermissions(r.permissions)"
+                  :key="pkey"
                   class="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded"
                 >{{ ALL_PAGES.find(p => p.key === pkey)?.label || pkey }}</span>
               </template>
@@ -1888,19 +1951,35 @@ async function deleteUser(user) {
               {{ $t('settings.pagePermissions') }}
               <span class="text-xs font-normal text-text-secondary ml-1">{{ $t('settings.pagePermissionsHint') }}</span>
             </label>
-            <div class="grid grid-cols-2 gap-2">
-              <label
-                v-for="page in ALL_PAGES" :key="page.key"
-                :class="['flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer border transition-colors text-sm',
-                  roleForm.permissions.includes(page.key) ? 'border-primary bg-primary/5 text-primary' : 'border-gray-100 text-text-secondary hover:border-gray-200']"
-                @click="toggleRolePermission(page.key)"
+            <ElCollapse v-model="activePermissionGroups" class="permission-collapse">
+              <ElCollapseItem
+                v-for="group in PERMISSION_GROUPS"
+                :key="group.label"
+                :name="group.label"
               >
-                <span class="material-symbols-outlined text-[16px]">
-                  {{ roleForm.permissions.includes(page.key) ? 'check_box' : 'check_box_outline_blank' }}
-                </span>
-                {{ page.label }}
-              </label>
-            </div>
+                <template #title>
+                  <span class="flex items-center gap-2">
+                    <span>{{ $t(group.label) }}</span>
+                    <span class="text-xs text-text-secondary font-normal">
+                      ({{ group.children.filter(c => roleForm.permissions.includes(c.key)).length }}/{{ group.children.length }})
+                    </span>
+                  </span>
+                </template>
+                <div class="grid grid-cols-2 gap-2">
+                  <label
+                    v-for="item in group.children" :key="item.key"
+                    :class="['flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer border transition-colors text-sm',
+                      roleForm.permissions.includes(item.key) ? 'border-primary bg-primary/5 text-primary' : 'border-gray-100 text-text-secondary hover:border-gray-200']"
+                    @click="toggleRolePermission(item.key)"
+                  >
+                    <span class="material-symbols-outlined text-[16px]">
+                      {{ roleForm.permissions.includes(item.key) ? 'check_box' : 'check_box_outline_blank' }}
+                    </span>
+                    {{ $t(item.labelKey) }}
+                  </label>
+                </div>
+              </ElCollapseItem>
+            </ElCollapse>
           </div>
 
           <div v-if="roleError" class="text-sm text-danger bg-red-50 px-3 py-2 rounded-lg">{{ roleError }}</div>
@@ -2021,3 +2100,18 @@ async function deleteUser(user) {
     </div>
   </div>
 </template>
+
+<style scoped>
+.permission-collapse :deep(.el-collapse-item__header) {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding-left: 8px;
+}
+.permission-collapse :deep(.el-collapse-item__wrap) {
+  border-top: none;
+}
+.permission-collapse :deep(.el-collapse-item__content) {
+  padding-bottom: 8px;
+}
+</style>

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import api from '../services/api.js'
@@ -38,15 +38,20 @@ const giftCheckLoading = ref(false)
 
 // ─── Quick Actions ───────────────────────────────────────────────────────────────────
 const quickActions = [
-  { name: '考勤打卡', icon: 'schedule', color: 'success', route: '/oa/attendance' },
-  { name: '工作日志', icon: 'description', color: 'primary', route: '/logs/work-logs' },
-  { name: '我的任务', icon: 'task_alt', color: 'info', route: '/tasks' },
-  { name: '扫码销售', icon: 'qr_code_scanner', color: 'warning', action: 'scan' },
-  { name: '我的权责', icon: 'assignment', color: 'blue', route: '/oa/my-responsibility' },
-  { name: '报销申请', icon: 'receipt_long', color: 'danger', route: '/oa/approvals/create?type=expense' },
-  { name: '个人信息', icon: 'person', color: 'purple', route: '/profile' },
-  { name: '二维码管理', icon: 'qr_code', color: 'teal', route: '/qrcode' },
+  { name: '考勤打卡', icon: 'schedule', color: 'success', route: '/oa/attendance',   permission: 'quick-action-attendance' },
+  { name: '工作日志', icon: 'description', color: 'primary', route: '/logs/work-logs', permission: 'quick-action-worklog' },
+  { name: '我的任务', icon: 'task_alt', color: 'info', route: '/tasks',              permission: 'quick-action-task' },
+  { name: '扫码销售', icon: 'qr_code_scanner', color: 'warning', action: 'scan',     permission: 'quick-action-scan' },
+  { name: '我的权责', icon: 'assignment', color: 'blue', route: '/oa/my-responsibility', permission: 'quick-action-responsibility' },
+  { name: '报销申请', icon: 'receipt_long', color: 'danger', route: '/oa/approvals/create?type=expense', permission: 'quick-action-expense' },
+  { name: '个人信息', icon: 'person', color: 'purple', route: '/profile',            permission: 'quick-action-profile' },
+  { name: '二维码管理', icon: 'qr_code', color: 'teal', route: '/qrcode',           permission: 'quick-action-qrcode' },
 ]
+
+// 按权限过滤显示的快捷操作
+const visibleQuickActions = computed(() =>
+  quickActions.filter(a => userStore.canAccess(a.permission))
+)
 
 // ─── Actions ────────────────────────────────────────────────────────────────────
 const handleQuickAction = (action) => {
@@ -307,7 +312,7 @@ onUnmounted(() => { stopCameraScanner() })
         </div>
         <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
           <button
-            v-for="action in quickActions"
+            v-for="action in visibleQuickActions"
             :key="action.name"
             @click="handleQuickAction(action)"
             class="flex flex-col items-center gap-2 p-3 sm:p-4 rounded-lg border border-gray-200 hover:border-primary hover:bg-primary/5 transition-all group"

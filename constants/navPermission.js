@@ -25,4 +25,16 @@ export const NAV_PERMISSION_KEYS = [
   { key: 'suppliers',       labelKey: 'nav.suppliers' },
   { key: 'dealers',         labelKey: 'nav.dealers' },
   { key: 'stores',          labelKey: 'nav.stores' },
+  // AI课堂子模块权限（不在导航栏显示，仅用于角色管理精细化控制）
+  { key: 'knowledge-base',       labelKey: 'nav.knowledgeBase' },
+  { key: 'memory-management',     labelKey: 'nav.memoryManagement' },
+  // 工作台快捷操作权限（不在导航栏显示，仅用于角色管理精细化控制）
+  { key: 'quick-action-attendance',  labelKey: 'nav.qaAttendance' },
+  { key: 'quick-action-worklog',     labelKey: 'nav.qaWorklog' },
+  { key: 'quick-action-task',        labelKey: 'nav.qaTask' },
+  { key: 'quick-action-scan',         labelKey: 'nav.qaScan' },
+  { key: 'quick-action-responsibility',labelKey: 'nav.qaResponsibility' },
+  { key: 'quick-action-expense',      labelKey: 'nav.qaExpense' },
+  { key: 'quick-action-profile',      labelKey: 'nav.qaProfile' },
+  { key: 'quick-action-qrcode',       labelKey: 'nav.qaQrcode' },
 ]
