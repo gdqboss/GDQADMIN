@@ -9,8 +9,48 @@ import { auth } from '../middleware/auth.js'
 
 const router = Router()
 
+// ==================== 回复格式化函数 ====================
+function formatReply(text) {
+  if (!text || text.length < 5) return text
+
+  // 0. 去掉 standalone 推理标签（文字直接出现）
+  text = text.replace(/<thinking>/gi, '')
+  text = text.replace(/<\/thinking>/gi, '')
+  text = text.replace(/<think>/gi, '')
+  text = text.replace(/<\/think>/gi, '')
+  text = text.replace(/<思考>/gi, '')
+  text = text.replace(/<\/思考>/gi, '')
+
+  // 1. 去掉 <thinking>...</thinking> 推理块
+  text = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+  // 2. 去掉 <思考>...</思考> 推理块
+  text = text.replace(/<思考>[\s\S]*?<\/思考>/gi, '')
+  // 3. 去掉 「<think>...」 推理块
+  text = text.replace(/「<think>[\s\S]*?」/g, '')
+  // 4. 去掉 【推理】...【/推理】类似块
+  text = text.replace(/【推理】[\s\S]*?【\/推理】/g, '')
+  // 5. 去掉 markdown 推理: [reasoning]...[/reasoning]
+  text = text.replace(/\[reasoning\][\s\S]*?\[\/reasoning\]/gi, '')
+  // 6. 去掉独立出现的<think>...（不成对）
+  text = text.replace(/icron\*\s*$/gm, '')
+  text = text.replace(/^icron\*\s*/gm, '')
+  text = text.replace(/<inson>/gi, '')
+  text = text.replace(/<\/inson>/gi, '')
+
+  // 7. 去除多余空行（超过2个换行压缩为2个）
+  text = text.replace(/\n{3,}/g, '\n\n')
+
+  // 8. 去除每行首尾空白，但保留结构
+  text = text.split('\n').map(line => line.trim()).join('\n')
+
+  // 9. 去除首尾空白
+  text = text.trim()
+
+  return text
+}
+
 // ==================== 网络搜索辅助函数（Node.js内置fetch）====================
-const TAVILY_KEY = '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'
+const TAVILY_KEY = process.env.TAVILY_API_KEY
 
 async function search_web(query, engine = 'tavily', max_results = 5) {
   // DuckDuckGo HTML 搜索（免费，无需API key）
@@ -339,10 +379,10 @@ router.post('/chat', auth, async (req, res, next) => {
       'SELECT * FROM ai_config WHERE is_default = 1 AND category = "llm" LIMIT 1'
     )
 
-// MiniMax-M2.7 配置（荣订阅，高速+Function Calling，优先使用）
+// MiniMax-M2.7 配置（波哥主账号，高速+Function Calling）
     const baseUrl = 'https://api.minimax.chat/v1'
     const model = 'MiniMax-M2.7'
-    const miniMaxKey = 'sk-cp-watsOmxIaIG7QXlRhtaUckuwof61boMsF1qdRIjhgmqzc_iq5XdFgrTlq4TzDvJofn65llrWGd3pXPMNkZnbYueV-zyWAE9-nIRHDog5zGK3gmSYEyPtbMg'
+    const miniMaxKey = process.env.MINIMAX_API_KEY
 
     // 6. 获取用户权限（用于AI智能过滤）
     const [[userRow]] = await pool.query(
@@ -447,14 +487,35 @@ router.post('/chat', auth, async (req, res, next) => {
 - 【用户相关事实】：该用户的历史信息（姓名、职位、公司等）
 - 【用户偏好】：用户的个人偏好设置
 
-## 七、MiniMax M2.7 输出规范（重要！）
+## 七、回复格式规范（必须严格执行！）
 
-MiniMax M2.7 是思考型模型，回复中可能包含大量推理过程文字。请严格遵循：
-1. 回复内容只包含直接回答，不要包含类似「让我想想」「根据搜索结果」等引导语
-2. 不要输出类似「<think>...</think>」的推理过程
-3. 结构化回答时用简洁的列表/分段，不要加粗或特殊markdown
-4. 回答结束时直接结束，不要加「还有其他需要帮助的吗」等套话
-5. 如果回答的事实信息，用一句话概括即可，不要展开解释
+你的回复**必须**按以下格式，违反者将被惩罚：
+
+**第一行**：一句话总结答案（不超过30字）
+
+**第二行起**（根据内容选择一种或多种）：
+- **加粗**标注关键数字和指标，如：**今日销售额：12,800元**
+- 用表格呈现多维数据（用纯文本格式，不用代码块）：
+  商品 | 销量 | 库存
+  --- | --- | ---
+  A产品 | 50件 | 200件
+- 用列表列出要点：
+  - 要点1：...
+  - 要点2：...
+
+**严禁**：换行少、流水账、一坨文字、不分段。严禁说"让我想想""根据搜索结果"等废话。严禁输出思考过程。回答完毕直接结束，不要加"还有其他问题吗"。
+
+**格式示例**：
+一句话总结。
+
+**核心数据**
+商品 | 销量 | 销售额
+--- | --- | ---
+螺丝M6 | 120件 | 960元
+
+**要点**
+- 要点1：内容
+- 要点2：内容
 
 ## 八、欢迎语规范
 
@@ -475,113 +536,143 @@ MiniMax M2.7 是思考型模型，回复中可能包含大量推理过程文字�
     // 8. 定义Function Calling工具
     const functions = [
       {
-        name: 'get_products',
-        description: '查询彩美特系统的产品列表，可以按产品名称或分类筛选',
-        parameters: {
-          type: 'object',
-          properties: {
-            keyword: { type: 'string', description: '产品名称关键词（可选）' },
-            category: { type: 'string', description: '产品分类，如"电子产品"、"服装"等（可选）' }
+        type: 'function',
+        function: {
+          name: 'get_products',
+          description: '查询彩美特系统的产品列表，可以按产品名称或分类筛选',
+          parameters: {
+            type: 'object',
+            properties: {
+              keyword: { type: 'string', description: '产品名称关键词（可选）' },
+              category: { type: 'string', description: '产品分类，如"电子产品"、"服装"等（可选）' }
+            }
           }
         }
       },
       {
-        name: 'get_inventory',
-        description: '查询指定产品的库存数量',
-        parameters: {
-          type: 'object',
-          properties: {
-            product_id: { type: 'integer', description: '产品ID（必填）' }
-          },
-          required: ['product_id']
-        }
-      },
-      {
-        name: 'get_orders',
-        description: '查询用户的订单列表',
-        parameters: {
-          type: 'object',
-          properties: {
-            user_id: { type: 'integer', description: '用户ID（必填）' },
-            status: { type: 'string', description: '订单状态筛选，如"pending"、"completed"、"cancelled"（可选）' }
-          },
-          required: ['user_id']
-        }
-      },
-      {
-        name: 'get_user_info',
-        description: '查询用户的基本信息',
-        parameters: {
-          type: 'object',
-          properties: {
-            user_id: { type: 'integer', description: '用户ID（必填）' }
-          },
-          required: ['user_id']
-        }
-      },
-      {
-        name: 'get_attendance',
-        description: '查询用户的考勤打卡记录',
-        parameters: {
-          type: 'object',
-          properties: {
-            user_id: { type: 'integer', description: '用户ID（可选，默认当前用户）' },
-            date_range: { type: 'string', description: '日期范围：today/today/month/all（默认today）' }
+        type: 'function',
+        function: {
+          name: 'get_inventory',
+          description: '查询指定产品的库存数量',
+          parameters: {
+            type: 'object',
+            properties: {
+              product_id: { type: 'integer', description: '产品ID（必填）' }
+            },
+            required: ['product_id']
           }
         }
       },
       {
-        name: 'search_knowledge',
-        description: '在知识库中搜索相关内容，用于回答用户咨询',
-        parameters: {
-          type: 'object',
-          properties: {
-            keyword: { type: 'string', description: '搜索关键词（必填）' }
-          },
-          required: ['keyword']
-        }
-      },
-      {
-        name: 'web_search',
-        description: '搜索互联网获取最新信息（商业新闻/行业动态/公司信息/天气预报等），当用户询问实时新闻、行业趋势、最新政策法规、天气预报等需要最新互联网数据的问题时使用',
-        parameters: {
-          type: 'object',
-          properties: {
-            query: { type: 'string', description: '搜索关键词（必填）' },
-            max_results: { type: 'integer', description: '结果数量，默认5' }
-          },
-          required: ['query']
-        }
-      },
-      {
-        name: 'get_sales_report',
-        description: '查询销售报表数据（需要quick-action-sales权限），返回销售额/订单数/客户数等统计',
-        parameters: {
-          type: 'object',
-          properties: {
-            date_range: { type: 'string', description: '日期范围：today/month/quarter/year（默认month）' },
-            category: { type: 'string', description: '产品分类筛选（可选）' }
+        type: 'function',
+        function: {
+          name: 'get_orders',
+          description: '查询用户的订单列表',
+          parameters: {
+            type: 'object',
+            properties: {
+              user_id: { type: 'integer', description: '用户ID（必填）' },
+              status: { type: 'string', description: '订单状态筛选，如"pending"、"completed"、"cancelled"（可选）' }
+            },
+            required: ['user_id']
           }
         }
       },
       {
-        name: 'get_inventory_alert',
-        description: '查询库存预警数据（需要quick-action-inventory权限），返回低于安全库存的产品列表',
-        parameters: {
-          type: 'object',
-          properties: {}
+        type: 'function',
+        function: {
+          name: 'get_user_info',
+          description: '查询用户的基本信息',
+          parameters: {
+            type: 'object',
+            properties: {
+              user_id: { type: 'integer', description: '用户ID（必填）' }
+            },
+            required: ['user_id']
+          }
         }
       },
       {
-        name: 'hermes_delegate',
-        description: '委托Hermes Agent执行复杂任务（如代码编写、数据分析、报告生成、深入研究），适用于多步骤、需要搜索、多文件处理的任务',
-        parameters: {
-          type: 'object',
-          properties: {
-            task: { type: 'string', description: '任务描述（必填），说明要让Hermes做什么，包含足够的上下文信息' },
-            toolsets: { type: 'string', description: '需要的工具集，可用：web,terminal,file,browser,vision（逗号分隔，默认web,terminal,file）' }
-          },
-          required: ['task']
+        type: 'function',
+        function: {
+          name: 'get_attendance',
+          description: '查询用户的考勤打卡记录',
+          parameters: {
+            type: 'object',
+            properties: {
+              user_id: { type: 'integer', description: '用户ID（可选，默认当前用户）' },
+              date_range: { type: 'string', description: '日期范围：today/today/month/all（默认today）' }
+            }
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'search_knowledge',
+          description: '在知识库中搜索相关内容，用于回答用户咨询',
+          parameters: {
+            type: 'object',
+            properties: {
+              keyword: { type: 'string', description: '搜索关键词（必填）' }
+            },
+            required: ['keyword']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'web_search',
+          description: '搜索互联网获取最新信息（商业新闻/行业动态/公司信息/天气预报等），当用户询问实时新闻、行业趋势、最新政策法规、天气预报等需要最新互联网数据的问题时使用',
+          parameters: {
+            type: 'object',
+            properties: {
+              query: { type: 'string', description: '搜索关键词（必填）' },
+              max_results: { type: 'integer', description: '结果数量，默认5' }
+            },
+            required: ['query']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'get_sales_report',
+          description: '查询销售报表数据（需要quick-action-sales权限），返回销售额/订单数/客户数等统计',
+          parameters: {
+            type: 'object',
+            properties: {
+              date_range: { type: 'string', description: '日期范围：today/month/quarter/year（默认month）' },
+              category: { type: 'string', description: '产品分类筛选（可选）' }
+            }
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'get_inventory_alert',
+          description: '查询库存预警数据（需要quick-action-inventory权限），返回低于安全库存的产品列表',
+          parameters: {
+            type: 'object',
+            properties: {}
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'hermes_delegate',
+          description: '委托Hermes Agent执行复杂任务（如代码编写、数据分析、报告生成、深入研究），适用于多步骤、需要搜索、多文件处理的任务',
+          parameters: {
+            type: 'object',
+            properties: {
+              task: { type: 'string', description: '任务描述（必填），说明要让Hermes做什么，包含足够的上下文信息' },
+              toolsets: { type: 'string', description: '需要的工具集，可用：web,terminal,file,browser,vision（逗号分隔，默认web,terminal,file）' }
+            },
+            required: ['task']
+          }
         }
       }
     ]
@@ -604,9 +695,9 @@ MiniMax M2.7 是思考型模型，回复中可能包含大量推理过程文字�
           messages: [
             { role: 'user', content: fullPrompt }
           ],
-          functions: functions,
-          max_tokens: 1500,
-          temperature: 0.7
+          tools: functions,
+          max_tokens: 3000,
+          temperature: 0.3
         }),
         signal: controller.signal
       })
@@ -776,13 +867,13 @@ MiniMax M2.7 是思考型模型，回复中可能包含大量推理过程文字�
                 { role: 'user', content: fullPrompt },
                 assistantMessage,
                 {
-                  role: 'function',
-                  name: fnName,
+                  role: 'tool',
+                  tool_call_id: assistantMessage.tool_calls?.[0]?.id || 'default',
                   content: functionResult
                 }
               ],
-              max_tokens: 1000,
-              temperature: 0.7
+              max_tokens: 1500,
+              temperature: 0.3
             }),
             signal: controller2.signal
           })
@@ -791,9 +882,11 @@ MiniMax M2.7 是思考型模型，回复中可能包含大量推理过程文字�
           if (response2.ok) {
             const data2 = await response2.json()
             reply = data2.choices?.[0]?.message?.content || reply
+            reply = formatReply(reply)
           }
         } else {
           reply = assistantMessage?.content || reply
+          reply = formatReply(reply)
         }
       } else {
         console.error('[ai-class] LLM API error:', response.status, await response.text())
