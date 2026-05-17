@@ -1,7 +1,8 @@
 import { createI18n } from 'vue-i18n'
 import zh from './zh.js'
+import en from './en.js'
 
-// 默认只用 zh（主语言），en 按需动态加载
+// 默认只用 zh（主语言），en 按需加载减少首屏体积
 let savedLocale = 'zh'
 try {
   const stored = localStorage.getItem('caimeite_locale')
@@ -10,35 +11,36 @@ try {
   }
 } catch (e) {}
 
-const loadedLocales = { zh }
+// 已加载的语言包缓存
+const loadedLocales = { zh, en }
 
 const i18n = createI18n({
   legacy: false,
   locale: savedLocale,
   fallbackLocale: 'zh',
-  messages: loadedLocales,
+  messages: { zh },   // 先只注册 zh
   globalInjection: true,
   missingWarn: false,
   fallbackWarn: false,
   missing: () => '',
 })
 
-// 语言切换：动态 import 次语言包，已加载则跳过
-i18n.setLocaleMessage = async (locale) => {
-  if (loadedLocales[locale]) {
-    i18n.global.locale.value = locale
-    return
+// 语言切换（同步，因为 en 已预加载）
+i18n.setLocaleMessage = (locale) => {
+  if (!loadedLocales[locale]) return
+  if (!i18n.global.messages.value[locale]) {
+    i18n.global.messages.value[locale] = loadedLocales[locale]
   }
-  const mod = await import(/* @vite-ignore */ `./${locale}.js`)
-  loadedLocales[locale] = mod.default
   i18n.global.locale.value = locale
 }
 
-// 初始化：如果上次选了 en，立即后台预加载（不等渲染）
-if (savedLocale === 'en') {
-  import('./en.js').then(mod => {
-    loadedLocales.en = mod.default
-  }).catch(() => {})
-}
+// 立即预加载 en（后台异步，不阻塞渲染）
+import('./en.js').then(mod => {
+  loadedLocales.en = mod.default
+  // 如果当前 locale 是 en，注入到 i18n
+  if (i18n.global.locale.value === 'en') {
+    i18n.global.messages.value.en = mod.default
+  }
+}).catch(() => {})
 
 export default i18n
