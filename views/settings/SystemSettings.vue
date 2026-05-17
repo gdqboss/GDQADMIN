@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElCollapse, ElCollapseItem } from 'element-plus'
@@ -23,6 +23,53 @@ const jobLevels = ref([])
 const responsibilities = ref([])
 // 获取部门名称
 function getDepartmentName(deptId) { if (!deptId) return ""; const dept = departments.value.find(d => d.id === Number(deptId)); return dept ? dept.name : ""; }
+
+// ─── Customer Management ───────────────────────────────────────────────────
+const customerStats = ref({ total_customers: 0, by_level: [] })
+const customerList = ref([])
+const customerLoading = ref(false)
+const selectedLevelFilter = ref('')
+const customerSearch = ref('')
+
+async function loadCustomerStats() {
+  try {
+    const res = await api.get('/customer-level/stats')
+    if (res.code === 0) customerStats.value = res.data
+  } catch (e) { /* ignore */ }
+}
+
+async function loadCustomerList() {
+  customerLoading.value = true
+  try {
+    const params = {}
+    if (selectedLevelFilter.value) params.level = selectedLevelFilter.value
+    if (customerSearch.value) params.keyword = customerSearch.value
+    const res = await api.get('/customer-level/list', { params })
+    if (res.code === 0) customerList.value = res.data
+  } catch (e) { /* ignore */ }
+  finally { customerLoading.value = false }
+}
+
+async function recalculateCustomerLevels() {
+  try {
+    const res = await api.post('/customer-level/calculate')
+    if (res.code === 0) {
+      alert(t('settings.levelRecalculated'))
+      await loadCustomerStats()
+      await loadCustomerList()
+    }
+  } catch (e) { alert(e.message) }
+}
+
+function getLevelLabel(code) {
+  const map = { VIP: t('settings.vipCustomer'), KEY: t('settings.keyCustomer'), NORMAL: t('settings.normalCustomer'), RISK: t('settings.riskCustomer') }
+  return map[code] || code || '未分类'
+}
+
+function getLevelColor(code) {
+  const map = { VIP: 'danger', KEY: 'warning', NORMAL: 'info', RISK: 'danger' }
+  return map[code] || 'info'
+}
 
 
 onMounted(async () => {
@@ -614,7 +661,7 @@ const tabs = computed(() => [
   { key: 'users',                label: t('settings.userList'),            icon: 'people' },
   { key: 'departments',          label: t('settings.deptManage'),          icon: 'corporate_fare' },
   { key: 'job-levels',           label: t('settings.levelManage'),         icon: 'military_tech' },
-  { key: 'job-responsibilities', label: t('nav.jobResponsibilities'),      icon: 'assignment' },
+  { key: 'customers',            label: t('settings.customerManage'),      icon: 'group' },
   { key: 'manage-roles',         label: t('settings.roleManage'),          icon: 'shield' },
   { key: 'payment',              label: t('settings.paymentSettings'),     icon: 'payments' },
   { key: 'ai-config',            label: t('settings.aiConfig'),            icon: 'smart_toy' },
@@ -626,7 +673,12 @@ function switchTab(key) {
   if (key === 'departments' && departments.value.length === 0) loadDepartments()
   if (key === 'job-levels' && jobLevels.value.length === 0) loadJobLevels()
   if (key === 'ai-config' && aiConfigs.value.length === 0) loadAiConfigs()
+  if (key === 'customers') { loadCustomerStats(); loadCustomerList() }
 }
+
+watch([selectedLevelFilter, customerSearch], () => {
+  loadCustomerList()
+})
 
 // ─── Payment Settings ─────────────────────────────────────────────────────────
 const paymentConfig = ref({
@@ -891,7 +943,7 @@ const levelLoading = ref(false)
 const levelError = ref('')
 const showLevelModal = ref(false)
 const editingLevel = ref(null)
-const levelForm = ref({ name: '', level: 1, description: '' })
+const levelForm = ref({ name: '', level: 1, description: '', responsibility_desc: '' })
 
 async function loadResponsibilities() { try { const res = await api.get("/users/responsibilities/list"); if (res.code === 0) responsibilities.value = res.data || []; } catch(e) {} }
 async function loadJobLevels() {
@@ -910,7 +962,7 @@ async function loadJobLevels() {
 
 function openAddLevel() {
   editingLevel.value = null
-  levelForm.value = { name: '', level: 1, description: '' }
+  levelForm.value = { name: '', level: 1, description: '', responsibility_desc: '' }
   levelError.value = ''
   showLevelModal.value = true
 }
@@ -920,7 +972,8 @@ function openEditLevel(level) {
   levelForm.value = {
     name: level.name,
     level: level.level,
-    description: level.description || ''
+    description: level.description || '',
+    responsibility_desc: level.responsibility_desc || ''
   }
   levelError.value = ''
   showLevelModal.value = true
@@ -1190,6 +1243,7 @@ async function deleteUser(user) {
                 <th class="px-4 py-3 font-medium">{{ $t('settings.levelName') }}</th>
                 <th class="px-4 py-3 font-medium">{{ $t('settings.grade') }}</th>
                 <th class="px-4 py-3 font-medium">{{ $t('common.description') }}</th>
+                <th class="px-4 py-3 font-medium">{{ $t('settings.responsibilityDesc') }}</th>
                 <th class="px-4 py-3 font-medium text-right">{{ $t('common.action') }}</th>
               </tr>
             </thead>
@@ -1198,6 +1252,7 @@ async function deleteUser(user) {
                 <td class="px-4 py-3 font-medium text-text-primary">{{ level.name }}</td>
                 <td class="px-4 py-3 text-text-secondary">{{ level.level }}</td>
                 <td class="px-4 py-3 text-text-secondary">{{ level.description || '-' }}</td>
+                <td class="px-4 py-3 text-text-secondary text-sm">{{ level.responsibility_desc || '-' }}</td>
                 <td class="px-4 py-3 text-right space-x-3">
                   <button @click="openEditLevel(level)" class="text-primary hover:text-primary-hover text-xs font-medium">{{ $t('common.edit') }}</button>
                   <button @click="deleteLevel(level)" class="text-danger hover:text-red-700 text-xs font-medium">{{ $t('common.delete') }}</button>
@@ -1325,6 +1380,106 @@ async function deleteUser(user) {
             @click="addCategory"
             class="text-white bg-primary hover:bg-primary-hover text-xs font-medium px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap shrink-0"
           >{{ $t('settings.addTopCategory') }}</button>
+        </div>
+      </div>
+
+      <!-- ── Customer Management ── -->
+      <div v-if="activeTab === 'customers'" class="p-6">
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+          <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4">
+            <div class="flex items-center gap-2">
+              <div class="size-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                <span class="material-symbols-outlined text-primary text-[18px]">group</span>
+              </div>
+              <div>
+                <p class="text-xl font-bold text-text-primary">{{ customerStats.total_customers }}</p>
+                <p class="text-[10px] text-text-secondary">{{ $t('settings.totalCustomers') }}</p>
+              </div>
+            </div>
+          </div>
+          <div v-for="lv in customerStats.by_level" :key="lv.level"
+            class="bg-white rounded-lg border border-gray-100 shadow-card p-4">
+            <div class="flex items-center gap-2">
+              <div :class="['size-9 rounded-lg flex items-center justify-center', `bg-${getLevelColor(lv.level)}/10`]">
+                <span :class="['material-symbols-outlined text-[18px]', `text-${getLevelColor(lv.level)}`]">star</span>
+              </div>
+              <div>
+                <p class="text-xl font-bold text-text-primary">{{ lv.customer_count }}</p>
+                <p class="text-[10px] text-text-secondary">{{ getLevelLabel(lv.level) }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="flex flex-wrap items-center gap-3 mb-4">
+          <div class="relative flex-1 min-w-[200px]">
+            <span class="material-symbols-outlined text-[18px] text-text-secondary absolute left-3 top-1/2 -translate-y-1/2">search</span>
+            <input v-model="customerSearch" type="text" :placeholder="$t('settings.customerPhone') + ' / ' + $t('settings.customerName')"
+              class="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+          </div>
+          <select v-model="selectedLevelFilter" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+            <option value="">{{ $t('settings.allLevels') }}</option>
+            <option value="VIP">{{ $t('settings.vipCustomer') }}</option>
+            <option value="KEY">{{ $t('settings.keyCustomer') }}</option>
+            <option value="NORMAL">{{ $t('settings.normalCustomer') }}</option>
+            <option value="RISK">{{ $t('settings.riskCustomer') }}</option>
+          </select>
+          <button @click="loadCustomerList"
+            class="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-text-primary px-4 py-2 rounded-lg text-sm transition-colors">
+            <span class="material-symbols-outlined text-[18px]">refresh</span>
+          </button>
+          <button @click="recalculateCustomerLevels"
+            class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            <span class="material-symbols-outlined text-[18px]">refresh</span>
+            {{ $t('settings.recalculateLevel') }}
+          </button>
+        </div>
+
+        <!-- Table -->
+        <div class="bg-white rounded-lg border border-gray-100 shadow-card overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
+                <tr>
+                  <th class="px-4 py-3 font-medium">{{ $t('settings.customerPhone') }}</th>
+                  <th class="px-4 py-3 font-medium">{{ $t('settings.customerName') }}</th>
+                  <th class="px-4 py-3 font-medium text-center">{{ $t('settings.totalAmount') }}</th>
+                  <th class="px-4 py-3 font-medium text-center">{{ $t('settings.monthlyAmount') }}</th>
+                  <th class="px-4 py-3 font-medium text-center">{{ $t('settings.orderCount') }}</th>
+                  <th class="px-4 py-3 font-medium text-center">{{ $t('settings.avgOrderAmount') }}</th>
+                  <th class="px-4 py-3 font-medium text-center">{{ $t('settings.currentLevel') }}</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <tr v-if="customerLoading">
+                  <td colspan="7" class="px-4 py-8 text-center text-text-secondary">{{ $t('common.loading') }}</td>
+                </tr>
+                <tr v-else-if="!customerList.length">
+                  <td colspan="7" class="px-4 py-8 text-center text-text-secondary">{{ $t('settings.noCustomerData') }}</td>
+                </tr>
+                <tr v-else v-for="c in customerList" :key="c.customer_phone"
+                  class="hover:bg-gray-50 transition-colors">
+                  <td class="px-4 py-3 font-mono text-sm text-primary">{{ c.customer_phone }}</td>
+                  <td class="px-4 py-3 text-text-primary font-medium">{{ c.customer_name || '-' }}</td>
+                  <td class="px-4 py-3 text-center text-text-primary">¥{{ Number(c.total_amount || 0).toFixed(2) }}</td>
+                  <td class="px-4 py-3 text-center text-text-primary">¥{{ Number(c.monthly_amount || 0).toFixed(2) }}</td>
+                  <td class="px-4 py-3 text-center text-text-secondary">{{ c.order_count }}</td>
+                  <td class="px-4 py-3 text-center text-text-secondary">¥{{ Number(c.avg_order_amount || 0).toFixed(2) }}</td>
+                  <td class="px-4 py-3 text-center">
+                    <span :class="['inline-flex items-center px-2 py-0.5 rounded text-xs font-medium',
+                      c.current_level === 'VIP' ? 'bg-danger/10 text-danger' :
+                      c.current_level === 'KEY' ? 'bg-warning/10 text-warning' :
+                      c.current_level === 'RISK' ? 'bg-danger/10 text-danger' :
+                      'bg-info/10 text-info']">
+                      {{ getLevelLabel(c.current_level) }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -1776,6 +1931,10 @@ async function deleteUser(user) {
           <div>
             <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('common.description') }}</label>
             <textarea v-model="levelForm.description" :placeholder="$t('settings.levelDescPlaceholder')" rows="3" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"></textarea>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('settings.responsibilityDesc') }}</label>
+            <textarea v-model="levelForm.responsibility_desc" :placeholder="$t('settings.responsibilityDescPlaceholder')" rows="3" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"></textarea>
           </div>
           <div v-if="levelError" class="text-sm text-danger bg-red-50 px-3 py-2 rounded-lg">{{ levelError }}</div>
         </div>

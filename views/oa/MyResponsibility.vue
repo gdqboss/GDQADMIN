@@ -32,29 +32,21 @@ const responsibility = ref(null)
 
 onMounted(async () => {
   try {
-    // 直接调用后端API获取用户信息
     const userRes = await api.get('/auth/me')
-    console.log('用户信息响应:', userRes)
-    
     if (!userRes || userRes.code !== 0) {
-      console.error('获取用户信息失败', userRes)
       loading.value = false
       return
     }
-    
     const user = userRes.data
-    console.log('用户:', user)
-    
-    // 获取权责列表
-    const respRes = await api.get('/job-responsibilities')
-    console.log('权责列表:', respRes)
-    
-    if (respRes && respRes.code === 0) {
-      const list = respRes.data || []
-      // 只用responsibility_id，默认显示公司职员(7)
-      const userRespId = user.responsibility_id ? parseInt(user.responsibility_id) : 7
-      responsibility.value = list.find(r => r.id === parseInt(userRespId)) || list.find(r => r.id === 7)
-      console.log('匹配的权责:', responsibility.value)
+    // 从职级的 responsibility_desc 获取权责说明（job_level_id 实际对应 job_levels.level）
+    if (user.job_level_id) {
+      const levelsRes = await api.get('/users/job-levels/list')
+      if (levelsRes && levelsRes.code === 0) {
+        const level = (levelsRes.data || []).find(l => String(l.level) === String(user.job_level_id))
+        if (level?.responsibility_desc) {
+          responsibility.value = { title: level.name, description: level.responsibility_desc }
+        }
+      }
     }
   } catch (e) {
     console.error('加载权责失败:', e)
