@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUserStore } from '../../stores/user'
 import api from '../../services/api.js'
@@ -24,6 +24,12 @@ const showReviewModal = ref(false)
 const selectedTask = ref(null)
 const statusFilter = ref('all')
 const priorityFilter = ref('all')
+
+// 筛选变化时自动重新加载列表（不走前端computed过滤，直接请求API）
+watch([statusFilter, priorityFilter], () => {
+  if (activeTab.value === 'my-tasks') loadMyTasks()
+  else if (activeTab.value === 'assigned-tasks') loadAssignedTasks()
+})
 
 // 全局筛选条件
 const filterAssignedTo = ref('')
@@ -150,7 +156,10 @@ const getPriorityText = (priority) => {
 const loadMyTasks = async () => {
   try {
     loading.value = true
-    const res = await api.get('/tasks/my')
+    const params = {}
+    if (statusFilter.value !== 'all') params.status = statusFilter.value
+    if (priorityFilter.value !== 'all') params.priority = priorityFilter.value
+    const res = await api.get('/tasks/my', { params })
     if (res.code === 0) {
       myTasks.value = res.data.tasks || res.data || []
     }
@@ -164,7 +173,10 @@ const loadMyTasks = async () => {
 const loadAssignedTasks = async () => {
   try {
     loading.value = true
-    const res = await api.get('/tasks/assigned')
+    const params = {}
+    if (statusFilter.value !== 'all') params.status = statusFilter.value
+    if (priorityFilter.value !== 'all') params.priority = priorityFilter.value
+    const res = await api.get('/tasks/assigned', { params })
     if (res.code === 0) {
       assignedTasks.value = res.data.tasks || res.data || []
     }
@@ -476,13 +488,12 @@ const formatDate = (dateStr) => {
 
 onMounted(async () => {
   await loadUsers()
+  // 默认打开"我的任务"Tab（所有人都一样）
+  activeTab.value = 'my-tasks'
+  await Promise.all([loadMyTasks(), loadAssignedTasks()])
   if (userStore.user.role === 'admin') {
-    activeTab.value = 'all-tasks'
-    await Promise.all([loadMyTasks(), loadAllTasks()])
-  } else {
-    await loadMyTasks()
+    await loadAllTasks()
   }
-  await loadAssignedTasks()
 })
 </script>
 
