@@ -13,7 +13,7 @@ import api from '../../services/api.js'
 const { t } = useI18n()
 const store = useQrcodeStore()
 const userStore = useUserStore()
-const canDelete = computed(() => ['admin', 'manager'].includes(userStore.userRole))
+const canDelete = computed(() => userStore.canAccess('qrcode_delete'))
 const canSelect = computed(() => true)
 const products = ref([])
 

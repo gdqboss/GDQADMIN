@@ -95,7 +95,7 @@ const templateForm = ref({
 const savingTemplate = ref(false)
 
 // ─── Computed ───────────────────────────────────────────────────────────────────
-const isAdmin = computed(() => userStore.userRole === 'admin' || userStore.isAdmin)
+const isAdmin = computed(() => userStore.canAccess('worklogs_admin'))
 
 // 全部模板可选，不限制类型
 const filteredTemplates = computed(() => {

@@ -11,7 +11,7 @@ const props = defineProps({ qrcodeId: { type: Number, default: null } })
 const emit = defineEmits(['close', 'updated'])
 
 const userStore = useUserStore()
-const canEdit = computed(() => ['admin', 'manager'].includes(userStore.userRole))
+const canEdit = computed(() => userStore.canAccess('qrcode_edit'))
 
 const detail = ref(null)
 const loading = ref(false)

@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import MainLayout from '../layouts/MainLayout.vue'
 import Login from '../views/Login.vue'
@@ -97,6 +97,7 @@ const routes = [
       { path: 'reports', name: 'Reports', component: lazyLoad(() => import('../views/reports/ReportCenter.vue')), meta: { title: '报表中心' } },
       { path: 'profile', name: 'UserProfile', component: lazyLoad(() => import('../views/profile/UserProfile.vue')), meta: { title: '个人信息' } },
       { path: 'settings', name: 'Settings', component: lazyLoad(() => import('../views/settings/SystemSettings.vue')), meta: { title: '系统设置', roles: ['admin'] } },
+      { path: 'settings/roles', name: 'RoleManage', component: lazyLoad(() => import('../views/settings/RoleManage.vue')), meta: { title: '角色管理', roles: ['admin'] } },
       { path: 'settings/users', name: 'UserManagement', component: lazyLoad(() => import('../views/settings/UserManagement.vue')), meta: { title: '用户管理', roles: ['admin'] } },
       { path: 'settings/h5-users', name: 'H5UserManage', component: lazyLoad(() => import('../views/settings/H5UserManage.vue')), meta: { title: 'H5用户管理', roles: ['admin', 'manager'] } },
       { path: 'settings/job-responsibilities', name: 'JobResponsibilities', component: lazyLoad(() => import('../views/settings/JobResponsibilities.vue')), meta: { title: '职位权责管理', roles: ['admin'] } },
@@ -125,7 +126,7 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHashHistory(),
   routes,
 })
 

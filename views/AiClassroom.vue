@@ -8,21 +8,10 @@ import api from '../services/api.js'
 const userStore = useUserStore()
 const { t } = useI18n()
 const currentUser = computed(() => userStore.user)
-const userRole = computed(() => userStore.userRole)
-const userPermissions = computed(() => userStore.user?.permissions || null)
 
-// admin 始终有全部权限；其他角色按 permissions 数组判断
-const isAdmin = computed(() => userRole.value === 'admin')
-
-const canAccess = (key) => {
-  if (isAdmin.value) return true
-  const perms = userPermissions.value
-  return Array.isArray(perms) && perms.includes(key)
-}
-
-// Tab 可见性：知识库管理 / 记忆管理（admin 始终可见，member 按角色权限）
-const showKnowledgeTab = computed(() => isAdmin.value || canAccess('knowledge-base'))
-const showMemoryTab = computed(() => isAdmin.value || canAccess('memory-management'))
+// Tab 可见性：知识库管理 / 记忆管理（统一走 userStore.canAccess）
+const showKnowledgeTab = computed(() => userStore.canAccess('knowledge-base'))
+const showMemoryTab = computed(() => userStore.canAccess('memory-management'))
 
 // ─── Tab ─────────────────────────────────────────────────────────────────────
 const activeTab = ref('chat')

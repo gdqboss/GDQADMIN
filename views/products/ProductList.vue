@@ -5,8 +5,12 @@ import PageHeader from '../../components/PageHeader.vue'
 import StatusTag from '../../components/StatusTag.vue'
 import Pagination from '../../components/Pagination.vue'
 import api from '../../services/api.js'
+import { useUserStore } from '../../stores/user.js'
 
 const { t, locale } = useI18n()
+const userStore = useUserStore()
+const canWrite = computed(() => userStore.canAccess('products_write'))
+const canDelete = computed(() => userStore.canAccess('products_delete'))
 
 const searchQuery = ref('')
 const selectedCategoryId = ref('')
@@ -1060,11 +1064,11 @@ async function deleteCategory(cat) {
           <option value="">{{ $t('product.allCategories') }}</option>
           <option v-for="cat in categoriesOrdered" :key="cat.id" :value="cat.id">{{ '　'.repeat(cat._depth) }}{{ isEnglish ? (categoryMap[cat.name] || cat.name) : cat.name }}</option>
         </select>
-        <button @click="showCatModal = true; fetchCategories()" class="flex items-center gap-1.5 border border-gray-200 text-text-secondary hover:text-text-primary hover:border-gray-300 px-3 py-2 rounded-lg text-sm transition-colors">
+        <button v-if="canWrite" @click="showCatModal = true; fetchCategories()" class="flex items-center gap-1.5 border border-gray-200 text-text-secondary hover:text-text-primary hover:border-gray-300 px-3 py-2 rounded-lg text-sm transition-colors">
           <span class="material-symbols-outlined text-[18px]">category</span>
           {{ $t('product.manageCategories') }}
         </button>
-        <button @click="openMaterialManage()" class="flex items-center gap-1.5 border border-gray-200 text-text-secondary hover:text-text-primary hover:border-gray-300 px-3 py-2 rounded-lg text-sm transition-colors">
+        <button v-if="canWrite" @click="openMaterialManage()" class="flex items-center gap-1.5 border border-gray-200 text-text-secondary hover:text-text-primary hover:border-gray-300 px-3 py-2 rounded-lg text-sm transition-colors">
           <span class="material-symbols-outlined text-[18px]">inventory_2</span>
           {{ $t('product.materialManagement') }}
         </button>
@@ -1073,7 +1077,7 @@ async function deleteCategory(cat) {
           {{ $t('product.materialCalculator') }}
         </button>
         <div class="ml-auto">
-          <button @click="openAdd" class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+          <button v-if="canWrite" @click="openAdd" class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
             <span class="material-symbols-outlined text-[18px]">add</span>
             {{ $t('product.addProduct') }}
           </button>
@@ -1131,9 +1135,9 @@ async function deleteCategory(cat) {
                 <StatusTag :type="p.status === 'discontinued' ? 'danger' : 'success'" :text="p.status === 'discontinued' ? $t('product.discontinued') : $t('product.active')" />
               </td>
               <td class="px-4 py-3 text-right">
-                <button @click="openEdit(p)" class="text-primary hover:text-primary-hover text-xs font-medium mr-3">{{ $t('common.edit') }}</button>
-                <button @click="openMaterialEdit(p)" class="text-primary hover:text-primary-hover text-xs font-medium mr-3">{{ $t('product.materialEdit') }}</button>
-                <button @click="handleDelete(p.id)" class="text-danger hover:text-red-700 text-xs font-medium">{{ $t('common.delete') }}</button>
+                <button v-if="canWrite" @click="openEdit(p)" class="text-primary hover:text-primary-hover text-xs font-medium mr-3">{{ $t('common.edit') }}</button>
+                <button v-if="canWrite" @click="openMaterialEdit(p)" class="text-primary hover:text-primary-hover text-xs font-medium mr-3">{{ $t('product.materialEdit') }}</button>
+                <button v-if="canDelete" @click="handleDelete(p.id)" class="text-danger hover:text-red-700 text-xs font-medium">{{ $t('common.delete') }}</button>
               </td>
             </tr>
             <tr v-if="filteredProducts.length === 0">

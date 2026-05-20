@@ -12,10 +12,11 @@ const { t } = useI18n()
 
 const unreadCount = ref(0)
 const giftApprovalCount = ref(0)
+const taskUnreadCount = ref(0)
 const recentReminders = ref([])
 const showReminderDropdown = ref(false)
 
-const totalBadge = computed(() => unreadCount.value + giftApprovalCount.value)
+const totalBadge = computed(() => unreadCount.value + giftApprovalCount.value + taskUnreadCount.value)
 
 // Map Chinese meta titles/parents to i18n keys for breadcrumb translation
 const metaI18nMap = {
@@ -140,6 +141,17 @@ const fetchGiftApprovalCount = async () => {
   }
 }
 
+const fetchTaskUnreadCount = async () => {
+  try {
+    const data = await api.get('/tasks/unread-count')
+    if (data.code === 0) {
+      taskUnreadCount.value = data.data.count
+    }
+  } catch (error) {
+    // ignore
+  }
+}
+
 const fetchRecentReminders = async () => {
   try {
     const data = await api.get('/finance-simple/reminders/recent')
@@ -179,9 +191,13 @@ const formatDate = (dateStr) => {
 onMounted(() => {
   fetchUnreadCount()
   fetchGiftApprovalCount()
+  fetchTaskUnreadCount()
   // 每分钟刷新一次
   setInterval(fetchUnreadCount, 60000)
   setInterval(fetchGiftApprovalCount, 60000)
+  setInterval(fetchTaskUnreadCount, 60000)
+  // 监听任务已读事件（TaskManage进入"我的任务"Tab时触发）
+  window.addEventListener('tasks-read', fetchTaskUnreadCount)
 })
 </script>
 

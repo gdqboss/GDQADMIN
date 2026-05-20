@@ -85,6 +85,8 @@ onMounted(async () => {
 
     // 加载所有角色（包括自定义角色）
     await loadRoles()
+    // 加载权限定义（用于角色编辑时的 name→id 映射）
+    await loadAllPermissions()
 
     // 加载待审批员工
     await loadPendingUsers()
@@ -97,55 +99,49 @@ onMounted(async () => {
 })
 
 // 权限分组定义（用于角色编辑弹窗的层级展示）
+// key 必须是数据库 rbac_permissions.name 的真实值
 const PERMISSION_GROUPS = [
   {
     label: 'nav.pagePermissions', // 页面模块
     children: [
-      { key: 'dashboard',       labelKey: 'nav.dashboard' },
-      { key: 'ai-classroom',   labelKey: 'nav.aiClassroom' },
-      { key: 'excel-analyzer',  labelKey: 'nav.excelAnalyzer' },
-      { key: 'oa',              labelKey: 'nav.oa' },
-      { key: 'finance',         labelKey: 'nav.finance' },
-      { key: 'tasks',           labelKey: 'nav.tasks' },
-      { key: 'qrcode',          labelKey: 'nav.qrcode' },
-      { key: 'products',        labelKey: 'nav.products' },
-      { key: 'in-out',          labelKey: 'nav.inout' },
-      { key: 'warehouses',      labelKey: 'nav.warehouses' },
-      { key: 'alerts',          labelKey: 'nav.alerts' },
-      { key: 'transfer',        labelKey: 'nav.transfer' },
-      { key: 'returns',         labelKey: 'nav.returns' },
-      { key: 'retail',          labelKey: 'nav.retail' },
-      { key: 'gift-approvals',  labelKey: 'nav.giftApprovals' },
-      { key: 'aftersale',       labelKey: 'nav.aftersale' },
-      { key: 'reports',         labelKey: 'nav.reports' },
+      { key: 'product:read',      labelKey: 'nav.products' },       // 查看商品（路由）
+      { key: 'product:write',     labelKey: 'settings.permEditProduct' }, // 编辑商品（路由）
+      { key: 'products_delete',   labelKey: 'settings.permDeleteProduct' }, // 删除商品
+      { key: 'warehouse:read',    labelKey: 'nav.warehouses' },
+      { key: 'warehouse:write',   labelKey: 'nav.warehouseWrite' },
+      { key: 'stock:read',        labelKey: 'nav.inout' },
+      { key: 'stock:write',       labelKey: 'nav.stockWrite' },
+      { key: 'finance:read',      labelKey: 'nav.finance' },
+      { key: 'finance:write',     labelKey: 'nav.financeWrite' },
+      { key: 'retail:read',       labelKey: 'nav.retail' },
+      { key: 'retail:write',      labelKey: 'nav.retailWrite' },
+      { key: 'aftersale:read',    labelKey: 'nav.aftersale' },
+      { key: 'aftersale:write',   labelKey: 'nav.aftersaleWrite' },
+      { key: 'user:read',         labelKey: 'nav.oa' },
+      { key: 'user:write',        labelKey: 'nav.userWrite' },
+      { key: 'role:read',        labelKey: 'nav.roleRead' },
+      { key: 'role:write',       labelKey: 'nav.roleWrite' },
     ]
   },
   {
     label: 'nav.partners',
     children: [
-      { key: 'suppliers', labelKey: 'nav.suppliers' },
-      { key: 'dealers',   labelKey: 'nav.dealers' },
-      { key: 'stores',    labelKey: 'nav.stores' },
-    ]
-  },
-  {
-    label: 'nav.aiSubModules',
-    children: [
-      { key: 'knowledge-base',      labelKey: 'nav.knowledgeBase' },
-      { key: 'memory-management',   labelKey: 'nav.memoryManagement' },
+      { key: 'supplier:read',  labelKey: 'nav.suppliers' },
+      { key: 'dealer:read',    labelKey: 'nav.dealers' },
+      { key: 'store:read',     labelKey: 'nav.stores' },
     ]
   },
   {
     label: 'nav.quickActions',
     children: [
-      { key: 'quick-action-attendance',   labelKey: 'nav.qaAttendance' },
-      { key: 'quick-action-worklog',      labelKey: 'nav.qaWorklog' },
-      { key: 'quick-action-task',         labelKey: 'nav.qaTask' },
-      { key: 'quick-action-scan',         labelKey: 'nav.qaScan' },
+      { key: 'quick-action-attendance',     labelKey: 'nav.qaAttendance' },
+      { key: 'quick-action-worklog',        labelKey: 'nav.qaWorklog' },
+      { key: 'quick-action-task',           labelKey: 'nav.qaTask' },
+      { key: 'quick-action-scan',           labelKey: 'nav.qaScan' },
       { key: 'quick-action-responsibility', labelKey: 'nav.qaResponsibility' },
-      { key: 'quick-action-expense',      labelKey: 'nav.qaExpense' },
-      { key: 'quick-action-profile',      labelKey: 'nav.qaProfile' },
-      { key: 'quick-action-qrcode',       labelKey: 'nav.qaQrcode' },
+      { key: 'quick-action-expense',       labelKey: 'nav.qaExpense' },
+      { key: 'quick-action-profile',        labelKey: 'nav.qaProfile' },
+      { key: 'quick-action-qrcode',         labelKey: 'nav.qaQrcode' },
     ]
   },
 ]
@@ -466,6 +462,8 @@ const editingRole = ref(null)
 const roleForm = ref({ name: '', label: '', permissions: [] })
 const roleLoading = ref(false)
 const roleError = ref('')
+// 所有权限定义的缓存（从 /rbac/permissions 加载），用于 name→id 转换
+const allPermissions = ref([])
 // 权限弹窗折叠状态：默认全部展开
 const activePermissionGroups = ref(PERMISSION_GROUPS.map(g => g.label))
 
@@ -478,10 +476,18 @@ function parsePermissions(perm) {
   return []
 }
 
+// 加载所有权限定义（name→id 映射用）
+async function loadAllPermissions() {
+  try {
+    const res = await api.get('/rbac/permissions')
+    if (res.code === 0) allPermissions.value = res.data?.list || res.data || []
+  } catch (e) { /* ignore */ }
+}
+
 async function loadRoles() {
   rolesLoading.value = true
   try {
-    const res = await api.get('/users/roles')
+    const res = await api.get('/rbac/roles')
     if (res.code === 0) roles.value = res.data || []
   } catch (e) { /* ignore */ } finally {
     rolesLoading.value = false
@@ -495,14 +501,18 @@ function openAddRole() {
   showRoleModal.value = true
 }
 
-function openEditRole(r) {
+async function openEditRole(r) {
   editingRole.value = r
-  roleForm.value = {
-    name: r.name,
-    label: r.label,
-    permissions: [...parsePermissions(r.permissions)]
-  }
+  roleForm.value = { name: r.name, label: r.label, permissions: [] }
   roleError.value = ''
+  // 从 API 加载该角色已有的权限
+  try {
+    const res = await api.get(`/rbac/roles/${r.id}/permissions`)
+    if (res.code === 0) {
+      // 数据库返回的权限含 name（如 'product:read'），前端 UI 用字符串 key 匹配，保存时再转 ID
+      roleForm.value.permissions = (res.data || []).map(p => p.name)
+    }
+  } catch (e) { /* ignore */ }
   showRoleModal.value = true
 }
 
@@ -524,25 +534,34 @@ async function saveRole() {
   }
   roleLoading.value = true
   try {
-    let res
+    let roleId
     if (editingRole.value) {
-      res = await api.put(`/users/roles/${editingRole.value.id}`, {
+      // 更新角色基本信息（label/description）
+      const res = await api.put(`/rbac/roles/${editingRole.value.id}`, {
         label: roleForm.value.label.trim(),
-        permissions: roleForm.value.permissions
       })
+      if (res.code !== 0) { roleError.value = res.message || t('settings.operationFailed'); return }
+      roleId = editingRole.value.id
     } else {
-      res = await api.post('/users/roles', {
+      // 新建角色
+      const res = await api.post('/rbac/roles', {
         name: roleForm.value.name.trim(),
         label: roleForm.value.label.trim(),
-        permissions: roleForm.value.permissions
       })
+      if (res.code !== 0) { roleError.value = res.message || t('settings.addFailed'); return }
+      roleId = res.data.id
     }
-    if (res.code === 0) {
-      showRoleModal.value = false
-      await loadRoles()
-    } else {
-      roleError.value = res.message || t('settings.operationFailed')
-    }
+    // 保存权限关联（整体替换）
+    // roleForm.value.permissions 存的是 name 字符串，需要转成数字 ID
+    const nameToId = {}
+    for (const p of allPermissions.value) nameToId[p.name] = p.id
+    const permission_ids = roleForm.value.permissions
+      .map(n => nameToId[n])
+      .filter(id => id != null)
+    const permRes = await api.put(`/rbac/roles/${roleId}/permissions`, { permission_ids })
+    if (permRes.code !== 0) { roleError.value = permRes.message || t('settings.permSaveFailed'); return }
+    showRoleModal.value = false
+    await loadRoles()
   } catch (e) {
     roleError.value = e.message || t('settings.requestFailed')
   } finally {
@@ -551,9 +570,9 @@ async function saveRole() {
 }
 
 async function deleteRole(r) {
-  if (!confirm(t('settings.confirmDeleteRole', { name: r.label }))) return
+  if (!confirm(t('settings.confirmDeleteRole', { name: r.label || r.name }))) return
   try {
-    const res = await api.delete(`/users/roles/${r.id}`)
+    const res = await api.delete(`/rbac/roles/${r.id}`)
     if (res.code === 0) {
       roles.value = roles.value.filter(x => x.id !== r.id)
     } else {
@@ -1530,14 +1549,14 @@ async function deleteUser(user) {
 
 <div class="mb-3">
               <span class="text-xs text-text-secondary">
-                {{ $t('settings.permissionCount') }}{{ parsePermissions(r.permissions).length }}{{ $t('settings.permissionUnit') }}
+                {{ $t('settings.permissionCount') }}{{ r.permission_count || 0 }}{{ $t('settings.permissionUnit') }}
               </span>
             </div>
 
             <div class="flex flex-wrap gap-1.5">
-              <template v-if="parsePermissions(r.permissions).length">
+              <template v-if="r.permission_names && r.permission_names.length">
                 <span
-                  v-for="pkey in parsePermissions(r.permissions)"
+                  v-for="pkey in r.permission_names.split(',')"
                   :key="pkey"
                   class="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded"
                 >{{ ALL_PAGES.find(p => p.key === pkey)?.label || pkey }}</span>

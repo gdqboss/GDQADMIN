@@ -25,6 +25,16 @@ export const useUserStore = defineStore('user', () => {
   const userRole = computed(() => user.value?.role || '')
   const userPermissions = computed(() => user.value?.permissions || null)
 
+  // 统一权限检查：传入权限标识符（如 'product:write'），返回是否有权限
+  // admin 角色天然拥有所有权限
+  function canAccess(permKey) {
+    if (!permKey) return true
+    if (userRole.value === 'admin') return true
+    const perms = userPermissions.value
+    if (!perms || !Array.isArray(perms)) return false
+    return perms.includes(permKey)
+  }
+
   async function login(email, password) {
     const res = await api.post('/auth/login', { email, password })
     if (res.code === 0) {
@@ -53,14 +63,7 @@ export const useUserStore = defineStore('user', () => {
     } catch { /* token invalid, will redirect */ }
   }
 
-  const isAdmin = computed(() => user.value?.role === 'admin')
-
-  const canAccess = (key) => {
-    if (isAdmin.value) return true
-    const perms = userPermissions.value
-    return Array.isArray(perms) && perms.includes(key)
-  }
-
   const userId = computed(() => user.value?.id || null)
+  const isAdmin = computed(() => userRole.value === 'admin')
   return { user, userId, token, isLoggedIn, userName, userRole, userPermissions, isAdmin, canAccess, login, logout, fetchMe }
 })

@@ -31,6 +31,20 @@ watch([statusFilter, priorityFilter], () => {
   else if (activeTab.value === 'assigned-tasks') loadAssignedTasks()
 })
 
+// 切换Tab时重新加载对应数据
+watch(activeTab, async (newTab) => {
+  if (newTab === 'my-tasks') {
+    // 进入"我的任务"时标记所有新任务为已读，同时通知AppHeader刷新铃铛
+    try {
+      await api.post('/tasks/mark-all-read')
+      window.dispatchEvent(new CustomEvent('tasks-read'))
+    } catch(e) {}
+    await loadMyTasks()
+  }
+  else if (newTab === 'assigned-tasks') loadAssignedTasks()
+  else if (newTab === 'all-tasks') loadAllTasks()
+})
+
 // 全局筛选条件
 const filterAssignedTo = ref('')
 const filterAssignedBy = ref('')
@@ -66,7 +80,7 @@ const tabs = computed(() => {
     { key: 'my-tasks', label: t('tasks.myTasks'), icon: 'task_alt' },
     { key: 'assigned-tasks', label: t('tasks.assignedTasks'), icon: 'assignment_ind' }
   ]
-  if (userStore.user.role === 'admin') {
+  if (userStore.canAccess('tasks_admin')) {
     baseTabs.push({ key: 'all-tasks', label: t('tasks.allTasks'), icon: 'list_alt' })
   }
   baseTabs.push({ key: 'create-task', label: t('tasks.createTask'), icon: 'add_task' })
@@ -195,7 +209,7 @@ const loadUsers = async () => {
       allUsers.value = userData // 保存所有用户用于筛选
 
       // 如果是超级管理员，显示所有用户
-      if (userStore.user.role === 'admin') {
+      if (userStore.canAccess('tasks_admin')) {
         users.value = userData
       } else {
         // 否则只显示当前用户的下级（通过递归查找supervisor_id链条）
@@ -373,6 +387,25 @@ const reviewTask = async () => {
   }
 }
 
+const handleDeleteTask = async (task) => {
+  if (!confirm(t('tasks.confirmDelete') || '确定删除该任务？')) return
+  try {
+    loading.value = true
+    const res = await api.delete(`/tasks/${task.id}`)
+    if (res.code === 0) {
+      await loadAllTasks()
+      if (showDetailModal.value) showDetailModal.value = false
+    } else {
+      alert(res.message || t('common.deleteFailed'))
+    }
+  } catch (err) {
+    console.error('Failed to delete task:', err)
+    alert(err.response?.data?.message || t('common.deleteFailed'))
+  } finally {
+    loading.value = false
+  }
+}
+
 // 加载全部任务（仅管理员）
 const loadAllTasks = async () => {
   try {
@@ -491,7 +524,7 @@ onMounted(async () => {
   // 默认打开"我的任务"Tab（所有人都一样）
   activeTab.value = 'my-tasks'
   await Promise.all([loadMyTasks(), loadAssignedTasks()])
-  if (userStore.user.role === 'admin') {
+  if (userStore.canAccess('tasks_admin')) {
     await loadAllTasks()
   }
 })
@@ -736,6 +769,13 @@ onMounted(async () => {
               <span>{{ $t('tasks.assignedByLabel') }}: {{ task.assigned_by_name }}</span>
               <span>{{ $t('tasks.assignedToLabel') }}: {{ task.assigned_to_name }}</span>
               <span>{{ $t('tasks.dueLabel') }}: {{ formatDate(task.due_date) }}</span>
+              <button
+                v-if="task.assigned_by === userStore.user.id || userStore.canAccess('tasks_admin')"
+                @click.stop="handleDeleteTask(task)"
+                class="text-red-500 hover:text-red-700 hover:underline ml-auto"
+              >
+                {{ $t('common.delete') }}
+              </button>
             </div>
           </div>
         </div>

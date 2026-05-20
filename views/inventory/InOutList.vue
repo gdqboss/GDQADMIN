@@ -91,7 +91,7 @@ const operatorName = computed(() => {
   }
 })
 
-const isAdmin = computed(() => userStore.userRole === 'admin')
+const canDelete = computed(() => userStore.canAccess('inventory_delete'))
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatDate(str) {
@@ -491,7 +491,7 @@ async function handleDeleteRecord() {
                   {{ $t('inout.print') }}
                 </button>
                 <button
-                  v-if="isAdmin"
+                  v-if="userStore.canAccess('inventory_delete')"
                   @click="deleteRecord(r)"
                   class="text-danger hover:text-red-700 text-xs font-medium"
                 >
@@ -856,7 +856,7 @@ async function handleDeleteRecord() {
           </div>
           <div class="px-6 py-4 border-t flex justify-between gap-3">
             <button
-              v-if="isAdmin"
+              v-if="userStore.canAccess('inventory_delete')"
               @click="handleDeleteRecord"
               class="flex items-center gap-2 px-4 py-2 border border-danger text-danger hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"
             >

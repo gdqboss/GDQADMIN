@@ -28,7 +28,7 @@ const typeColors = computed(() => ({
   [t('warehouse.bonded')]: 'bg-orange-100 text-warning',
 }))
 
-const isAdmin = computed(() => userStore.userRole === 'admin')
+const canDelete = computed(() => userStore.canAccess('warehouse_delete'))
 
 async function loadWarehouses() {
   const res = await api.get('/warehouses')
@@ -162,7 +162,7 @@ function viewDetail(wh) {
             {{ $t('common.edit') }}
           </button>
           <button
-            v-if="isAdmin"
+            v-if="userStore.canAccess('warehouse_delete')"
             @click="handleDelete(wh, $event)"
             class="flex items-center gap-1 text-danger hover:text-red-700 text-xs font-medium transition-colors ml-auto"
           >
