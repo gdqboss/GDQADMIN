@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, nextTick, computed } from 'vue'
+import { marked } from 'marked'
 import { useI18n } from 'vue-i18n'
 import { useUserStore } from '../stores/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -22,6 +23,7 @@ const inputMessage = ref('')
 const sending = ref(false)
 const chatContainer = ref(null)
 const conversationLoaded = ref(false)
+const streamingIndex = ref(null) // index of message being typed
 
 const SESSION_KEY = 'ai_classroom_session_id'
 
@@ -88,7 +90,26 @@ const sendMessage = async () => {
   try {
     const res = await api.post('/ai-class/chat', { message: msg, session_id: sessionId.value })
     if (res.code === 0) {
-      messages.value.push({ role: 'assistant', content: res.data?.reply || '' })
+      const reply = res.data?.reply || ''
+      // Push empty message first for typewriter effect
+      messages.value.push({ role: 'assistant', content: '' })
+      const msgIndex = messages.value.length - 1
+      streamingIndex.value = msgIndex
+      // Typewriter: append ~1-2 chars every ~30ms
+      let charIndex = 0
+      const typeInterval = setInterval(() => {
+        if (charIndex < reply.length) {
+          const chunkSize = Math.min(2, reply.length - charIndex)
+          messages.value[msgIndex].content += reply.slice(charIndex, charIndex + chunkSize)
+          charIndex += chunkSize
+          scrollToBottom()
+        } else {
+          clearInterval(typeInterval)
+          streamingIndex.value = null
+          sending.value = false
+        }
+      }, 30)
+      return
     } else {
       ElMessage.error(res.message || 'AI 响应失败')
       messages.value.push({ role: 'assistant', content: '抱歉，发生了错误。' })
@@ -97,7 +118,9 @@ const sendMessage = async () => {
     ElMessage.error(e.message || $t('aiClassroom.sendFailed'))
     messages.value.push({ role: 'assistant', content: '抱歉，发生了错误。' })
   } finally {
-    sending.value = false
+    if (streamingIndex.value === null) {
+      sending.value = false
+    }
     scrollToBottom()
   }
 }
@@ -336,7 +359,7 @@ onMounted(() => {
               </div>
               <button class="btn-clear" @click="clearMessages">
                 <span class="material-symbols-outlined">delete_sweep</span>
-                清空对话
+                {{ $t('aiClassroom.clearChat') }}
               </button>
             </div>
 
@@ -344,24 +367,24 @@ onMounted(() => {
             <div class="chat-messages" ref="chatContainer">
               <div v-if="messages.length === 0" class="chat-empty">
                 <span class="material-symbols-outlined">psychology</span>
-                <p>开始对话吧</p>
+                <p>{{ $t('aiClassroom.chatPlaceholder') }}</p>
               </div>
               <div
                 v-for="(msg, i) in messages"
                 :key="i"
-                :class="['message-row', msg.role]"
+                :class="['message-row', msg.role, { streaming: streamingIndex === i }]"
               >
                 <div class="message-bubble">
                   <span class="message-avatar">
                     <span class="material-symbols-outlined">{{ msg.role === 'user' ? 'person' : 'smart_toy' }}</span>
                   </span>
-                  <div class="message-content">{{ msg.content }}</div>
+                  <div class="message-content" v-html="marked.parse(msg.content)"></div>
                 </div>
               </div>
-              <div v-if="sending" class="message-row assistant">
+              <div v-if="streamingIndex !== null" class="message-row assistant">
                 <div class="message-bubble">
                   <span class="message-avatar"><span class="material-symbols-outlined">smart_toy</span></span>
-                  <div class="message-content typing">思考中...</div>
+                  <div class="message-content"><span class="typing-indicator"><span></span><span></span><span></span></span></div>
                 </div>
               </div>
             </div>
@@ -371,7 +394,7 @@ onMounted(() => {
               <input
                 v-model="inputMessage"
                 class="chat-input"
-                placeholder="输入消息..."
+                :placeholder="$t('aiClassroom.inputPlaceholder')"
                 :disabled="sending"
                 @keyup.enter="sendMessage"
               />
@@ -390,40 +413,40 @@ onMounted(() => {
               <div class="search-row">
                 <el-input
                   v-model="knowledgeQuery.search"
-                  placeholder="搜索标题/内容"
+                  :placeholder="$t('aiClassroom.searchKnowledge')"
                   class="search-input"
                   clearable
                   @keyup.enter="onKnowledgeSearch"
                 />
-                <el-select v-model="knowledgeQuery.doc_type" placeholder="类型" class="type-select" clearable>
+                <el-select v-model="knowledgeQuery.doc_type" :placeholder="$t('aiClassroom.type')" class="type-select" clearable>
                   <el-option v-for="opt in docTypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
                 </el-select>
-                <el-button type="primary" @click="onKnowledgeSearch">搜索</el-button>
+                <el-button type="primary" @click="onKnowledgeSearch">{{ $t('aiClassroom.search') }}</el-button>
               </div>
               <el-button type="primary" @click="openKnowledgeAdd">
-                <span class="material-symbols-outlined">add</span> 新增
+                <span class="material-symbols-outlined">add</span> {{ $t('aiClassroom.add') }}
               </el-button>
             </div>
 
             <!-- Table -->
             <el-table :data="knowledgeList" v-loading="knowledgeLoading" stripe class="ai-table">
-              <el-table-column prop="title" label="标题" min-width="150" show-overflow-tooltip />
-              <el-table-column prop="doc_type" label="类型" width="100">
+              <el-table-column prop="title" :label="$t('aiClassroom.title_field')" min-width="150" show-overflow-tooltip />
+              <el-table-column prop="doc_type" :label="$t('aiClassroom.type')" width="100">
                 <template #default="{ row }">
                   <span class="type-tag">{{ docTypeOptions.find(o => o.value === row.doc_type)?.label || row.doc_type }}</span>
                 </template>
               </el-table-column>
-              <el-table-column prop="is_public" label="是否公开" width="90">
+              <el-table-column prop="is_public" :label="$t('aiClassroom.isPublic')" width="90">
                 <template #default="{ row }">
-                  <span :class="row.is_public ? 'text-success' : 'text-muted'">{{ row.is_public ? '是' : '否' }}</span>
+                  <span :class="row.is_public ? 'text-success' : 'text-muted'">{{ row.is_public ? $t('aiClassroom.yes') : $t('aiClassroom.no') }}</span>
                 </template>
               </el-table-column>
-              <el-table-column prop="created_at" label="创建时间" width="160" />
-              <el-table-column label="操作" width="120" fixed="right">
+              <el-table-column prop="created_at" :label="$t('aiClassroom.createdAt')" width="160" />
+              <el-table-column :label="$t('aiClassroom.action')" width="120" fixed="right">
                 <template #default="{ row }">
                   <div class="action-btns">
-                    <button class="btn-text" @click="openKnowledgeEdit(row)">编辑</button>
-                    <button class="btn-text text-danger" @click="deleteKnowledge(row)">删除</button>
+                    <button class="btn-text" @click="openKnowledgeEdit(row)">{{ $t('aiClassroom.edit') }}</button>
+                    <button class="btn-text text-danger" @click="deleteKnowledge(row)">{{ $t('aiClassroom.delete') }}</button>
                   </div>
                 </template>
               </el-table-column>
@@ -657,10 +680,11 @@ onMounted(() => {
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 20px 24px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  scroll-behavior: smooth;
 }
 
 .chat-empty {
@@ -682,23 +706,45 @@ onMounted(() => {
   margin: 0;
 }
 
+@keyframes messageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .message-row {
   display: flex;
+  animation: messageEnter 0.2s ease-out;
 }
 
 .message-row.user {
-  justify-content: flex-end;
+  flex-direction: row-reverse;
+  justify-content: flex-start;
 }
 
 .message-row.assistant {
   justify-content: flex-start;
 }
 
+.message-row + .message-row {
+  margin-top: 4px;
+}
+
+.message-row.user + .message-row.user,
+.message-row.assistant + .message-row.assistant {
+  margin-top: 12px;
+}
+
 .message-bubble {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  max-width: 75%;
+  max-width: 70%;
 }
 
 .message-avatar {
@@ -735,12 +781,13 @@ onMounted(() => {
 
 .message-content {
   background: #f3f4f6;
-  border-radius: 12px;
-  padding: 10px 16px;
-  font-size: 14px;
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-size: 15px;
   color: #333;
-  line-height: 1.6;
+  line-height: 1.65;
   word-break: break-word;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .message-row.user .message-content {
@@ -751,6 +798,129 @@ onMounted(() => {
 .message-content.typing {
   color: #999;
   font-style: italic;
+}
+
+/* Typing indicator dots */
+.typing-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.typing-indicator span {
+  display: block;
+  width: 6px;
+  height: 6px;
+  background: #999;
+  border-radius: 50%;
+  animation: typingDot 1.4s infinite ease-in-out;
+}
+
+.typing-indicator span:nth-child(1) { animation-delay: 0s; }
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typingDot {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+/* Streaming message cursor */
+.message-row.streaming .message-content::after {
+  content: '|';
+  display: inline-block;
+  margin-left: 2px;
+  animation: blink 0.8s infinite;
+  color: #3b82f6;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.message-time {
+  font-size: 11px;
+  color: #bbb;
+  margin-top: 4px;
+  text-align: right;
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .chat-panel {
+    height: calc(100vh - 180px);
+    min-height: 400px;
+  }
+
+  .chat-header {
+    padding: 10px 14px;
+  }
+
+  .user-info {
+    font-size: 13px;
+  }
+
+  .btn-clear {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  .chat-messages {
+    padding: 12px 12px;
+    gap: 12px;
+  }
+
+  .message-bubble {
+    max-width: 85%;
+    gap: 8px;
+  }
+
+  .message-avatar {
+    width: 28px;
+    height: 28px;
+  }
+
+  .message-avatar .material-symbols-outlined {
+    font-size: 15px;
+  }
+
+  .message-content {
+    padding: 8px 12px;
+    font-size: 14px;
+    border-radius: 12px;
+  }
+
+  .message-row.assistant .message-avatar {
+    display: flex;
+  }
+
+  .message-row.user .message-avatar {
+    display: flex;
+  }
+
+  .chat-input-bar {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .chat-input {
+    height: 40px;
+    padding: 0 12px;
+    font-size: 14px;
+  }
+
+  .btn-send {
+    width: 40px;
+    height: 40px;
+  }
 }
 
 .chat-input-bar {
@@ -1020,4 +1190,117 @@ onMounted(() => {
 .text-success { color: #22c55e; }
 .text-danger { color: #ef4444; }
 .text-muted { color: #999; }
+
+/* Markdown rendered content */
+.message-content pre {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-family: 'Fira Code', 'Consolas', monospace;
+  overflow-x: auto;
+  margin: 8px 0;
+  line-height: 1.5;
+}
+
+.message-content code {
+  background: #f0f0f0;
+  color: #c7254e;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 13px;
+  font-family: 'Fira Code', 'Consolas', monospace;
+}
+
+.message-row.user .message-content code {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+}
+
+.message-content p {
+  margin: 4px 0;
+}
+
+.message-content p:first-child {
+  margin-top: 0;
+}
+
+.message-content p:last-child {
+  margin-bottom: 0;
+}
+
+.message-content strong {
+  font-weight: 700;
+  color: inherit;
+}
+
+.message-content em {
+  font-style: italic;
+}
+
+.message-content ul, .message-content ol {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
+.message-content li {
+  margin: 3px 0;
+}
+
+.message-content blockquote {
+  border-left: 3px solid #3b82f6;
+  margin: 8px 0;
+  padding: 4px 12px;
+  color: #666;
+  background: rgba(59, 130, 246, 0.05);
+  border-radius: 0 4px 4px 0;
+}
+
+.message-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+.message-content table th,
+.message-content table td {
+  border: 1px solid #e0e0e0;
+  padding: 6px 12px;
+  text-align: left;
+}
+
+.message-content table th {
+  background: #f5f5f5;
+  font-weight: 600;
+}
+
+.message-content a {
+  color: #3b82f6;
+  text-decoration: none;
+}
+
+.message-content a:hover {
+  text-decoration: underline;
+}
+
+.message-content h1,
+.message-content h2,
+.message-content h3,
+.message-content h4 {
+  margin: 8px 0 4px;
+  font-weight: 600;
+}
+
+.message-content h1 { font-size: 18px; }
+.message-content h2 { font-size: 16px; }
+.message-content h3 { font-size: 15px; }
+.message-content h4 { font-size: 14px; }
+
+.message-content hr {
+  border: none;
+  border-top: 1px solid #e0e0e0;
+  margin: 10px 0;
+}
 </style>

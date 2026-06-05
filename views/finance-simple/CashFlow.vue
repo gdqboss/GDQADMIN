@@ -1,11 +1,12 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../../components/PageHeader.vue'
 import Pagination from '../../components/Pagination.vue'
 import api from '../../services/api.js'
 
-const { t } = useI18n()
+const { t, locale: i18nLocale } = useI18n()
+const locale = computed(() => i18nLocale.value || 'en')
 
 const transactions = ref([])
 const total = ref(0)
@@ -66,7 +67,7 @@ function formatMoney(val) {
 
 function formatDate(dt) {
   if (!dt) return '-'
-  return new Date(dt).toLocaleDateString('zh-CN')
+  return new Date(dt).toLocaleDateString(locale.value, { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 
 function getTransactionTypeInfo(type) {
@@ -91,7 +92,7 @@ function getAccountTypeIcon(type) {
 
     <!-- Filters -->
     <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 mb-6">
-      <div class="flex flex-wrap items-center gap-3">
+      <div class="flex flex-wrap items-center gap-3 max-sm:flex-col max-sm:items-stretch">
         <select v-model="filterAccount" class="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
           <option value="">{{ $t('fundAccounts.allAccounts') }}</option>
           <option v-for="acc in accounts" :key="acc.id" :value="acc.id">{{ acc.account_name }}</option>
@@ -110,7 +111,7 @@ function getAccountTypeIcon(type) {
     </div>
 
     <!-- Table -->
-    <div class="bg-white rounded-lg border border-gray-100 shadow-card overflow-hidden">
+    <div class="bg-white rounded-lg border border-gray-100 shadow-card overflow-hidden max-sm:border-0 max-sm:shadow-none max-sm:rounded-none">
       <div class="overflow-x-auto">
         <table class="w-full text-left text-sm">
           <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
@@ -169,3 +170,87 @@ function getAccountTypeIcon(type) {
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* 容器内边距调整 */
+  .bg-white {
+    padding: 12px;
+  }
+
+  /* 筛选区域 - 垂直布局 */
+  .flex.flex-wrap.items-center.gap-3 {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .flex.flex-wrap.items-center.gap-3 > * {
+    width: 100%;
+  }
+
+  /* 筛选器输入框和选择框 */
+  .flex.flex-wrap.items-center.gap-3 select,
+  .flex.flex-wrap.items-center.gap-3 input {
+    font-size: 14px;
+    padding: 8px 10px;
+  }
+
+  /* 日期分隔符隐藏 */
+  .flex.flex-wrap.items-center.gap-3 span.text-text-secondary {
+    display: none;
+  }
+
+  /* 重置按钮全宽 */
+  .flex.flex-wrap.items-center.gap-3 button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* 表格容器 */
+  .overflow-x-auto {
+    font-size: 12px;
+  }
+
+  /* 表头 */
+  thead.bg-gray-50 {
+    font-size: 10px;
+  }
+
+  th.px-4.py-3,
+  td.px-4.py-3 {
+    padding: 8px 6px;
+  }
+
+  /* 表格单元格文字缩小 */
+  td.px-4.py-3 {
+    font-size: 12px;
+  }
+
+  td.px-4.py-3 span.text-xs {
+    font-size: 10px;
+    padding: 2px 4px;
+  }
+
+  /* 类型标签缩小 */
+  td.px-4.py-3 span\[class\*=\"rounded\"\] {
+    font-size: 10px;
+    padding: 1px 4px;
+  }
+
+  /* 金额文字 */
+  td.px-4.py-3.text-right span\[class\*=\"font-semibold\"\] {
+    font-size: 12px;
+  }
+
+  /* 分页区域 */
+  .px-4.py-3.border-t {
+    padding: 12px 8px;
+  }
+
+  /* 操作按钮 */
+  button {
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+}
+</style>

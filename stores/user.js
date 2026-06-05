@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api from '../services/api.js'
+import { ROLES } from '../constants/roles.js'
 
 export const useUserStore = defineStore('user', () => {
   let savedUser = null
@@ -29,7 +30,7 @@ export const useUserStore = defineStore('user', () => {
   // admin 角色天然拥有所有权限
   function canAccess(permKey) {
     if (!permKey) return true
-    if (userRole.value === 'admin') return true
+    if (userRole.value === ROLES.ADMIN) return true
     const perms = userPermissions.value
     if (!perms || !Array.isArray(perms)) return false
     return perms.includes(permKey)
@@ -64,6 +65,6 @@ export const useUserStore = defineStore('user', () => {
   }
 
   const userId = computed(() => user.value?.id || null)
-  const isAdmin = computed(() => userRole.value === 'admin')
+  const isAdmin = computed(() => userRole.value === ROLES.ADMIN)
   return { user, userId, token, isLoggedIn, userName, userRole, userPermissions, isAdmin, canAccess, login, logout, fetchMe }
 })

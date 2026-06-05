@@ -4,6 +4,7 @@ import ElementPlus from 'element-plus'
 import App from './App.vue'
 import router from './router'
 import i18n from './i18n'
+import { loadSystemSettings } from './stores/system.js'
 import 'material-symbols/outlined.css'
 import 'element-plus/dist/index.css'
 import './style.css'
@@ -15,6 +16,10 @@ app.use(createPinia())
 app.use(router)
 app.use(i18n)
 app.use(ElementPlus)
+
+// 加载系统设置（站点名称等全局配置）
+const savedLocale = localStorage.getItem('caimeite_locale') || 'zh'
+loadSystemSettings(savedLocale)
 
 // 全局 Vue 错误处理：静默处理，不弹 alert
 app.config.errorHandler = (err, instance, info) => {

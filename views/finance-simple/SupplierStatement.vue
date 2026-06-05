@@ -15,6 +15,11 @@ onMounted(async () => {
   await loadSuppliers()
 })
 
+function getMethodLabel(method) {
+  const map = { cash: t('financeSimple.cash'), bank: t('financeSimple.bank'), alipay: t('financeSimple.alipay'), wechat: t('financeSimple.wechat'), other: t('financeSimple.other') }
+  return map[method] || method
+}
+
 async function loadSuppliers() {
   try {
     const res = await api.get('/suppliers', { params: { page: 1, size: 1000 } })
@@ -186,7 +191,7 @@ function printStatement() {
           <tbody>
             <tr v-for="(item, index) in statement.payments" :key="index">
               <td class="border border-gray-300 px-4 py-2">{{ item.payment_date }}</td>
-              <td class="border border-gray-300 px-4 py-2">{{ item.payment_method }}</td>
+              <td class="border border-gray-300 px-4 py-2">{{ getMethodLabel(item.payment_method) }}</td>
               <td class="border border-gray-300 px-4 py-2 text-right">¥{{ item.amount.toFixed(2) }}</td>
             </tr>
             <tr v-if="statement.payments.length === 0">

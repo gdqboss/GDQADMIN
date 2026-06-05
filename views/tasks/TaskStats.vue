@@ -333,3 +333,78 @@ onMounted(async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* 标题 */
+  .text-2xl {
+    font-size: 1.25rem;
+  }
+
+  /* 统计卡片网格改为单列 */
+  .grid-cols-1.sm\:grid-cols-2.lg\:grid-cols-5 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* 统计卡片内边距 */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4 {
+    padding: 0.75rem;
+  }
+
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4 .text-2xl {
+    font-size: 1.125rem;
+  }
+
+  /* 图表区域 */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-6 {
+    padding: 1rem;
+  }
+
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-6 h3 {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  /* 图表高度 */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-6 :deep(canvas) {
+    height: 220px !important;
+  }
+
+  /* 任务列表 - 表格适配 */
+  .overflow-x-auto table {
+    font-size: 0.75rem;
+  }
+
+  .overflow-x-auto .px-6.py-3 {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .overflow-x-auto .px-6.py-4 {
+    padding: 0.625rem 0.5rem;
+  }
+
+  /* 任务列表表头文字 */
+  .overflow-x-auto .uppercase {
+    font-size: 0.625rem;
+  }
+
+  /* 弹窗适配 */
+  .fixed.inset-0.bg-black\/50 {
+    padding: 0.5rem;
+  }
+
+  .bg-white.rounded-lg.max-w-2xl.w-full.max-h-\[90vh\] {
+    max-height: 85vh;
+  }
+
+  .bg-white.rounded-lg.max-w-2xl.w-full.max-h-\[90vh\] .p-6 {
+    padding: 1rem;
+  }
+
+  /* 弹窗内网格改为单列 */
+  .grid.grid-cols-2.gap-4 {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+}
+</style>

@@ -241,3 +241,43 @@ async function confirmResolve() {
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  .bg-gray-100 {
+    width: 100%;
+    overflow-x: auto;
+  }
+  .bg-gray-100 button {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+  .bg-white.rounded-lg {
+    padding: 0;
+  }
+  .overflow-x-auto {
+    font-size: 12px;
+  }
+  table {
+    min-width: 600px;
+  }
+  table th,
+  table td {
+    padding: 8px 6px;
+  }
+  .text-xs {
+    font-size: 11px;
+  }
+  .gap-2 {
+    gap: 4px;
+  }
+  .px-4 {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .py-3 {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+}
+</style>

@@ -1,36 +1,26 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElCollapse, ElCollapseItem, ElCheckbox, ElCheckboxGroup, ElButton, ElInput, ElMessage, ElMessageBox } from 'element-plus'
+import { ElTabs, ElTabPane, ElButton, ElInput, ElMessage, ElMessageBox, ElTag } from 'element-plus'
 import PageHeader from '../../components/PageHeader.vue'
+import JobResponsibilities from './JobResponsibilities.vue'
 import api from '../../services/api.js'
 
 const { t } = useI18n()
 
 // ─── State ─────────────────────────────────────────────────────────────────────
+const activeTab = ref('permissions')
 const roles = ref([])
 const rolesLoading = ref(false)
-const allPermissions = ref([]) // all permission definitions from API
-const selectedRoleId = ref(null)
-const rolePermissions = ref([]) // permission_ids for selected role
-const pendingPermissions = ref([]) // local changes before save
-const isDirty = ref(false)
-const savingPermissions = ref(false)
-
-// ─── Add/Edit Role Modal ────────────────────────────────────────────────────────
-const showRoleModal = ref(false)
-const editingRole = ref(null)
-const roleForm = ref({ name: '', label: '' })
-const roleLoading = ref(false)
-const roleError = ref('')
+const allPermissions = ref([])
+const expandedRoleId = ref(null)
+const savingRoleId = ref(null)
+const rolePendingPerms = ref({}) // roleId -> Set of pending permIds
 
 // ─── Computed ──────────────────────────────────────────────────────────────────
-const selectedRole = computed(() => roles.value.find(r => r.id === selectedRoleId.value))
-
 const permissionsByCategory = computed(() => {
   const map = {}
-  const perms = allPermissions.value || []
-  for (const p of perms) {
+  for (const p of (allPermissions.value || [])) {
     const cat = p.category || 'other'
     if (!map[cat]) map[cat] = []
     map[cat].push(p)
@@ -38,11 +28,36 @@ const permissionsByCategory = computed(() => {
   return map
 })
 
-const categoryOrder = ['system', 'product', 'warehouse', 'stock', 'finance', 'retail', 'aftersale', 'oa', 'supply', 'work_log', 'bi', 'report']
+const categoryOrder = [
+  'system', 'product', 'warehouse', 'stock',
+  'finance', 'retail', 'aftersale', 'oa',
+  'supply', 'work_log', 'bi', 'report',
+  'inventory', 'order', 'approval', 'attendance',
+  'leave', 'shift', 'schedule', 'task',
+  'qrcode', 'referral', 'wecom', 'ai-automation',
+  'workflow', 'workbench',
+]
 
 const sortedCategories = computed(() => {
   return categoryOrder.filter(cat => permissionsByCategory.value[cat]?.length)
 })
+
+// Build a set of permission_ids for each role from the pending map (or initial permission_ids if not expanded)
+// Only mutate role.permission_ids when explicitly saved
+function getRolePermSet(role) {
+  if (rolePendingPerms.value[role.id] !== undefined) {
+    return rolePendingPerms.value[role.id]
+  }
+  const ids = role.permission_ids || ''
+  return new Set(ids.split(',').filter(Boolean).map(Number))
+}
+
+function ensurePendingPerms(role) {
+  if (rolePendingPerms.value[role.id] === undefined) {
+    const ids = role.permission_ids || ''
+    rolePendingPerms.value[role.id] = new Set(ids.split(',').filter(Boolean).map(Number))
+  }
+}
 
 // ─── Load data ─────────────────────────────────────────────────────────────────
 async function loadRoles() {
@@ -66,82 +81,67 @@ async function loadAllPermissions() {
   }
 }
 
-async function loadRolePermissions(roleId) {
-  try {
-    const res = await api.get(`/rbac/roles/${roleId}/permissions`)
-    if (res.code === 0) {
-      rolePermissions.value = (res.data || []).map(p => p.id)
-      pendingPermissions.value = [...rolePermissions.value]
-      isDirty.value = false
-    }
-  } catch (e) {
-    ElMessage.error(t('settings.loadRolePermissionsFailed'))
-  }
+// ─── Role card expand/collapse ─────────────────────────────────────────────────
+function toggleRole(roleId) {
+  expandedRoleId.value = expandedRoleId.value === roleId ? null : roleId
 }
 
-// ─── Role selection ────────────────────────────────────────────────────────────
-function selectRole(role) {
-  if (isDirty.value) {
-    ElMessageBox.confirm(t('settings.unsavedChangesTip'), t('common.tip'), {
-      confirmButtonText: t('common.confirm'),
-      cancelButtonText: t('common.cancel'),
-      type: 'warning',
-    }).then(() => {
-      selectedRoleId.value = role.id
-    }).catch(() => {})
+// ─── Permission tag toggle ────────────────────────────────────────────────────
+function togglePermission(role, permId) {
+  ensurePendingPerms(role)
+  const idSet = rolePendingPerms.value[role.id]
+  if (idSet.has(permId)) {
+    idSet.delete(permId)
   } else {
-    selectedRoleId.value = role.id
+    idSet.add(permId)
   }
+  // Update the pending count on the role card so the tag shows live count
+  role.permission_count = [...idSet].size
+  // Trigger reactivity
+  rolePendingPerms.value = { ...rolePendingPerms.value }
 }
 
-watch(selectedRoleId, (newId) => {
-  if (newId) loadRolePermissions(newId)
-})
-
-// ─── Permission changes ────────────────────────────────────────────────────────
-function onPermissionChange(permId, checked) {
-  if (checked) {
-    if (!pendingPermissions.value.includes(permId)) {
-      pendingPermissions.value.push(permId)
-    }
-  } else {
-    const idx = pendingPermissions.value.indexOf(permId)
-    if (idx !== -1) pendingPermissions.value.splice(idx, 1)
-  }
-  isDirty.value = true
+function isPermChecked(role, permId) {
+  return getRolePermSet(role).has(permId)
 }
 
-function isPermChecked(permId) {
-  return pendingPermissions.value.includes(permId)
-}
-
-async function savePermissions() {
-  if (!selectedRoleId.value) return
-  savingPermissions.value = true
+// ─── Save permissions for a role ──────────────────────────────────────────────
+async function saveRolePermissions(role) {
+  const idSet = getRolePermSet(role)
+  savingRoleId.value = role.id
   try {
-    const res = await api.put(`/rbac/roles/${selectedRoleId.value}/permissions`, {
-      permission_ids: pendingPermissions.value,
+    const res = await api.put(`/rbac/roles/${role.id}/permissions`, {
+      permission_ids: [...idSet],
     })
     if (res.code === 0) {
-      rolePermissions.value = [...pendingPermissions.value]
-      isDirty.value = false
+      if (res.data?.length) {
+        role.permission_names = res.data.map(p => p.name).join(',')
+      }
+      role.permission_count = [...idSet].size
+      role.permission_ids = [...idSet].join(',')
+      // Clear pending
+      const pending = { ...rolePendingPerms.value }
+      delete pending[role.id]
+      rolePendingPerms.value = pending
       ElMessage.success(t('settings.savePermissionsSuccess'))
+      expandedRoleId.value = null
     } else {
       ElMessage.error(res.message || t('settings.savePermissionsFailed'))
     }
   } catch (e) {
     ElMessage.error(e.message || t('settings.savePermissionsFailed'))
   } finally {
-    savingPermissions.value = false
+    savingRoleId.value = null
   }
 }
 
-function cancelPermissionChanges() {
-  pendingPermissions.value = [...rolePermissions.value]
-  isDirty.value = false
-}
-
 // ─── Add/Edit Role ─────────────────────────────────────────────────────────────
+const showRoleModal = ref(false)
+const editingRole = ref(null)
+const roleForm = ref({ name: '', label: '' })
+const roleLoading = ref(false)
+const roleError = ref('')
+
 function openAddRole() {
   editingRole.value = null
   roleForm.value = { name: '', label: '' }
@@ -158,24 +158,16 @@ function openEditRole(role, event) {
 }
 
 async function saveRole() {
-  if (!roleForm.value.name.trim()) {
-    roleError.value = t('settings.roleNameRequired')
-    return
-  }
+  if (!roleForm.value.name.trim()) { roleError.value = t('settings.roleNameRequired'); return }
+  if (!roleForm.value.label.trim()) { roleError.value = '角色显示名必填'; return }
   roleLoading.value = true
   roleError.value = ''
   try {
     let res
     if (editingRole.value) {
-      res = await api.put(`/rbac/roles/${editingRole.value.id}`, {
-        name: roleForm.value.name.trim(),
-        label: roleForm.value.label.trim(),
-      })
+      res = await api.put(`/rbac/roles/${editingRole.value.id}`, { name: roleForm.value.name.trim(), label: roleForm.value.label.trim() })
     } else {
-      res = await api.post('/rbac/roles', {
-        name: roleForm.value.name.trim(),
-        label: roleForm.value.label.trim(),
-      })
+      res = await api.post('/rbac/roles', { name: roleForm.value.name.trim(), label: roleForm.value.label.trim() })
     }
     if (res.code === 0) {
       showRoleModal.value = false
@@ -194,35 +186,22 @@ async function saveRole() {
 async function deleteRole(role, event) {
   event.stopPropagation()
   try {
-    await ElMessageBox.confirm(
-      t('settings.confirmDeleteRole', { name: role.label || role.name }),
-      t('common.tip'),
-      { confirmButtonText: t('common.confirm'), cancelButtonText: t('common.cancel'), type: 'warning' }
-    )
+    await ElMessageBox.confirm(t('settings.confirmDeleteRole', { name: role.label || role.name }), t('common.tip'), { confirmButtonText: t('common.confirm'), cancelButtonText: t('common.cancel'), type: 'warning' })
     const res = await api.delete(`/rbac/roles/${role.id}`)
     if (res.code === 0) {
-      if (selectedRoleId.value === role.id) {
-        selectedRoleId.value = null
-        rolePermissions.value = []
-        pendingPermissions.value = []
-        isDirty.value = false
-      }
+      if (expandedRoleId.value === role.id) expandedRoleId.value = null
       await loadRoles()
       ElMessage.success(t('settings.deleteRoleSuccess'))
     } else {
       ElMessage.error(res.message || t('settings.deleteFailed'))
     }
   } catch (e) {
-    if (e !== 'cancel') {
-      ElMessage.error(e.message || t('settings.deleteFailed'))
-    }
+    if (e !== 'cancel') ElMessage.error(e.message || t('settings.deleteFailed'))
   }
 }
 
-// ─── Init ──────────────────────────────────────────────────────────────────────
-onMounted(async () => {
-  await Promise.all([loadRoles(), loadAllPermissions()])
-})
+// ─── Init ─────────────────────────────────────────────────────────────────────
+onMounted(async () => { await Promise.all([loadRoles(), loadAllPermissions()]) })
 </script>
 
 <template>
@@ -230,188 +209,127 @@ onMounted(async () => {
     <PageHeader :title="$t('settings.roleManage')" :subtitle="$t('settings.roleManageSubtitle')" />
 
     <div class="max-w-screen-xl mx-auto px-6 py-6">
-      <div class="flex gap-6">
-        <!-- Left: Role List -->
-        <div class="w-80 flex-shrink-0">
-          <div class="bg-white rounded-lg shadow p-4">
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="font-medium text-gray-700">{{ $t('settings.roleList') }}</h3>
-              <el-button type="primary" size="small" @click="openAddRole">
-                {{ $t('settings.addRole') }}
-              </el-button>
-            </div>
-
-            <div v-if="rolesLoading" class="text-center py-8 text-gray-400">
-              {{ $t('common.loading') }}...
-            </div>
-
-            <div v-else-if="roles.length === 0" class="text-center py-8 text-gray-400">
-              {{ $t('settings.noRoles') }}
-            </div>
-
-            <div v-else class="space-y-2">
-              <div
-                v-for="role in roles"
-                :key="role.id"
-                @click="selectRole(role)"
-                :class="[
-                  'p-3 rounded-lg cursor-pointer border transition-all',
-                  selectedRoleId === role.id
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300 bg-white'
-                ]"
-              >
-                <div class="flex items-start justify-between">
-                  <div class="flex-1 min-w-0">
-                    <div class="font-medium text-gray-800 truncate">
-                      {{ role.label || role.name }}
-                    </div>
-                    <div class="text-xs text-gray-400 mt-0.5">
-                      {{ (role.user_count || 0) + $t('settings.people') }}
-                    </div>
-                  </div>
-                  <div class="flex items-center gap-1 ml-2">
-                    <el-button
-                      size="small"
-                      text
-                      @click="openEditRole(role, $event)"
-                      :title="$t('common.edit')"
-                    >
-                      <span class="text-gray-400 hover:text-blue-500">✏️</span>
-                    </el-button>
-                    <el-button
-                      size="small"
-                      text
-                      @click="deleteRole(role, $event)"
-                      :title="$t('common.delete')"
-                    >
-                      <span class="text-gray-400 hover:text-red-500">🗑️</span>
-                    </el-button>
-                  </div>
+      <el-tabs v-model="activeTab" class="settings-tabs">
+        <el-tab-pane :label="$t('settings.rolePermissionsTab')" name="permissions">
+          <div class="flex gap-6">
+            <!-- Left: Role List Cards -->
+            <div class="w-96 flex-shrink-0">
+              <div class="bg-white rounded-lg shadow p-4">
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="font-medium text-gray-700">{{ $t('settings.roleList') }}</h3>
+                  <el-button type="primary" size="small" @click="openAddRole">{{ $t('settings.addRole') }}</el-button>
                 </div>
-                <div v-if="role.permissions?.length" class="mt-1 text-xs text-gray-400">
-                  {{ $t('settings.permissionCount') }}{{ role.permissions.length }}{{ $t('settings.permissionUnit') }}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
 
-        <!-- Right: Permission Panel -->
-        <div class="flex-1 min-w-0">
-          <div class="bg-white rounded-lg shadow p-6">
-            <template v-if="!selectedRoleId">
-              <div class="text-center py-16 text-gray-400">
-                <div class="text-4xl mb-2">👆</div>
-                <div>{{ $t('settings.selectRoleToManagePermissions') }}</div>
-              </div>
-            </template>
+                <div v-if="rolesLoading" class="text-center py-8 text-gray-400">{{ $t('common.loading') }}...</div>
+                <div v-else-if="roles.length === 0" class="text-center py-8 text-gray-400">{{ $t('settings.noRoles') }}</div>
 
-            <template v-else>
-              <div class="flex items-center justify-between mb-6">
-                <h3 class="font-medium text-gray-700">
-                  {{ $t('settings.editPermissions') }}: {{ selectedRole?.label || selectedRole?.name }}
-                </h3>
-                <div class="flex gap-2">
-                  <el-button
-                    v-if="isDirty"
-                    @click="cancelPermissionChanges"
-                    size="small"
+                <div v-else class="space-y-3">
+                  <div
+                    v-for="role in roles"
+                    :key="role.id"
+                    :class="['rounded-lg border transition-all', expandedRoleId === role.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-gray-300']"
                   >
-                    {{ $t('common.cancel') }}
-                  </el-button>
-                  <el-button
-                    type="primary"
-                    size="small"
-                    :loading="savingPermissions"
-                    :disabled="!isDirty"
-                    @click="savePermissions"
-                  >
-                    {{ $t('common.save') }}
-                  </el-button>
-                </div>
-              </div>
-
-              <div v-if="sortedCategories.length === 0" class="text-center py-8 text-gray-400">
-                {{ $t('settings.noPermissions') }}
-              </div>
-
-              <el-collapse v-else class="role-permission-collapse" :model-value="sortedCategories">
-                <el-collapse-item
-                  v-for="cat in sortedCategories"
-                  :key="cat"
-                  :title="$t('settings.category_' + cat)"
-                  :name="cat"
-                >
-                  <div class="grid grid-cols-2 gap-2">
+                    <!-- Card header (always visible) -->
                     <div
-                      v-for="perm in permissionsByCategory[cat]"
-                      :key="perm.id"
-                      class="flex items-center gap-2 p-2 rounded hover:bg-gray-50"
+                      class="p-3 cursor-pointer flex items-start justify-between"
+                      @click="toggleRole(role.id)"
                     >
-                      <el-checkbox
-                        :model-value="isPermChecked(perm.id)"
-                        @change="(val) => onPermissionChange(perm.id, val)"
-                      >
-                        <span class="text-sm">{{ perm.label || perm.name }}</span>
-                      </el-checkbox>
-                      <span class="text-xs text-gray-400 font-mono">{{ perm.name }}</span>
+                      <div class="flex-1 min-w-0">
+                        <div class="font-medium text-gray-800">{{ role.label || role.name }}</div>
+                        <div class="flex items-center gap-2 mt-1 flex-wrap">
+                          <span class="text-xs text-gray-400">{{ (role.user_count || 0) }}{{ $t('settings.people') }}</span>
+                          <el-tag type="info" size="small">{{ role.permission_count || 0 }} 权限</el-tag>
+                        </div>
+                        <!-- Permission names preview (collapsed) -->
+                        <div v-if="expandedRoleId !== role.id && role.permission_names" class="mt-1.5 text-xs text-gray-400 truncate">
+                          {{ role.permission_names }}
+                        </div>
+                      </div>
+                      <div class="flex items-center gap-1 ml-2" @click.stop>
+                        <el-button size="small" text @click="openEditRole(role, $event)" :title="$t('common.edit')">
+                          <span class="text-gray-400 hover:text-blue-500">✏️</span>
+                        </el-button>
+                        <el-button size="small" text @click="deleteRole(role, $event)" :title="$t('common.delete')">
+                          <span class="text-gray-400 hover:text-red-500">🗑️</span>
+                        </el-button>
+                        <span class="text-gray-300 text-xs ml-1">{{ expandedRoleId === role.id ? '▲' : '▼' }}</span>
+                      </div>
+                    </div>
+
+                    <!-- Expanded: permission tags + save -->
+                    <div v-if="expandedRoleId === role.id" class="px-3 pb-3 border-t border-blue-100 pt-3">
+                      <div class="space-y-3 max-h-80 overflow-y-auto">
+                        <div v-for="cat in sortedCategories" :key="cat">
+                          <div class="text-xs font-medium text-gray-500 uppercase mb-1.5 tracking-wide">
+                            {{ $t('settings.category_' + cat) }}
+                          </div>
+                          <div class="flex flex-wrap gap-1.5">
+                            <el-tag
+                              v-for="perm in permissionsByCategory[cat]"
+                              :key="perm.id"
+                              :type="isPermChecked(role, perm.id) ? 'primary' : 'info'"
+                              class="cursor-pointer text-xs select-none"
+                              :class="isPermChecked(role, perm.id) ? '' : 'opacity-60'"
+                              @click="togglePermission(role, perm.id)"
+                            >
+                              {{ perm.label || perm.name }}
+                            </el-tag>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="mt-3 flex justify-end">
+                        <el-button
+                          type="primary"
+                          size="small"
+                          :loading="savingRoleId === role.id"
+                          @click="saveRolePermissions(role)"
+                        >
+                          {{ $t('common.save') }}
+                        </el-button>
+                      </div>
                     </div>
                   </div>
-                </el-collapse-item>
-              </el-collapse>
-            </template>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: placeholder to keep layout stable -->
+            <div class="flex-1 min-w-0" />
           </div>
-        </div>
-      </div>
+        </el-tab-pane>
+
+        <el-tab-pane :label="$t('settings.jobResponsibilitiesTab')" name="responsibilities">
+          <JobResponsibilities />
+        </el-tab-pane>
+      </el-tabs>
     </div>
 
     <!-- Add/Edit Role Modal -->
-    <el-dialog
-      v-model="showRoleModal"
-      :title="editingRole ? $t('settings.editRole') : $t('settings.addRole')"
-      width="400px"
-      :close-on-click-modal="false"
-    >
+    <el-dialog v-model="showRoleModal" :title="editingRole ? $t('settings.editRole') : $t('settings.addRole')" width="400px" :close-on-click-modal="false">
       <div class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">
-            {{ $t('settings.roleName') }} *
-          </label>
-          <el-input
-            v-model="roleForm.name"
-            :placeholder="$t('settings.roleNamePlaceholder')"
-            @keyup.enter="saveRole"
-          />
+          <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('settings.roleName') }} *</label>
+          <el-input v-model="roleForm.name" :placeholder="$t('settings.roleNamePlaceholder')" @keyup.enter="saveRole" />
+          <div class="text-xs text-gray-400 mt-1">英文标识，如 admin / manager</div>
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">
-            {{ $t('settings.roleLabel') }}
-          </label>
-          <el-input
-            v-model="roleForm.label"
-            :placeholder="$t('settings.roleLabelPlaceholder')"
-            @keyup.enter="saveRole"
-          />
+          <label class="block text-sm font-medium text-gray-700 mb-1">角色显示名 *</label>
+          <el-input v-model="roleForm.label" placeholder="如 管理员" @keyup.enter="saveRole" />
         </div>
         <div v-if="roleError" class="text-sm text-red-500">{{ roleError }}</div>
       </div>
       <template #footer>
         <el-button @click="showRoleModal = false">{{ $t('common.cancel') }}</el-button>
-        <el-button type="primary" :loading="roleLoading" @click="saveRole">
-          {{ $t('common.save') }}
-        </el-button>
+        <el-button type="primary" :loading="roleLoading" @click="saveRole">{{ $t('common.save') }}</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <style scoped>
-.role-permission-collapse :deep(.el-collapse-item__header) {
-  font-weight: 500;
-  font-size: 15px;
-}
-.role-permission-collapse :deep(.el-collapse-item__content) {
-  padding-bottom: 12px;
+@media (max-width: 768px) {
+  .max-w-screen-xl.mx-auto.px-6.py-6 { padding: 12px; }
+  .flex.gap-6 { flex-direction: column; gap: 12px; }
+  .w-96.flex-shrink-0 { width: 100%; }
 }
 </style>

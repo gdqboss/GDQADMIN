@@ -12,6 +12,8 @@ export const NAV_PERMISSION_KEYS = [
   { key: 'tasks',           labelKey: 'nav.tasks' },
   { key: 'qrcode',          labelKey: 'nav.qrcode' },
   { key: 'products',        labelKey: 'nav.products' },
+  { key: 'orders',         labelKey: 'nav.orders' },
+  { key: 'referral',      labelKey: 'nav.referral' },
   { key: 'in-out',          labelKey: 'nav.inout' },
   { key: 'warehouses',      labelKey: 'nav.warehouses' },
   { key: 'alerts',          labelKey: 'nav.alerts' },

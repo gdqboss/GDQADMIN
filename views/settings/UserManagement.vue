@@ -277,3 +277,87 @@ function editH5User(user) {
   alert('Edit H5 user: ' + user.phone)
 }
 </script>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* 容器内边距缩小 */
+  .p-6 {
+    padding: 1rem;
+  }
+
+  /* 标题区域 */
+  .mb-6 {
+    margin-bottom: 1rem;
+  }
+
+  .text-2xl {
+    font-size: 1.25rem;
+  }
+
+  /* Tab 导航 - 缩小间距 */
+  .border-b button {
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+  }
+
+  /* 搜索表单 - 垂直堆叠 */
+  .p-6 > .flex {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .p-6 input[type="text"] {
+    width: 100%;
+  }
+
+  .p-6 button {
+    width: 100%;
+  }
+
+  /* 表格横向滚动 */
+  .overflow-x-auto {
+    margin: 0 -1rem;
+    padding: 0 1rem;
+  }
+
+  /* 表格单元格 - 缩小内边距 */
+  table th,
+  table td {
+    padding: 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  /* 身份码 - 缩小显示 */
+  .text-xs {
+    font-size: 0.625rem;
+    padding: 0.125rem 0.25rem;
+  }
+
+  /* 按钮 - 缩小尺寸 */
+  .px-4 {
+    padding: 0.375rem 0.75rem;
+  }
+
+  /* 操作按钮 */
+  td button {
+    font-size: 0.75rem;
+    margin-right: 0.25rem;
+  }
+
+  /* Modal 弹窗 - 全屏适配 */
+  .fixed.inset-0 {
+    padding: 1rem;
+  }
+
+  .bg-white.rounded-lg.p-6 {
+    width: 100%;
+    max-width: 100%;
+    padding: 1rem;
+  }
+
+  .max-w-md {
+    max-width: 100%;
+  }
+}
+</style>

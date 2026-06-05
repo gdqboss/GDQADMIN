@@ -316,3 +316,88 @@ async function deleteRule(rule) {
   }
 }
 </script>
+
+<style scoped>
+@media (max-width: 768px) {
+  .p-6 {
+    padding: 12px;
+  }
+
+  .flex.justify-between.items-center.mb-6 {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .flex.justify-between.items-center.mb-6 h1 {
+    font-size: 18px;
+  }
+
+  .grid.grid-cols-1.md\:grid-cols-2.lg\:grid-cols-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .border.rounded-lg.p-4 {
+    padding: 12px;
+  }
+
+  .text-lg.font-semibold {
+    font-size: 15px;
+  }
+
+  .text-sm {
+    font-size: 12px;
+  }
+
+  button.px-4.py-2 {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .sticky.top-0.bg-white.border-b.px-6.py-4 {
+    padding: 12px 16px;
+  }
+
+  .bg-white.rounded-lg.w-full.max-w-2xl {
+    width: 95%;
+    max-width: none;
+    margin: 0 10px;
+  }
+
+  .p-6.space-y-5 {
+    padding: 16px;
+  }
+
+  .flex.gap-2.justify-end.pt-2 {
+    flex-direction: column;
+  }
+
+  .flex.gap-2.justify-end.pt-2 button {
+    width: 100%;
+  }
+
+  .flex.items-center.gap-2 {
+    flex-direction: column;
+  }
+
+  .flex.items-center.gap-2 input {
+    width: 100%;
+  }
+
+  .inline-flex.items-center.gap-1\.5.px-4.py-2 {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .w-8.h-8 {
+    width: 28px;
+    height: 28px;
+    font-size: 10px;
+  }
+
+  .flex.gap-1.mb-3 {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+}
+</style>

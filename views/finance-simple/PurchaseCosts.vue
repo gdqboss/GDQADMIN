@@ -5,7 +5,8 @@ import PageHeader from '../../components/PageHeader.vue'
 import Pagination from '../../components/Pagination.vue'
 import api from '../../services/api.js'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const localeMap = { zh: 'zh-CN', en: 'en-US' }
 
 const records = ref([])
 const total = ref(0)
@@ -120,7 +121,7 @@ async function saveRecord() {
       await api.post('/finance-simple/purchase-costs', formData.value)
     }
     showModal.value = false
-    fetchRecords()
+    await fetchRecords()
   } catch (err) {
     alert(err.message || t('common.operationFailed'))
   }
@@ -130,7 +131,7 @@ async function deleteRecord(id) {
   if (!confirm(t('common.confirmDelete'))) return
   try {
     await api.delete(`/finance-simple/purchase-costs/${id}`)
-    fetchRecords()
+    await fetchRecords()
   } catch (err) {
     alert(err.message || t('common.deleteFailed'))
   }
@@ -142,7 +143,7 @@ function formatMoney(val) {
 
 function formatDate(dt) {
   if (!dt) return '-'
-  return new Date(dt).toLocaleDateString('zh-CN')
+  return new Date(dt).toLocaleDateString(localeMap[locale.value] || 'zh-CN')
 }
 
 function getPaymentStatusText(status) {
@@ -194,7 +195,7 @@ async function exportExcel() {
 
     <!-- Filters -->
     <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 mb-6">
-      <div class="flex flex-wrap items-center gap-3 mb-3">
+      <div class="flex flex-wrap items-center gap-3 mb-3 max-sm:flex-col max-sm:items-stretch">
         <select v-model="filterSupplier" class="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
           <option value="">{{ $t('financeSimple.allSuppliers') }}</option>
           <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.name }}</option>
@@ -216,7 +217,7 @@ async function exportExcel() {
           {{ $t('common.reset') }}
         </button>
       </div>
-      <div class="flex justify-end">
+      <div class="flex justify-end max-sm:flex-col max-sm:gap-2">
         <button @click="exportExcel" :disabled="exporting" class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
           <span class="material-symbols-outlined text-sm">download</span>
           {{ exporting ? $t('common.exporting') : $t('common.exportExcel') }}
@@ -225,7 +226,7 @@ async function exportExcel() {
     </div>
 
     <!-- Table -->
-    <div class="bg-white rounded-lg border border-gray-100 shadow-card overflow-hidden">
+    <div class="bg-white rounded-lg border border-gray-100 shadow-card overflow-hidden max-sm:border-0 max-sm:shadow-none max-sm:rounded-none">
       <div class="overflow-x-auto">
         <table class="w-full text-left text-sm">
           <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
@@ -283,7 +284,7 @@ async function exportExcel() {
 
     <!-- Modal -->
     <div v-if="showModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click.self="showModal = false">
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto max-sm:fixed max-sm:inset-0 max-sm:max-w-none max-sm:max-h-none max-sm:m-0 max-sm:rounded-none">
         <div class="flex items-center justify-between p-6 border-b border-gray-100">
           <h3 class="text-lg font-semibold text-text-primary">{{ editingRecord ? $t('financeSimple.editPurchaseCost') || '编辑采购' : $t('financeSimple.addPurchaseCost') || '新增采购' }}</h3>
           <button @click="showModal = false" class="text-text-secondary hover:text-text-primary">
@@ -291,7 +292,7 @@ async function exportExcel() {
           </button>
         </div>
         <div class="p-6 space-y-4">
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-2 gap-4 max-sm:grid-cols-1">
             <div>
               <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('financeSimple.purchaseDate') }} *</label>
               <input v-model="formData.purchase_date" type="date" required class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
@@ -345,7 +346,7 @@ async function exportExcel() {
             <textarea v-model="formData.note" rows="3" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"></textarea>
           </div>
         </div>
-        <div class="flex items-center justify-end gap-3 p-6 border-t border-gray-100">
+        <div class="flex items-center justify-between gap-3 p-6 border-t border-gray-100 max-sm:gap-2">
           <button @click="showModal = false" class="px-4 py-2 border border-gray-200 rounded-lg text-text-secondary hover:text-text-primary transition-colors">
             {{ $t('common.cancel') }}
           </button>
@@ -357,3 +358,99 @@ async function exportExcel() {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* 手机适配 */
+@media (max-width: 768px) {
+  /* 筛选区域 */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-6 {
+    padding: 12px;
+  }
+
+  /* 表格容器 */
+  .overflow-x-auto {
+    font-size: 12px;
+  }
+
+  table {
+    min-width: 700px;
+  }
+
+  table th,
+  table td {
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+
+  /* 序号列收窄 */
+  table th:first-child,
+  table td:first-child {
+    font-size: 11px;
+    max-width: 60px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* 操作按钮 */
+  .material-symbols-outlined.text-\[18px\] {
+    font-size: 16px;
+  }
+
+  /* 分页 */
+  .px-4.py-3.border-t.border-gray-100 {
+    padding: 12px 8px;
+  }
+
+  /* 模态框 */
+  .bg-white.rounded-lg.shadow-xl.w-full.max-w-2xl {
+    padding: 0;
+  }
+
+  .p-6 {
+    padding: 16px;
+  }
+
+  .p-6.space-y-4 > div {
+    margin-bottom: 12px;
+  }
+
+  .grid.grid-cols-2.gap-4 {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .grid.grid-cols-2.gap-4 > div {
+    margin-bottom: 0;
+  }
+
+  /* 表单输入框 */
+  input,
+  select,
+  textarea {
+    font-size: 14px;
+    padding: 10px 8px;
+  }
+
+  label {
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
+
+  /* 按钮 */
+  button.px-4.py-2 {
+    padding: 10px 16px;
+    font-size: 14px;
+  }
+
+  .flex.items-center.justify-between.gap-3.p-6 {
+    padding: 16px;
+    gap: 12px;
+  }
+
+  /* 标题 */
+  .text-lg.font-semibold {
+    font-size: 16px;
+  }
+}
+</style>

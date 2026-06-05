@@ -1083,3 +1083,182 @@ onMounted(async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* 手机适配 */
+@media (max-width: 768px) {
+  /* 页面容器内边距 */
+  .task-container {
+    padding: 0.75rem;
+  }
+
+  /* 标题区域 */
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .page-title {
+    font-size: 1.25rem;
+  }
+
+  /* Tabs 标签页 */
+  .tabs-container {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tabs-wrapper {
+    min-width: max-content;
+  }
+
+  /* 搜索和筛选表单 */
+  .search-section {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .search-row {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .filter-row {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .filter-select {
+    min-width: 100%;
+    font-size: 0.875rem;
+  }
+
+  .search-input {
+    width: 100%;
+    font-size: 0.875rem;
+  }
+
+  .quick-date-btns {
+    flex-wrap: wrap;
+  }
+
+  .quick-date-btn {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+  }
+
+  /* 表格横向滚动 */
+  .table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .data-table {
+    min-width: 600px;
+    font-size: 0.8125rem;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 0.5rem 0.375rem;
+    white-space: nowrap;
+  }
+
+  .data-table th {
+    font-size: 0.75rem;
+  }
+
+  /* 任务列表卡片 */
+  .task-card {
+    padding: 0.75rem;
+  }
+
+  .task-title {
+    font-size: 0.9375rem;
+  }
+
+  /* 按钮适配 */
+  .btn {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+  }
+
+  .btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  /* 弹窗适配 */
+  .modal {
+    padding: 0.5rem;
+  }
+
+  .modal-content {
+    max-width: 100%;
+    margin: 0.5rem;
+  }
+
+  .modal-header {
+    padding: 0.75rem;
+  }
+
+  .modal-body {
+    padding: 0.75rem;
+  }
+
+  .modal-footer {
+    padding: 0.75rem;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .modal-footer .btn {
+    width: 100%;
+  }
+
+  /* 分页器 */
+  .pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .pagination-info {
+    width: 100%;
+    text-align: center;
+    font-size: 0.75rem;
+  }
+
+  /* 状态标签 */
+  .status-tag {
+    font-size: 0.6875rem;
+    padding: 0.125rem 0.375rem;
+  }
+
+  /* 头像 */
+  .avatar {
+    width: 1.75rem;
+    height: 1.75rem;
+    font-size: 0.75rem;
+  }
+
+  /* 图片预览 */
+  .image-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* 操作按钮组 */
+  .action-btns {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .action-btns .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+</style>

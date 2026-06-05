@@ -5,7 +5,8 @@ import { useRouter } from 'vue-router'
 import PageHeader from '../../components/PageHeader.vue'
 import api from '../../services/api.js'
 
-const { t } = useI18n()
+const { t, locale: i18nLocale } = useI18n()
+const locale = computed(() => i18nLocale.value || 'en')
 const router = useRouter()
 
 const accounts = ref([])
@@ -161,7 +162,7 @@ function formatMoney(val) {
 
 function formatDate(dt) {
   if (!dt) return '-'
-  return new Date(dt).toLocaleDateString('zh-CN')
+  return new Date(dt).toLocaleDateString(locale.value, { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 
 function getTransactionTypeColor(type) {
@@ -241,7 +242,7 @@ function getTransactionTypeColor(type) {
 
     <!-- Add/Edit Account Modal -->
     <div v-if="showModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click.self="showModal = false">
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-lg">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-lg max-sm:fixed max-sm:inset-0 max-sm:max-w-none max-sm:max-h-none max-sm:m-0 max-sm:rounded-none">
         <div class="flex items-center justify-between p-6 border-b border-gray-100">
           <h3 class="text-lg font-semibold text-text-primary">{{ editingAccount ? $t('fundAccounts.editAccount') : $t('fundAccounts.addAccount') }}</h3>
           <button @click="showModal = false" class="text-text-secondary hover:text-text-primary">
@@ -279,7 +280,7 @@ function getTransactionTypeColor(type) {
             </select>
           </div>
         </div>
-        <div class="flex items-center justify-end gap-3 p-6 border-t border-gray-100">
+        <div class="flex items-center justify-between gap-3 p-6 border-t border-gray-100 max-sm:gap-2">
           <button @click="showModal = false" class="px-4 py-2 border border-gray-200 rounded-lg text-text-secondary hover:text-text-primary transition-colors">
             {{ $t('common.cancel') }}
           </button>
@@ -292,7 +293,7 @@ function getTransactionTypeColor(type) {
 
     <!-- Transfer Modal -->
     <div v-if="showTransferModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click.self="showTransferModal = false">
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-lg">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-lg max-sm:fixed max-sm:inset-0 max-sm:max-w-none max-sm:max-h-none max-sm:m-0 max-sm:rounded-none">
         <div class="flex items-center justify-between p-6 border-b border-gray-100">
           <h3 class="text-lg font-semibold text-text-primary">{{ $t('fundAccounts.transfer') }}</h3>
           <button @click="showTransferModal = false" class="text-text-secondary hover:text-text-primary">
@@ -344,7 +345,7 @@ function getTransactionTypeColor(type) {
 
     <!-- Transactions Modal -->
     <div v-if="showTransactionsModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click.self="showTransactionsModal = false">
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto max-sm:fixed max-sm:inset-0 max-sm:max-w-none max-sm:max-h-none max-sm:m-0 max-sm:rounded-none">
         <div class="flex items-center justify-between p-6 border-b border-gray-100 sticky top-0 bg-white">
           <h3 class="text-lg font-semibold text-text-primary">{{ selectedAccount?.account_name }} - {{ $t('fundAccounts.transactions') }}</h3>
           <button @click="showTransactionsModal = false" class="text-text-secondary hover:text-text-primary">
@@ -380,3 +381,69 @@ function getTransactionTypeColor(type) {
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* Header buttons - stack vertically */
+  :deep(.page-header) .flex {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Total balance card - adjust padding and font size */
+  .bg-gradient-to-br {
+    padding: 16px;
+  }
+  .bg-gradient-to-br .text-3xl {
+    font-size: 24px;
+  }
+  .bg-gradient-to-br .text-\[48px\] {
+    font-size: 32px;
+  }
+
+  /* Account cards - reduce padding */
+  .shadow-card {
+    padding: 16px;
+  }
+  .shadow-card .text-2xl {
+    font-size: 20px;
+  }
+  .shadow-card .w-12 {
+    width: 40px;
+    height: 40px;
+  }
+  .shadow-card .text-\[24px\] {
+    font-size: 20px;
+  }
+
+  /* Buttons - full width on mobile */
+  button[class*="bg-primary"] {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Modals - full screen on mobile */
+  .fixed.inset-0 {
+    padding: 0;
+  }
+  .bg-white.rounded-lg {
+    border-radius: 0;
+    max-height: 100vh;
+    height: 100vh;
+  }
+
+  /* Form inputs - larger touch targets */
+  input, select, textarea {
+    padding: 12px;
+    font-size: 16px; /* Prevent iOS zoom */
+  }
+
+  /* Transaction items - compact layout */
+  .border.rounded-lg.p-4 {
+    padding: 12px;
+  }
+  .space-y-3 > div {
+    margin-bottom: 8px;
+  }
+}
+</style>

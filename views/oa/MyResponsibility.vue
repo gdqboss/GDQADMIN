@@ -55,3 +55,29 @@ onMounted(async () => {
   }
 })
 </script>
+
+<style scoped>
+@media (max-width: 768px) {
+  .p-6 {
+    padding: 1rem;
+  }
+  .max-w-2xl {
+    max-width: 100%;
+  }
+  .mb-6 {
+    margin-bottom: 1rem;
+  }
+  .space-y-6 > :not(:last-child) {
+    margin-bottom: 1rem;
+  }
+  .bg-white {
+    padding: 1rem;
+  }
+  .text-2xl {
+    font-size: 1.25rem;
+  }
+  .text-xl {
+    font-size: 1.1rem;
+  }
+}
+</style>

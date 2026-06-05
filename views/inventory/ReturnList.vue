@@ -221,3 +221,48 @@ function getStatusColor(status) {
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  .p-6 {
+    padding: 12px;
+  }
+
+  .bg-white.rounded-lg.shadow {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table {
+    min-width: 600px;
+  }
+
+  table th,
+  table td {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .input,
+  select,
+  textarea {
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+
+  .max-w-md {
+    max-width: 95%;
+    margin: 0 10px;
+  }
+
+  .grid-cols-1.md\:grid-cols-3 {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

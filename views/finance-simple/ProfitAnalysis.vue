@@ -98,7 +98,7 @@ async function exportExcel() {
 
     <!-- Filters -->
     <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 mb-6">
-      <div class="flex flex-wrap items-center gap-3 mb-4">
+      <div class="flex flex-wrap items-center gap-3 mb-4 max-sm:flex-col max-sm:items-stretch">
         <span class="text-sm font-medium text-text-primary">{{ $t('financeSimple.analysisDimension') }}:</span>
         <div class="flex gap-2">
           <button @click="dimension = 'product'" :class="dimension === 'product' ? 'bg-primary text-white' : 'bg-gray-100 text-text-secondary'" class="px-4 py-2 rounded-lg text-sm transition-colors">
@@ -112,7 +112,7 @@ async function exportExcel() {
           </button>
         </div>
       </div>
-      <div class="flex flex-wrap items-center gap-3">
+      <div class="flex flex-wrap items-center gap-3 max-sm:flex-col max-sm:items-stretch">
         <select v-if="dimension !== 'store'" v-model="filterStore" class="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
           <option value="">{{ $t('financeSimple.allStores') }}</option>
           <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
@@ -135,7 +135,7 @@ async function exportExcel() {
     </div>
 
     <!-- Analysis Table -->
-    <div class="bg-white rounded-lg border border-gray-100 shadow-card overflow-hidden">
+    <div class="bg-white rounded-lg border border-gray-100 shadow-card overflow-hidden max-sm:border-0 max-sm:shadow-none max-sm:rounded-none">
       <div class="overflow-x-auto">
         <table class="w-full text-left text-sm">
           <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
@@ -208,3 +208,75 @@ async function exportExcel() {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* 手机端适配 */
+@media (max-width: 768px) {
+  /* 筛选区域 */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-6 {
+    padding: 12px;
+  }
+
+  /* 按钮组横向滚动 */
+  .flex.gap-2 {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .flex.gap-2 button {
+    flex-shrink: 0;
+  }
+
+  /* 筛选器 select/input 样式优化 */
+  select, input[type="date"] {
+    font-size: 13px;
+    padding: 6px 8px;
+    min-height: 36px;
+  }
+
+  /* 导出按钮 */
+  .ml-auto {
+    margin-left: 0;
+    margin-top: 8px;
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* 表格容器 */
+  .overflow-x-auto {
+    font-size: 12px;
+  }
+
+  /* 表格单元格 padding 缩小 */
+  table.text-left.text-sm th,
+  table.text-left.text-sm td {
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+
+  /* 隐藏不重要的列，保留核心数据 */
+  table.text-left.text-sm th:nth-child(3), /* totalQuantity */
+  table.text-left.text-sm td:nth-child(3),
+  table.text-left.text-sm th:nth-child(8), /* avgSalePrice */
+  table.text-left.text-sm td:nth-child(8) {
+    display: none;
+  }
+
+  /* 表头 */
+  thead.bg-gray-50.text-text-secondary.text-xs.uppercase {
+    font-size: 10px;
+  }
+
+  /* 合计行 */
+  tfoot.bg-gray-50.font-semibold td {
+    font-size: 12px;
+    padding: 8px 6px;
+  }
+
+  /* 页头 */
+  :deep(.page-header) {
+    padding: 16px 12px;
+  }
+}
+</style>

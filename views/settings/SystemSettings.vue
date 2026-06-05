@@ -6,6 +6,7 @@ import { ElCollapse, ElCollapseItem } from 'element-plus'
 import PageHeader from '../../components/PageHeader.vue'
 import StatusTag from '../../components/StatusTag.vue'
 import api from '../../services/api.js'
+import { ROLES } from '../../constants/roles.js'
 import { NAV_PERMISSION_KEYS } from '../../constants/navPermission.js'
 import { useWecomStore } from '../../stores/wecom.js'
 
@@ -98,56 +99,64 @@ onMounted(async () => {
   } catch (e) { /* ignore */ }
 })
 
-// 权限分组定义（用于角色编辑弹窗的层级展示）
-// key 必须是数据库 rbac_permissions.name 的真实值
-const PERMISSION_GROUPS = [
-  {
-    label: 'nav.pagePermissions', // 页面模块
-    children: [
-      { key: 'product:read',      labelKey: 'nav.products' },       // 查看商品（路由）
-      { key: 'product:write',     labelKey: 'settings.permEditProduct' }, // 编辑商品（路由）
-      { key: 'products_delete',   labelKey: 'settings.permDeleteProduct' }, // 删除商品
-      { key: 'warehouse:read',    labelKey: 'nav.warehouses' },
-      { key: 'warehouse:write',   labelKey: 'nav.warehouseWrite' },
-      { key: 'stock:read',        labelKey: 'nav.inout' },
-      { key: 'stock:write',       labelKey: 'nav.stockWrite' },
-      { key: 'finance:read',      labelKey: 'nav.finance' },
-      { key: 'finance:write',     labelKey: 'nav.financeWrite' },
-      { key: 'retail:read',       labelKey: 'nav.retail' },
-      { key: 'retail:write',      labelKey: 'nav.retailWrite' },
-      { key: 'aftersale:read',    labelKey: 'nav.aftersale' },
-      { key: 'aftersale:write',   labelKey: 'nav.aftersaleWrite' },
-      { key: 'user:read',         labelKey: 'nav.oa' },
-      { key: 'user:write',        labelKey: 'nav.userWrite' },
-      { key: 'role:read',        labelKey: 'nav.roleRead' },
-      { key: 'role:write',       labelKey: 'nav.roleWrite' },
-    ]
-  },
-  {
-    label: 'nav.partners',
-    children: [
-      { key: 'supplier:read',  labelKey: 'nav.suppliers' },
-      { key: 'dealer:read',    labelKey: 'nav.dealers' },
-      { key: 'store:read',     labelKey: 'nav.stores' },
-    ]
-  },
-  {
-    label: 'nav.quickActions',
-    children: [
-      { key: 'quick-action-attendance',     labelKey: 'nav.qaAttendance' },
-      { key: 'quick-action-worklog',        labelKey: 'nav.qaWorklog' },
-      { key: 'quick-action-task',           labelKey: 'nav.qaTask' },
-      { key: 'quick-action-scan',           labelKey: 'nav.qaScan' },
-      { key: 'quick-action-responsibility', labelKey: 'nav.qaResponsibility' },
-      { key: 'quick-action-expense',       labelKey: 'nav.qaExpense' },
-      { key: 'quick-action-profile',        labelKey: 'nav.qaProfile' },
-      { key: 'quick-action-qrcode',         labelKey: 'nav.qaQrcode' },
-    ]
-  },
-]
+// 权限分组：由 allPermissions 动态生成，不再硬编码
+// allPermissions 在 onMounted 时从 /rbac/permissions 加载，包含数据库全部 86 项权限
+const PERMISSION_GROUP_LABELS = {
+  'page': 'nav.pagePermissions',
+  'product': 'nav.products',
+  'warehouse': 'nav.warehouses',
+  'stock': 'nav.inout',
+  'inventory': 'nav.inventory',
+  'transfer': 'nav.transfer',
+  'finance': 'nav.finance',
+  'retail': 'nav.retail',
+  'order': 'nav.orders',
+  'aftersale': 'nav.aftersale',
+  'supplier': 'nav.suppliers',
+  'dealer': 'nav.dealers',
+  'store': 'nav.stores',
+  'user': 'nav.oa',
+  'role': 'nav.roleManageIndex',
+  'ai-classroom': 'nav.aiClassroom',
+  'attendance': 'nav.attendance',
+  'leave': 'nav.leave',
+  'shift': 'nav.shifts',
+  'schedule': 'nav.schedule',
+  'task': 'nav.tasks',
+  'workflow': 'nav.workflow',
+  'quick-action': 'nav.quickActions',
+  'report': 'nav.reports',
+  'bi': 'nav.reports',
+  'approval': 'nav.approvals',
+  'gift': 'nav.giftApprovals',
+  'referral': 'nav.referral',
+  'qrcode': 'nav.qrcode',
+  'oa': 'nav.oa',
+  'menu': 'nav.settingsIndex',
+  'permission': 'nav.permissionManage',
+  'system': 'nav.settingsIndex',
+  'wecom': 'nav.wechatLink',
+  'products_delete': 'settings.permDeleteProduct',
+  'products_read': 'settings.permReadProduct',
+  'products_write': 'settings.permWriteProduct',
+  'work_log': 'nav.workLogs',
+  'work_log_template': 'settings.workLogTemplate',
+}
 
-// ALL_PAGES: 扁平化的所有权限项（用于权限标签展示）
-const ALL_PAGES = PERMISSION_GROUPS.flatMap(g => g.children.map(c => ({ key: c.key, label: c.labelKey })))
+const PERMISSION_GROUPS = computed(() => {
+  const groups = {}
+  for (const p of allPermissions.value) {
+    const colonIdx = p.name.indexOf(':')
+    const prefix = colonIdx > 0 ? p.name.slice(0, colonIdx) : p.name
+    const labelKey = PERMISSION_GROUP_LABELS[p.name] || PERMISSION_GROUP_LABELS[prefix] || `perm.${p.name}`
+    if (!groups[labelKey]) groups[labelKey] = []
+    groups[labelKey].push({ key: p.name, labelKey: labelKey, id: p.id })
+  }
+  return Object.entries(groups).map(([label, children]) => ({ label, children }))
+})
+
+// ALL_PAGES: 扁平化的所有权限项（用于用户权限标签展示）
+const ALL_PAGES = computed(() => PERMISSION_GROUPS.value.flatMap(g => g.children.map(c => ({ key: c.key, label: c.labelKey }))))
 
 const ROLE_LABELS = computed(() => ({ admin: t('settings.roleAdmin'), manager: t('settings.roleManager'), operator: t('settings.roleOperator'), member: t('settings.roleMember'), warehouse: t('settings.roleWarehouse'), custom: t('settings.roleCustom') }))
 const ROLE_COLORS = { admin: 'danger', manager: 'primary', operator: 'info', member: 'success', warehouse: 'warning', custom: 'warning' }
@@ -155,13 +164,13 @@ const ROLE_COLORS = { admin: 'danger', manager: 'primary', operator: 'info', mem
 // ─── User modal ────────────────────────────────────────────────────────────────
 const showUserModal = ref(false)
 const editingUser = ref(null)
-const userForm = ref({ name: '', phone: '', password: '', role: 'operator', department_id: null, permissions: [], supplier_id: null, supplier_ids: [], supervisor_id: null, responsibility_id: null, require_attendance: false, require_worklog: false })
+const userForm = ref({ name: '', phone: '', password: '', role: ROLES.OPERATOR, department_id: null, permissions: [], supplier_id: null, supplier_ids: [], supervisor_id: null, responsibility_id: null, require_attendance: false, require_worklog: false })
 const userLoading = ref(false)
 const userError = ref('')
 
 function openAddUser() {
   editingUser.value = null
-  userForm.value = { name: '', phone: '', password: '', role: 'operator', department_id: null, permissions: [], supplier_id: null, supplier_ids: [], supervisor_id: null, responsibility_id: null, require_attendance: false, require_worklog: false }
+  userForm.value = { name: '', phone: '', password: '', role: ROLES.OPERATOR, department_id: null, permissions: [], supplier_id: null, supplier_ids: [], supervisor_id: null, responsibility_id: null, require_attendance: false, require_worklog: false }
   userError.value = ''
   showUserModal.value = true
 }
@@ -183,8 +192,8 @@ function openEditUser(u) {
   userError.value = ''
   showUserModal.value = true
 
-  // 如果是自定义角色，加载该角色的权限
-  if (u.role !== 'admin' && u.role !== 'manager' && u.role !== 'operator' && u.role !== 'custom') {
+  // 加载角色的权限配置（所有角色都从这里读取，包括预设角色）
+  if (u.role !== 'custom') {
     const role = roles.value.find(r => r.name === u.role)
     if (role && Array.isArray(role.permissions)) {
       userForm.value.permissions = [...role.permissions]
@@ -202,12 +211,8 @@ function togglePermission(key) {
 function onRoleChange() {
   const selectedRole = userForm.value.role
 
-  // 如果选择的是预设角色，清空自定义权限
-  if (['admin', 'manager', 'operator'].includes(selectedRole)) {
-    userForm.value.permissions = []
-  }
-  // 如果选择的是自定义角色，加载该角色的权限
-  else if (selectedRole !== 'custom') {
+  // 如果选择的是自定义角色，加载该角色的权限；如果选择其他角色也加载对应权限
+  if (selectedRole !== 'custom') {
     const role = roles.value.find(r => r.name === selectedRole)
     if (role && Array.isArray(role.permissions)) {
       userForm.value.permissions = [...role.permissions]
@@ -464,8 +469,8 @@ const roleLoading = ref(false)
 const roleError = ref('')
 // 所有权限定义的缓存（从 /rbac/permissions 加载），用于 name→id 转换
 const allPermissions = ref([])
-// 权限弹窗折叠状态：默认全部展开
-const activePermissionGroups = ref(PERMISSION_GROUPS.map(g => g.label))
+// 权限弹窗折叠状态：默认全部展开（等 allPermissions 加载完成后初始化）
+const activePermissionGroups = ref([])
 
 // 统一解析角色权限字段（可能是 JSON 字符串或数组）
 function parsePermissions(perm) {
@@ -480,7 +485,13 @@ function parsePermissions(perm) {
 async function loadAllPermissions() {
   try {
     const res = await api.get('/rbac/permissions')
-    if (res.code === 0) allPermissions.value = res.data?.list || res.data || []
+    if (res.code === 0) {
+      allPermissions.value = res.data?.list || res.data || []
+      // allPermissions 加载完成后，初始化折叠状态（全部展开）
+      nextTick(() => {
+        activePermissionGroups.value = PERMISSION_GROUPS.value.map(g => g.label)
+      })
+    }
   } catch (e) { /* ignore */ }
 }
 
@@ -2056,28 +2067,6 @@ async function deleteUser(user) {
             </p>
           </div>
 
-          <!-- Custom permissions -->
-          <div v-if="userForm.role === 'custom' || (userForm.role !== 'admin' && userForm.role !== 'manager' && userForm.role !== 'operator' && userForm.permissions.length > 0)" class="border border-gray-100 rounded-lg p-4">
-            <p class="text-sm font-medium text-text-primary mb-3">
-              {{ userForm.role === 'custom' ? $t('settings.selectAccessPages') : $t('settings.rolePermissionsInherited') }}
-            </p>
-            <div class="grid grid-cols-2 gap-2">
-              <label v-for="page in ALL_PAGES" :key="page.key"
-                :class="['flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors text-sm',
-                  userForm.permissions.includes(page.key) ? 'border-primary bg-primary/5 text-primary' : 'border-gray-100 text-text-secondary hover:border-gray-200',
-                  userForm.role !== 'custom' ? 'cursor-not-allowed opacity-60' : 'cursor-pointer']"
-                @click="userForm.role === 'custom' ? togglePermission(page.key) : null">
-                <span class="material-symbols-outlined text-[16px]">
-                  {{ userForm.permissions.includes(page.key) ? 'check_box' : 'check_box_outline_blank' }}
-                </span>
-                {{ page.label }}
-              </label>
-            </div>
-            <p v-if="userForm.role !== 'custom'" class="text-xs text-text-secondary mt-2">
-              {{ $t('settings.permissionInheritTip') }}
-            </p>
-          </div>
-
           <div v-if="userError" class="text-sm text-danger bg-red-50 px-3 py-2 rounded-lg">{{ userError }}</div>
         </div>
         <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
@@ -2291,5 +2280,80 @@ async function deleteUser(user) {
 }
 .permission-collapse :deep(.el-collapse-item__content) {
   padding-bottom: 8px;
+}
+
+@media (max-width: 768px) {
+  /* Tab content area */
+  .settings-content > div[class*="p-6"] {
+    padding: 12px;
+  }
+
+  /* Tab header - stack on mobile */
+  .settings-content .flex.justify-between.items-center {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  /* Customer stats - single column on mobile */
+  .settings-content .grid.grid-cols-2 {
+    grid-template-columns: 1fr;
+  }
+
+  /* Tables - reduce padding */
+  .settings-content table td,
+  .settings-content table th {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  /* Modal adjustments */
+  .settings-content .fixed .bg-white {
+    max-width: 100%;
+    margin: 0 8px;
+  }
+
+  /* Form grids - single column on mobile */
+  .settings-content .grid.grid-cols-2 {
+    grid-template-columns: 1fr;
+  }
+
+  /* Buttons - full width on small screens */
+  .settings-content button[class*="px-4 py-2"] {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Tab bar */
+  .settings-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Payment settings - full width inputs */
+  .settings-content .max-w-2xl input,
+  .settings-content .max-w-2xl textarea,
+  .settings-content .max-w-2xl select {
+    width: 100%;
+  }
+
+  /* Role cards - stack on mobile */
+  .settings-content .grid.grid-cols-1.md\:grid-cols-2 {
+    grid-template-columns: 1fr;
+  }
+
+  /* AI config table */
+  .settings-content .overflow-x-auto {
+    font-size: 12px;
+  }
+
+  /* Modal footer buttons */
+  .settings-content .fixed .flex.justify-end.gap-3 {
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+  .settings-content .fixed .flex.justify-end.gap-3 button {
+    width: 100%;
+  }
 }
 </style>

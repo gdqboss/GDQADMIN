@@ -545,3 +545,83 @@ function getChannelChartColor(channel) {
   </div>
 </template>
 
+<style scoped>
+@media (max-width: 768px) {
+  /* Statistics Cards */
+  .grid.grid-cols-4 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+  }
+
+
+  /* Charts Section */
+  .grid.grid-cols-2 {
+    grid-template-columns: 1fr;
+  }
+
+
+  /* Top Performers */
+  .grid.grid-cols-3 {
+    grid-template-columns: 1fr;
+  }
+
+  /* Filters */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-6 .flex.flex-wrap.items-center.gap-3 {
+    gap: 0.5rem;
+  }
+
+  /* Table */
+  table {
+    font-size: 0.75rem;
+  }
+  table th,
+  table td {
+    padding: 0.5rem 0.25rem;
+  }
+
+  /* Stats Card text */
+  .text-xl {
+    font-size: 1.125rem;
+  }
+  .text-xs {
+    font-size: 0.625rem;
+  }
+
+  /* Charts */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-5 {
+    padding: 0.75rem;
+  }
+
+  /* Modal */
+  .fixed.inset-0.z-50.flex.items-center.justify-center.p-4 {
+    padding: 0.5rem;
+  }
+  .fixed.inset-0.z-50.flex.items-center.justify-center.p-4 .bg-white.rounded-lg.shadow-xl {
+    max-width: 100%;
+    max-height: 95vh;
+  }
+  .fixed.inset-0.z-50.flex.items-center.justify-center.p-4 .px-6.py-4 {
+    padding: 0.75rem;
+  }
+  .fixed.inset-0.z-50.flex.items-center.justify-center.p-4 .p-6 {
+    padding: 0.75rem;
+  }
+  .fixed.inset-0.z-50.flex.items-center.justify-center.p-4 .grid.grid-cols-2.gap-4 {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+  .fixed.inset-0.z-50.flex.items-center.justify-center.p-4 .grid.grid-cols-3.gap-4 {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+  }
+  .fixed.inset-0.z-50.flex.items-center.justify-center.p-4 .bg-blue-50.rounded-lg.p-4,
+  .fixed.inset-0.z-50.flex.items-center.justify-center.p-4 .bg-green-50.rounded-lg.p-4,
+  .fixed.inset-0.z-50.flex.items-center.justify-center.p-4 .bg-orange-50.rounded-lg.p-4 {
+    padding: 0.5rem;
+  }
+  .fixed.inset-0.z-50.flex.items-center.justify-center.p-4 .text-2xl {
+    font-size: 1.25rem;
+  }
+}
+</style>
+

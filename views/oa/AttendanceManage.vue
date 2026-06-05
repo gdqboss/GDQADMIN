@@ -279,3 +279,62 @@ function getStatusText(status) {
   return texts[status] || status
 }
 </script>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* 顶部时间显示 */
+  .min-h-screen .bg-gradient-to-r {
+    padding: 1rem;
+  }
+  .min-h-screen .text-5xl {
+    font-size: 2.5rem;
+  }
+
+  /* 打卡按钮区域 */
+  .min-h-screen .flex.justify-center.gap-8 {
+    gap: 1rem;
+  }
+  .min-h-screen .w-28.h-28 {
+    width: 5rem;
+    height: 5rem;
+  }
+  .min-h-screen .w-28.h-28 .text-2xl {
+    font-size: 1rem;
+  }
+  .min-h-screen .w-28.h-28 .text-xs {
+    font-size: 0.6rem;
+  }
+
+  /* 统计卡片 - 2列 */
+  .min-h-screen .grid.grid-cols-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* 今日记录 */
+  .min-h-screen .flex.justify-between.text-sm {
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+
+  /* 历史记录筛选 */
+  .min-h-screen .bg-white.rounded-xl.shadow.p-3 .flex.gap-2 {
+    flex-direction: column;
+  }
+  .min-h-screen .bg-white.rounded-xl.shadow.p-3 .flex.gap-2 input {
+    width: 100%;
+  }
+
+  /* 记录列表 */
+  .min-h-screen .bg-white.rounded-xl.shadow.p-3.flex.items-center.justify-between {
+    padding: 0.75rem;
+  }
+
+  /* 整体内边距调整 */
+  .min-h-screen > .p-4,
+  .min-h-screen > .px-4 {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+}
+</style>

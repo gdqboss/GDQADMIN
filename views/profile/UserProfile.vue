@@ -324,3 +324,42 @@ onMounted(() => { userStore.fetchMe() })
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  .max-w-2xl {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .bg-gradient-to-br {
+    padding: 16px;
+  }
+
+  .text-xl {
+    font-size: 18px;
+  }
+
+  .w-20 {
+    width: 64px;
+    height: 64px;
+  }
+
+  .bg-white.rounded-xl {
+    padding: 16px;
+  }
+
+  .grid.grid-cols-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .grid.grid-cols-3 {
+    gap: 8px;
+  }
+
+
+  .flex.gap-3 button {
+    flex: 1;
+  }
+}
+</style>

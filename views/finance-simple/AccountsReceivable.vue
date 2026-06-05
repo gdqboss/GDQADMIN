@@ -1,11 +1,12 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../../components/PageHeader.vue'
 import Pagination from '../../components/Pagination.vue'
 import api from '../../services/api.js'
 
-const { t } = useI18n()
+const { t, locale: i18nLocale } = useI18n()
+const locale = computed(() => i18nLocale.value || 'en')
 
 const records = ref([])
 const total = ref(0)
@@ -44,6 +45,11 @@ async function fetchRecords() {
 async function fetchAccounts() {
   const res = await api.get('/finance-simple/accounts')
   if (res.code === 0) accounts.value = res.data.filter(a => a.status === 'active')
+}
+
+function getMethodLabel(method) {
+  const map = { cash: t('financeSimple.cash'), bank: t('financeSimple.bank'), alipay: t('financeSimple.alipay'), wechat: t('financeSimple.wechat'), other: t('financeSimple.other') }
+  return map[method] || method
 }
 
 async function viewTransactions(customer) {
@@ -91,7 +97,10 @@ function formatMoney(val) {
 
 function formatDate(dt) {
   if (!dt) return '-'
-  return new Date(dt).toLocaleDateString('zh-CN')
+  const d = new Date(dt)
+  if (isNaN(d.getTime())) return '-'
+  const localeMap = { zh: 'zh-CN', en: 'en-US' }
+  return d.toLocaleDateString(localeMap[locale.value] || 'zh-CN')
 }
 </script>
 
@@ -100,7 +109,7 @@ function formatDate(dt) {
     <PageHeader :title="$t('financeSimple.accountsReceivable')" :subtitle="$t('financeSimple.accountsReceivableSubtitle')" />
 
     <!-- Table -->
-    <div class="bg-white rounded-lg border border-gray-100 shadow-card overflow-hidden">
+    <div class="bg-white rounded-lg border border-gray-100 shadow-card overflow-hidden max-sm:border-0 max-sm:shadow-none max-sm:rounded-none">
       <div class="overflow-x-auto">
         <table class="w-full text-left text-sm">
           <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
@@ -147,7 +156,7 @@ function formatDate(dt) {
 
     <!-- Transaction Modal -->
     <div v-if="showTransactionModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click.self="showTransactionModal = false">
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto max-sm:fixed max-sm:inset-0 max-sm:max-w-none max-sm:max-h-none max-sm:m-0 max-sm:rounded-none">
         <div class="flex items-center justify-between p-6 border-b border-gray-100">
           <h3 class="text-lg font-semibold text-text-primary">{{ selectedCustomer?.customer_phone }} - {{ $t('financeSimple.transactionHistory') }}</h3>
           <button @click="showTransactionModal = false" class="text-text-secondary hover:text-text-primary">
@@ -174,7 +183,7 @@ function formatDate(dt) {
                   {{ formatMoney(Math.abs(t.amount)) }}
                 </td>
                 <td class="px-4 py-3 text-right font-semibold text-text-primary">{{ formatMoney(t.balance) }}</td>
-                <td class="px-4 py-3 text-text-secondary">{{ t.payment_method || '-' }}</td>
+                <td class="px-4 py-3 text-text-secondary">{{ getMethodLabel(t.payment_method) || '-' }}</td>
                 <td class="px-4 py-3 text-text-secondary text-xs">{{ t.note || '-' }}</td>
               </tr>
             </tbody>
@@ -185,7 +194,7 @@ function formatDate(dt) {
 
     <!-- Receipt Modal -->
     <div v-if="showReceiptModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click.self="showReceiptModal = false">
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-md max-sm:fixed max-sm:inset-0 max-sm:max-w-none max-sm:max-h-none max-sm:m-0 max-sm:rounded-none">
         <div class="flex items-center justify-between p-6 border-b border-gray-100">
           <h3 class="text-lg font-semibold text-text-primary">{{ $t('financeSimple.recordReceipt') }}</h3>
           <button @click="showReceiptModal = false" class="text-text-secondary hover:text-text-primary">
@@ -231,7 +240,7 @@ function formatDate(dt) {
             <textarea v-model="receiptForm.note" rows="3" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"></textarea>
           </div>
         </div>
-        <div class="flex items-center justify-end gap-3 p-6 border-t border-gray-100">
+        <div class="flex items-center justify-between gap-3 p-6 border-t border-gray-100 max-sm:gap-2">
           <button @click="showReceiptModal = false" class="px-4 py-2 border border-gray-200 rounded-lg text-text-secondary hover:text-text-primary transition-colors">
             {{ $t('common.cancel') }}
           </button>
@@ -243,3 +252,68 @@ function formatDate(dt) {
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* 容器内边距缩小 */
+  .bg-white {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  /* 表格横向滚动强化 */
+  .overflow-x-auto {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table {
+    min-width: 600px;
+  }
+
+  /* 表头文字缩小 */
+  thead th {
+    font-size: 11px;
+    padding: 8px 6px;
+  }
+
+  /* 表格单元格缩小 */
+  tbody td {
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+
+  /* 操作按钮间距调整 */
+  tbody td button {
+    margin-right: 4px;
+  }
+
+  /* 分页区域适配 */
+  .px-4.py-3 {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  /* 模态框全屏适配 */
+  .fixed.inset-0 {
+    padding: 0;
+  }
+
+  /* 模态框内容区 */
+  .bg-white.rounded-lg {
+    border-radius: 0;
+  }
+
+  /* 表单输入框 */
+  input, select, textarea {
+    font-size: 16px; /* 防止iOS缩放 */
+  }
+
+  /* 按钮适应屏幕 */
+  .flex.items-center.justify-between.gap-3 button {
+    flex: 1;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+}
+</style>

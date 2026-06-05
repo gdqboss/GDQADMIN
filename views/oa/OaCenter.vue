@@ -322,3 +322,53 @@ function formatDate(dateStr) {
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* Stats Cards - 顶部4个统计卡片改为2列 */
+  .grid-cols-1.md\:grid-cols-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* 首页统计卡片改为单列 */
+  .grid-cols-1.md\:grid-cols-3 {
+    grid-template-columns: 1fr;
+  }
+
+  /* 快速入口改为2列 */
+  .grid-cols-2.md\:grid-cols-3.lg\:grid-cols-6 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* 减少内边距 */
+  .p-6 {
+    padding: 1rem;
+  }
+
+  /* Tab按钮减少横向内边距 */
+  .px-6.py-3 {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  /* 打卡区域调整 */
+  .rounded-lg.p-6.text-white {
+    padding: 1rem;
+  }
+
+  /* 卡片内文字大小调整 */
+  .text-2xl {
+    font-size: 1.5rem;
+  }
+
+  /* 快速操作按钮缩小 */
+  .flex.flex-col.items-center.gap-2.p-4 {
+    padding: 0.75rem;
+  }
+
+  .flex.flex-col.items-center.gap-2.p-4 .w-12.h-12 {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+}
+</style>

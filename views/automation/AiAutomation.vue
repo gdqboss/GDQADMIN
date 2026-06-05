@@ -179,3 +179,70 @@ const logLevelColors = {
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* 任务卡片 - 移动端改为单列 */
+  .grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+
+  /* Section Tabs - 移动端标签页 */
+  .flex.border-b.border-gray-100 {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .flex.border-b.border-gray-100 button {
+    padding: 10px 12px !important;
+    white-space: nowrap;
+  }
+
+  /* 表格 - 移动端横向滚动 */
+  .overflow-x-auto {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .w-full.text-left.text-sm {
+    min-width: 600px;
+  }
+
+  /* 规则列表 - 移动端堆叠 */
+  .flex.items-center.gap-4.p-4 {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+    padding: 12px !important;
+  }
+  .flex.items-center.gap-4.p-4 .flex-1 {
+    width: 100%;
+  }
+
+  /* 日志面板 */
+  .bg-gray-900.rounded-lg.p-4 {
+    padding: 12px !important;
+  }
+
+  /* 内边距调整 */
+  .bg-white.rounded-lg {
+    padding: 12px !important;
+  }
+
+  /* 按钮移动端适配 */
+  button {
+    min-height: 36px;
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  /* 文字大小调整 */
+  .text-sm {
+    font-size: 12px;
+  }
+  .text-xs {
+    font-size: 11px;
+  }
+}
+</style>
+

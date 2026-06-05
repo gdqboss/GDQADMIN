@@ -308,3 +308,124 @@ async function saveBatchSchedule() {
   }
 }
 </script>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* 容器内边距 */
+  .p-6 {
+    padding: 0.75rem;
+  }
+
+  /* 标题 */
+  h1.text-2xl {
+    font-size: 1.25rem;
+  }
+
+  /* 按钮组 - 改为垂直或紧凑布局 */
+  .flex.gap-2 {
+    gap: 0.5rem;
+  }
+
+  .flex.gap-2 button {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  /* 筛选器 - 改为垂直布局 */
+  .mb-4.flex.gap-4 {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .mb-4.flex.gap-4 select {
+    width: 100%;
+  }
+
+  /* 日历头部月份文字 */
+  .text-center.text-xl.font-bold.mb-4 {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  /* 日历网格 - 减小间距和内边距 */
+  .grid.grid-cols-7.gap-2 {
+    gap: 0.25rem;
+  }
+
+  .grid.grid-cols-7.gap-2 > div {
+    padding: 0.25rem;
+    min-height: 60px;
+    font-size: 0.75rem;
+  }
+
+  /* 周几标题行 */
+  .grid.grid-cols-7.gap-2 .font-semibold.py-2 {
+    padding: 0.25rem;
+    font-size: 0.625rem;
+  }
+
+  /* 日期单元格的日期数字 */
+  .text-sm.font-semibold.mb-1 {
+    font-size: 0.75rem;
+    margin-bottom: 0.125rem;
+  }
+
+  /* 事件条目 - 减小内边距 */
+  .space-y-1 > div {
+    padding: 0.125rem;
+    font-size: 0.625rem;
+  }
+
+  .space-y-1 > div .font-medium {
+    font-size: 0.625rem;
+  }
+
+  .space-y-1 > div .text-gray-600 {
+    font-size: 0.5rem;
+  }
+
+  /* 添加按钮 */
+  button.text-xs {
+    font-size: 0.625rem;
+  }
+
+  /* 弹窗 - 全屏显示 */
+  .fixed.inset-0.bg-black.bg-opacity-50 .bg-white {
+    width: 95%;
+    max-width: none;
+    max-height: 85vh;
+    padding: 1rem;
+  }
+
+  .fixed.inset-0.bg-black.bg-opacity-50 .bg-white h2 {
+    font-size: 1rem;
+  }
+
+  /* 弹窗内表单 */
+  .space-y-4 {
+    gap: 0.75rem;
+  }
+
+  /* 弹窗内网格布局改为单列 */
+  .grid.grid-cols-2.gap-4 {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  /* 周几选择按钮 - 紧凑排列 */
+  .flex.flex-wrap.gap-2 label {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  /* 弹窗底部按钮 */
+  .flex.gap-2.justify-end {
+    justify-content: stretch;
+  }
+
+  .flex.gap-2.justify-end button {
+    flex: 1;
+    padding: 0.5rem;
+  }
+}
+</style>

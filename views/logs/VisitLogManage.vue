@@ -602,3 +602,83 @@ function getCustomerTypeLabel(type) {
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* Stats cards - stack vertically */
+  .grid.grid-cols-4 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  /* Toolbar - full width, stack items */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-6 {
+    padding: 12px;
+  }
+
+  .flex.flex-wrap.items-center.gap-3 {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .flex.flex-wrap.items-center.gap-3 > * {
+    width: 100%;
+  }
+
+  .flex.items-center.bg-gray-50.rounded-lg.px-3.py-2.border.border-transparent.focus-within\:border-primary.focus-within\:bg-white.transition-all.min-w-\[180px\] {
+    min-width: unset;
+  }
+
+  .ml-auto {
+    margin-left: 0;
+    margin-top: 8px;
+  }
+
+  /* List cards - full width */
+  .grid.grid-cols-1.md\:grid-cols-2.lg\:grid-cols-3.gap-4.mb-6 {
+    gap: 12px;
+  }
+
+  /* Modal adjustments */
+  .fixed.inset-0.z-50.flex.items-center.justify-center.p-4 {
+    padding: 8px;
+  }
+
+  .relative.w-full.max-w-2xl.bg-white.rounded-lg.shadow-xl.max-h-\[90vh\].overflow-y-auto {
+    max-height: 85vh;
+  }
+
+  /* Modal grid - single column */
+  .grid.grid-cols-2.gap-4 {
+    grid-template-columns: 1fr;
+  }
+
+  /* Modal photos grid */
+  .grid.grid-cols-3.gap-2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Form inputs */
+  .p-6.space-y-4 input,
+  .p-6.space-y-4 select,
+  .p-6.space-y-4 textarea {
+    font-size: 14px;
+  }
+
+  /* Photo upload grid */
+  .grid.grid-cols-5.gap-2 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  /* Modal footer */
+  .sticky.bottom-0.bg-white.border-t.px-6.py-4.flex.justify-end.gap-3 {
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .sticky.bottom-0.bg-white.border-t.px-6.py-4.flex.justify-end.gap-3 button {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+}
+</style scoped>

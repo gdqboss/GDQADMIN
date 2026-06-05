@@ -198,3 +198,100 @@ function exportData() {
   link.click()
 }
 </script>
+
+<style scoped>
+/* 基础样式 */
+.p-6 {
+  padding: 1.5rem;
+}
+
+.text-2xl {
+  font-size: 1.5rem;
+}
+
+.mb-6 {
+  margin-bottom: 1.5rem;
+}
+
+.gap-4 {
+  gap: 1rem;
+}
+
+.bg-white.rounded-lg.shadow.overflow-hidden {
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+}
+
+table {
+  border-collapse: collapse;
+}
+
+th, td {
+  padding: 0.75rem 1rem;
+}
+
+/* 手机适配 */
+@media (max-width: 768px) {
+  .p-6 {
+    padding: 1rem;
+  }
+
+  .text-2xl {
+    font-size: 1.25rem;
+  }
+
+  .flex.justify-between.items-center.mb-6 {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .flex.justify-between.items-center.mb-6 button {
+    width: 100%;
+  }
+
+  .mb-6.grid.grid-cols-1.md\:grid-cols-4 {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .grid.grid-cols-1.md\:grid-cols-4.gap-4.mb-6 {
+    grid-template-columns: 1fr;
+  }
+
+  .bg-blue-50, .bg-green-50, .bg-orange-50, .bg-purple-50 {
+    padding: 0.75rem;
+  }
+
+  .text-2xl {
+    font-size: 1.125rem;
+  }
+
+  .bg-white.rounded-lg.shadow.overflow-hidden {
+    overflow-x: auto;
+  }
+
+  table {
+    font-size: 0.75rem;
+    min-width: 600px;
+  }
+
+  th, td {
+    padding: 0.5rem;
+  }
+
+  .px-4.py-3 {
+    padding: 0.5rem;
+  }
+
+  .px-2.py-1 {
+    padding: 0.125rem 0.375rem;
+    font-size: 0.7rem;
+  }
+
+  button {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+  }
+}
+</style>

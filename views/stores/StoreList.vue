@@ -220,3 +220,63 @@ const extraFormFields = computed(() => [
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-6 {
+    padding: 12px;
+  }
+  .flex.flex-wrap.items-center.gap-3 {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .flex.items-center.bg-gray-50.rounded-lg.px-3.py-2.border.border-transparent.focus-within\:border-primary.focus-within\:bg-white.transition-all.flex-1.min-w-\[160px\].max-w-\[360px\] {
+    max-width: 100%;
+    min-width: unset;
+  }
+  .ml-auto {
+    margin-left: 0;
+    margin-top: 8px;
+  }
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.overflow-hidden {
+    padding: 0;
+  }
+  table {
+    font-size: 12px;
+  }
+  table th,
+  table td {
+    padding: 8px 6px;
+    white-space: nowrap;
+  }
+  table td.text-xs.max-w-\[200px\].truncate {
+    max-width: 120px;
+  }
+  button.text-xs {
+    font-size: 11px;
+    padding: 2px 4px;
+  }
+  .fixed.max-w-lg {
+    max-width: 100%;
+  }
+  .p-6 {
+    padding: 16px;
+  }
+  .space-y-4 > div {
+    margin-bottom: 12px;
+  }
+  input.w-full,
+  select.w-full {
+    font-size: 14px;
+  }
+  .px-6.py-4.border-t.flex.gap-3.justify-end {
+    padding: 12px 16px;
+    flex-wrap: wrap;
+  }
+  .px-6.py-4.border-t.flex.gap-3.justify-end button {
+    flex: 1;
+    min-width: 80px;
+    text-align: center;
+  }
+}
+</style>

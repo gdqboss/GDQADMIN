@@ -946,7 +946,7 @@ async function handleDeleteRecord() {
                   <!-- Header -->
                   <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #111; padding-bottom:8px; margin-bottom:12px;">
                     <div>
-                      <h1 style="font-size:18px; font-weight:bold; margin:0 0 4px 0;">彩美特智慧管理系统</h1>
+                      <h1 style="font-size:18px; font-weight:bold; margin:0 0 4px 0;">3号仓库</h1>
                       <p style="margin:0; font-size:11px; color:#555;">
                         {{ activeTab === 'inbound' ? '入库单' : activeTab === 'outbound' ? '出库单' : '退货单' }}
                       </p>
@@ -1026,7 +1026,7 @@ async function handleDeleteRecord() {
                   </div>
 
                   <p style="margin-top:16px; font-size:10px; color:#aaa; text-align:center;">
-                    彩美特智慧管理系统 {{ new Date().toLocaleString('zh-CN') }}
+                    3号仓库 {{ new Date().toLocaleString('zh-CN') }}
                   </p>
                 </div>
               </template>
@@ -1160,5 +1160,74 @@ async function handleDeleteRecord() {
   body > * { display: none; }
   #print-area, #print-preview-area { display: block !important; }
   #print-preview-area > * { display: block !important; }
+}
+
+@media (max-width: 768px) {
+  /* 表格横向滚动 & 单元格 */
+  .overflow-x-auto {
+    margin: 0 -1rem;
+    padding: 0 1rem;
+  }
+  table.text-left.text-sm th,
+  table.text-left.text-sm td {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+  }
+  table.text-left.text-sm th {
+    font-size: 0.65rem;
+  }
+  /* 操作列按钮 */
+  table.text-left.text-sm td button {
+    font-size: 0.7rem;
+    margin-right: 0.5rem;
+  }
+  /* Tabs 区域 */
+  .flex.flex-wrap.border-b.border-gray-100 {
+    padding: 0;
+  }
+  .flex.flex-wrap.border-b.border-gray-100 button {
+    padding: 0.5rem 1rem;
+    font-size: 0.75rem;
+  }
+  .flex.items-center.gap-2.bg-primary {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+  }
+  /* 模态框 */
+  .fixed.inset-0.z-50 .bg-white.rounded-xl {
+    max-width: 100%;
+    margin: 1rem;
+    max-height: calc(100vh - 2rem);
+  }
+  /* 表单 grid */
+  .grid.grid-cols-1.sm\:grid-cols-2.gap-4 {
+    grid-template-columns: 1fr;
+  }
+  .grid.grid-cols-2.gap-x-4.gap-y-2 {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+  /* 模态框内边距 */
+  .p-6 {
+    padding: 1rem;
+  }
+  /* 按钮缩小 */
+  button.px-4.py-2,
+  button.px-4.py-2.rounded-lg {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+  }
+  /* 分页 */
+  .text-sm.text-text-secondary {
+    font-size: 0.75rem;
+  }
+  /* 详情模态框 */
+  .max-w-lg {
+    max-width: calc(100% - 2rem);
+  }
+  /* 打印预览模态框 */
+  .max-w-2xl {
+    max-width: calc(100% - 2rem);
+  }
 }
 </style>

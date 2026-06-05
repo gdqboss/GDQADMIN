@@ -9,10 +9,16 @@
 
 // ─── 角色常量 ─────────────────────────────────────────────────────────────────
 export const ROLES = Object.freeze({
-  ADMIN:    'admin',      // 超级管理员
-  MANAGER:  'manager',    // 经理/管理层
-  OPERATOR: 'operator',   // 操作员
-  MEMBER:   'member',     // 普通会员
+  ADMIN:      'admin',        // 超级管理员
+  SUPERADMIN: 'superadmin',   // 超级管理员（系统级）
+  MANAGER:    'manager',      // 经理/管理层
+  OPERATOR:   'operator',     // 操作员
+  MEMBER:     'member',       // 普通会员
+  SALESPERSON:'salesperson',  // 销售员
+  CASHIER:    'cashier',      // 收银员
+  DIRECTOR:   'director',     // 总监
+  WAREHOUSE:  'warehouse',    // 仓库管理员
+  FINANCE:    'finance',      // 财务
 })
 
 // ─── 综合判断 ─────────────────────────────────────────────────────────────────

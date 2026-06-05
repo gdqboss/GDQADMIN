@@ -154,3 +154,61 @@ onMounted(() => {
   loadUsers()
 })
 </script>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* 左侧列表：隐藏或缩小 */
+  .w-64 {
+    width: 56px !important;
+  }
+  .w-64 > .p-4 {
+    display: none;
+  }
+  .w-64 .flex-1 > div:first-child {
+    justify-content: center;
+  }
+  .w-64 .flex-1 .cursor-pointer > *:not(.rounded-full) {
+    display: none;
+  }
+  .w-64 .px-3.py-2 {
+    display: none;
+  }
+
+  /* 聊天区域内边距 */
+  .flex-1.flex-col > .flex-1 {
+    padding: 8px !important;
+  }
+
+  /* 消息气泡 */
+  .max-w-\[80\%\] {
+    max-width: 90% !important;
+  }
+  .max-w-\[80\%\] .text-sm {
+    font-size: 14px !important;
+  }
+
+  /* 输入框区域 */
+  .bg-white.p-4 {
+    padding: 8px !important;
+  }
+  .bg-white.p-4 .flex.gap-2 {
+    gap: 6px !important;
+  }
+  .bg-white.p-4 input {
+    padding: 6px 10px !important;
+    font-size: 14px !important;
+  }
+  .bg-white.p-4 button {
+    padding: 6px 12px !important;
+    font-size: 14px !important;
+  }
+
+  /* 标题 */
+  .bg-white.px-6.py-4 {
+    padding: 8px 12px !important;
+  }
+  .text-xl.font-bold {
+    font-size: 16px !important;
+  }
+}
+</style>

@@ -318,3 +318,97 @@ onMounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* 标题区域 */
+  .mb-6.flex.items-center.justify-between {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .mb-6.flex.items-center.justify-between button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  h1.text-2xl {
+    font-size: 1.25rem;
+  }
+
+  p.text-sm {
+    font-size: 0.8rem;
+  }
+
+  /* 筛选区域 */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-sm.p-4.mb-6 {
+    padding: 12px;
+  }
+
+  .grid.grid-cols-1.md\:grid-cols-3.gap-4 {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* 表格区域 */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-sm.overflow-hidden {
+    overflow-x: auto;
+  }
+
+  table.w-full {
+    min-width: 700px;
+  }
+
+  th, td {
+    padding: 8px !important;
+    font-size: 0.75rem;
+  }
+
+  th.text-xs {
+    font-size: 0.65rem;
+  }
+
+  td.text-sm {
+    font-size: 0.75rem;
+  }
+
+  td.max-w-xs.truncate {
+    max-width: 100px;
+  }
+
+  /* 对话框 */
+  .fixed.inset-0.bg-black\/50 {
+    padding: 8px;
+  }
+
+  .bg-white.rounded-xl.shadow-xl.w-full.max-w-2xl {
+    max-width: calc(100vw - 16px);
+    max-height: 85vh;
+  }
+
+  .p-6.space-y-4 {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .grid.grid-cols-2.gap-4 {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .p-6.border-t.border-gray-100 {
+    padding: 12px;
+    flex-direction: column;
+  }
+
+  .flex.items-center.justify-end.gap-3 button {
+    flex: 1;
+    padding: 10px 16px;
+  }
+
+  .text-lg.font-bold {
+    font-size: 1rem;
+  }
+}
+</style>

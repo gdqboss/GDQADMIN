@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { ROLES } from '../constants/roles.js'
 
 // Migrate old localStorage keys to new ones (one-time migration)
 if (typeof window !== 'undefined') {
@@ -69,3 +70,28 @@ api.interceptors.response.use(
 )
 
 export default api
+
+// 目标服务器管理 API
+export const serverProfileApi = {
+  list() { return api.get('/server-profiles') },
+  get(id) { return api.get(`/server-profiles/${id}`) },
+  getAvailableModules() { return api.get('/server-profiles/available-modules') },
+  create(data) { return api.post('/server-profiles', data) },
+  update(id, data) { return api.put(`/server-profiles/${id}`, data) },
+  remove(id) { return api.delete(`/server-profiles/${id}`) },
+  sync(id) { return api.post(`/server-profiles/${id}/sync`) },
+  execSync(id) { return api.post(`/server-profiles/${id}/exec-sync`) },
+}
+
+// 菜单配置 API
+export const menuApi = {
+  getMenuConfig(role = ROLES.ADMIN) {
+    return api.get(`/settings/menu-config?role=${role}`)
+  },
+  getMenuModules() {
+    return api.get('/settings/menu-modules')
+  },
+  updateMenuConfig(selections) {
+    return api.put('/settings/menu-config', { selections })
+  }
+}

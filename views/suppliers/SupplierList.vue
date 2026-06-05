@@ -15,8 +15,9 @@ const searchQuery = ref('')
 const showDrawer = ref(false)
 const showEditDrawer = ref(false)
 const editingId = ref(null)
+const filterType = ref('')
 
-const emptyForm = () => ({ name: '', contact: '', phone: '', email: '', address: '', remark: '' })
+const emptyForm = () => ({ name: '', contact: '', phone: '', email: '', address: '', remark: '', type: 'raw_material' })
 const newForm = ref(emptyForm())
 const editForm = ref(emptyForm())
 
@@ -28,6 +29,7 @@ async function fetchSuppliers() {
 
   const params = {}
   if (searchQuery.value) params.keyword = searchQuery.value
+  if (filterType.value) params.type = filterType.value
   const res = await api.get('/suppliers', { params })
   if (res.code === 0) suppliers.value = res.data
 }
@@ -44,7 +46,7 @@ async function handleAdd() {
 
 function openEdit(s) {
   editingId.value = s.id
-  editForm.value = { name: s.name, contact: s.contact || '', phone: s.phone || '', email: s.email || '', address: s.address || '', remark: s.remark || '', status: s.status }
+  editForm.value = { name: s.name, contact: s.contact || '', phone: s.phone || '', email: s.email || '', address: s.address || '', remark: s.remark || '', status: s.status, type: s.type || 'raw_material' }
   showEditDrawer.value = true
 }
 
@@ -80,6 +82,12 @@ const formFields = computed(() => [
           <span class="material-symbols-outlined text-text-secondary text-[20px]">search</span>
           <input v-model="searchQuery" @input="fetchSuppliers" type="text" :placeholder="$t('supplier.searchPlaceholder')" class="bg-transparent border-none focus:ring-0 focus:outline-none text-sm w-full ml-2" />
         </div>
+        <select v-model="filterType" @change="fetchSuppliers" class="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+          <option value="">{{ $t('common.supplierTypeAll') }}</option>
+          <option value="raw_material">{{ $t('common.supplierTypeRaw') }}</option>
+          <option value="finished_goods">{{ $t('common.supplierTypeFinished') }}</option>
+          <option value="both">{{ $t('common.supplierTypeBoth') }}</option>
+        </select>
         <div class="ml-auto">
           <button @click="showDrawer = true" class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
             <span class="material-symbols-outlined text-[18px]">add</span>
@@ -95,6 +103,7 @@ const formFields = computed(() => [
           <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
             <tr>
               <th class="px-4 py-3 font-medium">{{ $t('supplier.nameLabel') }}</th>
+              <th class="px-4 py-3 font-medium">{{ $t('common.supplierType') || '类型' }}</th>
               <th class="px-4 py-3 font-medium">{{ $t('common.contact') }}</th>
               <th class="px-4 py-3 font-medium">{{ $t('common.phone') }}</th>
               <th class="px-4 py-3 font-medium">{{ $t('common.email') }}</th>
@@ -106,6 +115,11 @@ const formFields = computed(() => [
           <tbody class="divide-y divide-gray-100">
             <tr v-for="s in suppliers" :key="s.id" class="hover:bg-gray-50 transition-colors">
               <td class="px-4 py-3 font-medium text-text-primary">{{ s.name }}</td>
+              <td class="px-4 py-3">
+                <span v-if="s.type === 'raw_material'" class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{{ $t('common.supplierTypeRaw') }}</span>
+                <span v-else-if="s.type === 'finished_goods'" class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">{{ $t('common.supplierTypeFinished') }}</span>
+                <span v-else class="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">{{ $t('common.supplierTypeBoth') }}</span>
+              </td>
               <td class="px-4 py-3 text-text-secondary">{{ s.contact || '-' }}</td>
               <td class="px-4 py-3 text-text-secondary">{{ s.phone || '-' }}</td>
               <td class="px-4 py-3 text-text-secondary">{{ s.email || '-' }}</td>
@@ -119,7 +133,7 @@ const formFields = computed(() => [
               </td>
             </tr>
             <tr v-if="suppliers.length === 0">
-              <td colspan="7" class="px-4 py-8 text-center text-text-secondary text-sm">{{ $t('common.noData') }}</td>
+              <td colspan="8" class="px-4 py-8 text-center text-text-secondary text-sm">{{ $t('common.noData') }}</td>
             </tr>
           </tbody>
         </table>
@@ -140,6 +154,14 @@ const formFields = computed(() => [
             <div v-for="f in formFields" :key="f.key">
               <label class="block text-sm font-medium text-text-primary mb-1">{{ f.label }}<span v-if="f.required" class="text-danger ml-1">*</span></label>
               <input v-model="newForm[f.key]" :placeholder="f.placeholder" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('common.supplierType') || '类型' }}</label>
+              <select v-model="newForm.type" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+                <option value="raw_material">{{ $t('common.supplierTypeRaw') }}</option>
+                <option value="finished_goods">{{ $t('common.supplierTypeFinished') }}</option>
+                <option value="both">{{ $t('common.supplierTypeBoth') }}</option>
+              </select>
             </div>
           </div>
           <div class="px-6 py-4 border-t flex gap-3 justify-end">
@@ -171,6 +193,14 @@ const formFields = computed(() => [
                 <option value="inactive">{{ $t('supplier.statusInactive') }}</option>
               </select>
             </div>
+            <div>
+              <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('common.supplierType') || '类型' }}</label>
+              <select v-model="editForm.type" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+                <option value="raw_material">{{ $t('common.supplierTypeRaw') }}</option>
+                <option value="finished_goods">{{ $t('common.supplierTypeFinished') }}</option>
+                <option value="both">{{ $t('common.supplierTypeBoth') }}</option>
+              </select>
+            </div>
           </div>
           <div class="px-6 py-4 border-t flex gap-3 justify-end">
             <button @click="showEditDrawer = false" class="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50">{{ $t('common.cancel') }}</button>
@@ -181,3 +211,75 @@ const formFields = computed(() => [
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* 搜索表单区 - 全宽适配 */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-6 {
+    padding: 12px;
+  }
+
+  /* 搜索框 */
+  .flex.flex-wrap.items-center.gap-3 {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .flex.items-center.bg-gray-50.rounded-lg.px-3.py-2.border.border-transparent.focus-within\\:border-primary.focus-within\\:bg-white.transition-all.flex-1.min-w-\\[160px\\].max-w-\\[360px\\] {
+    max-width: 100%;
+    min-width: unset;
+  }
+
+  .ml-auto {
+    margin-left: 0;
+    width: 100%;
+    margin-top: 8px;
+  }
+
+  .ml-auto button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* 表格区 */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.overflow-hidden {
+    padding: 0;
+  }
+
+  .overflow-x-auto {
+    font-size: 12px;
+  }
+
+  table {
+    min-width: 600px;
+  }
+
+  th, td {
+    padding: 8px 10px;
+  }
+
+  /* 表单项全宽 - Drawer */
+  .relative.w-full.max-w-lg.bg-white.shadow-xl.flex.flex-col {
+    max-width: 100%;
+  }
+
+  .flex-1.overflow-y-auto.p-6.space-y-4 > div {
+    width: 100%;
+  }
+
+  .flex-1.overflow-y-auto.p-6.space-y-4 input,
+  .flex-1.overflow-y-auto.p-6.space-y-4 select {
+    width: 100%;
+  }
+
+  /* Drawer 按钮 */
+  .px-6.py-4.border-t.flex.gap-3.justify-end {
+    flex-direction: column;
+  }
+
+  .px-6.py-4.border-t.flex.gap-3.justify-end button {
+    width: 100%;
+    text-align: center;
+  }
+}
+</style>

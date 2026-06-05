@@ -14,5 +14,8 @@ defineProps({
     <div v-if="$slots.actions" class="ml-4">
       <slot name="actions"></slot>
     </div>
+    <div v-else-if="$slots.default" class="ml-4">
+      <slot></slot>
+    </div>
   </div>
 </template>

@@ -352,3 +352,85 @@ function formatDateTime(dt) {
   })
 }
 </script>
+
+<style scoped>
+@media (max-width: 768px) {
+  .p-6 {
+    padding: 1rem;
+  }
+
+  .p-6.max-w-7xl {
+    max-width: 100%;
+  }
+
+  .bg-white.rounded-lg.shadow.p-6 {
+    padding: 0.75rem;
+  }
+
+  .mb-6 {
+    margin-bottom: 1rem;
+  }
+
+  .text-2xl {
+    font-size: 1.25rem;
+  }
+
+  .text-lg {
+    font-size: 1rem;
+  }
+
+  .flex.justify-between.items-center {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .px-6.py-3 {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  button.px-4.py-2 {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  .fixed.inset-0.bg-black\/50 {
+    padding: 0.5rem;
+  }
+
+  .bg-white.rounded-lg.max-w-lg {
+    max-width: 100%;
+    margin: 0;
+  }
+
+  .p-6.space-y-4 {
+    padding: 1rem;
+  }
+
+  .grid.grid-cols-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .flex.gap-3 {
+    flex-direction: column;
+  }
+
+  .border.rounded-lg.p-4 {
+    padding: 0.75rem;
+  }
+
+  .flex.items-start.justify-between {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .flex.gap-2.justify-end {
+    justify-content: stretch;
+  }
+
+  .flex.gap-2.justify-end button {
+    flex: 1;
+  }
+}
+</style>

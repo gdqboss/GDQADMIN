@@ -159,3 +159,60 @@ const statusMap = computed(() => ({
   </div>
   <div v-else class="text-center py-20 text-text-secondary">{{ $t('approval.notFound') }}</div>
 </template>
+
+<style scoped>
+/* 手机端适配 */
+@media (max-width: 768px) {
+  /* Header */
+  .flex.items-center.gap-3.mb-6 {
+    flex-wrap: wrap;
+  }
+  .flex.items-center.gap-3.mb-6 .text-xl {
+    font-size: 16px;
+  }
+  .flex.items-center.gap-3.mb-6 .text-sm {
+    font-size: 12px;
+  }
+
+  /* Steps 区域 */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-6:has(.flex.items-center) {
+    padding: 16px;
+    overflow-x: auto;
+  }
+  .size-10 {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+  }
+  .text-xs.mt-2 {
+    font-size: 10px;
+    max-width: 60px;
+  }
+
+  /* Details 表格 */
+  .grid.grid-cols-1.lg\:grid-cols-2 {
+    grid-template-columns: 1fr;
+  }
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-6 {
+    padding: 16px;
+  }
+  .space-y-3 .flex {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  /* 操作按钮区 */
+  .flex.gap-3 {
+    flex-direction: column;
+  }
+  .flex.gap-3 button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* textarea */
+  textarea {
+    font-size: 14px;
+  }
+}
+</style>

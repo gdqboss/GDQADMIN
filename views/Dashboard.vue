@@ -297,10 +297,10 @@ onUnmounted(() => { stopCameraScanner() })
     <!-- Main Content -->
     <template v-else>
       <div class="flex justify-between items-center">
-        <h2 class="text-xl sm:text-2xl font-bold text-text-primary">工作台</h2>
+        <h2 class="text-xl sm:text-2xl font-bold text-text-primary">{{ $t('dashboard.title') }}</h2>
         <button @click="refreshData" class="flex items-center gap-2 px-3 py-2 text-sm text-primary hover:bg-primary/10 rounded-lg transition-colors">
           <span class="material-symbols-outlined text-lg">refresh</span>
-          <span class="hidden sm:inline">刷新</span>
+          <span class="hidden sm:inline">{{ $t('dashboard.refresh') }}</span>
         </button>
       </div>
 
@@ -574,3 +574,46 @@ onUnmounted(() => { stopCameraScanner() })
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* 卡片网格 - 快捷操作 */
+  .grid-cols-2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  /* 快捷操作图标和文字 */
+  .grid span.material-symbols-outlined {
+    font-size: 1.5rem;
+  }
+  .grid span.text-sm {
+    font-size: 0.7rem;
+  }
+  
+  /* 卡片内边距 */
+  .bg-white.rounded-lg {
+    padding: 0.75rem;
+  }
+  
+  /* 标题文字 */
+  .text-xl {
+    font-size: 1.125rem;
+  }
+  .text-2xl {
+    font-size: 1.25rem;
+  }
+  
+  /* 权责列表项 */
+  .space-y-3 > div {
+    padding: 0.625rem;
+  }
+  
+  /* 弹窗适配 */
+  .fixed.inset-0 {
+    padding: 1rem;
+  }
+  .max-w-md {
+    max-width: 100%;
+  }
+}
+</style>

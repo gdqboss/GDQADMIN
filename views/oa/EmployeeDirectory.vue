@@ -158,3 +158,59 @@ function filterEmployees() {
   // Reactive computed will handle this
 }
 </script>
+
+<style scoped>
+@media (max-width: 768px) {
+  :deep(.p-6) {
+    padding: 1rem;
+  }
+
+  :deep(.mb-6) {
+    margin-bottom: 1rem;
+  }
+
+  :deep(.text-2xl) {
+    font-size: 1.25rem;
+  }
+
+  :deep(.bg-white) {
+    padding: 1rem;
+  }
+
+  :deep(.grid-cols-1) {
+    grid-template-columns: 1fr;
+  }
+
+  :deep(.gap-4),
+  :deep(.gap-3) {
+    gap: 0.75rem;
+  }
+
+  :deep(.rounded-lg) {
+    border-radius: 0.5rem;
+  }
+
+  :deep(.text-lg) {
+    font-size: 1rem;
+  }
+
+  :deep(.w-12) {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  :deep(.h-10) {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  :deep(.p-4),
+  :deep(.p-3) {
+    padding: 0.75rem;
+  }
+
+  :deep(.text-sm) {
+    font-size: 0.75rem;
+  }
+}
+</style>

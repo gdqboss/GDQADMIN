@@ -553,3 +553,82 @@ const openImagePreview = (url) => {
   previewImage.value = url
 }
 </script>
+
+<style scoped>
+@media (max-width: 768px) {
+  .invoice-manage.p-6 {
+    padding: 0.75rem;
+  }
+
+  .mb-6 {
+    margin-bottom: 0.75rem;
+  }
+
+  .mb-4 {
+    margin-bottom: 0.5rem;
+  }
+
+  .flex.space-x-4 {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+  }
+
+  .flex.flex-wrap.gap-4 {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .flex.flex-wrap.gap-4 > * {
+    width: 100%;
+  }
+
+  .px-3.py-2.border {
+    font-size: 0.875rem;
+  }
+
+  .px-4.py-2.bg-blue-500,
+  .px-4.py-2.bg-gray-500,
+  .px-4.py-2.bg-green-500 {
+    width: 100%;
+    text-align: center;
+    margin-left: 0 !important;
+    margin-top: 0.25rem;
+  }
+
+  .bg-white.rounded-lg.shadow.overflow-hidden {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .min-w-full {
+    min-width: 800px;
+  }
+
+  .text-2xl.font-bold {
+    font-size: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.25rem;
+  }
+
+  .fixed.inset-0.bg-black.bg-opacity-50 {
+    padding: 0.5rem;
+  }
+
+  .bg-white.rounded-lg.max-w-4xl {
+    max-width: 100%;
+    margin: 0.5rem;
+  }
+
+  .grid.grid-cols-2.gap-6 {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .p-6 {
+    padding: 1rem;
+  }
+}
+</style>

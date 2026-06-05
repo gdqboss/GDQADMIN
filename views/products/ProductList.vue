@@ -726,7 +726,9 @@ const editingMat = ref(null)        // 当前编辑的材料类目（manage模�
 const newMatName = ref('')
 const newMatUnit = ref('')
 const newMatRemark = ref('')
+const newMatSupplierId = ref('')
 const materialCategories = ref([])
+const matSuppliers = ref([])
 const productMaterials = ref([])
 const matLoading = ref(false)
 
@@ -741,6 +743,19 @@ async function fetchMaterials() {
   }
 }
 
+async function fetchMatSuppliers() {
+  try {
+    const res = await api.get('/suppliers', { params: { type: 'raw_material' } })
+    if (res.code === 0) {
+      matSuppliers.value = res.data || []
+    } else {
+      matSuppliers.value = []
+    }
+  } catch (e) {
+    matSuppliers.value = []
+  }
+}
+
 // 打开材料管理（基础数据管理，不关联商品）
 async function openMaterialManage() {
   materialMode.value = 'manage'
@@ -749,7 +764,9 @@ async function openMaterialManage() {
   newMatName.value = ''
   newMatUnit.value = ''
   newMatRemark.value = ''
+  newMatSupplierId.value = ''
   await fetchMaterials()
+  await fetchMatSuppliers()
   showMaterialModal.value = true
 }
 // 打开商品配方编辑
@@ -826,6 +843,7 @@ function startEditMat(cat) {
   newMatName.value = cat.name
   newMatUnit.value = cat.unit || ''
   newMatRemark.value = cat.remark || ''
+  newMatSupplierId.value = cat.supplier_id || ''
 }
 
 function cancelEditMat() {
@@ -833,6 +851,7 @@ function cancelEditMat() {
   newMatName.value = ''
   newMatUnit.value = ''
   newMatRemark.value = ''
+  newMatSupplierId.value = ''
 }
 
 async function saveMatCategory() {
@@ -845,7 +864,8 @@ async function saveMatCategory() {
     const payload = {
       name: newMatName.value.trim(),
       unit: newMatUnit.value || '',
-      remark: newMatRemark.value || ''
+      remark: newMatRemark.value || '',
+      supplier_id: newMatSupplierId.value || null
     }
     if (editingMat.value) {
       await api.put(`/materials/categories/${editingMat.value.id}`, payload)
@@ -1632,6 +1652,9 @@ async function deleteCategory(cat) {
                     <div class="font-medium text-sm text-text-primary">{{ cat.name }}</div>
                     <div class="text-xs text-text-secondary mt-0.5">
                       {{ $t('product.unit') }}: {{ cat.unit || $t('product.none') }} |
+                      供应商: {{ cat.supplier_name || '未指定' }}
+                    </div>
+                    <div class="text-xs text-text-secondary mt-0.5">
                       {{ $t('product.remarkOptional') }}: {{ cat.remark || $t('product.none') }}
                     </div>
                   </div>
@@ -1654,8 +1677,12 @@ async function deleteCategory(cat) {
                   <input v-model="newMatName" :placeholder="$t('product.materialName')" class="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
                   <div class="flex gap-2">
                     <input v-model="newMatUnit" :placeholder="$t('product.unit')" class="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
-                    <input v-model="newMatRemark" :placeholder="$t('product.remarkOptional')" class="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+                    <select v-model="newMatSupplierId" class="flex-1 border border-gray-200 rounded px-3 py-1.5 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none bg-white">
+                      <option value="">选择原材料供应商</option>
+                      <option v-for="s in matSuppliers" :key="s.id" :value="s.id">{{ s.name }}</option>
+                    </select>
                   </div>
+                  <input v-model="newMatRemark" :placeholder="$t('product.remarkOptional')" class="w-full border border-gray-200 rounded px-3 py-1.5 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
                   <div class="flex gap-2">
                     <button @click="saveMatCategory" class="flex-1 py-1.5 bg-primary hover:bg-primary-hover text-white rounded text-sm font-medium">
                       {{ $t('common.save') }}
@@ -1933,3 +1960,63 @@ async function deleteCategory(cat) {
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* Toolbar: search input full width, buttons stack */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-6 {
+    padding: 12px;
+  }
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-6 .flex.flex-wrap.items-center.gap-3 {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-6 .flex.flex-wrap.items-center.gap-3 > div:first-child,
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-6 .flex.flex-wrap.items-center.gap-3 select {
+    min-width: unset !important;
+    max-width: unset !important;
+    width: 100%;
+  }
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-6 .flex.flex-wrap.items-center.gap-3 button {
+    width: 100%;
+    justify-content: center;
+    padding: 10px 12px;
+  }
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-6 .ml-auto {
+    margin-left: 0;
+    width: 100%;
+  }
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-6 .ml-auto button {
+    width: 100%;
+  }
+
+  /* Table: enable horizontal scroll */
+  .overflow-x-auto {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Table cells: reduce padding */
+  table.text-left.text-sm th,
+  table.text-left.text-sm td {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  /* Product image smaller */
+  table.text-left.text-sm td img,
+  table.text-left.text-sm td > div {
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  /* Action buttons: stack vertically */
+  table.text-left.text-sm td button:last-child {
+    margin-right: 0;
+  }
+  table.text-left.text-sm td button {
+    display: block;
+    margin-bottom: 4px;
+  }
+}
+</style>

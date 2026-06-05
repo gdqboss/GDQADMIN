@@ -194,8 +194,8 @@ async function handleDelete(record) {
       </div>
     </div>
 
-    <!-- Table -->
-    <div class="bg-white rounded-lg border border-gray-100 shadow-card overflow-hidden">
+
+<div class="bg-white rounded-lg border border-gray-100 shadow-card overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-left text-sm">
           <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
@@ -286,3 +286,70 @@ async function handleDelete(record) {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* 桌面端已有 Tailwind 基础样式，移动端适配 */
+@media (max-width: 768px) {
+  /* 统计卡片堆叠 */
+  .grid-cols-3 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* 搜索表单换行、减小内边距 */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-6 .flex.flex-wrap {
+    gap: 8px;
+  }
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-6 .flex.flex-wrap > * {
+    width: 100%;
+    min-width: 0;
+  }
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-6 .ml-auto {
+    margin-left: 0;
+    width: 100%;
+  }
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-6 .ml-auto button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* 输入框和选择框全宽 */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-6 input,
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-6 select {
+    width: 100%;
+  }
+
+  /* 表格横向滚动 + 单元格缩小 */
+  .overflow-x-auto {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  table.text-sm th,
+  table.text-sm td {
+    padding: 8px 6px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  table.text-sm td {
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  table.text-sm td:last-child {
+    max-width: 80px;
+  }
+
+  /* 操作按钮缩小 */
+  .flex.items-center.justify-center.gap-2 button {
+    padding: 4px 6px;
+    font-size: 11px;
+  }
+
+  /* 统计卡片减小内边距 */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4 {
+    padding: 12px;
+  }
+  .text-xl.font-bold {
+    font-size: 18px;
+  }
+}
+</style>

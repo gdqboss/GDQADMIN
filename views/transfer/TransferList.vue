@@ -159,3 +159,35 @@ function createTransfer() {
     />
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  .p-6 {
+    padding: 1rem;
+  }
+
+  .bg-white.rounded-lg.shadow {
+    overflow-x: auto;
+  }
+
+  table {
+    min-width: 700px;
+  }
+
+  .grid-cols-1.md\:grid-cols-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .btn-primary {
+    width: 100%;
+    justify-content: center;
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+  }
+
+  th, td {
+    font-size: 0.75rem;
+    padding: 0.5rem;
+  }
+}
+</style>

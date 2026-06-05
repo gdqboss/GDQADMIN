@@ -1,11 +1,7 @@
 <template>
   <div class="excel-analyzer">
     <div class="header">
-      <h1>📊 Excel Analyzer</h1>
-      <div class="lang-toggle">
-        <button @click="setLang('zh')" :class="{ active: locale === 'zh' }">中文</button>
-        <button @click="setLang('en')" :class="{ active: locale === 'en' }">EN</button>
-      </div>
+      <h1>📊 {{ $t('excelAnalyzer.pageTitle') }}</h1>
     </div>
 
     <!-- Upload Area -->
@@ -148,10 +144,17 @@
       <div class="report-section" v-if="(report.dataType === 'APPOLLOS' || report.dataType === 'APPOLLOS_MULTI') && filteredItems.length">
         <h2>📦 {{ $t('excelAnalyzer.productDetails') }} ({{ filteredItems.length }})</h2>
         <table class="data-table">
-          <thead><tr><th>SKU</th><th>{{ $t('excelAnalyzer.description') }}</th><th>SCLASS</th><th>{{ $t('excelAnalyzer.price') }}</th><th v-if="report.isMultiFile">{{ $t('excelAnalyzer.source') }}</th></tr></thead>
+          <thead><tr><th>SKU</th><th>{{ $t('excelAnalyzer.image') }}</th><th>{{ $t('excelAnalyzer.productName') }}</th><th>{{ $t('excelAnalyzer.description') }}</th><th>SCLASS</th><th>{{ $t('excelAnalyzer.price') }}</th><th v-if="report.isMultiFile">{{ $t('excelAnalyzer.source') }}</th></tr></thead>
           <tbody>
             <tr v-for="(item, i) in filteredItems.slice(0, 500)" :key="i">
               <td>{{ item.sku }}</td>
+              <td>
+                <img v-if="getItemImage(item)" :src="getItemImage(item)" alt="" class="w-10 h-10 object-cover rounded border border-gray-100" />
+                <div v-else class="w-10 h-10 rounded border border-gray-100 bg-gray-50 flex items-center justify-center">
+                  <span class="material-symbols-outlined text-gray-300 text-[16px]">image</span>
+                </div>
+              </td>
+              <td>{{ getItemName(item) }}</td>
               <td>{{ item.description }}</td>
               <td>{{ item.sclass }}</td>
               <td>{{ item.price?.toLocaleString() }}</td>
@@ -265,15 +268,81 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import * as XLSX from 'xlsx'
+import { ref, computed, onMounted } from 'vue'
 import i18n from '@/i18n'
+import api from '../../services/api.js'
 
 const fileInputRef = ref(null)
 const hasData = ref(false)
 const fileName = ref('')
 const report = ref({})
 const showSaveSuccess = ref(false)
+const uploadedFile = ref(null) // 存储已上传的原始File对象，供saveReport使用
+
+// 商品SKU对照表：sku -> { name, image_main }
+const productMap = ref({})
+
+// 型号->图片映射：从商品名称提取6位型号，映射到image_main
+// 例如 "VOYAGER HC LUGG 555165A 28 BLK" -> extract "555165A" -> image
+const modelImageMap = ref({})
+
+// 加载商品SKU对照表
+async function loadProductMap() {
+  try {
+    const res = await api.get('/products', { params: { size: 10000 } })
+    if (res.code === 0) {
+      const list = res.data.list || res.data || []
+      const map = {}
+      const modelMap = {}
+      list.forEach(p => {
+        if (p.sku) map[String(p.sku)] = p
+        // 从商品名称提取6位型号建立图片映射
+        if (p.image_main) {
+          const m = String(p.name || '').match(/\d{6}[A-Z]/)
+          if (m) modelMap[m[0]] = p.image_main
+        }
+      })
+      productMap.value = map
+      modelImageMap.value = modelMap
+    }
+  } catch (e) {
+    console.error('[ExcelAnalyzer] 加载商品表失败', e)
+  }
+}
+
+// 从描述文本提取6位型号
+function extractModel(desc) {
+  if (!desc) return null
+  const m = String(desc).match(/\d{6}[A-Z]/)
+  return m ? m[0] : null
+}
+
+// 获取商品图片：优先按SKU精确匹配，其次按描述中的6位型号模糊匹配
+function getItemImage(item) {
+  // 1. 先按SKU精确查（适合日期格式SKU的商品）
+  if (productMap.value[item.sku]?.image_main) return productMap.value[item.sku].image_main
+  // 2. 按描述中的型号查（如 "VOYAGER HARDCASE LUGGAGE 551563A 28 BRONZE" -> 提取 "551563A"）
+  const model = extractModel(item.description)
+  if (model && modelImageMap.value[model]) return modelImageMap.value[model]
+  return null
+}
+
+// 获取商品名称：优先按SKU精确查，其次按描述型号模糊匹配
+function getItemName(item) {
+  if (productMap.value[item.sku]?.name) return productMap.value[item.sku].name
+  const model = extractModel(item.description)
+  if (model) {
+    // 找型号相同的所有商品，返回第一个
+    const found = Object.values(productMap.value).find(p => {
+      const pm = String(p.name || '').match(/\d{6}[A-Z]/)
+      return pm && pm[0] === model
+    })
+    if (found) return found.name
+  }
+  return '-'
+}
+
+onMounted(loadProductMap)
 
 // 使用 i18n 管理语言
 const { t, locale } = i18n.global
@@ -326,10 +395,14 @@ function resetFilter() {
   filteredItems.value = report.value.items || []
 }
 
-function getSclassList() {
-  if (!report.value.items) return []
-  const sclases = [...new Set(report.value.items.map(i => i.sclass).filter(Boolean))]
+function getSclassListFromItems(items) {
+  if (!items || items.length === 0) return []
+  const sclases = [...new Set(items.map(i => i.sclass).filter(Boolean))]
   return sclases.sort((a, b) => a - b)
+}
+
+function getSclassList() {
+  return getSclassListFromItems(report.value.items)
 }
 
 const colorNames = {
@@ -409,6 +482,7 @@ function handleFileSelect(e) {
   const files = Array.from(e.target.files)
   if (files.length === 0) return
   if (files.length === 1) {
+    uploadedFile.value = files[0] // 保存原始File对象供saveReport使用
     analyzeFile(files[0])
   } else {
     // 多文件：同类型文件合并分析
@@ -440,6 +514,7 @@ function analyzeMultipleFiles(files) {
       
       if (validResults.length === 1) {
         // 单个文件，直接使用
+        uploadedFile.value = files[0] // 多文件时保存第一个文件供saveReport使用
         report.value = validResults[0]
         initFilterData()
         return
@@ -459,7 +534,10 @@ function handleDrop(e) {
   const files = Array.from(e.dataTransfer.files)
   if (files.length <= 1) {
     const file = files[0]
-    if (file) analyzeFile(file)
+    if (file) {
+      uploadedFile.value = file // 保存原始File对象供saveReport使用
+      analyzeFile(file)
+    }
   } else {
     // 多个文件
     analyzeMultipleFiles(e.dataTransfer.files)
@@ -467,20 +545,32 @@ function handleDrop(e) {
 }
 
 // 异步分析单个文件
-function analyzeFileAsync(file) {
+async function analyzeFileAsync(file) {
   return new Promise((resolve) => {
     const reader = new FileReader()
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const data = new Uint8Array(e.target.result)
+        const XLSX = await import('xlsx')
         const workbook = XLSX.read(data, { type: 'array', cellDates: true })
         const sheetName = workbook.SheetNames[0]
         const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 })
-        const headers = (jsonData[0] || []).map((name, idx) => ({ name: String(name || '').trim(), index: idx }))
-        
+        // APPOLLOS格式: 找实际数据行(含最多非空值的行作为表头)
+        let headerRow = jsonData[0] || []
+        let maxCols = (headerRow || []).filter(v => v != null).length
+        for (let i = 1; i < Math.min(jsonData.length, 10); i++) {
+          const row = jsonData[i] || []
+          const nonNull = row.filter(v => v != null).length
+          if (nonNull > maxCols) {
+            headerRow = row
+            maxCols = nonNull
+          }
+        }
+        const headers = (headerRow || []).map((name, idx) => ({ name: String(name || '').trim(), index: idx }))
+
         // 检测是否为APPOLLOS格式
         const idxSclass = headers.findIndex(h => /^sclass$/i.test(h.name))
-        
+
         if (idxSclass !== -1) {
           const result = analyzeAppollosFileData(jsonData, headers, idxSclass, file.name)
           resolve(result)
@@ -623,15 +713,17 @@ function analyzeAppollosFileData(jsonData, headers, idxSclass, fileNameVal) {
   const sclassMap = {}, skuMap = {}
   
   dataRows.forEach(row => {
-    const sku = String(row[0] || '').trim()
+    // APPOLLOS has two SKU columns: col 0 = Excel row number (skip), col 10 = real UPC/SKU
+    const sku = String(row[10] || row[0] || '').trim()
     const desc = String(idxDesc !== -1 ? row[idxDesc] : row[7] || '').trim()
     const price = parseFloat(idxPrice !== -1 ? row[idxPrice] : row[8]) || 0
     const sclass = String(idxSclass !== -1 ? row[idxSclass] : row[6] || '').trim()
     const dept = String(row[3] || '').trim()
+    const upc = String(row[9] || '').trim()
     
-    if (!sku) return
+    if (!sku || sku === 'undefined') return
     
-    items.push({ sku, description: desc, price, sclass, dept })
+    items.push({ sku, description: desc, price, sclass, dept, upc })
     if (price > 0) totalPrice += price
     if (sclass) sclassMap[sclass] = (sclassMap[sclass] || 0) + 1
     if (sku) skuMap[sku] = (skuMap[sku] || 0) + 1
@@ -730,33 +822,60 @@ function analyzeAppollosFileData(jsonData, headers, idxSclass, fileNameVal) {
     
     function analyzeFile(file) {
   fileName.value = file.name
+  hasData.value = false
+  report.value = {}
   const reader = new FileReader()
-  reader.onload = (e) => {
-    const data = new Uint8Array(e.target.result)
-    const wb = XLSX.read(data, { type: 'array' })
-    const ws = wb.Sheets[wb.SheetNames[0]]
-    const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 })
-    
-    const headers = jsonData[0].map((h, i) => ({ name: String(h || '').trim(), index: i }))
-    const idxDoc = headers.findIndex(h => /document title/i.test(h.name))
-    const idxVendor = headers.findIndex(h => /vendor name|supplier/i.test(h.name))
-    const idxBrand = headers.findIndex(h => /^brand$/i.test(h.name))
-    
-    // 检测是否为APPOLLOS格式（有SCLASS列）
-    const idxSclass = headers.findIndex(h => /^sclass$/i.test(h.name))
-    const isAppollos = idxSclass !== -1
-    
-    if (isAppollos) {
-      // APPOLLOS格式解析
-      return analyzeAppollosFileData(jsonData, headers, idxSclass, fileName.value)
+  reader.onload = async (e) => {
+    try {
+      const data = new Uint8Array(e.target.result)
+      const XLSX = await import('xlsx')
+      const wb = XLSX.read(data, { type: 'array', cellDates: true })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 })
+      
+      // APPOLLOS格式: 找实际数据行(含最多非空值的行作为表头)
+      let headerRow = jsonData[0] || []
+      let maxCols = (headerRow || []).filter(v => v != null).length
+      for (let i = 1; i < Math.min(jsonData.length, 10); i++) {
+        const row = jsonData[i] || []
+        const nonNull = row.filter(v => v != null).length
+        if (nonNull > maxCols) {
+          headerRow = row
+          maxCols = nonNull
+        }
+      }
+      const headers = (headerRow || []).map((h, i) => ({ name: String(h || '').trim(), index: i }))
+      
+      // 检测是否为APPOLLOS格式（有SCLASS列）
+      const idxSclass = headers.findIndex(h => /^sclass$/i.test(h.name))
+      
+      let result
+      if (idxSclass !== -1) {
+        // APPOLLOS格式解析
+        result = analyzeAppollosFileData(jsonData, headers, idxSclass, fileName.value)
+        // 初始化筛选数据
+        sclassList.value = getSclassListFromItems(result.items)
+        filteredItems.value = result.items || []
+      } else {
+        // 通用SM格式解析
+        result = analyzeSMFile(jsonData, headers, fileName.value)
+      }
+      
+      report.value = result
+      hasData.value = true
+      showSaveSuccess.value = false
+    } catch (err) {
+      console.error('[ExcelAnalyzer] analyzeFile error:', err.message, err.stack)
+      alert(locale.value === 'zh' ? '文件解析失败: ' + err.message : 'File parse error: ' + err.message)
     }
-    
-    // 通用SM格式解析
-    return analyzeSMFile(jsonData, headers, fileName.value)
   }
+  reader.onerror = () => alert(locale.value === 'zh' ? '读取文件失败' : 'Failed to read file')
+  reader.readAsArrayBuffer(file)
+}
 
 // SM通用格式分析
 function analyzeSMFile(jsonData, headers, fileNameVal) {
+  const idxDoc = headers.findIndex(h => /^document$/i.test(h.name))
   const allRows = jsonData.slice(1)
   const idxBranch = findStoreColumn(headers, allRows)
   const idxDate = headers.findIndex(h => /^date$/i.test(h.name))
@@ -829,7 +948,7 @@ function analyzeSMFile(jsonData, headers, fileNameVal) {
     .sort((a, b) => b.count - a.count)
   
   const colorDist = Object.entries(colorMap)
-    .map(([name, count]) => ({ name, nameZh: colorNames(name), count, percent: ((count / totalQty) * 100).toFixed(1) }))
+    .map(([name, count]) => ({ name, nameZh: getColorName(name), count, percent: ((count / totalQty) * 100).toFixed(1) }))
     .sort((a, b) => b.count - a.count)
   
   if (fileNameVal) {
@@ -859,159 +978,53 @@ function analyzeSMFile(jsonData, headers, fileNameVal) {
   }
 }
 
-function reset() {
-    const idxBranch = findStoreColumn(headers, allRows)
-    const idxDate = headers.findIndex(h => /^date$/i.test(h.name))
-    const idxSKU = headers.findIndex(h => /^sku$/i.test(h.name))
-    const idxDesc = headers.findIndex(h => /description|desc/i.test(h.name))
-    const idxQty = headers.findIndex(h => /^qty$|quantity/i.test(h.name))
-    
-    const rows = allRows.filter(r => {
-      const doc = idxDoc !== -1 ? r[idxDoc] : r[0]
-      return String(doc || '').toLowerCase().includes('sales')
-    })
-    
-    let totalQty = 0
-    const storeMap = {}, sizeMap = {}, colorMap = {}, skuMap = {}, skuDescMap = {}, storeSkuMap = {}, comboMap = {}
-    let supplier = '', brand = '', dateRange = ''
-    
-    rows.forEach(row => {
-      const qty = parseFloat(idxQty !== -1 ? row[idxQty] : row[12]) || 0
-      const store = String(idxBranch !== -1 ? row[idxBranch] : row[6] || '').trim()
-      const desc = String(idxDesc !== -1 ? row[idxDesc] : row[9] || '').trim()
-      const sku = String(idxSKU !== -1 ? row[idxSKU] : row[8] || '').trim()
-      
-      totalQty += qty
-      if (store) storeMap[store] = (storeMap[store] || 0) + qty
-      
-      // Track per-store SKU data
-      if (store && sku && qty > 0) {
-        if (!storeSkuMap[store]) storeSkuMap[store] = {}
-        if (!storeSkuMap[store][sku]) storeSkuMap[store][sku] = { qty: 0, desc }
-        storeSkuMap[store][sku].qty += qty
-      }
-      
-      const sizeMatch = desc.match(/(\d{2})\s*[A-Z]{2,}$/)
-      if (sizeMatch) {
-        const sizeName = sizeMatch[1] + '"'
-        sizeMap[sizeName] = (sizeMap[sizeName] || 0) + qty
-      }
-      
-      // 颜色提取 - 从SKU或描述中提取颜色代码
-      const colorMatch = sku.match(colorRegex) || desc.match(colorRegex)
-      if (colorMatch) {
-        const colorCode = colorMatch[1].toUpperCase()
-        colorMap[colorCode] = (colorMap[colorCode] || 0) + qty
-      
-      // SKU+尺寸+颜色组合 - 放宽条件
-      const sizeMatch2 = desc.match(/(\d{2})\s*[A-Z]{2,}$/) || (sku && sku.match(/(\d{2})\s*[A-Z]{2,}$/))
-      const colorMatch2 = sku.match(colorRegex) || desc.match(colorRegex)
-      if (sizeMatch2 || colorMatch2) {
-        const sizeName = sizeMatch2 ? (sizeMatch2[1] + '"') : '-'
-        const colorCode = colorMatch2 ? colorMatch2[1].toUpperCase() : '-'
-        const comboKey = `${sku}_${sizeName}_${colorCode}`
-        if (!comboMap[comboKey]) comboMap[comboKey] = { sku, size: sizeName, color: colorCode, colorName: getColorName(colorCode), qty: 0, desc }
-        comboMap[comboKey].qty += qty
-      }
-      }
-      
-      if (sku) {
-        skuMap[sku] = (skuMap[sku] || 0) + qty
-        if (!skuDescMap[sku]) skuDescMap[sku] = desc
-      }
-      
-      if (!supplier && idxVendor !== -1) supplier = String(row[idxVendor] || '').trim()
-      if (!brand && idxBrand !== -1) brand = String(row[idxBrand] || '').trim()
-      if (!dateRange && idxDate !== -1) dateRange = String(row[idxDate] || '').trim()
-    })
-    
-    const sortedStores = Object.entries(storeMap).sort((a, b) => b[1] - a[1])
-    const sortedSizes = Object.entries(sizeMap).sort((a, b) => b[1] - a[1]).slice(0, 15)
-    const sortedColors = Object.entries(colorMap).sort((a, b) => b[1] - a[1]).slice(0, 15)
-    const sortedSKU = Object.entries(skuMap).map(([code, qty]) => ({ code, qty, desc: skuDescMap[code] || '' })).sort((a, b) => b.qty - a.qty).slice(0, 10)
-    
-    // SKU+尺寸+颜色组合分析
-    const comboList = Object.values(comboMap).filter(c => c.qty > 0).sort((a, b) => b.qty - a.qty)
-    const topCombos = comboList.slice(0, 10)
-    const bottomCombos = comboList.length > 10 ? comboList.slice(-10).reverse() : []
-    
-    const insights = []
-    if (sortedSizes[0]) insights.push({ type: 'best_size', name: sortedSizes[0][0] })
-    if (sortedColors[0]) insights.push({ type: 'best_color', name: sortedColors[0][0] })
-    if (sortedStores.length >= 2) insights.push({ type: 'top_stores', names: `${sortedStores[0][0]} + ${sortedStores[1][0]}` })
-    
-    // Build per-store SKU data (exclude qty=0)
-    const storeSkus = {}
-    Object.entries(storeSkuMap).forEach(([store, skus]) => {
-      const storeName = store.replace('SM STORE - ', '').replace('SM STORE ', '')
-      storeSkus[storeName] = Object.entries(skus)
-        .filter(([_, info]) => info.qty > 0)
-        .map(([code, info]) => ({ code, qty: info.qty, desc: info.desc }))
-        .sort((a, b) => b.qty - a.qty)
-    })
-    
-    report.value = {
-      supplier, brand, dateRange,
-      totalQty,
-      totalRecords: rows.length,
-      uniqueSKU: Object.keys(skuMap).length,
-      uniqueStores: Object.keys(storeMap).length,
-      allStores: sortedStores.map(([name, qty], idx) => ({ rank: idx + 1, name: name.replace('SM STORE - ', '').replace('SM STORE ', ''), qty, percent: ((qty / totalQty) * 100).toFixed(1) })),
-      sizeDistribution: sortedSizes.map(([name, qty]) => ({ name, qty, percent: ((qty / totalQty) * 100).toFixed(1) })),
-      colorDistribution: sortedColors.map(([code, qty]) => ({ code, name: getColorName(code), qty, percent: ((qty / totalQty) * 100).toFixed(1) })),
-      comboAnalysis: { top: topCombos, bottom: bottomCombos },
-      topSKU: sortedSKU,
-      storeSkus,
-      insights
-    }
-    hasData.value = true
-  }
-  reader.readAsArrayBuffer(file)
-}
+
 
 function reset() {
   hasData.value = false
   fileName.value = ''
   report.value = {}
+  uploadedFile.value = null
   if (fileInputRef.value) fileInputRef.value.value = ''
 }
 
 function saveReport() {
-  const data = {
-    name: report.value.supplier + ' - ' + report.value.dateRange,
-    file_name: fileName.value,
-    supplier: report.value.supplier,
-    brand: report.value.brand,
-    date_range: report.value.dateRange,
-    total_qty: report.value.totalQty,
-    total_records: report.value.totalRecords,
-    unique_sku: report.value.uniqueSKU,
-    unique_stores: report.value.uniqueStores,
-    top_stores: report.value.allStores,
-    size_dist: report.value.sizeDistribution,
-    color_dist: report.value.colorDistribution || [],
-    top_sku: report.value.topSKU,
-    store_skus: report.value.storeSkus || {},
-    insights: report.value.insights,
-    combo_analysis: report.value.comboAnalysis
+  const file = uploadedFile.value || fileInputRef.value?.files?.[0]
+  if (!file) {
+    alert(locale.value === 'zh' ? '请先上传文件' : 'Please upload a file first')
+    return
   }
   
   const token = localStorage.getItem('caimeite_token')
-  fetch('/api/excel-report/save', {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('file_type', report.value.dataType === 'APPOLLOS' || report.value.dataType === 'APPOLLOS_MULTI' ? 'APPOLLOS' : 'SM')
+  formData.append('supplier', report.value.supplier || '')
+  formData.append('brand', report.value.brand || '')
+  formData.append('date_range', report.value.dateRange || '')
+  formData.append('total_qty', report.value.totalQty || 0)
+  formData.append('total_records', report.value.totalRecords || 0)
+  formData.append('unique_sku', report.value.uniqueSKU || 0)
+  formData.append('unique_stores', report.value.uniqueStores || 0)
+  
+  fetch('/api/import/upload', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-    body: JSON.stringify(data)
+    headers: { 'Authorization': 'Bearer ' + token },
+    body: formData
   })
   .then(res => res.json())
   .then(result => {
-    if (result.code === 0) showSaveSuccess.value = true
-    else alert(result.message || 'Error')
+    if (result.success) {
+      showSaveSuccess.value = true
+    } else {
+      alert(result.message || (locale.value === 'zh' ? '保存失败' : 'Save failed'))
+    }
   })
-  .catch(err => { console.error(err); alert('Error') })
+  .catch(err => { console.error(err); alert(locale.value === 'zh' ? '保存失败' : 'Save failed') })
 }
 
 function goManage() {
-  window.location.href = '/excel-report-manage'
+  window.location.href = '/#/excel-report-manage'
 }
 </script>
 
@@ -1063,4 +1076,29 @@ function goManage() {
 .filter-stats { margin-top: 10px; font-size: 13px; color: #606266; }
 .btn-small { padding: 6px 12px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; font-size: 13px; }
 .btn-small:hover { background: #f5f5f5; }
+
+@media (max-width: 768px) {
+  .excel-analyzer { padding: 12px; }
+  .header { flex-direction: column; align-items: flex-start; gap: 10px; margin-bottom: 20px; }
+  .header h1 { font-size: 20px; }
+  .upload-area { padding: 30px 15px; }
+  .upload-box { width: 100%; padding: 40px 20px; }
+  .report { padding: 15px; border-radius: 8px; }
+  .report-section { margin-bottom: 25px; }
+  .report-section h2 { font-size: 16px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .stat-card { padding: 15px; }
+  .stat-value { font-size: 22px; }
+  .stat-label { font-size: 12px; }
+  .filter-section { padding: 15px; }
+  .filter-row { flex-direction: column; gap: 10px; }
+  .filter-item select, .filter-item input { min-width: 100%; width: 100%; font-size: 14px; }
+  .filter-item.filter-buttons { flex-direction: row; gap: 10px; }
+  .actions { flex-direction: column; gap: 10px; }
+  .btn { width: 100%; padding: 12px 20px; font-size: 15px; }
+  .data-table { font-size: 13px; overflow-x: auto; display: block; }
+  .data-table th, .data-table td { padding: 8px 10px; white-space: nowrap; }
+  .info-table { display: block; overflow-x: auto; }
+  .save-success button { display: block; width: 100%; margin: 10px 0 0 0; }
+}
 </style>

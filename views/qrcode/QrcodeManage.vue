@@ -1042,6 +1042,103 @@ async function handleBatchEdit() {
   </div>
 </template>
 
+<style scoped>
+/* Mobile responsive styles */
+@media (max-width: 768px) {
+  /* Stats grid - reduce columns */
+  .grid-cols-2 {
+    grid-template-columns: repeat(1, 1fr) !important;
+  }
+  .lg\:grid-cols-6 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Stats cards - smaller padding and text */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-3 {
+    padding: 0.75rem !important;
+  }
+  .text-lg.font-bold {
+    font-size: 1.125rem !important;
+  }
+  .text-\[10px\] {
+    font-size: 0.65rem !important;
+  }
+
+  /* Tabs - smaller padding */
+  .flex.items-center.gap-2.px-6.py-3 {
+    padding: 0.5rem 1rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* Filter toolbar - stack items, reduce padding */
+  .flex.flex-wrap.items-center.gap-3.p-4 {
+    padding: 0.75rem !important;
+    gap: 0.5rem !important;
+  }
+  .flex-1.min-w-\[200px\] {
+    min-width: 100% !important;
+  }
+
+  /* Table - smaller font and padding */
+  .w-full.text-left.text-sm {
+    font-size: 0.75rem !important;
+  }
+  .px-4.py-3 {
+    padding: 0.5rem !important;
+  }
+  .w-10.h-10 {
+    width: 2rem !important;
+    height: 2rem !important;
+  }
+  .font-mono.text-xs {
+    font-size: 0.65rem !important;
+  }
+
+  /* Action buttons - smaller text */
+  .text-xs.font-medium {
+    font-size: 0.7rem !important;
+  }
+  .flex.items-center.justify-end.gap-2 {
+    flex-wrap: wrap !important;
+    gap: 0.25rem !important;
+  }
+
+  /* Modal/dialog - full width with smaller padding */
+  .fixed.inset-0.bg-black\/40 .bg-white.rounded-xl.shadow-xl.w-full.max-w-md.p-6,
+  .fixed.inset-0.bg-black\/40 .bg-white.rounded-xl.shadow-xl.w-full.max-w-lg.mx-4 {
+    width: calc(100% - 2rem) !important;
+    max-width: 100% !important;
+    margin: 1rem !important;
+    padding: 1rem !important;
+  }
+
+  /* Print preview modal - smaller padding */
+  .fixed.inset-0.bg-black\/60 .bg-white.rounded-xl.shadow-2xl.w-full.max-w-4xl.mx-4 {
+    width: calc(100% - 1rem) !important;
+    max-width: 100% !important;
+    margin: 0.5rem !important;
+    padding: 0.75rem !important;
+  }
+
+  /* Batch edit modal fields - stack form fields */
+  .space-y-4 {
+    gap: 0.75rem !important;
+  }
+  .border.border-gray-100.rounded-lg.p-4 {
+    padding: 0.75rem !important;
+  }
+
+  /* Buttons - compact sizing on mobile */
+  .px-4.py-2.rounded-lg.text-sm {
+    padding: 0.4rem 0.75rem !important;
+    font-size: 0.75rem !important;
+  }
+  .flex.items-center.gap-2 .material-symbols-outlined {
+    font-size: 16px !important;
+  }
+}
+</style>
+
 <style>
 @media print {
   /* Hide everything except the print area */

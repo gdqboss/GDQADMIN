@@ -54,7 +54,7 @@
         <option value="intermediate">{{ $t('oa.intermediateLevel') }}</option>
         <option value="senior">{{ $t('oa.seniorLevel') }}</option>
         <option value="expert">{{ $t('oa.expertLevel') }}</option>
-        <option value="manager">{{ $t('oa.managerLevel') }}</option>
+        <option :value="ROLES.MANAGER">{{ $t('oa.managerLevel') }}</option>
         <option value="director">{{ $t('oa.directorLevel') }}</option>
       </select>
     </div>
@@ -101,6 +101,7 @@
 <script setup>
 import { reactive, watch, ref, onMounted } from 'vue'
 import api from '../../../services/api'
+import { ROLES } from '../../../constants/roles.js'
 
 const props = defineProps({
   modelValue: {

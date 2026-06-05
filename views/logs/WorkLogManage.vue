@@ -5,6 +5,7 @@ import { useUserStore } from '../../stores/user.js'
 import PageHeader from '../../components/PageHeader.vue'
 import Pagination from '../../components/Pagination.vue'
 import api from '../../services/api.js'
+import { ROLES } from '../../constants/roles.js'
 
 // Prevent Vite from tree-shaking the watch import (used at top-level call sites)
 void watch
@@ -1400,7 +1401,7 @@ async function initDefaultTemplates() {
                 <div class="text-xs text-gray-400 truncate">{{ user.department || '未分配部门' }}</div>
               </div>
               <div class="flex items-center gap-2 shrink-0">
-                <span v-if="user.role === 'admin'" class="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">管理员</span>
+                <span v-if="user.role === ROLES.ADMIN" class="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">管理员</span>
                 <div class="w-5 h-5 rounded border-2 flex items-center justify-center transition-colors"
                   :class="selectedRecipients.includes(user.id) ? 'border-primary bg-primary' : 'border-gray-300'"
                 >
@@ -1462,7 +1463,7 @@ async function initDefaultTemplates() {
                 <div class="text-xs text-gray-400 truncate">{{ user.department || '未分配部门' }}</div>
               </div>
               <div class="flex items-center gap-2 shrink-0">
-                <span v-if="user.role === 'admin'" class="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">管理员</span>
+                <span v-if="user.role === ROLES.ADMIN" class="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">管理员</span>
                 <div class="w-5 h-5 rounded border-2 flex items-center justify-center transition-colors"
                   :class="selectedComplainants.includes(user.id) ? 'border-red-500 bg-red-500' : 'border-gray-300'"
                 >
@@ -1702,5 +1703,142 @@ async function initDefaultTemplates() {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  /* Tab Buttons */
+  .flex.gap-2.mb-4 {
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+  }
+  .flex.gap-2.mb-4 button {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+
+  /* Filter section */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-4 {
+    padding: 0.75rem;
+  }
+  .flex.gap-4.flex-wrap {
+    gap: 0.75rem;
+  }
+  .flex.gap-4.flex-wrap > div {
+    min-width: 100%;
+  }
+
+  /* Log list card */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.cursor-pointer.hover\:shadow-md {
+    padding: 0.875rem;
+  }
+  .flex.items-center.gap-4.pt-2.border-t.border-gray-50 {
+    gap: 1.25rem;
+  }
+
+  /* Fixed FAB button - move to bottom center on mobile */
+  .fixed.bottom-6.right-6.w-14.h-14 {
+    bottom: 5rem;
+    right: 1rem;
+    width: 3rem;
+    height: 3rem;
+  }
+
+  /* Detail Modal - full screen bottom sheet */
+  .fixed.inset-0.bg-black\/50.flex.items-center.justify-center.z-50.p-4 {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .fixed.inset-0.bg-black\/50.flex.items-center.justify-center.z-50.p-4 > div {
+    max-width: 100%;
+    width: 100%;
+    max-height: 90vh;
+    border-radius: 1rem 1rem 0 0;
+  }
+
+  /* Create/Edit Dialog - full screen bottom sheet */
+  .fixed.inset-0.bg-black\/60.flex.items-center.justify-center.z-50.p-4:nth-of-type(1) {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .fixed.inset-0.bg-black\/60.flex.items-center.justify-center.z-50.p-4:nth-of-type(1) > div {
+    max-width: 100%;
+    width: 100%;
+    max-height: 95vh;
+    border-radius: 1rem 1rem 0 0;
+  }
+  .fixed.inset-0.bg-black\/60.flex.items-center.justify-center.z-50.p-4 .p-6 {
+    padding: 1rem;
+  }
+  .fixed.inset-0.bg-black\/60.flex.items-center.justify-center.z-50.p-4 .px-6 {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  /* Picker modals - full screen bottom sheet */
+  .fixed.inset-0.bg-black\/60.flex.items-center.justify-center.z-50.p-4[class*="Recipient"],
+  .fixed.inset-0.bg-black\/60.flex.items-center.justify-center.z-50.p-4[class*="Complainant"],
+  .fixed.inset-0.bg-black\/60.flex.items-center.justify-center.z-50.p-4[class*="Participant"] {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .fixed.inset-0.bg-black\/60.flex.items-center.justify-center.z-50.p-4 > div.bg-white.rounded-2xl.max-w-md {
+    max-width: 100%;
+    width: 100%;
+    max-height: 80vh;
+    border-radius: 1rem 1rem 0 0;
+  }
+
+  /* Template Dialog */
+  .fixed.inset-0.bg-black\/50.flex.items-center.justify-center.z-50.p-4 > div.bg-white.rounded-xl.max-w-2xl {
+    max-width: 100%;
+    width: 100%;
+    max-height: 90vh;
+    border-radius: 1rem 1rem 0 0;
+  }
+
+  /* Image grid in form */
+  .grid.grid-cols-4 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  /* Text sizes */
+  .text-text-primary,
+  .text-text-secondary {
+    font-size: 0.875rem;
+  }
+  .text-xs {
+    font-size: 0.7rem;
+  }
+  .text-sm {
+    font-size: 0.8rem;
+  }
+
+  /* Pagination */
+  .flex.justify-center {
+    justify-content: center;
+  }
+
+  /* Interaction buttons text */
+  .flex.items-center.gap-4.pt-2.border-t.border-gray-50 button span:last-child,
+  .flex.items-center.gap-4.pt-2.border-t.border-gray-50 button .material-symbols-outlined {
+    font-size: 0.7rem;
+  }
+
+  /* Modal footer buttons */
+  .sticky.bottom-0.bg-white.border-t.border-gray-100.px-4.py-3.flex.gap-2 {
+    padding: 0.75rem;
+    gap: 0.5rem;
+  }
+  .sticky.bottom-0.bg-white.border-t.border-gray-100.px-4.py-3.flex.gap-2 button {
+    padding: 0.625rem 0.5rem;
+    font-size: 0.8rem;
+  }
+
+  /* Template list items */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4:not(.cursor-pointer) {
+    padding: 0.75rem;
+  }
 }
 </style>

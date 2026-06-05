@@ -301,3 +301,106 @@ function parseFormData(data) {
   }
 }
 </script>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* 页面整体适配 */
+  .p-6 {
+    padding: 1rem;
+  }
+
+  /* 头部标题区域 */
+  .mb-6.flex.justify-between.items-center {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .mb-6 .text-2xl {
+    font-size: 1.25rem;
+  }
+
+  /* 发起审批按钮 */
+  .mb-6.flex.justify-between.items-center a {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* 快捷卡片 */
+  .grid.grid-cols-4 {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.5rem;
+  }
+
+  /* 标签页 */
+  .flex.gap-4.mb-4 {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .flex.gap-4.mb-4 button {
+    flex: 1;
+    min-width: 30%;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  /* 筛选器 */
+  .flex.gap-3.mb-4 {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .flex.gap-3.mb-4 select {
+    width: 100%;
+    font-size: 0.875rem;
+  }
+
+  /* 表格横向滚动 */
+  .overflow-x-auto {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .overflow-x-auto table {
+    min-width: 600px;
+  }
+
+  .overflow-x-auto th,
+  .overflow-x-auto td {
+    padding: 0.5rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+
+  .overflow-x-auto td .inline-flex {
+    gap: 0.25rem;
+  }
+
+  /* 弹窗 */
+  .fixed.inset-0.bg-black.bg-opacity-50 .bg-white {
+    margin: 1rem;
+    padding: 1rem;
+    max-width: calc(100% - 2rem);
+  }
+
+  .bg-white.rounded-lg.p-6 {
+    padding: 1rem;
+  }
+
+  .bg-white.rounded-lg.p-6 .grid.grid-cols-2 {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  /* 弹窗内按钮 */
+  .flex.gap-2 button {
+    padding: 0.5rem;
+    font-size: 0.875rem;
+  }
+
+  .mt-6.flex.justify-end button {
+    width: 100%;
+  }
+}
+</style>

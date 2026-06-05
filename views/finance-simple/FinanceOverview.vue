@@ -103,7 +103,7 @@ async function exportExcel() {
     </div>
 
     <!-- Stats Cards -->
-    <div class="grid grid-cols-4 gap-4 mb-6">
+    <div class="grid grid-cols-4 gap-4 mb-6 max-sm:grid-cols-2">
       <!-- 销售收入 -->
       <div class="bg-white rounded-lg border border-gray-100 shadow-card p-5">
         <div class="flex items-center justify-between mb-3">
@@ -183,7 +183,7 @@ async function exportExcel() {
     <!-- Quick Links -->
     <div class="bg-white rounded-lg border border-gray-100 shadow-card p-6">
       <h3 class="text-base font-semibold text-text-primary mb-4">{{ $t('financeSimple.quickLinks') }}</h3>
-      <div class="grid grid-cols-4 gap-4">
+      <div class="grid grid-cols-4 gap-4 max-sm:grid-cols-2">
         <router-link to="/finance/purchase-costs" class="flex items-center gap-3 p-4 border border-gray-200 rounded-lg hover:border-primary hover:bg-primary/5 transition-all">
           <span class="material-symbols-outlined text-primary text-[24px]">shopping_cart</span>
           <span class="text-sm font-medium text-text-primary">{{ $t('financeSimple.purchaseCosts') }}</span>
@@ -224,7 +224,79 @@ async function exportExcel() {
           <span class="material-symbols-outlined text-primary text-[24px]">tune</span>
           <span class="text-sm font-medium text-text-primary">{{ $t('financeSimple.reminderSettings') }}</span>
         </router-link>
+        <router-link to="/finance/payments" class="flex items-center gap-3 p-4 border border-gray-200 rounded-lg hover:border-primary hover:bg-primary/5 transition-all">
+          <span class="material-symbols-outlined text-primary text-[24px]">logout</span>
+          <span class="text-sm font-medium text-text-primary">{{ $t('financeSimple.paymentManage') }}</span>
+        </router-link>
+        <router-link to="/finance/receipts" class="flex items-center gap-3 p-4 border border-gray-200 rounded-lg hover:border-primary hover:bg-primary/5 transition-all">
+          <span class="material-symbols-outlined text-primary text-[24px]">add_card</span>
+          <span class="text-sm font-medium text-text-primary">{{ $t('financeSimple.receiptManage') }}</span>
+        </router-link>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* 过滤器区域 - 允许换行，减小内边距 */
+  .rounded-lg.border.border-gray-100.shadow-card.p-4 {
+    padding: 12px;
+  }
+  .flex.items-center.gap-3 {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .flex.items-center.gap-3 .text-sm {
+    width: 100%;
+  }
+  .flex.items-center.gap-3 input,
+  .flex.items-center.gap-3 button {
+    flex: 1;
+    min-width: 100px;
+  }
+
+  /* 统计卡片网格 - 4列→2列 */
+  .grid.grid-cols-4.gap-4.mb-6 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  /* 应收应付网格 - 保持2列但减小间距 */
+  .grid.grid-cols-2.gap-4.mb-6 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  /* 所有卡片 - 减小内边距 */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-5,
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-6 {
+    padding: 12px;
+  }
+
+  /* 卡片标题文字 */
+  .text-sm.text-text-secondary {
+    font-size: 11px;
+  }
+
+  /* 金额文字 - 减小尺寸 */
+  .text-2xl.font-bold {
+    font-size: 18px;
+  }
+
+  /* 快捷链接网格 - 4列→2列 */
+  .grid.grid-cols-4.gap-4.max-sm\:grid-cols-2 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  /* 快捷链接卡片 - 减小内边距 */
+  .flex.items-center.gap-3.p-4.border.border-gray-200 {
+    padding: 10px;
+    gap: 8px;
+  }
+  .material-symbols-outlined.text-\[24px\] {
+    font-size: 20px;
+  }
+}
+</style>

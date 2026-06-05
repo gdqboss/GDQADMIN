@@ -1,11 +1,11 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../../components/PageHeader.vue'
 import Pagination from '../../components/Pagination.vue'
 import api from '../../services/api.js'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const records = ref([])
 const total = ref(0)
@@ -123,21 +123,15 @@ async function saveRecord() {
   try {
     if (editingRecord.value) {
       await api.put(`/finance-simple/expenses/${editingRecord.value.id}`, formData.value)
-      showModal.value = false
-      fetchRecords()
     } else {
       const res = await api.post('/finance-simple/expenses', formData.value)
-      showModal.value = false
-
       // 检查是否需要审批
       if (res.data?.needs_approval) {
         alert(t('financeSimple.expenseApprovalAutoSubmit'))
-        // 可选：跳转到审批详情页
-        // router.push(`/oa/approvals/${res.data.approval_id}`)
       }
-
-      fetchRecords()
     }
+    showModal.value = false
+    await fetchRecords()
   } catch (err) {
     alert(err.message || t('common.operationFailed'))
   }
@@ -159,7 +153,10 @@ function formatMoney(val) {
 
 function formatDate(dt) {
   if (!dt) return '-'
-  return new Date(dt).toLocaleDateString('zh-CN')
+  const d = new Date(dt)
+  if (isNaN(d.getTime())) return '-'
+  const localeMap = { zh: 'zh-CN', en: 'en-US' }
+  return d.toLocaleDateString(localeMap[locale.value] || 'zh-CN')
 }
 
 function getCategoryText(cat) {
@@ -170,6 +167,11 @@ function getCategoryText(cat) {
 function getApprovalStatusColor(status) {
   const map = { pending: 'text-orange-600 bg-orange-50', approved: 'text-green-600 bg-green-50', rejected: 'text-red-600 bg-red-50' }
   return map[status] || 'text-gray-600 bg-gray-50'
+}
+
+function getMethodLabel(method) {
+  const map = { cash: t('financeSimple.cash'), bank: t('financeSimple.bank'), alipay: t('financeSimple.alipay'), wechat: t('financeSimple.wechat'), other: t('financeSimple.other') }
+  return map[method] || method
 }
 
 function viewApproval(approvalId) {
@@ -215,7 +217,7 @@ async function exportExcel() {
 
     <!-- Filters -->
     <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 mb-6">
-      <div class="flex flex-wrap items-center gap-3 mb-3">
+      <div class="flex flex-wrap items-center gap-3 mb-3 max-sm:flex-col max-sm:items-stretch">
         <select v-model="filterCategory" class="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
           <option value="">{{ $t('financeSimple.allCategories') }}</option>
           <option v-for="c in categories" :key="c.value" :value="c.value">{{ $t(c.label) }}</option>
@@ -231,7 +233,7 @@ async function exportExcel() {
           {{ $t('common.reset') }}
         </button>
       </div>
-      <div class="flex justify-end">
+      <div class="flex justify-end max-sm:flex-col max-sm:gap-2">
         <button @click="exportExcel" :disabled="exporting" class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
           <span class="material-symbols-outlined text-sm">download</span>
           {{ exporting ? $t('common.exporting') : $t('common.exportExcel') }}
@@ -240,7 +242,7 @@ async function exportExcel() {
     </div>
 
     <!-- Table -->
-    <div class="bg-white rounded-lg border border-gray-100 shadow-card overflow-hidden">
+    <div class="bg-white rounded-lg border border-gray-100 shadow-card overflow-hidden max-sm:border-0 max-sm:shadow-none max-sm:rounded-none">
       <div class="overflow-x-auto">
         <table class="w-full text-left text-sm">
           <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
@@ -268,7 +270,7 @@ async function exportExcel() {
               <td class="px-4 py-3 text-text-primary">{{ getCategoryText(r.category) }}</td>
               <td class="px-4 py-3 text-text-primary">{{ r.description }}</td>
               <td class="px-4 py-3 text-right font-semibold text-red-600">{{ formatMoney(r.amount) }}</td>
-              <td class="px-4 py-3 text-text-secondary text-xs">{{ r.payment_method }}</td>
+              <td class="px-4 py-3 text-text-secondary text-xs">{{ getMethodLabel(r.payment_method) }}</td>
               <td class="px-4 py-3 text-center">
                 <span :class="getApprovalStatusColor(r.approval_status)" class="px-2 py-1 rounded text-xs font-medium">
                   {{ $t('financeSimple.' + r.approval_status) }}
@@ -297,7 +299,7 @@ async function exportExcel() {
 
     <!-- Modal -->
     <div v-if="showModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click.self="showModal = false">
-      <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto max-sm:fixed max-sm:inset-0 max-sm:max-w-none max-sm:max-h-none max-sm:m-0 max-sm:rounded-none">
         <div class="flex items-center justify-between p-6 border-b border-gray-100">
           <h3 class="text-lg font-semibold text-text-primary">{{ editingRecord ? $t('financeSimple.editExpense') : $t('financeSimple.addExpense') }}</h3>
           <button @click="showModal = false" class="text-text-secondary hover:text-text-primary">
@@ -305,7 +307,7 @@ async function exportExcel() {
           </button>
         </div>
         <div class="p-6 space-y-4">
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-2 gap-4 max-sm:grid-cols-1">
             <div>
               <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('financeSimple.expenseDate') }} *</label>
               <input v-model="formData.expense_date" type="date" required class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
@@ -360,7 +362,7 @@ async function exportExcel() {
             <textarea v-model="formData.note" rows="3" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"></textarea>
           </div>
         </div>
-        <div class="flex items-center justify-end gap-3 p-6 border-t border-gray-100">
+        <div class="flex items-center justify-between gap-3 p-6 border-t border-gray-100 max-sm:gap-2">
           <button @click="showModal = false" class="px-4 py-2 border border-gray-200 rounded-lg text-text-secondary hover:text-text-primary transition-colors">
             {{ $t('common.cancel') }}
           </button>
@@ -372,3 +374,96 @@ async function exportExcel() {
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* 筛选区域 */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4.mb-6 {
+    padding: 12px;
+  }
+  .flex.flex-wrap.items-center.gap-3.mb-3.max-sm\:flex-col.max-sm\:items-stretch {
+    gap: 8px;
+  }
+  .flex.justify-end.max-sm\:flex-col.max-sm\:gap-2 {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* 表格区域 */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.overflow-hidden.max-sm\:border-0.max-sm\:shadow-none.max-sm\:rounded-none {
+    margin: 0 -12px;
+    border-radius: 0;
+  }
+  .overflow-x-auto {
+    font-size: 12px;
+  }
+  table {
+    min-width: 600px;
+  }
+  th, td {
+    padding: 8px 6px !important;
+    font-size: 12px;
+  }
+  th {
+    white-space: nowrap;
+  }
+  .px-4\.py-3 {
+    padding: 8px 6px;
+  }
+
+  /* 操作按钮 */
+  .text-center .material-symbols-outlined {
+    font-size: 16px;
+  }
+
+  /* 分页 */
+  .px-4\.py-3.border-t.border-gray-100 {
+    padding: 12px 8px;
+  }
+
+  /* 模态框 */
+  .fixed.inset-0.bg-black\/50 {
+    padding: 0;
+  }
+  .bg-white.rounded-lg.shadow-xl.w-full.max-w-2xl.max-h-\[90vh\].overflow-y-auto.max-sm\:fixed.max-sm\:inset-0.max-sm\:max-w-none.max-sm\:max-h-none.max-sm\:m-0.max-sm\:rounded-none {
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    max-width: 100vw;
+  }
+  .p-6 {
+    padding: 16px;
+  }
+  .p-6.space-y-4 {
+    padding: 12px;
+  }
+  .grid.grid-cols-2.gap-4.max-sm\:grid-cols-1 {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .grid.grid-cols-2.gap-4 {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  input, select, textarea {
+    font-size: 14px;
+  }
+  .block.text-sm.font-medium.text-text-primary.mb-1 {
+    font-size: 13px;
+  }
+  label {
+    margin-bottom: 4px;
+  }
+
+  /* 模态框底部按钮 */
+  .flex.items-center.justify-between.gap-3.p-6.border-t.border-gray-100.max-sm\:gap-2 {
+    padding: 12px;
+    gap: 8px;
+  }
+  button.px-4\.py-2 {
+    flex: 1;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+}
+</style>

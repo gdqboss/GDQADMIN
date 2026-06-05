@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '../../services/api.js'
+import { ROLES } from '../../constants/roles.js'
 
 const { t } = useI18n()
 
@@ -33,8 +34,8 @@ const roleOptions = computed(() => [
   { value: 'tech_dept', label: t('settings.techDeptRole') },
   { value: 'finance_dept', label: t('settings.financeDeptRole') },
   { value: 'admin', label: t('settings.adminRole') },
-  { value: 'manager', label: t('settings.managerRole') },
-  { value: 'operator', label: t('settings.operatorRole') }
+  { value: ROLES.MANAGER, label: t('settings.managerRole') },
+  { value: ROLES.OPERATOR, label: t('settings.operatorRole') }
 ])
 
 const filteredResponsibilities = computed(() => {
@@ -70,7 +71,7 @@ const loadResponsibilities = async () => {
 const handleCreate = () => {
   editForm.value = {
     id: null,
-    role: selectedRole.value || 'admin',
+    role: selectedRole.value || ROLES.ADMIN,
     category: 'duty',
     title: '',
     description: '',
@@ -376,3 +377,134 @@ onMounted(async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* 头部标题区 */
+  .space-y-4 > .flex {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start !important;
+  }
+
+  .space-y-4 h2.text-2xl {
+    font-size: 1.25rem;
+  }
+
+  .space-y-4 button {
+    width: 100%;
+    justify-content: center;
+    padding: 10px 16px;
+    font-size: 0.875rem;
+  }
+
+  /* 角色筛选区 */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4 {
+    padding: 12px !important;
+  }
+
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4 .flex.items-center.gap-4 {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px !important;
+  }
+
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4 .flex.gap-2 {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.p-4 button {
+    padding: 6px 12px;
+    font-size: 0.75rem;
+  }
+
+  /* 职责列表 */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card .px-6.py-4 {
+    padding: 12px 16px !important;
+  }
+
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card .p-6 {
+    padding: 12px !important;
+  }
+
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card .p-6.space-y-4 > div {
+    padding: 12px !important;
+  }
+
+  /* 职责项布局 */
+  .border.border-gray-200.rounded-lg.p-4 .flex.items-start.justify-between {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .border.border-gray-200.rounded-lg.p-4 .flex.gap-2.ml-4 {
+    margin-left: 0 !important;
+    justify-content: flex-end;
+  }
+
+  /* 标签文字大小 */
+  .border.border-gray-200.rounded-lg.p-4 .text-sm {
+    font-size: 0.8125rem;
+  }
+
+  .border.border-gray-200.rounded-lg.p-4 .text-xs {
+    font-size: 0.6875rem;
+  }
+
+  .border.border-gray-200.rounded-lg.p-4 h4.font-medium {
+    font-size: 0.9375rem;
+  }
+
+  /* 模态框 */
+  .fixed.inset-0.bg-black\/50 {
+    padding: 8px !important;
+  }
+
+  .fixed.inset-0 .bg-white.rounded-lg.max-w-2xl {
+    max-height: 85vh;
+  }
+
+  .fixed.inset-0 .bg-white .px-6.py-4 {
+    padding: 12px 16px !important;
+  }
+
+  .fixed.inset-0 .bg-white .p-6 {
+    padding: 12px !important;
+  }
+
+  /* 表单 */
+  .fixed.inset-0 .bg-white .grid.grid-cols-2.gap-4 {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .fixed.inset-0 .bg-white .p-6.space-y-4 {
+    gap: 12px;
+  }
+
+  .fixed.inset-0 .bg-white .flex.items-center.gap-2 {
+    gap: 8px;
+  }
+
+  .fixed.inset-0 .bg-white .flex.items-center.gap-2 .flex-1 {
+    min-width: 0;
+  }
+
+  .fixed.inset-0 .bg-white input,
+  .fixed.inset-0 .bg-white select,
+  .fixed.inset-0 .bg-white textarea {
+    font-size: 14px;
+    padding: 8px 10px;
+  }
+
+  .fixed.inset-0 .bg-white .flex.justify-end.gap-2 {
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+
+  .fixed.inset-0 .bg-white .flex.justify-end.gap-2 button {
+    width: 100%;
+  }
+}
+</style>

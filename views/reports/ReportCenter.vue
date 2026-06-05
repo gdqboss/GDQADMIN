@@ -287,3 +287,84 @@ onMounted(async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* 标签栏手机适配 */
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.overflow-hidden.mb-6 .flex {
+    flex-wrap: wrap;
+    overflow-x: auto;
+  }
+  
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.overflow-hidden.mb-6 .flex button:first-child,
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.overflow-hidden.mb-6 .flex button:nth-child(2),
+  .bg-white.rounded-lg.border.border-gray-100.shadow-card.overflow-hidden.mb-6 .flex button:nth-child(3) {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+
+  /* 头部按钮区域 */
+  .ml-auto.flex.items-center.gap-3.px-4 {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px !important;
+  }
+
+  /* 导出按钮 */
+  .flex.items-center.gap-2.border.border-gray-200.text-text-primary.hover\:bg-gray-50.px-4.py-2.rounded-lg.text-sm.font-medium.transition-colors {
+    padding: 6px 10px !important;
+    font-size: 12px;
+  }
+
+
+  /* 内容区域内边距 */
+  .p-6 {
+    padding: 12px !important;
+  }
+
+  /* 标题文字 */
+  .mb-6 h3.font-bold.text-text-primary.mb-1 {
+    font-size: 14px;
+  }
+  
+  .mb-6 p.text-xs.text-text-secondary {
+    font-size: 11px;
+  }
+
+  /* 表格手机适配 */
+  .mt-6.overflow-x-auto table.w-full.text-left.text-sm {
+    font-size: 11px;
+  }
+  
+  .mt-6.overflow-x-auto table.w-full.text-left.text-sm th.px-4.py-3,
+  .mt-6.overflow-x-auto table.w-full.text-left.text-sm td.px-4.py-3 {
+    padding: 8px 6px;
+  }
+
+  /* 图表高度 */
+  v-chart {
+    height: 280px !important;
+  }
+
+  /* Stock 标签页网格 */
+  .grid.grid-cols-1.lg\:grid-cols-2.gap-6 {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* Warehouse 卡片 */
+  .border.border-gray-100.rounded-lg.p-4 {
+    padding: 10px !important;
+  }
+
+  /* 时间维度按钮 */
+  .flex.items-center.gap-1.border.border-gray-200.rounded-lg.overflow-hidden {
+    flex-wrap: wrap;
+  }
+  
+  .flex.items-center.gap-1.border.border-gray-200.rounded-lg.overflow-hidden button {
+    padding: 6px 10px !important;
+    font-size: 11px;
+  }
+}
+</style>

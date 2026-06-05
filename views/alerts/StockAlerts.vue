@@ -123,3 +123,61 @@ async function markHandled(id) {
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* Stats grid */
+  .grid {
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  /* Table container - ensure horizontal scroll */
+  .overflow-x-auto {
+    margin: 0;
+  }
+
+  /* Table cells - reduce padding and font size */
+  table th,
+  table td {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+  }
+
+  /* Filter buttons wrapper */
+  .flex.items-center.gap-3.flex-wrap {
+    padding: 0.75rem 1rem;
+    gap: 0.5rem;
+  }
+
+  /* Individual filter button */
+  .px-3.py-1\.5.rounded-lg.text-sm.font-medium {
+    padding: 0.375rem 0.625rem;
+    font-size: 0.75rem;
+  }
+
+  /* Quick replenish button */
+  .flex.items-center.gap-2.bg-danger {
+    padding: 0.375rem 0.625rem;
+    font-size: 0.75rem;
+    gap: 0.25rem;
+  }
+
+  /* SKU column - smaller font */
+  .font-mono.text-xs {
+    font-size: 0.65rem;
+  }
+
+  /* Timestamp column (8th) - hide on mobile */
+  table th:nth-child(8),
+  table td:nth-child(8) {
+    display: none;
+  }
+
+  /* Records count bar */
+  .px-4.py-3.border-t.border-gray-100 {
+    padding: 0.5rem 1rem;
+    font-size: 0.75rem;
+  }
+}
+</style>

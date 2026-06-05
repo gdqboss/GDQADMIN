@@ -261,3 +261,77 @@ function viewDetail(wh) {
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* 卡片列表 - 改为单列 */
+  .grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* 卡片本身 */
+  .bg-white.rounded-lg {
+    padding: 16px !important;
+  }
+
+  /* 卡片内网格 - 改为双列 */
+  .grid.grid-cols-3 {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+
+  /* 卡片标题 */
+  .text-lg.font-bold {
+    font-size: 15px !important;
+  }
+
+  /* 数量文字 */
+  .text-lg.font-bold.text-text-primary {
+    font-size: 18px !important;
+  }
+
+  /* 操作按钮区 */
+  .flex.items-center.gap-2.pt-3 {
+    padding-top: 12px !important;
+  }
+
+  /* 弹窗 */
+  .relative.bg-white.rounded-xl.shadow-xl.w-full.max-w-md {
+    max-width: calc(100vw - 32px) !important;
+    margin: 0 16px !important;
+  }
+
+  /* 弹窗内边距 */
+  .p-6.space-y-4 {
+    padding: 16px !important;
+  }
+
+  /* 弹窗按钮 */
+  .px-6.py-4.border-t.flex.gap-3.justify-end {
+    padding: 12px 16px !important;
+  }
+
+  /* 头部按钮文字 */
+  .px-4.py-2.rounded-lg.text-sm {
+    font-size: 13px !important;
+    padding: 8px 12px !important;
+  }
+
+  /* 分隔线按钮文字 */
+  .text-xs.font-medium {
+    font-size: 12px !important;
+  }
+
+  /* 表单项全宽 */
+  input.w-full,
+  select.w-full {
+    width: 100% !important;
+  }
+
+  /* 标签 */
+  .block.text-sm.font-medium {
+    font-size: 13px !important;
+  }
+}
+</style>

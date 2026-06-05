@@ -15,6 +15,7 @@
     "echarts": "^5.5.0",
     "element-plus": "^2.5.0",
     "html5-qrcode": "^2.3.8",
+    "marked": "^18.0.4",
     "material-symbols": "^0.44.4",
     "pinia": "^2.1.0",
     "postcss": "^8.5.12",

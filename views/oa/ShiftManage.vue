@@ -170,3 +170,51 @@ function closeDialog() {
   }
 }
 </script>
+
+<style scoped>
+@media (max-width: 768px) {
+  .p-6 {
+    padding: 1rem;
+  }
+
+  .flex.justify-between.items-center.mb-6 {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .text-2xl {
+    font-size: 1.25rem;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fixed.inset-0.bg-black\/50 {
+    padding: 0.5rem;
+  }
+
+  .bg-white.rounded-lg.p-6.max-w-md {
+    width: 100%;
+    max-width: 100%;
+    margin: 0.5rem;
+    padding: 1rem;
+  }
+
+  .grid.grid-cols-2.gap-4 {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  input,
+  textarea {
+    font-size: 16px;
+  }
+
+  button {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+  }
+}
+</style>

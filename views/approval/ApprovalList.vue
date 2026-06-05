@@ -118,3 +118,53 @@ const typeIconMap = {
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) {
+  /* 表格横向滚动 */
+  .overflow-x-auto {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 搜索表单适配 */
+  .mb-4 {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  /* 内边距调整 */
+  .bg-white.rounded-lg {
+    border-radius: 8px;
+  }
+
+  /* Tabs 横向滚动 */
+  .flex.border-b {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .flex.border-b::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* 表格单元格调整 */
+  table.w-full.text-left.text-sm th,
+  table.w-full.text-left.text-sm td {
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+
+  /* 审批编号缩小 */
+  td .font-mono {
+    font-size: 10px;
+  }
+
+  /* 操作按钮 */
+  button.text-primary {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+}
+</style>

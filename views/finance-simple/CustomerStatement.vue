@@ -15,6 +15,11 @@ onMounted(async () => {
   await loadRecentCustomers()
 })
 
+function getMethodLabel(method) {
+  const map = { cash: t('financeSimple.cash'), bank: t('financeSimple.bank'), alipay: t('financeSimple.alipay'), wechat: t('financeSimple.wechat'), other: t('financeSimple.other') }
+  return map[method] || method
+}
+
 async function loadRecentCustomers() {
   try {
     const res = await api.get('/finance-simple/accounts-receivable', { params: { page: 1, size: 20 } })
@@ -202,7 +207,7 @@ function selectCustomer(phone) {
           <tbody>
             <tr v-for="(item, index) in statement.receipts" :key="index">
               <td class="border border-gray-300 px-4 py-2">{{ item.receipt_date }}</td>
-              <td class="border border-gray-300 px-4 py-2">{{ item.payment_method }}</td>
+              <td class="border border-gray-300 px-4 py-2">{{ getMethodLabel(item.payment_method) }}</td>
               <td class="border border-gray-300 px-4 py-2 text-right">¥{{ item.amount.toFixed(2) }}</td>
             </tr>
             <tr v-if="statement.receipts.length === 0">

@@ -1,11 +1,11 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, onBeforeRouteUpdate } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useWecomStore } from '../stores/wecom'
 import { useI18n } from 'vue-i18n'
 import { ROLES } from '../constants/roles.js'
-import api from '../services/api.js'
+import api, { menuApi } from '../services/api.js'
 
 const emit = defineEmits(['close'])
 const route = useRoute()
@@ -19,19 +19,34 @@ const alertCount = ref(0)
 // 赠送审批待审批数量
 const giftApprovalCount = ref(0)
 
-// Pages accessible by each preset role (fallback if API fails)
-const ROLE_PAGES = {
-  admin: null, // null = all pages
-  manager: ['dashboard','wecom','ai-classroom','excel-analyzer','oa','finance','qrcode','products','in-out','warehouses','alerts','transfer','returns','retail','gift-approvals','aftersale','reports','suppliers','dealers','stores','tasks'],
-  operator: ['dashboard','oa','gift-approvals','settings'],
-  warehouse: ['dashboard','in-out','warehouses','alerts','products','qrcode','retail','suppliers','dealers','stores'],
-  member: ['dashboard'],  // 兜底：只显示工作台
+// 数据库菜单配置（从后端加载）
+const dbMenuConfig = ref([])
+
+// 菜单显隐配置（key=菜单key, value=visible）
+const menuVisibility = ref({})
+
+// 展开的分组
+const expandedGroups = ref(['dashboard'])
+
+// 加载数据库菜单配置
+async function loadMenuConfig() {
+  try {
+    const role = userStore.userRole || ROLES.ADMIN
+    const res = await menuApi.getMenuConfig(role)
+    if (res.code === 0 && Array.isArray(res.data)) {
+      dbMenuConfig.value = res.data
+      menuVisibility.value = {}
+      res.data.forEach(item => {
+        menuVisibility.value[item.menu_key] = item.visible === 1
+      })
+    }
+  } catch {
+    // 加载失败，使用后端硬编码默认值
+  }
 }
 
-// Dynamic permissions loaded from the API, keyed by role name
-const rolePermissions = ref({})
-
 onMounted(async () => {
+  await loadMenuConfig()
   try {
     const res = await api.get('/users/roles')
     if (res.code === 0 && Array.isArray(res.data)) {
@@ -47,83 +62,219 @@ onMounted(async () => {
           }
         }
       })
-      rolePermissions.value = map
     }
-  } catch {
-    // API failed – canAccess will fall back to ROLE_PAGES
-  }
+  } catch { /* ignore */ }
 
-  // 加载库存预警数量
   try {
     const alertRes = await api.get('/stock-alerts?handled=false')
     if (alertRes.code === 0 && Array.isArray(alertRes.data)) {
       alertCount.value = alertRes.data.length
     }
-  } catch {
-    // 加载失败，保持为0
-  }
+  } catch { /* ignore */ }
 
-  // 加载赠送审批待审批数量
   try {
     const giftRes = await api.get('/gift-approvals/pending-count')
     if (giftRes.code === 0) {
       giftApprovalCount.value = giftRes.data.count
     }
-  } catch {
-    // 加载失败，保持为0
+  } catch { /* ignore */ }
+})
+
+// 路由变化时：自动展开对应的一级菜单（二级菜单激活时）
+watch(() => route.path, (path) => {
+  if (!path) return
+  for (const group of menuGroups.value) {
+    if (!group.children || group.children.length === 0) continue
+    const hasActiveChild = group.children.some(child => {
+      if (!child.to) return false
+      if (child.to === '/') return path === '/'
+      return path.startsWith(child.to)
+    })
+    if (hasActiveChild && !expandedGroups.value.includes(group.key)) {
+      expandedGroups.value.push(group.key)
+    }
+  }
+}, { immediate: false })
+
+onMounted(() => {
+  // 初始化时自动展开对应的一级菜单
+  const path = route.path
+  if (path) {
+    for (const group of menuGroups.value) {
+      if (!group.children || group.children.length === 0) continue
+      const hasActiveChild = group.children.some(child => {
+        if (!child.to) return false
+        if (child.to === '/') return path === '/'
+        return path.startsWith(child.to)
+      })
+      if (hasActiveChild && !expandedGroups.value.includes(group.key)) {
+        expandedGroups.value.push(group.key)
+      }
+    }
   }
 })
 
-function canAccess(pageKey) {
-  const role = userStore.userRole
-  if (role === 'admin') return true
-  if (role === 'custom') {
-    const perms = userStore.userPermissions
-    if (!Array.isArray(perms)) return pageKey === 'dashboard'
-    return perms.includes(pageKey)
+// 是否显示该菜单项（权限驱动）
+function canAccess(permKey) {
+  if (!permKey) return true
+  // 数据库菜单配置优先（可配置显隐）
+  if (dbMenuConfig.value.length > 0) {
+    // 尝试用 permKey 匹配 menu_key
+    const vis = menuVisibility.value[permKey]
+    if (vis !== undefined) return vis
+    return userStore.canAccess(permKey)
   }
-  // Use dynamic permissions from the API if available for this role
-  if (Object.prototype.hasOwnProperty.call(rolePermissions.value, role)) {
-    return rolePermissions.value[role].includes(pageKey)
-  }
-  // Fallback to hardcoded ROLE_PAGES
-  const allowed = ROLE_PAGES[role]
-  if (!allowed) return false
-  return allowed.includes(pageKey)
+  // 无数据库配置时，用权限数组判断
+  return userStore.canAccess(permKey)
 }
 
-const allNavItems = computed(() => [
-  { key: 'dashboard',     label: t('nav.dashboard'),     icon: 'dashboard',      to: '/' },
-  // { key: 'wecom',         label: t('nav.wecom'),         icon: 'chat',           to: '/wecom', badge: wecomStore.totalUnread || 0 },
-  { key: 'ai-classroom', label: t('nav.aiClassroom'),  icon: 'school',      to: '/ai-classroom' },
-  { key: 'excel-analyzer', label: t('nav.excelAnalyzer'),  icon: 'table_chart',   to: '/excel-analyzer' },
-  { key: 'oa',            label: t('nav.oa'),            icon: 'badge',          to: '/oa' },
-  { key: 'finance', label: t('nav.finance'),      icon: 'payments',       to: '/finance' },
-  { key: 'tasks',         label: t('tasks.title'),       icon: 'task_alt',       to: '/tasks' },
-  { key: 'qrcode',        label: t('nav.qrcode'),        icon: 'qr_code_2',      to: '/qrcode' },
-  { key: 'products',      label: t('nav.products'),      icon: 'inventory_2',    to: '/products' },
-  { key: 'in-out',        label: t('nav.inout'),         icon: 'swap_horiz',     to: '/in-out' },
-  { key: 'warehouses',    label: t('nav.warehouses'),    icon: 'warehouse',      to: '/warehouses' },
-  { key: 'alerts',        label: t('nav.alerts'),        icon: 'warning',        to: '/alerts', badge: alertCount.value },
-  { key: 'transfer',      label: t('nav.transfer'),      icon: 'sync_alt',       to: '/transfer' },
-  { key: 'returns',       label: t('returns.title'),     icon: 'keyboard_return', to: '/inventory/returns' },
-  { key: 'retail',        label: t('nav.retail'),        icon: 'receipt_long',   to: '/retail' },
-  { key: 'gift-approvals', label: t('nav.giftApprovals'), icon: 'card_giftcard',  to: '/gift-approvals', badge: giftApprovalCount.value },
-  { key: 'aftersale',     label: t('nav.aftersale'),     icon: 'support_agent',  to: '/aftersale' },
-  { key: 'reports',       label: t('nav.reports'),       icon: 'bar_chart',      to: '/reports' },
+// 菜单排序映射
+const navOrder = computed(() => {
+  const m = {}
+  dbMenuConfig.value.forEach(item => {
+    m[item.menu_key] = item.position
+  })
+  return m
+})
+
+// 二级菜单分组定义（key = 权限 key，与 rbac_permissions.name 一一对应）
+const menuGroups = computed(() => [
+  {
+    key: 'dashboard',
+    icon: 'dashboard',
+    label: t('nav.dashboard'),
+    to: '/',
+    children: []
+  },
+  {
+    key: 'ai-classroom',
+    icon: 'school',
+    label: t('nav.aiClassroom'),
+    to: '/ai-classroom',
+    children: []
+  },
+  {
+    key: 'operations',
+    icon: 'business',
+    label: t('nav.operations'),
+    to: null,
+    children: [
+      { key: 'task:read', label: t('tasks.title'), to: '/tasks' },
+      { key: 'work_log:read', label: t('logs.workLog'), to: '/logs/work-logs' },
+      { key: 'work_log:read', label: t('logs.visitLog'), to: '/logs/visit-logs' },
+      { key: 'attendance:manage', label: t('nav.qaAttendance'), to: '/oa/attendance' },
+      { key: 'approval:read', label: t('nav.approvals'), to: '/approvals' },
+    ]
+  },
+  {
+    key: 'inventory',
+    icon: 'inventory_2',
+    label: t('nav.inventory'),
+    to: null,
+    children: [
+      { key: 'product:write', label: t('nav.products'), to: '/products' },
+      { key: 'inventory:inout', label: t('nav.inout'), to: '/in-out' },
+      { key: 'warehouse:write', label: t('nav.warehouses'), to: '/warehouses' },
+      { key: 'stock:read', label: t('nav.alerts'), to: '/alerts', badge: alertCount.value },
+      { key: 'transfer:read', label: t('nav.transfer'), to: '/transfer' },
+      { key: 'inventory:return', label: t('nav.returnRecords'), to: '/inventory/returns' },
+    ]
+  },
+  {
+    key: 'finance',
+    icon: 'payments',
+    label: t('nav.financeCenter'),
+    to: null,
+    children: [
+      { key: 'finance:read', label: t('nav.financeOverview'), to: '/finance' },
+      { key: 'retail:write', label: t('nav.retail'), to: '/retail' },
+      { key: 'finance:read', label: t('nav.invoices'), to: '/finance/invoices' },
+    ]
+  },
+  {
+    key: 'sales',
+    icon: 'shopping_cart',
+    label: t('nav.sales'),
+    to: null,
+    children: [
+      { key: 'order:read', label: t('nav.orders'), to: '/orders' },
+      { key: 'qrcode:write', label: t('nav.scanSale'), to: '/qrcode' },
+      { key: 'aftersale:write', label: t('nav.aftersale'), to: '/aftersale' },
+    ]
+  },
+  {
+    key: 'partners',
+    icon: 'handshake',
+    label: t('nav.partners'),
+    to: null,
+    children: [
+      { key: 'supplier:write', label: t('nav.suppliers'), to: '/suppliers' },
+      { key: 'dealer:write', label: t('nav.dealers'), to: '/dealers' },
+      { key: 'store:write', label: t('nav.stores'), to: '/stores' },
+    ]
+  },
+  {
+    key: 'growth',
+    icon: 'trending_up',
+    label: t('nav.growth'),
+    to: null,
+    children: [
+      { key: 'bi:excel', label: t('nav.excelAnalyzer'), to: '/excel-analyzer' },
+      { key: 'bi:report', label: t('nav.reportManage'), to: '/excel-report-manage' },
+      { key: 'qrcode:write', label: t('nav.qrcode'), to: '/qrcode' },
+      { key: 'referral:read', label: t('nav.referral'), to: '/referral' },
+      { key: 'report:read', label: t('nav.reports'), to: '/reports' },
+    ]
+  },
+  {
+    key: 'system',
+    icon: 'settings',
+    label: t('nav.systemManagement'),
+    to: null,
+    children: [
+      { key: 'system:config', label: t('nav.settingsIndex'), to: '/settings' },
+      { key: 'user:write', label: t('nav.userManagement'), to: '/settings/users' },
+      { key: 'role:write', label: t('nav.roleManageIndex'), to: '/settings/roles' },
+      { key: 'system:config', label: t('nav.serverProfiles'), to: '/settings/server-profiles' },
+    ]
+  },
 ])
 
-const allPartnerItems = computed(() => [
-  { key: 'suppliers', label: t('nav.suppliers'), icon: 'local_shipping', to: '/suppliers' },
-  { key: 'dealers',   label: t('nav.dealers'),   icon: 'handshake',      to: '/dealers' },
-  { key: 'stores',    label: t('nav.stores'),    icon: 'storefront',     to: '/stores' },
-])
+// 过滤后的菜单分组
+const filteredGroups = computed(() => {
+  return menuGroups.value
+    .map(group => {
+      // 工作台：登录用户都可见
+      if (group.key === 'dashboard') {
+        return { ...group, label: t('nav.dashboard') }
+      }
+      // 用权限 key 过滤子菜单
+    const filteredChildren = group.children
+      .filter(child => canAccess(child.key))
+      .map(child => ({ ...child }))
+    // 规则：有children但全部被过滤则隐藏；无children（独立一级菜单）始终显示
+    if (group.children.length > 0 && filteredChildren.length === 0) return null
+      return { ...group, children: filteredChildren }
+    })
+    .filter(Boolean)
+})
 
-const navItems     = computed(() => allNavItems.value.filter(i => canAccess(i.key)))
-const partnerItems = computed(() => allPartnerItems.value.filter(i => canAccess(i.key)))
-const showSettings = computed(() => userStore.userRole === ROLES.ADMIN)
+// 检查一级分组是否有任何子菜单激活（用于高亮父级）
+function groupHasActiveChild(group) {
+  if (!group.children || group.children.length === 0) return false
+  return group.children.some(child => isActive(child.to))
+}
+
+function toggleGroup(key) {
+  if (expandedGroups.value.includes(key)) {
+    expandedGroups.value = expandedGroups.value.filter(k => k !== key)
+  } else {
+    expandedGroups.value.push(key)
+  }
+}
 
 function isActive(to) {
+  if (!to) return false
   if (to === '/') return route.path === '/'
   return route.path.startsWith(to)
 }
@@ -147,54 +298,57 @@ function handleLogout() {
     <!-- Navigation -->
     <nav class="flex-1 overflow-y-auto py-3 sm:py-4 custom-scrollbar">
       <ul class="flex flex-col gap-1 px-2">
-        <li v-for="item in navItems" :key="item.to">
-          <router-link
-            :to="item.to"
-            @click="$emit('close')"
-            :class="[
-              'flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded transition-colors text-sm sm:text-base',
-              isActive(item.to) ? 'bg-primary text-white font-medium' : 'text-gray-300 hover:text-white hover:bg-[#1890ff]/20'
-            ]"
+        <li v-for="group in filteredGroups" :key="group.key">
+          <!-- 一级菜单（可点击展开/折叠，或者直接跳转） -->
+          <div
+            v-if="group.children.length === 0"
           >
-            <span class="material-symbols-outlined text-[18px] sm:text-[20px]">{{ item.icon }}</span>
-            <span>{{ item.label }}</span>
-            <span v-if="item.badge" class="ml-auto bg-danger text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">{{ item.badge }}</span>
-          </router-link>
+            <router-link
+              :to="group.to"
+              @click="$emit('close')"
+              :class="[
+                'flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded transition-colors text-sm sm:text-base',
+                'bg-primary text-white font-medium hover:bg-primary-hover'
+              ]"
+            >
+              <span class="material-symbols-outlined text-[18px] sm:text-[20px]">{{ group.icon }}</span>
+              <span>{{ group.label }}</span>
+            </router-link>
+          </div>
+          <div v-else>
+            <!-- 可展开分组 -->
+            <div
+              @click="toggleGroup(group.key)"
+              :class="[
+                'flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded transition-colors text-sm sm:text-base cursor-pointer',
+                'bg-primary text-white font-medium hover:bg-primary-hover'
+              ]"
+            >
+              <span class="material-symbols-outlined text-[18px] sm:text-[20px]">{{ group.icon }}</span>
+              <span class="flex-1">{{ group.label }}</span>
+              <span v-if="group.children && group.children.length > 0" class="material-symbols-outlined text-[16px] transition-transform"
+                :class="expandedGroups.includes(group.key) ? 'rotate-90' : ''">
+                chevron_right
+              </span>
+            </div>
+            <!-- 二级菜单 -->
+            <ul v-if="expandedGroups.includes(group.key)" class="ml-4 sm:ml-6 mt-1 flex flex-col gap-0.5">
+              <li v-for="child in group.children" :key="child.key">
+                <router-link
+                  :to="child.to"
+                  @click="$emit('close')"
+                  :class="[
+                    'flex items-center gap-2 px-3 py-2 rounded transition-colors text-xs sm:text-sm',
+                    isActive(child.to) ? 'bg-primary text-white font-medium' : 'text-gray-400 hover:text-white hover:bg-[#1890ff]/10'
+                  ]"
+                >
+                  <span>{{ child.label }}</span>
+                  <span v-if="child.badge" class="ml-auto bg-danger text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">{{ child.badge }}</span>
+                </router-link>
+              </li>
+            </ul>
+          </div>
         </li>
-
-        <template v-if="partnerItems.length">
-          <li class="mt-4 sm:mt-6 px-3 sm:px-4 pb-2 text-xs font-bold text-gray-500 uppercase tracking-wider">{{ t('nav.partners') }}</li>
-          <li v-for="item in partnerItems" :key="item.to">
-            <router-link
-              :to="item.to"
-              @click="$emit('close')"
-              :class="[
-                'flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded transition-colors text-sm sm:text-base',
-                isActive(item.to) ? 'bg-primary text-white font-medium' : 'text-gray-300 hover:text-white hover:bg-[#1890ff]/20'
-              ]"
-            >
-              <span class="material-symbols-outlined text-[18px] sm:text-[20px]">{{ item.icon }}</span>
-              <span>{{ item.label }}</span>
-            </router-link>
-          </li>
-        </template>
-
-        <template v-if="showSettings">
-          <li class="mt-3 sm:mt-4 px-3 sm:px-4 pb-2 text-xs font-bold text-gray-500 uppercase tracking-wider">{{ t('nav.settings') }}</li>
-          <li>
-            <router-link
-              to="/settings"
-              @click="$emit('close')"
-              :class="[
-                'flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded transition-colors text-sm sm:text-base',
-                isActive('/settings') ? 'bg-primary text-white font-medium' : 'text-gray-300 hover:text-white hover:bg-[#1890ff]/20'
-              ]"
-            >
-              <span class="material-symbols-outlined text-[18px] sm:text-[20px]">settings</span>
-              <span>{{ t('nav.settings') }}</span>
-            </router-link>
-          </li>
-        </template>
       </ul>
     </nav>
     <!-- User -->
