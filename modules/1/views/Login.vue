@@ -118,8 +118,14 @@ async function handleResetPassword() {
   }
 }
 
+const localeCycle = ['zh', 'en', 'ms']
+const localeLabels = { zh: 'EN', en: 'MS', ms: '中文' }
+
 async function toggleLocale() {
-  const newLocale = i18n.global.locale.value === 'zh' ? 'en' : 'zh'
+  const current = i18n.global.locale.value
+  const currentIdx = localeCycle.indexOf(current)
+  const nextIdx = (currentIdx + 1) % localeCycle.length
+  const newLocale = localeCycle[nextIdx]
   // 动态加载语言包（如果尚未加载）
   if (i18n.setLocaleMessage) {
     await i18n.setLocaleMessage(newLocale)
@@ -237,8 +243,8 @@ async function handleRegister() {
           <!-- Language Toggle - Top Right of Card -->
           <button @click="toggleLocale" class="absolute top-4 right-4 flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-700 hover:border-primary transition-all">
             <span class="material-symbols-outlined text-[16px] sm:text-[18px]">language</span>
-            <span class="hidden sm:inline">{{ i18n.global.locale.value === 'zh' ? 'EN' : '中文' }}</span>
-            <span class="sm:hidden">{{ i18n.global.locale.value === 'zh' ? 'EN' : '中' }}</span>
+            <span class="hidden sm:inline">{{ localeLabels[i18n.global.locale.value] }}</span>
+            <span class="sm:hidden">{{ localeLabels[i18n.global.locale.value] }}</span>
           </button>
 
           <div class="flex justify-center mb-2 sm:mb-3 md:mb-4">

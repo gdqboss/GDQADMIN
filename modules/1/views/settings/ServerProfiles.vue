@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PageHeader from '../../components/PageHeader.vue'
 import { serverProfileApi } from '../../services/api.js'
@@ -11,10 +11,12 @@ const { t } = useI18n()
 const loading = ref(false)
 const profiles = ref([])
 const availableModules = ref([])
+const industryTemplates = ref([])
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const isEditing = ref(false)
 const editingId = ref(null)
+const moduleSearch = ref('')
 
 // 语言选项
 const languageOptions = [
@@ -29,28 +31,34 @@ const currencyOptions = [
   { value: 'MYR', label: '令吉 (MYR)' },
   { value: 'SGD', label: '新币 (SGD)' },
   { value: 'USD', label: '美元 (USD)' },
+  { value: 'HKD', label: '港币 (HKD)' },
+  { value: 'EUR', label: '欧元 (EUR)' },
 ]
+
+// 行业选项
+const industryOptions = [
+  { value: 'ecommerce', label: '电商' },
+  { value: 'sales', label: '销售CRM' },
+  { value: 'education', label: '教育' },
+  { value: 'company', label: '企业管理' },
+  { value: 'realestate', label: '房地产' },
+  { value: 'restaurant', label: '餐饮' },
+  { value: 'hotel', label: '酒店' },
+]
+
+// 行业分类中文名
+const industryNameMap = {
+  ecommerce: '电商', sales: '销售CRM', education: '教育',
+  company: '企业管理', realestate: '房地产', restaurant: '餐饮', hotel: '酒店',
+  main: '基础', partner: '合作伙伴'
+}
 
 // 表单
 const form = ref({
-  name: '',
-  ip: '',
-  ssh_port: 22,
-  ssh_user: 'ubuntu',
-  ssh_key_path: '/root/clawgdqshop.pem',
-  description: '',
-  env: 'production',
-  build_date: '',
-  manager: '',
-  domain: '',
-  pem_content: '',
-  website: '',
-  modules: [],
-  // 新增字段
-  site_name_zh: '',
-  site_name_en: '',
-  language: '',
-  currency: '',
+  name: '', ip: '', ssh_port: 22, ssh_user: 'ubuntu',
+  ssh_key_path: '/root/clawgdqshop.pem', description: '', env: 'production',
+  build_date: '', manager: '', domain: '', pem_content: '', website: '',
+  modules: [], site_name_zh: '', site_name_en: '', language: [], currency: '', industry: '',
 })
 
 // 同步状态
@@ -79,6 +87,13 @@ async function loadAvailableModules() {
   } catch (e) { /* ignore */ }
 }
 
+async function loadIndustryTemplates() {
+  try {
+    const res = await serverProfileApi.getIndustryTemplates()
+    if (res.code === 0) industryTemplates.value = res.data
+  } catch (e) { /* ignore */ }
+}
+
 // ─── Dialog ─────────────────────────────────────────────────────────────────
 function openAdd() {
   dialogTitle.value = t('serverProfiles.addServer')
@@ -87,8 +102,8 @@ function openAdd() {
   form.value = {
     name: '', ip: '', ssh_port: 22, ssh_user: 'ubuntu',
     ssh_key_path: '/root/clawgdqshop.pem', description: '', env: 'production',
-    build_date: '', manager: '', domain: '', pem_content: '', website: '', modules: [],
-    site_name_zh: '', site_name_en: '', language: [], currency: '',
+    build_date: '', manager: '', domain: '', pem_content: '', website: '',
+    modules: [], site_name_zh: '', site_name_en: '', language: [], currency: '', industry: '',
   }
   dialogVisible.value = true
 }
@@ -97,7 +112,7 @@ function openEdit(row) {
   dialogTitle.value = t('serverProfiles.editServer')
   isEditing.value = true
   editingId.value = row.id
-  // Support language field stored as JSON string "[\"en\",\"ms\"]", comma-string "en,ms", or already array
+  // Parse language
   let langArray = row.language
   if (typeof langArray === 'string' && langArray.startsWith('[')) {
     try { langArray = JSON.parse(langArray) } catch { langArray = [] }
@@ -106,23 +121,14 @@ function openEdit(row) {
   }
   if (!Array.isArray(langArray)) langArray = []
   form.value = {
-    name: row.name,
-    ip: row.ip,
-    ssh_port: row.ssh_port || 22,
-    ssh_user: row.ssh_user || 'ubuntu',
-    ssh_key_path: row.ssh_key_path || '/root/clawgdqshop.pem',
-    description: row.description || '',
-    env: row.env || 'production',
-    build_date: row.build_date || '',
-    manager: row.manager || '',
-    domain: row.domain || '',
-    pem_content: row.pem_content || '',
-    website: row.website || '',
-    modules: [...(row.modules || [])],
-    site_name_zh: row.site_name_zh || '',
-    site_name_en: row.site_name_en || '',
-    language: langArray,
-    currency: row.currency || '',
+    name: row.name, ip: row.ip, ssh_port: row.ssh_port || 22,
+    ssh_user: row.ssh_user || 'ubuntu', ssh_key_path: row.ssh_key_path || '/root/clawgdqshop.pem',
+    description: row.description || '', env: row.env || 'production',
+    build_date: row.build_date || '', manager: row.manager || '',
+    domain: row.domain || '', pem_content: row.pem_content || '',
+    website: row.website || '', modules: [...(row.modules || [])],
+    site_name_zh: row.site_name_zh || '', site_name_en: row.site_name_en || '',
+    language: langArray, currency: row.currency || '', industry: row.industry || '',
   }
   dialogVisible.value = true
 }
@@ -132,7 +138,6 @@ async function submitForm() {
     ElMessage.warning(t('serverProfiles.nameIpRequired'))
     return
   }
-  // 如果 language 是字符串（多选拼接），保持原样传给后端
   try {
     if (isEditing.value) {
       await serverProfileApi.update(editingId.value, form.value)
@@ -160,6 +165,70 @@ async function handleDelete(row) {
   } catch (e) {
     if (e !== 'cancel') ElMessage.error(e.message)
   }
+}
+
+// ─── Industry Templates ──────────────────────────────────────────────────────
+function applyTemplate(template) {
+  // Parse modules JSON string/array
+  let mods = template.modules
+  if (typeof mods === 'string') {
+    try { mods = JSON.parse(mods) } catch { mods = [] }
+  }
+  // Merge with existing selections (avoid duplicates)
+  const existing = new Set(form.value.modules)
+  ;(mods || []).forEach(m => existing.add(m))
+  form.value.modules = Array.from(existing)
+  form.value.industry = template.key
+  ElMessage.success(`已应用「${template.label_zh}」模板，` + form.value.modules.length + ' 个模块已勾选')
+}
+
+function clearModules() {
+  form.value.modules = []
+  form.value.industry = ''
+}
+
+function toggleModule(key) {
+  const idx = form.value.modules.indexOf(key)
+  if (idx >= 0) {
+    form.value.modules.splice(idx, 1)
+  } else {
+    form.value.modules.push(key)
+  }
+}
+
+// ─── Module display helpers ──────────────────────────────────────────────────
+const moduleCategoryMap = computed(() => {
+  const cats = {}
+  availableModules.value.forEach(m => {
+    const cat = m.category || 'main'
+    if (!cats[cat]) cats[cat] = []
+    cats[cat].push(m)
+  })
+  return cats
+})
+
+const filteredModules = computed(() => {
+  if (!moduleSearch.value.trim()) return null
+  const q = moduleSearch.value.toLowerCase()
+  return availableModules.value.filter(m =>
+    m.label_zh?.toLowerCase().includes(q) ||
+    m.label_en?.toLowerCase().includes(q) ||
+    m.module_key.toLowerCase().includes(q)
+  )
+})
+
+const categoryOrder = ['ecommerce', 'restaurant', 'hotel', 'sales', 'education', 'company', 'main', 'partner']
+
+function getCategoryName(cat) {
+  return industryNameMap[cat] || cat
+}
+
+function isModuleSelected(key) {
+  return form.value.modules.includes(key)
+}
+
+function getModuleCount(modules) {
+  return Array.isArray(modules) ? modules.length : 0
 }
 
 // ─── Sync ────────────────────────────────────────────────────────────────────
@@ -194,15 +263,9 @@ async function handleSync(row) {
 
 async function confirmSync() {
   if (!syncResult.value) return
-  const profile = syncResult.value.profile
   syncLoading.value = true
   try {
-    const sshKey = profile.ssh_key_path || '/root/clawgdqshop.pem'
-    const sshPort = profile.ssh_port || 22
-    const remoteAddr = profile.ip
-
-    // 调用后端执行 rsync 同步
-    const res = await serverProfileApi.execSync(profile.id)
+    const res = await serverProfileApi.execSync(syncResult.value.profile.id)
     if (res.code === 0) {
       ElMessage.success('同步完成')
       syncDialogVisible.value = false
@@ -216,10 +279,6 @@ async function confirmSync() {
   }
 }
 
-function getModuleCount(modules) {
-  return Array.isArray(modules) ? modules.length : 0
-}
-
 function getEnvLabel(env) {
   const map = { production: t('serverProfiles.envProduction'), staging: t('serverProfiles.envStaging'), development: t('serverProfiles.envDev') }
   return map[env] || env
@@ -230,21 +289,8 @@ function getEnvTagType(env) {
   return map[env] || 'info'
 }
 
-// 模块按分类分组
-function getModulesByCategory() {
-  const cats = {}
-  availableModules.value.forEach(m => {
-    const cat = m.category || 'other'
-    if (!cats[cat]) cats[cat] = []
-    cats[cat].push(m)
-  })
-  return cats
-}
-
-// 显示语言标签
 function displayLanguages(lang) {
   if (!lang) return '-'
-  // Parse JSON string "[\"en\",\"ms\"]" or comma-string "en,ms" or already array
   let langs = lang
   if (typeof langs === 'string') {
     if (langs.startsWith('[')) {
@@ -258,9 +304,14 @@ function displayLanguages(lang) {
   return langs.map(l => displayMap[l] || l).join(', ')
 }
 
+function getIndustryLabel(ind) {
+  return industryNameMap[ind] || ind || '-'
+}
+
 onMounted(() => {
   loadProfiles()
   loadAvailableModules()
+  loadIndustryTemplates()
 })
 </script>
 
@@ -289,13 +340,17 @@ onMounted(() => {
             <el-tag :type="getEnvTagType(row.env)" size="small">{{ getEnvLabel(row.env) }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column :label="$t('serverProfiles.colIndustry')" width="90">
+          <template #default="{ row }">
+            <span class="text-sm">{{ getIndustryLabel(row.industry) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column :label="$t('serverProfiles.colModules')" width="90">
           <template #default="{ row }">
             <span class="text-blue-600 font-medium">{{ getModuleCount(row.modules) }}</span> / {{ availableModules.length }}
           </template>
         </el-table-column>
-        <el-table-column :label="$t('serverProfiles.colSSHUser')" prop="ssh_user" width="90" />
-        <el-table-column :label="$t('serverProfiles.colLang')" min-width="130">
+        <el-table-column :label="$t('serverProfiles.colLang')" min-width="120">
           <template #default="{ row }">
             <span class="text-sm text-gray-700">{{ displayLanguages(row.language) }}</span>
           </template>
@@ -306,14 +361,9 @@ onMounted(() => {
             <span v-else class="text-gray-400">-</span>
           </template>
         </el-table-column>
-        <el-table-column :label="$t('serverProfiles.colSiteZh')" prop="site_name_zh" width="120">
+        <el-table-column :label="$t('serverProfiles.colSiteZh')" prop="site_name_zh" width="110">
           <template #default="{ row }">
             <span class="text-sm">{{ row.site_name_zh || '-' }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('serverProfiles.colSiteEn')" prop="site_name_en" width="120">
-          <template #default="{ row }">
-            <span class="text-sm text-gray-600">{{ row.site_name_en || '-' }}</span>
           </template>
         </el-table-column>
         <el-table-column :label="$t('common.actions')" width="200" fixed="right">
@@ -329,88 +379,200 @@ onMounted(() => {
     </div>
 
     <!-- 新增/编辑弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="700px" :close-on-click-modal="false">
-      <el-form :model="form" label-width="130px" class="grid grid-cols-2 gap-x-4">
-        <el-form-item :label="$t('serverProfiles.formName')" class="col-span-2 md:col-span-1">
-          <el-input v-model="form.name" :placeholder="$t('serverProfiles.formNamePlaceholder')" />
-        </el-form-item>
-        <el-form-item :label="$t('serverProfiles.formIp')" class="col-span-2 md:col-span-1">
-          <el-input v-model="form.ip" placeholder="81.70.199.64" />
-        </el-form-item>
-        <el-form-item :label="$t('serverProfiles.formSSHPort')" class="col-span-2 md:col-span-1">
-          <el-input-number v-model="form.ssh_port" :min="1" :max="65535" controls-position="right" class="w-full" />
-        </el-form-item>
-        <el-form-item :label="$t('serverProfiles.formSSHUser')" class="col-span-2 md:col-span-1">
-          <el-input v-model="form.ssh_user" />
-        </el-form-item>
-        <el-form-item :label="$t('serverProfiles.formSSHKey')" class="col-span-2">
-          <el-input v-model="form.ssh_key_path" />
-        </el-form-item>
-        <el-form-item :label="$t('serverProfiles.formEnv')" class="col-span-2 md:col-span-1">
-          <el-select v-model="form.env" class="w-full">
-            <el-option value="production" :label="$t('serverProfiles.envProduction')" />
-            <el-option value="staging" :label="$t('serverProfiles.envStaging')" />
-            <el-option value="development" :label="$t('serverProfiles.envDev')" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="$t('serverProfiles.formDescription')" class="col-span-2">
-          <el-input v-model="form.description" type="textarea" :rows="2" />
-        </el-form-item>
-        <el-form-item :label="$t('serverProfiles.formBuildDate')" class="col-span-2 md:col-span-1">
-          <el-date-picker v-model="form.build_date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" />
-        </el-form-item>
-        <el-form-item :label="$t('serverProfiles.formManager')" class="col-span-2 md:col-span-1">
-          <el-input v-model="form.manager" :placeholder="$t('serverProfiles.formManagerPlaceholder')" />
-        </el-form-item>
-        <el-form-item :label="$t('serverProfiles.formDomain')" class="col-span-2 md:col-span-1">
-          <el-input v-model="form.domain" placeholder="wecom.gdqshop.cn" />
-        </el-form-item>
-        <el-form-item :label="$t('serverProfiles.formWebsite')" class="col-span-2 md:col-span-1">
-          <el-input v-model="form.website" placeholder="https://wecom.gdqshop.cn" />
-        </el-form-item>
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="800px" :close-on-click-modal="false" destroy-on-close>
+      <div class="space-y-5 max-h-[70vh] overflow-y-auto pr-2">
 
-        <!-- 中英文名称 -->
-        <el-form-item :label="$t('serverProfiles.formSiteNameZh')" class="col-span-2 md:col-span-1">
-          <el-input v-model="form.site_name_zh" placeholder="彩美特" />
-        </el-form-item>
-        <el-form-item :label="$t('serverProfiles.formSiteNameEn')" class="col-span-2 md:col-span-1">
-          <el-input v-model="form.site_name_en" placeholder="TRAVELMATE" />
-        </el-form-item>
+        <!-- 基本信息 -->
+        <div class="bg-gray-50 rounded-lg p-4">
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">基本信息</div>
+          <el-form :model="form" label-width="120px" class="grid grid-cols-2 gap-x-4">
+            <el-form-item :label="$t('serverProfiles.formName')" class="col-span-2 md:col-span-1">
+              <el-input v-model="form.name" :placeholder="$t('serverProfiles.formNamePlaceholder')" />
+            </el-form-item>
+            <el-form-item :label="$t('serverProfiles.formIp')" class="col-span-2 md:col-span-1">
+              <el-input v-model="form.ip" placeholder="81.70.199.64" />
+            </el-form-item>
+            <el-form-item :label="$t('serverProfiles.formSSHPort')" class="col-span-2 md:col-span-1">
+              <el-input-number v-model="form.ssh_port" :min="1" :max="65535" controls-position="right" class="w-full" />
+            </el-form-item>
+            <el-form-item :label="$t('serverProfiles.formSSHUser')" class="col-span-2 md:col-span-1">
+              <el-input v-model="form.ssh_user" />
+            </el-form-item>
+            <el-form-item :label="$t('serverProfiles.formSSHKey')" class="col-span-2">
+              <el-input v-model="form.ssh_key_path" />
+            </el-form-item>
+            <el-form-item :label="$t('serverProfiles.formEnv')" class="col-span-2 md:col-span-1">
+              <el-select v-model="form.env" class="w-full">
+                <el-option value="production" :label="$t('serverProfiles.envProduction')" />
+                <el-option value="staging" :label="$t('serverProfiles.envStaging')" />
+                <el-option value="development" :label="$t('serverProfiles.envDev')" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="$t('serverProfiles.formDescription')" class="col-span-2">
+              <el-input v-model="form.description" type="textarea" :rows="2" />
+            </el-form-item>
+          </el-form>
+        </div>
 
-        <!-- 语言（多选） -->
-        <el-form-item :label="$t('serverProfiles.formLanguage')" class="col-span-2">
-          <el-select v-model="form.language" multiple filterable allow-create default-first-option placeholder="选择语言（可多选）" class="w-full">
-            <el-option v-for="opt in languageOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
-          </el-select>
-        </el-form-item>
+        <!-- 部署信息 -->
+        <div class="bg-gray-50 rounded-lg p-4">
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">部署信息</div>
+          <el-form :model="form" label-width="120px" class="grid grid-cols-2 gap-x-4">
+            <el-form-item :label="$t('serverProfiles.formBuildDate')" class="col-span-2 md:col-span-1">
+              <el-date-picker v-model="form.build_date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" />
+            </el-form-item>
+            <el-form-item :label="$t('serverProfiles.formManager')" class="col-span-2 md:col-span-1">
+              <el-input v-model="form.manager" :placeholder="$t('serverProfiles.formManagerPlaceholder')" />
+            </el-form-item>
+            <el-form-item :label="$t('serverProfiles.formDomain')" class="col-span-2 md:col-span-1">
+              <el-input v-model="form.domain" placeholder="wecom.gdqshop.cn" />
+            </el-form-item>
+            <el-form-item :label="$t('serverProfiles.formWebsite')" class="col-span-2 md:col-span-1">
+              <el-input v-model="form.website" placeholder="https://wecom.gdqshop.cn" />
+            </el-form-item>
+          </el-form>
+        </div>
 
-        <!-- 货币 -->
-        <el-form-item :label="$t('serverProfiles.formCurrency')" class="col-span-2 md:col-span-1">
-          <el-select v-model="form.currency" placeholder="选择货币" class="w-full">
-            <el-option v-for="opt in currencyOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
-          </el-select>
-        </el-form-item>
+        <!-- 站点信息 -->
+        <div class="bg-gray-50 rounded-lg p-4">
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">站点信息</div>
+          <el-form :model="form" label-width="120px" class="grid grid-cols-2 gap-x-4">
+            <el-form-item :label="$t('serverProfiles.formSiteNameZh')" class="col-span-2 md:col-span-1">
+              <el-input v-model="form.site_name_zh" placeholder="彩美特" />
+            </el-form-item>
+            <el-form-item :label="$t('serverProfiles.formSiteNameEn')" class="col-span-2 md:col-span-1">
+              <el-input v-model="form.site_name_en" placeholder="TRAVELMATE" />
+            </el-form-item>
+            <el-form-item :label="$t('serverProfiles.formLanguage')" class="col-span-2 md:col-span-1">
+              <el-select v-model="form.language" multiple filterable allow-create default-first-option placeholder="选择语言（可多选）" class="w-full">
+                <el-option v-for="opt in languageOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="$t('serverProfiles.formCurrency')" class="col-span-2 md:col-span-1">
+              <el-select v-model="form.currency" placeholder="选择货币" class="w-full">
+                <el-option v-for="opt in currencyOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="$t('serverProfiles.formIndustry')" class="col-span-2 md:col-span-1">
+              <el-select v-model="form.industry" placeholder="选择行业（可选）" class="w-full" clearable>
+                <el-option v-for="opt in industryOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+              </el-select>
+            </el-form-item>
+          </el-form>
+        </div>
 
-        <el-form-item :label="$t('serverProfiles.formPem')" class="col-span-2">
-          <el-input v-model="form.pem_content" type="textarea" :rows="4" placeholder="-----BEGIN RSA PRIVATE KEY-----" class="font-mono text-xs" />
-        </el-form-item>
+        <!-- SSH密钥 -->
+        <div class="bg-gray-50 rounded-lg p-4">
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">SSH密钥</div>
+          <el-form-item :label="$t('serverProfiles.formPem')">
+            <el-input v-model="form.pem_content" type="textarea" :rows="3" placeholder="-----BEGIN RSA PRIVATE KEY-----" class="font-mono text-xs" />
+          </el-form-item>
+        </div>
 
-        <!-- 模块勾选 -->
-        <el-form-item :label="$t('serverProfiles.formModules')" class="col-span-2">
-          <div class="border border-gray-200 rounded-lg p-3 max-h-64 overflow-y-auto w-full">
-            <template v-for="(mods, cat) in getModulesByCategory()" :key="cat">
-              <div class="font-semibold text-xs text-gray-500 uppercase mt-2 mb-1 first:mt-0">{{ cat }}</div>
-              <div class="grid grid-cols-2 gap-1">
-                <label v-for="mod in mods" :key="mod.module_key" class="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-2 py-1">
-                  <input type="checkbox" :value="mod.module_key" v-model="form.modules" class="rounded" />
-                  <span class="text-sm">{{ mod.name }}</span>
-                </label>
-              </div>
-            </template>
+        <!-- 模块勾选：行业模板 + 精细调整 -->
+        <div class="bg-gray-50 rounded-lg p-4">
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">模块配置</div>
+
+          <!-- 行业模板快捷选择 -->
+          <div class="mb-4">
+            <div class="text-xs text-gray-500 mb-2">快捷模板（一键勾选整套模块，可叠加）</div>
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="tpl in industryTemplates"
+                :key="tpl.key"
+                @click="applyTemplate(tpl)"
+                class="px-3 py-1.5 text-sm border border-blue-200 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
+              >
+                {{ tpl.label_zh }}
+              </button>
+              <button
+                @click="clearModules"
+                class="px-3 py-1.5 text-sm border border-gray-200 bg-white text-gray-500 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                清空
+              </button>
+            </div>
           </div>
-          <div class="text-xs text-gray-400 mt-1">{{ $t('serverProfiles.modulesSelected', { n: form.modules.length }) }}</div>
-        </el-form-item>
-      </el-form>
+
+          <!-- 搜索 -->
+          <div class="mb-3">
+            <el-input
+              v-model="moduleSearch"
+              placeholder="搜索模块（输入名称过滤）..."
+              clearable
+              size="small"
+              class="max-w-xs"
+            >
+              <template #prefix>
+                <span class="text-gray-400 text-sm">🔍</span>
+              </template>
+            </el-input>
+          </div>
+
+          <!-- 搜索结果模式 -->
+          <div v-if="filteredModules" class="mb-2">
+            <div class="text-xs text-gray-500 mb-2">搜索结果（{{ filteredModules.length }} 个）</div>
+            <div class="flex flex-wrap gap-1">
+              <button
+                v-for="mod in filteredModules"
+                :key="mod.module_key"
+                @click="toggleModule(mod.module_key)"
+                class="px-2 py-1 text-xs rounded border transition-colors"
+                :class="isModuleSelected(mod.module_key)
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-gray-700 border-gray-200 hover:border-blue-400'"
+              >
+                {{ mod.label_zh || mod.module_key }}
+              </button>
+            </div>
+          </div>
+
+          <!-- 按行业分类展示 -->
+          <div v-else>
+            <div
+              v-for="cat in categoryOrder"
+              :key="cat"
+              v-show="moduleCategoryMap[cat]?.length"
+              class="mb-3"
+            >
+              <div class="text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">
+                {{ getCategoryName(cat) }}
+              </div>
+              <div class="flex flex-wrap gap-1">
+                <button
+                  v-for="mod in moduleCategoryMap[cat]"
+                  :key="mod.module_key"
+                  @click="toggleModule(mod.module_key)"
+                  class="px-2 py-1 text-xs rounded border transition-colors"
+                  :class="isModuleSelected(mod.module_key)
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-700 border-gray-200 hover:border-blue-400'"
+                >
+                  {{ mod.label_zh || mod.module_key }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 已选模块汇总 -->
+          <div class="mt-3 pt-3 border-t border-gray-200">
+            <div class="text-xs text-gray-500 mb-1.5">
+              已选模块（{{ form.modules.length }}）{{ form.industry ? '| 行业：' + getIndustryLabel(form.industry) : '' }}
+            </div>
+            <div class="flex flex-wrap gap-1">
+              <span
+                v-for="key in form.modules"
+                :key="key"
+                class="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded"
+              >
+                {{ availableModules.find(m => m.module_key === key)?.label_zh || key }}
+              </span>
+              <span v-if="!form.modules.length" class="text-xs text-gray-400">未选择任何模块</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
       <template #footer>
         <button @click="dialogVisible = false" class="px-4 py-2 text-gray-600 hover:text-gray-800 mr-2">{{ $t('common.cancel') }}</button>
         <button @click="submitForm" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">{{ $t('common.save') }}</button>
@@ -431,9 +593,15 @@ onMounted(() => {
         <div class="flex flex-wrap gap-2 mb-4">
           <span v-for="f in syncResult.files.base" :key="f" class="px-2 py-1 bg-gray-100 rounded text-xs font-mono">{{ f }}</span>
         </div>
-        <div class="mb-3 font-medium text-sm text-gray-700">{{ $t('serverProfiles.moduleFiles') }}</div>
-        <div class="flex flex-wrap gap-2 max-h-48 overflow-y-auto">
-          <span v-for="f in syncResult.files.modules" :key="f" class="px-2 py-1 bg-green-50 border border-green-200 rounded text-xs font-mono">{{ f }}.js</span>
+        <div class="mb-3 font-medium text-sm text-gray-700">{{ $t('serverProfiles.moduleFiles') }}（按模块分组）</div>
+        <div class="max-h-64 overflow-y-auto">
+          <div v-for="(files, modName) in syncResult.grouped" :key="modName" class="mb-3">
+            <div class="text-xs font-medium text-green-700 mb-1">{{ modName }}</div>
+            <div class="flex flex-wrap gap-1">
+              <span v-for="f in files" :key="f" class="px-1.5 py-0.5 bg-green-50 border border-green-200 rounded text-xs font-mono text-gray-600">{{ f }}</span>
+            </div>
+          </div>
+          <div v-if="Object.keys(syncResult.grouped).length === 0" class="text-sm text-gray-400 text-center py-4">无模块文件</div>
         </div>
         <div class="mt-4 text-xs text-gray-400">{{ $t('serverProfiles.syncCommandHint') }}</div>
       </div>

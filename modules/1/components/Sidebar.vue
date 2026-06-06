@@ -235,6 +235,7 @@ const menuGroups = computed(() => [
     children: [
       { key: 'bi:excel', label: t('nav.excelAnalyzer'), to: '/excel-analyzer' },
       { key: 'bi:report', label: t('nav.reportManage'), to: '/excel-report-manage' },
+      { key: 'bi:excel', label: t('nav.storeSales'), to: '/store-sales' },
       { key: 'qrcode:write', label: t('nav.qrcode'), to: '/qrcode' },
       { key: 'referral:read', label: t('nav.referral'), to: '/referral' },
       { key: 'report:read', label: t('nav.reports'), to: '/reports' },
@@ -299,6 +300,8 @@ const filteredGroups = computed(() => {
       // 独立一级菜单（如 AI课堂）：按 module_key 过滤
       if (!group.children || group.children.length === 0) {
         const mod = routeToModule[group.to]
+        // serverModules 未加载（=[]）时，有 module_key 映射的项先隐藏，加载完再过滤
+        if (mod && serverModules.value.length === 0) return null
         if (mod && serverModules.value.length > 0 && !serverModules.value.includes(mod)) {
           return null
         }
@@ -309,6 +312,8 @@ const filteredGroups = computed(() => {
         .filter(child => {
           if (!canAccess(child.key)) return false
           const mod = routeToModule[child.to]
+          // serverModules 未加载（=[]）时，有 module_key 映射的项先隐藏
+          if (mod && serverModules.value.length === 0) return false
           if (mod && serverModules.value.length > 0 && !serverModules.value.includes(mod)) {
             return false
           }

@@ -76,6 +76,7 @@ export const serverProfileApi = {
   list() { return api.get('/server-profiles') },
   get(id) { return api.get(`/server-profiles/${id}`) },
   getAvailableModules() { return api.get('/server-profiles/available-modules') },
+  getIndustryTemplates() { return api.get('/server-profiles/industry-templates') },
   create(data) { return api.post('/server-profiles', data) },
   update(id, data) { return api.put(`/server-profiles/${id}`, data) },
   remove(id) { return api.delete(`/server-profiles/${id}`) },

@@ -41,6 +41,12 @@ async function loadSystemSettings(locale = 'zh') {
           companyName_en: json.data.site_name_en || systemSettings.system_name_en,
         }
       }
+
+      // 设置浏览器 Tab 标题：优先使用 site_name_en，否则用 site_name
+      const tabTitle = systemSettings.site_name_en || systemSettings.site_name
+      if (tabTitle) {
+        document.title = tabTitle
+      }
     }
   } catch (e) {
     console.warn('系统设置加载失败，使用默认值')

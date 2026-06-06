@@ -28,19 +28,24 @@ async function loadSystemSettings(locale = 'zh') {
       systemSettings.site_name_en = json.data.site_name_en || systemSettings.site_name_en
 
       // 同时更新 i18n 的 system 字段（运行时覆盖静态翻译）
-      if (json.data.site_name) {
-        i18n.global.messages.value[locale] = i18n.global.messages.value[locale] || {}
-        i18n.global.messages.value[locale].system = {
-          ...(i18n.global.messages.value[locale].system || {}),
-          name: json.data.site_name || systemSettings.site_name,
-          fullName: json.data.site_name || systemSettings.site_name,
-          companyName: json.data.site_name || systemSettings.site_name,
+      // 同时更新 zh 和 en 两个 locale，确保切换语言时名字一致
+      for (const l of ['zh', 'en']) {
+        i18n.global.messages.value[l] = i18n.global.messages.value[l] || {}
+        i18n.global.messages.value[l].system = {
+          ...(i18n.global.messages.value[l].system || {}),
+          name: l === 'en' && json.data.site_name_en ? json.data.site_name_en : (json.data.site_name || systemSettings.site_name),
+          fullName: l === 'en' && json.data.site_name_en ? json.data.site_name_en : (json.data.site_name || systemSettings.site_name),
+          companyName: l === 'en' && json.data.site_name_en ? json.data.site_name_en : (json.data.site_name || systemSettings.site_name),
+          name_en: json.data.site_name_en || systemSettings.system_name_en,
+          fullName_en: json.data.site_name_en || systemSettings.system_name_en,
+          companyName_en: json.data.site_name_en || systemSettings.system_name_en,
         }
-        if (json.data.site_name_en) {
-          i18n.global.messages.value[locale].system.name_en = json.data.site_name_en
-          i18n.global.messages.value[locale].system.fullName_en = json.data.site_name_en
-          i18n.global.messages.value[locale].system.companyName_en = json.data.site_name_en
-        }
+      }
+
+      // 设置浏览器 Tab 标题：优先使用 site_name_en，否则用 site_name
+      const tabTitle = systemSettings.site_name_en || systemSettings.site_name
+      if (tabTitle) {
+        document.title = tabTitle
       }
     }
   } catch (e) {

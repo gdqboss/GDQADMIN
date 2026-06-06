@@ -692,14 +692,12 @@ const tabs = computed(() => [
   { key: 'departments',          label: t('settings.deptManage'),          icon: 'corporate_fare' },
   { key: 'job-levels',           label: t('settings.levelManage'),         icon: 'military_tech' },
   { key: 'customers',            label: t('settings.customerManage'),      icon: 'group' },
-  { key: 'manage-roles',         label: t('settings.roleManage'),          icon: 'shield' },
   { key: 'payment',              label: t('settings.paymentSettings'),     icon: 'payments' },
   { key: 'ai-config',            label: t('settings.aiConfig'),            icon: 'smart_toy' },
 ])
 
 function switchTab(key) {
   activeTab.value = key
-  if (key === 'manage-roles' && roles.value.length === 0) loadRoles()
   if (key === 'departments' && departments.value.length === 0) loadDepartments()
   if (key === 'job-levels' && jobLevels.value.length === 0) loadJobLevels()
   if (key === 'ai-config' && aiConfigs.value.length === 0) loadAiConfigs()
@@ -1509,71 +1507,6 @@ async function deleteUser(user) {
                 </tr>
               </tbody>
             </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── Manage Roles ── -->
-      <div v-if="activeTab === 'manage-roles'" class="p-6">
-        <div class="flex justify-between items-center mb-4">
-          <h3 class="font-bold text-text-primary">{{ $t('settings.roleManage') }}</h3>
-          <button
-            @click="openAddRole"
-            class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            <span class="material-symbols-outlined text-[18px]">add</span>
-            {{ $t('settings.addRole') }}
-          </button>
-        </div>
-
-        <div v-if="rolesLoading" class="py-8 text-center text-text-secondary text-sm">{{ $t('common.loading') }}</div>
-
-        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div v-if="!roles.length" class="md:col-span-2 py-8 text-center text-text-secondary text-sm">{{ $t('settings.noRoles') }}</div>
-
-          <div
-            v-for="r in roles" :key="r.id"
-            class="border border-gray-100 rounded-lg p-4 hover:shadow-card-hover transition-shadow"
-          >
-            <div class="flex items-start justify-between gap-2 mb-2">
-              <div class="flex items-center gap-2">
-                <span class="material-symbols-outlined text-[20px] text-primary">shield</span>
-                <div>
-                  <h4 class="font-bold text-text-primary text-sm leading-tight">{{ r.label }}</h4>
-                  <p class="text-xs text-text-secondary font-mono">{{ r.name }}</p>
-                </div>
-              </div>
-              <div class="flex items-center gap-1.5 flex-shrink-0">
-                <span v-if="r.is_system" class="text-xs bg-warning/10 text-warning px-2 py-0.5 rounded font-medium">{{ $t('settings.system') }}</span>
-                <template v-if="!r.is_system">
-                  <button
-                    @click="openEditRole(r)"
-                    class="text-primary hover:text-primary-hover text-xs font-medium px-2 py-1 rounded hover:bg-primary/5 transition-colors"
-                  >{{ $t('common.edit') }}</button>
-                  <button
-                    @click="deleteRole(r)"
-                    class="text-danger hover:text-red-700 text-xs font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
-                  >{{ $t('common.delete') }}</button>
-                </template>
-              </div>
-            </div>
-
-<div class="mb-3">
-              <span class="text-xs text-text-secondary">
-                {{ $t('settings.permissionCount') }}{{ r.permission_count || 0 }}{{ $t('settings.permissionUnit') }}
-              </span>
-            </div>
-
-            <div class="flex flex-wrap gap-1.5">
-              <template v-if="r.permission_names && r.permission_names.length">
-                <span
-                  v-for="pkey in r.permission_names.split(',')"
-                  :key="pkey"
-                  class="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded"
-                >{{ ALL_PAGES.find(p => p.key === pkey)?.label || pkey }}</span>
-              </template>
-              <span v-else class="text-xs text-text-secondary italic">{{ $t('settings.noPermissions') }}</span>
-            </div>
           </div>
         </div>
       </div>
