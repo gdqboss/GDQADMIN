@@ -1,0 +1,1671 @@
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+import PageHeader from '../../components/PageHeader.vue'
+import StatusTag from '../../components/StatusTag.vue'
+import api from '../../services/api.js'
+import { useChatStore } from '../../stores/chat.js'
+import { useWecomStore } from '../../stores/wecom.js'
+
+const { t } = useI18n()
+const chatStore = useChatStore()
+const wecomStore = useWecomStore()
+
+// ─── Data ─────────────────────────────────────────────────────────────────────
+const users = ref([])
+const pendingUsers = ref([])
+const warehouses = ref([])
+const suppliers = ref([])
+const departments = ref([])
+const jobLevels = ref([])
+
+onMounted(async () => {
+  try {
+    const [usersRes, whRes, supRes] = await Promise.all([
+      api.get('/users'),
+      api.get('/warehouses'),
+      api.get('/suppliers'),
+    ])
+    if (usersRes.code === 0) users.value = usersRes.data
+    if (whRes.code === 0) warehouses.value = whRes.data.list || whRes.data
+    if (supRes.code === 0) suppliers.value = supRes.data.list || supRes.data
+
+    // 加载所有角色（包括自定义角色）
+    await loadRoles()
+
+    // 加载待审批员工
+    await loadPendingUsers()
+
+    // 加载部门和职级
+    await loadDepartments()
+    await loadJobLevels()
+  } catch (e) { /* ignore */ }
+})
+
+// ─── Role definitions ──────────────────────────────────────────────────────────
+const ALL_PAGES = [
+  { key: 'dashboard',       label: '工作台' },
+  { key: 'products',        label: '商品管理（查看）' },
+  { key: 'products_write',  label: '商品管理（编辑）' },
+  { key: 'in-out',          label: '出入库管理' },
+  { key: 'warehouses',      label: '仓库管理' },
+  { key: 'alerts',          label: '库存预警' },
+  { key: 'approvals',       label: '审批管理' },
+  { key: 'qrcode',          label: '一物一码（查看）' },
+  { key: 'qrcodes_write',   label: '一物一码（编辑）' },
+  { key: 'retail',          label: '零售记录' },
+  { key: 'aftersale',       label: '售后管理' },
+  { key: 'reports',         label: '报表中心' },
+  { key: 'suppliers',       label: '供货商管理' },
+  { key: 'dealers',         label: '经销商管理' },
+  { key: 'stores',          label: '门店管理' },
+  { key: 'oa',              label: 'OA办公' },
+  { key: 'wecom',           label: '企业微信' },
+  { key: 'ai-automation',   label: 'AI自动化' },
+]
+
+const ROLE_LABELS = { admin: '超级管理员', manager: '经理', operator: '操作员', custom: '自定义' }
+const ROLE_COLORS = { admin: 'danger', manager: 'primary', operator: 'info', custom: 'warning' }
+
+// ─── User modal ────────────────────────────────────────────────────────────────
+const showUserModal = ref(false)
+const editingUser = ref(null)
+const userForm = ref({ name: '', phone: '', password: '', role: 'operator', department: '', permissions: [], supplier_id: null, supplier_ids: [], supervisor_id: null })
+const userLoading = ref(false)
+const userError = ref('')
+
+function openAddUser() {
+  editingUser.value = null
+  userForm.value = { name: '', phone: '', password: '', role: 'operator', department: '', permissions: [], supplier_id: null, supplier_ids: [], supervisor_id: null }
+  userError.value = ''
+  showUserModal.value = true
+}
+
+function openEditUser(u) {
+  editingUser.value = u
+  userForm.value = {
+    name: u.name,
+    phone: u.phone || '',
+    password: '',
+    role: u.role,
+    department: u.department || '',
+    permissions: Array.isArray(u.permissions) ? [...u.permissions] : [],
+    supplier_id: u.supplier_id || null,
+    supplier_ids: Array.isArray(u.suppliers) ? u.suppliers.map(s => s.id) : [],
+    supervisor_id: u.supervisor_id || null
+  }
+  userError.value = ''
+  showUserModal.value = true
+
+  // 如果是自定义角色，加载该角色的权限
+  if (u.role !== 'admin' && u.role !== 'manager' && u.role !== 'operator' && u.role !== 'custom') {
+    const role = roles.value.find(r => r.name === u.role)
+    if (role && Array.isArray(role.permissions)) {
+      userForm.value.permissions = [...role.permissions]
+    }
+  }
+}
+
+function togglePermission(key) {
+  const idx = userForm.value.permissions.indexOf(key)
+  if (idx === -1) userForm.value.permissions.push(key)
+  else userForm.value.permissions.splice(idx, 1)
+}
+
+// 角色切换时自动加载权限
+function onRoleChange() {
+  const selectedRole = userForm.value.role
+
+  // 如果选择的是预设角色，清空自定义权限
+  if (['admin', 'manager', 'operator'].includes(selectedRole)) {
+    userForm.value.permissions = []
+  }
+  // 如果选择的是自定义角色，加载该角色的权限
+  else if (selectedRole !== 'custom') {
+    const role = roles.value.find(r => r.name === selectedRole)
+    if (role && Array.isArray(role.permissions)) {
+      userForm.value.permissions = [...role.permissions]
+    }
+  }
+  // 如果选择"自定义权限（临时）"，保持当前权限或清空
+  else {
+    if (userForm.value.permissions.length === 0) {
+      userForm.value.permissions = []
+    }
+  }
+}
+
+async function saveUser() {
+  userError.value = ''
+  if (!userForm.value.name || !userForm.value.phone) {
+    userError.value = '姓名和手机号必填'
+    return
+  }
+  if (!editingUser.value && !userForm.value.password) {
+    userError.value = '新用户密码必填'
+    return
+  }
+  userLoading.value = true
+  try {
+    const payload = {
+      name: userForm.value.name,
+      phone: userForm.value.phone,
+      role: userForm.value.role,
+      department: userForm.value.department,
+      supplier_id: userForm.value.supplier_id || null,
+      supplier_ids: userForm.value.supplier_ids || [],
+      supervisor_id: userForm.value.supervisor_id || null,
+      // 只有选择"自定义权限（临时）"时才传递permissions，其他角色由后端根据role自动处理
+      permissions: userForm.value.role === 'custom' ? userForm.value.permissions : undefined,
+    }
+    if (userForm.value.password) payload.password = userForm.value.password
+
+    let res
+    if (editingUser.value) {
+      res = await api.put(`/users/${editingUser.value.id}`, payload)
+    } else {
+      res = await api.post('/users', payload)
+    }
+
+    if (res.code === 0) {
+      showUserModal.value = false
+      const usersRes = await api.get('/users')
+      if (usersRes.code === 0) users.value = usersRes.data
+    } else {
+      userError.value = res.message || '操作失败'
+    }
+  } catch (e) {
+    userError.value = e.message || '请求失败'
+  } finally {
+    userLoading.value = false
+  }
+}
+
+// ─── Pending Users ─────────────────────────────────────────────────────────────
+async function loadPendingUsers() {
+  try {
+    const res = await api.get('/users?status=pending')
+    if (res.code === 0) {
+      pendingUsers.value = Array.isArray(res.data) ? res.data.filter(u => u.status === 'pending') : []
+    }
+  } catch (e) {
+    console.error('加载待审批员工失败:', e)
+  }
+}
+
+async function approveUser(user) {
+  if (!confirm(`确定要批准「${user.name}」的注册申请吗？`)) return
+  try {
+    const res = await api.put(`/users/${user.id}`, { status: 'active' })
+    if (res.code === 0) {
+      alert('审批成功！')
+      await loadPendingUsers()
+      const usersRes = await api.get('/users')
+      if (usersRes.code === 0) users.value = usersRes.data
+    } else {
+      alert(res.message || '审批失败')
+    }
+  } catch (e) {
+    alert(e.message || '审批失败')
+  }
+}
+
+async function rejectUser(user) {
+  const reason = prompt(`确定要拒绝「${user.name}」的注册申请吗？\n\n请输入拒绝原因（可选）：`)
+  if (reason === null) return // 用户取消
+  try {
+    const res = await api.delete(`/users/${user.id}`)
+    if (res.code === 0) {
+      alert('已拒绝该申请')
+      await loadPendingUsers()
+    } else {
+      alert(res.message || '操作失败')
+    }
+  } catch (e) {
+    alert(e.message || '操作失败')
+  }
+}
+
+async function toggleUserStatus(u) {
+  const newStatus = u.status === 'active' ? 'disabled' : 'active'
+  const label = newStatus === 'disabled' ? '禁用' : '启用'
+  if (!confirm(`确定要${label}用户「${u.name}」吗？`)) return
+  try {
+    const res = await api.put(`/users/${u.id}`, { status: newStatus })
+    if (res.code === 0) {
+      u.status = newStatus
+    }
+  } catch (e) { /* ignore */ }
+}
+
+// ─── Categories ────────────────────────────────────────────────────────────────
+const categories = ref([])
+const catLoading = ref(false)
+const catEditId = ref(null)
+const catEditName = ref('')
+const catNewName = ref('')
+const catError = ref('')
+const expandedIds = ref([])
+const addingChildOf = ref(null)
+const childCatName = ref('')
+
+function buildCategoryTree(flat) {
+  const map = {}
+  const roots = []
+  for (const c of flat) map[c.id] = { ...c, children: [] }
+  for (const c of flat) {
+    if (c.parent_id && map[c.parent_id]) map[c.parent_id].children.push(map[c.id])
+    else roots.push(map[c.id])
+  }
+  return roots
+}
+
+function flattenTree(nodes, expanded) {
+  const result = []
+  for (const node of nodes) {
+    result.push(node)
+    if (expanded.includes(node.id) && node.children?.length)
+      result.push(...flattenTree(node.children, expanded))
+  }
+  return result
+}
+
+const catTree = computed(() => buildCategoryTree(categories.value))
+const catFlat = computed(() => flattenTree(catTree.value, expandedIds.value))
+
+function toggleExpand(id) {
+  const idx = expandedIds.value.indexOf(id)
+  if (idx >= 0) expandedIds.value.splice(idx, 1)
+  else expandedIds.value.push(id)
+}
+
+async function loadCategories() {
+  catLoading.value = true
+  try {
+    const res = await api.get('/categories')
+    if (res.code === 0) categories.value = res.data || []
+  } catch (e) { /* ignore */ } finally {
+    catLoading.value = false
+  }
+}
+
+function startEditCat(cat) {
+  catEditId.value = cat.id
+  catEditName.value = cat.name
+  catError.value = ''
+  addingChildOf.value = null
+}
+
+function cancelEditCat() {
+  catEditId.value = null
+  catEditName.value = ''
+  catError.value = ''
+}
+
+async function saveEditCat(cat) {
+  if (!catEditName.value.trim()) { catError.value = '分类名称不能为空'; return }
+  try {
+    const res = await api.put(`/categories/${cat.id}`, { name: catEditName.value.trim() })
+    if (res.code === 0) {
+      cancelEditCat()
+      await loadCategories()
+    } else {
+      catError.value = res.message || '更新失败'
+    }
+  } catch (e) { catError.value = e.message || '请求失败' }
+}
+
+async function deleteCat(cat) {
+  const hasChildren = cat.children && cat.children.length > 0
+  const msg = hasChildren
+    ? `确定要删除分类「${cat.name}」及其所有子分类吗？`
+    : `确定要删除分类「${cat.name}」吗？`
+  if (!confirm(msg)) return
+  try {
+    const res = await api.delete(`/categories/${cat.id}`)
+    if (res.code === 0) {
+      await loadCategories()
+    } else {
+      alert(res.message || '删除失败')
+    }
+  } catch (e) { alert(e.message || '请求失败') }
+}
+
+async function addCategory() {
+  catError.value = ''
+  if (!catNewName.value.trim()) { catError.value = '分类名称不能为空'; return }
+  try {
+    const res = await api.post('/categories', { name: catNewName.value.trim() })
+    if (res.code === 0) {
+      catNewName.value = ''
+      await loadCategories()
+    } else {
+      catError.value = res.message || '添加失败'
+    }
+  } catch (e) { catError.value = e.message || '请求失败' }
+}
+
+function startAddChild(cat) {
+  addingChildOf.value = cat.id
+  childCatName.value = ''
+  catError.value = ''
+  catEditId.value = null
+  if (!expandedIds.value.includes(cat.id)) expandedIds.value.push(cat.id)
+}
+
+async function saveChildCat(parentId) {
+  catError.value = ''
+  if (!childCatName.value.trim()) { catError.value = '分类名称不能为空'; return }
+  try {
+    const res = await api.post('/categories', { name: childCatName.value.trim(), parent_id: parentId })
+    if (res.code === 0) {
+      addingChildOf.value = null
+      childCatName.value = ''
+      await loadCategories()
+    } else {
+      catError.value = res.message || '添加失败'
+    }
+  } catch (e) { catError.value = e.message || '请求失败' }
+}
+
+// ─── Manage Roles ───────────────────────────────────────────────────────────────
+const roles = ref([])
+const rolesLoading = ref(false)
+const showRoleModal = ref(false)
+const editingRole = ref(null)
+const roleForm = ref({ name: '', label: '', permissions: [] })
+const roleLoading = ref(false)
+const roleError = ref('')
+
+async function loadRoles() {
+  rolesLoading.value = true
+  try {
+    const res = await api.get('/users/roles')
+    if (res.code === 0) roles.value = res.data || []
+  } catch (e) { /* ignore */ } finally {
+    rolesLoading.value = false
+  }
+}
+
+function openAddRole() {
+  editingRole.value = null
+  roleForm.value = { name: '', label: '', permissions: [] }
+  roleError.value = ''
+  showRoleModal.value = true
+}
+
+function openEditRole(r) {
+  editingRole.value = r
+  roleForm.value = {
+    name: r.name,
+    label: r.label,
+    permissions: Array.isArray(r.permissions) ? [...r.permissions] : []
+  }
+  roleError.value = ''
+  showRoleModal.value = true
+}
+
+function toggleRolePermission(key) {
+  const idx = roleForm.value.permissions.indexOf(key)
+  if (idx === -1) roleForm.value.permissions.push(key)
+  else roleForm.value.permissions.splice(idx, 1)
+}
+
+async function saveRole() {
+  roleError.value = ''
+  if (!editingRole.value && !roleForm.value.name.trim()) {
+    roleError.value = '角色标识不能为空'
+    return
+  }
+  if (!roleForm.value.label.trim()) {
+    roleError.value = '角色名称不能为空'
+    return
+  }
+  roleLoading.value = true
+  try {
+    let res
+    if (editingRole.value) {
+      res = await api.put(`/users/roles/${editingRole.value.id}`, {
+        label: roleForm.value.label.trim(),
+        permissions: roleForm.value.permissions
+      })
+    } else {
+      res = await api.post('/users/roles', {
+        name: roleForm.value.name.trim(),
+        label: roleForm.value.label.trim(),
+        permissions: roleForm.value.permissions
+      })
+    }
+    if (res.code === 0) {
+      showRoleModal.value = false
+      await loadRoles()
+    } else {
+      roleError.value = res.message || '操作失败'
+    }
+  } catch (e) {
+    roleError.value = e.message || '请求失败'
+  } finally {
+    roleLoading.value = false
+  }
+}
+
+async function deleteRole(r) {
+  if (!confirm(`确定要删除角色「${r.label}」吗？此操作不可撤销。`)) return
+  try {
+    const res = await api.delete(`/users/roles/${r.id}`)
+    if (res.code === 0) {
+      roles.value = roles.value.filter(x => x.id !== r.id)
+    } else {
+      alert(res.message || '删除失败')
+    }
+  } catch (e) { alert(e.message || '请求失败') }
+}
+
+// ─── Tabs & other settings ─────────────────────────────────────────────────────
+const showApiKey = ref(false)
+const aiKeyInput = ref(chatStore.apiKey)
+const aiModelInput = ref(chatStore.model)
+const aiModels = [
+  { value: 'glm-4-flash', label: 'GLM-4-Flash (快速)' },
+  { value: 'glm-4', label: 'GLM-4 (标准)' },
+  { value: 'glm-4-plus', label: 'GLM-4-Plus (增强)' },
+]
+function saveAiSettings() {
+  chatStore.setApiKey(aiKeyInput.value)
+  chatStore.setModel(aiModelInput.value)
+  aiSaveSuccess.value = true
+  setTimeout(() => aiSaveSuccess.value = false, 2000)
+}
+const aiSaveSuccess = ref(false)
+
+const wecomCorpId = ref(wecomStore.corpId)
+const wecomAgentId = ref(wecomStore.agentId)
+const wecomSecret = ref(wecomStore.secret)
+const showWecomSecret = ref(false)
+const wecomSaveSuccess = ref(false)
+function saveWecomSettings() {
+  wecomStore.saveConfig({ corpId: wecomCorpId.value, agentId: wecomAgentId.value, secret: wecomSecret.value })
+  wecomSaveSuccess.value = true
+  setTimeout(() => wecomSaveSuccess.value = false, 2000)
+}
+
+const activeTab = ref('users')
+const tabs = computed(() => [
+  { key: 'users',         label: t('settings.userList'),           icon: 'people' },
+  { key: 'pending-users', label: '待审批员工',                      icon: 'person_add' },
+  { key: 'departments',   label: '部门管理',                        icon: 'corporate_fare' },
+  { key: 'job-levels',    label: '职级管理',                        icon: 'military_tech' },
+  { key: 'categories',    label: '分类管理',                        icon: 'category' },
+  { key: 'manage-roles',  label: '角色管理',                        icon: 'shield' },
+  { key: 'warehouses',    label: t('settings.warehouseSettings'),  icon: 'warehouse' },
+  { key: 'dingtalk',      label: t('settings.dingtalConfig'),      icon: 'link' },
+  { key: 'wecom',         label: t('settings.wecomConfig'),        icon: 'chat' },
+  { key: 'openclaw',      label: 'OpenClaw',                       icon: 'smart_toy' },
+  { key: 'ai',            label: t('settings.aiAssistantConfig'),  icon: 'psychology' },
+])
+
+// Load tab-specific data on tab change
+function switchTab(key) {
+  activeTab.value = key
+  if (key === 'categories' && categories.value.length === 0) loadCategories()
+  if (key === 'manage-roles' && roles.value.length === 0) loadRoles()
+  if (key === 'departments' && departments.value.length === 0) loadDepartments()
+  if (key === 'job-levels' && jobLevels.value.length === 0) loadJobLevels()
+}
+
+// ─── Warehouse Management ──────────────────────────────────────────────────────
+const showWarehouseModal = ref(false)
+const editingWarehouse = ref(null)
+const warehouseForm = ref({ name: '', address: '', type: '', manager: '', contact: '' })
+const warehouseLoading = ref(false)
+const selectedWarehouses = ref([])
+const selectAllWarehouses = ref(false)
+
+function toggleSelectAllWarehouses() {
+  if (selectAllWarehouses.value) {
+    selectedWarehouses.value = warehouses.value.map(w => w.id)
+  } else {
+    selectedWarehouses.value = []
+  }
+}
+
+function toggleSelectWarehouse(id) {
+  const idx = selectedWarehouses.value.indexOf(id)
+  if (idx > -1) {
+    selectedWarehouses.value.splice(idx, 1)
+  } else {
+    selectedWarehouses.value.push(id)
+  }
+  selectAllWarehouses.value = selectedWarehouses.value.length === warehouses.value.length
+}
+
+async function batchDeleteWarehouses() {
+  if (selectedWarehouses.value.length === 0) {
+    alert('请先选择要删除的仓库')
+    return
+  }
+  if (!confirm(`确认删除选中的 ${selectedWarehouses.value.length} 个仓库？\n此操作不可恢复！`)) return
+
+  try {
+    const res = await api.post('/warehouses/batch-delete', { ids: selectedWarehouses.value })
+    if (res.code === 0) {
+      alert(res.message || '批量删除成功')
+      selectedWarehouses.value = []
+      selectAllWarehouses.value = false
+      const whRes = await api.get('/warehouses')
+      if (whRes.code === 0) warehouses.value = whRes.data.list || whRes.data
+    } else {
+      alert(res.message || '批量删除失败')
+    }
+  } catch (e) {
+    alert(e.message || '批量删除失败')
+  }
+}
+
+function openAddWarehouse() {
+  editingWarehouse.value = null
+  warehouseForm.value = { name: '', address: '', type: '', manager: '', contact: '' }
+  showWarehouseModal.value = true
+}
+
+function openEditWarehouse(wh) {
+  editingWarehouse.value = wh
+  warehouseForm.value = { ...wh }
+  showWarehouseModal.value = true
+}
+
+async function saveWarehouse() {
+  if (!warehouseForm.value.name?.trim()) {
+    alert('仓库名称不能为空')
+    return
+  }
+  warehouseLoading.value = true
+  try {
+    if (editingWarehouse.value) {
+      const res = await api.put(`/warehouses/${editingWarehouse.value.id}`, warehouseForm.value)
+      if (res.code === 0) {
+        const idx = warehouses.value.findIndex(w => w.id === editingWarehouse.value.id)
+        if (idx !== -1) warehouses.value[idx] = { ...editingWarehouse.value, ...warehouseForm.value }
+        showWarehouseModal.value = false
+      } else {
+        alert(res.message || '保存失败')
+      }
+    } else {
+      const res = await api.post('/warehouses', warehouseForm.value)
+      if (res.code === 0) {
+        warehouses.value.push(res.data)
+        showWarehouseModal.value = false
+      } else {
+        alert(res.message || '创建失败')
+      }
+    }
+  } catch (e) {
+    alert(e.message || '操作失败')
+  } finally {
+    warehouseLoading.value = false
+  }
+}
+
+async function deleteWarehouse(wh) {
+  if (!confirm(`确认删除仓库"${wh.name}"？\n此操作不可恢复！`)) return
+  try {
+    const res = await api.delete(`/warehouses/${wh.id}`)
+    if (res.code === 0) {
+      warehouses.value = warehouses.value.filter(w => w.id !== wh.id)
+    } else {
+      alert(res.message || '删除失败')
+    }
+  } catch (e) {
+    alert(e.message || '删除失败')
+  }
+}
+
+// ─── Departments Management ────────────────────────────────────────────────────
+const deptLoading = ref(false)
+const deptError = ref('')
+const showDeptModal = ref(false)
+const editingDept = ref(null)
+const deptForm = ref({ name: '', parent_id: null, manager_id: null, sort_order: 0 })
+
+async function loadDepartments() {
+  try {
+    deptLoading.value = true
+    const res = await api.get('/users/departments/list')
+    if (res.code === 0) {
+      departments.value = res.data || []
+    }
+  } catch (err) {
+    deptError.value = '加载部门失败'
+  } finally {
+    deptLoading.value = false
+  }
+}
+
+function openAddDept() {
+  editingDept.value = null
+  deptForm.value = { name: '', parent_id: null, manager_id: null, sort_order: 0 }
+  deptError.value = ''
+  showDeptModal.value = true
+}
+
+function openEditDept(dept) {
+  editingDept.value = dept
+  deptForm.value = {
+    name: dept.name,
+    parent_id: dept.parent_id || null,
+    manager_id: dept.manager_id || null,
+    sort_order: dept.sort_order || 0
+  }
+  deptError.value = ''
+  showDeptModal.value = true
+}
+
+async function saveDept() {
+  if (!deptForm.value.name) {
+    deptError.value = '部门名称必填'
+    return
+  }
+  try {
+    deptLoading.value = true
+    let res
+    if (editingDept.value) {
+      res = await api.put(`/users/departments/${editingDept.value.id}`, deptForm.value)
+    } else {
+      res = await api.post('/users/departments/create', deptForm.value)
+    }
+    if (res.code === 0) {
+      showDeptModal.value = false
+      await loadDepartments()
+    } else {
+      deptError.value = res.message || '操作失败'
+    }
+  } catch (err) {
+    deptError.value = '操作失败'
+  } finally {
+    deptLoading.value = false
+  }
+}
+
+async function deleteDept(dept) {
+  if (!confirm(`确定要删除部门"${dept.name}"吗？`)) return
+  try {
+    const res = await api.delete(`/users/departments/${dept.id}`)
+    if (res.code === 0) {
+      await loadDepartments()
+    } else {
+      alert(res.message || '删除失败')
+    }
+  } catch (err) {
+    alert('删除失败')
+  }
+}
+
+// ─── Job Levels Management ─────────────────────────────────────────────────────
+const levelLoading = ref(false)
+const levelError = ref('')
+const showLevelModal = ref(false)
+const editingLevel = ref(null)
+const levelForm = ref({ name: '', level: 1, description: '' })
+
+async function loadJobLevels() {
+  try {
+    levelLoading.value = true
+    const res = await api.get('/users/job-levels/list')
+    if (res.code === 0) {
+      jobLevels.value = res.data || []
+    }
+  } catch (err) {
+    levelError.value = '加载职级失败'
+  } finally {
+    levelLoading.value = false
+  }
+}
+
+function openAddLevel() {
+  editingLevel.value = null
+  levelForm.value = { name: '', level: 1, description: '' }
+  levelError.value = ''
+  showLevelModal.value = true
+}
+
+function openEditLevel(level) {
+  editingLevel.value = level
+  levelForm.value = {
+    name: level.name,
+    level: level.level,
+    description: level.description || ''
+  }
+  levelError.value = ''
+  showLevelModal.value = true
+}
+
+async function saveLevel() {
+  if (!levelForm.value.name || !levelForm.value.level) {
+    levelError.value = '职级名称和等级必填'
+    return
+  }
+  try {
+    levelLoading.value = true
+    let res
+    if (editingLevel.value) {
+      res = await api.put(`/users/job-levels/${editingLevel.value.id}`, levelForm.value)
+    } else {
+      res = await api.post('/users/job-levels/create', levelForm.value)
+    }
+    if (res.code === 0) {
+      showLevelModal.value = false
+      await loadJobLevels()
+    } else {
+      levelError.value = res.message || '操作失败'
+    }
+  } catch (err) {
+    levelError.value = '操作失败'
+  } finally {
+    levelLoading.value = false
+  }
+}
+
+async function deleteLevel(level) {
+  if (!confirm(`确定要删除职级"${level.name}"吗？`)) return
+  try {
+    const res = await api.delete(`/users/job-levels/${level.id}`)
+    if (res.code === 0) {
+      await loadJobLevels()
+    } else {
+      alert(res.message || '删除失败')
+    }
+  } catch (err) {
+    alert('删除失败')
+  }
+}
+
+// ─── User Delete ───────────────────────────────────────────────────────────────
+async function deleteUser(user) {
+  if (user.status !== 'disabled') {
+    alert('只能删除已停用的用户')
+    return
+  }
+  if (!confirm(`确定要删除用户"${user.name}"吗？此操作不可恢复！`)) return
+  try {
+    const res = await api.delete(`/users/${user.id}`)
+    if (res.code === 0) {
+      const usersRes = await api.get('/users')
+      if (usersRes.code === 0) users.value = usersRes.data
+    } else {
+      alert(res.message || '删除失败')
+    }
+  } catch (err) {
+    alert('删除失败')
+  }
+}
+</script>
+
+<template>
+  <div>
+    <PageHeader :title="$t('settings.title')" :subtitle="$t('settings.subtitle')" />
+
+    <div class="bg-white rounded-lg border border-gray-100 shadow-card overflow-hidden">
+      <!-- Tabs -->
+      <div class="flex border-b border-gray-100 overflow-x-auto">
+        <button
+          v-for="tab in tabs" :key="tab.key"
+          @click="switchTab(tab.key)"
+          :class="['flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
+            activeTab === tab.key ? 'border-primary text-primary' : 'border-transparent text-text-secondary hover:text-text-primary']"
+        >
+          <span class="material-symbols-outlined text-[18px]">{{ tab.icon }}</span>
+          {{ tab.label }}
+        </button>
+      </div>
+
+      <!-- ── Users ── -->
+      <div v-if="activeTab === 'users'" class="p-6">
+        <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+          <span class="material-symbols-outlined text-sm align-middle">info</span>
+          此处管理系统内部员工账号。H5应用的顾客用户请在"身份码管理"中查看。
+        </div>
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-bold text-text-primary">{{ $t('settings.userList') }}</h3>
+          <button @click="openAddUser" class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            <span class="material-symbols-outlined text-[18px]">person_add</span>
+            {{ $t('settings.addUser') }}
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
+              <tr>
+                <th class="px-4 py-3 font-medium">{{ $t('common.name') }}</th>
+                <th class="px-4 py-3 font-medium">{{ $t('common.phone') }}</th>
+                <th class="px-4 py-3 font-medium">{{ $t('settings.role') }}</th>
+                <th class="px-4 py-3 font-medium">{{ $t('settings.department') }}</th>
+                <th class="px-4 py-3 font-medium">直属上级</th>
+                <th class="px-4 py-3 font-medium">供货商</th>
+                <th class="px-4 py-3 font-medium">{{ $t('settings.lastLogin') }}</th>
+                <th class="px-4 py-3 font-medium text-center">{{ $t('common.status') }}</th>
+                <th class="px-4 py-3 font-medium text-right">{{ $t('common.action') }}</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="u in users" :key="u.id" class="hover:bg-gray-50 transition-colors">
+                <td class="px-4 py-3 font-medium text-text-primary">{{ u.name }}</td>
+                <td class="px-4 py-3 text-text-secondary">{{ u.phone || '-' }}</td>
+                <td class="px-4 py-3">
+                  <StatusTag :type="ROLE_COLORS[u.role] || 'info'" :text="ROLE_LABELS[u.role] || u.role" />
+                </td>
+                <td class="px-4 py-3 text-text-secondary">{{ u.department || '-' }}</td>
+                <td class="px-4 py-3 text-text-secondary">{{ u.supervisor_name || '-' }}</td>
+                <td class="px-4 py-3 text-text-secondary text-xs">
+                  <template v-if="u.suppliers && u.suppliers.length > 0">
+                    <span v-for="(s, idx) in u.suppliers" :key="s.id" class="inline-block bg-primary/10 text-primary px-2 py-0.5 rounded text-xs mr-1 mb-1">
+                      {{ s.name }}
+                    </span>
+                  </template>
+                  <span v-else>-</span>
+                </td>
+                <td class="px-4 py-3 text-text-secondary text-xs">{{ u.last_login ? u.last_login.slice(0,16) : '-' }}</td>
+                <td class="px-4 py-3 text-center">
+                  <StatusTag :type="u.status === 'active' ? 'success' : 'danger'" :text="u.status === 'active' ? '启用' : '禁用'" />
+                </td>
+                <td class="px-4 py-3 text-right space-x-3">
+                  <button @click="openEditUser(u)" class="text-primary hover:text-primary-hover text-xs font-medium">{{ $t('common.edit') }}</button>
+                  <button @click="toggleUserStatus(u)" :class="['text-xs font-medium', u.status === 'active' ? 'text-danger hover:text-red-700' : 'text-success hover:text-green-700']">
+                    {{ u.status === 'active' ? $t('settings.disable') : '启用' }}
+                  </button>
+                  <button v-if="u.status === 'disabled'"
+                          @click="deleteUser(u)"
+                          class="text-danger hover:text-red-700 text-xs font-medium"
+                          :title="'永久删除用户：' + u.name">
+                    删除
+                  </button>
+                  <span v-else
+                        class="text-xs text-gray-400 cursor-not-allowed"
+                        title="请先禁用用户后才能删除">
+                    删除
+                  </span>
+                </td>
+              </tr>
+              <tr v-if="!users.length">
+                <td colspan="9" class="px-4 py-8 text-center text-text-secondary text-sm">暂无用户</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Pending Users ── -->
+      <div v-if="activeTab === 'pending-users'" class="p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-bold text-text-primary">待审批员工
+            <span class="text-xs font-normal text-text-secondary ml-2">共 {{ pendingUsers.length }} 人</span>
+          </h3>
+          <button @click="loadPendingUsers" class="flex items-center gap-2 text-primary hover:text-primary-hover text-sm font-medium">
+            <span class="material-symbols-outlined text-[18px]">refresh</span>
+            刷新
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
+              <tr>
+                <th class="px-4 py-3 font-medium">姓名</th>
+                <th class="px-4 py-3 font-medium">手机号</th>
+                <th class="px-4 py-3 font-medium">身份证号</th>
+                <th class="px-4 py-3 font-medium">申请时间</th>
+                <th class="px-4 py-3 font-medium text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="u in pendingUsers" :key="u.id" class="hover:bg-gray-50 transition-colors">
+                <td class="px-4 py-3 font-medium text-text-primary">{{ u.name }}</td>
+                <td class="px-4 py-3 text-text-secondary">{{ u.phone }}</td>
+                <td class="px-4 py-3 text-text-secondary">{{ u.id_card || '-' }}</td>
+                <td class="px-4 py-3 text-text-secondary text-xs">{{ u.applied_at ? u.applied_at.slice(0,16) : '-' }}</td>
+                <td class="px-4 py-3 text-right space-x-3">
+                  <button @click="approveUser(u)" class="text-success hover:text-green-700 text-xs font-medium">
+                    批准
+                  </button>
+                  <button @click="rejectUser(u)" class="text-danger hover:text-red-700 text-xs font-medium">
+                    拒绝
+                  </button>
+                </td>
+              </tr>
+              <tr v-if="!pendingUsers.length">
+                <td colspan="5" class="px-4 py-8 text-center text-text-secondary text-sm">暂无待审批员工</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Departments ── -->
+      <div v-if="activeTab === 'departments'" class="p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-bold text-text-primary">部门管理
+            <span class="text-xs font-normal text-text-secondary ml-2">共 {{ departments.length }} 个部门</span>
+          </h3>
+          <button @click="openAddDept" class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            <span class="material-symbols-outlined text-[18px]">add</span>
+            添加部门
+          </button>
+        </div>
+        <div v-if="deptError" class="mb-3 text-sm text-danger bg-red-50 px-3 py-2 rounded-lg">{{ deptError }}</div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
+              <tr>
+                <th class="px-4 py-3 font-medium">部门名称</th>
+                <th class="px-4 py-3 font-medium">负责人</th>
+                <th class="px-4 py-3 font-medium">排序</th>
+                <th class="px-4 py-3 font-medium">状态</th>
+                <th class="px-4 py-3 font-medium text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="dept in departments" :key="dept.id" class="hover:bg-gray-50 transition-colors">
+                <td class="px-4 py-3 font-medium text-text-primary">{{ dept.name }}</td>
+                <td class="px-4 py-3 text-text-secondary">{{ dept.manager_name || '-' }}</td>
+                <td class="px-4 py-3 text-text-secondary">{{ dept.sort_order }}</td>
+                <td class="px-4 py-3">
+                  <StatusTag :type="dept.status === 'active' ? 'success' : 'danger'" :text="dept.status === 'active' ? '启用' : '禁用'" />
+                </td>
+                <td class="px-4 py-3 text-right space-x-3">
+                  <button @click="openEditDept(dept)" class="text-primary hover:text-primary-hover text-xs font-medium">编辑</button>
+                  <button @click="deleteDept(dept)" class="text-danger hover:text-red-700 text-xs font-medium">删除</button>
+                </td>
+              </tr>
+              <tr v-if="!departments.length">
+                <td colspan="5" class="px-4 py-8 text-center text-text-secondary text-sm">暂无部门</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Job Levels ── -->
+      <div v-if="activeTab === 'job-levels'" class="p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-bold text-text-primary">职级管理
+            <span class="text-xs font-normal text-text-secondary ml-2">共 {{ jobLevels.length }} 个职级</span>
+          </h3>
+          <button @click="openAddLevel" class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            <span class="material-symbols-outlined text-[18px]">add</span>
+            添加职级
+          </button>
+        </div>
+        <div v-if="levelError" class="mb-3 text-sm text-danger bg-red-50 px-3 py-2 rounded-lg">{{ levelError }}</div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
+              <tr>
+                <th class="px-4 py-3 font-medium">职级名称</th>
+                <th class="px-4 py-3 font-medium">等级</th>
+                <th class="px-4 py-3 font-medium">描述</th>
+                <th class="px-4 py-3 font-medium text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="level in jobLevels" :key="level.id" class="hover:bg-gray-50 transition-colors">
+                <td class="px-4 py-3 font-medium text-text-primary">{{ level.name }}</td>
+                <td class="px-4 py-3 text-text-secondary">{{ level.level }}</td>
+                <td class="px-4 py-3 text-text-secondary">{{ level.description || '-' }}</td>
+                <td class="px-4 py-3 text-right space-x-3">
+                  <button @click="openEditLevel(level)" class="text-primary hover:text-primary-hover text-xs font-medium">编辑</button>
+                  <button @click="deleteLevel(level)" class="text-danger hover:text-red-700 text-xs font-medium">删除</button>
+                </td>
+              </tr>
+              <tr v-if="!jobLevels.length">
+                <td colspan="4" class="px-4 py-8 text-center text-text-secondary text-sm">暂无职级</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Categories ── -->
+      <div v-if="activeTab === 'categories'" class="p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-bold text-text-primary">分类管理
+            <span class="text-xs font-normal text-text-secondary ml-2">最多4级层级</span>
+          </h3>
+          <div class="flex items-center gap-3">
+            <span v-if="catLoading" class="text-sm text-text-secondary">加载中...</span>
+          </div>
+        </div>
+
+        <div v-if="catError" class="mb-3 text-sm text-danger bg-red-50 px-3 py-2 rounded-lg">{{ catError }}</div>
+
+        <!-- Tree view -->
+        <div class="border border-gray-100 rounded-lg divide-y divide-gray-100 mb-4">
+          <div v-if="!catFlat.length && !catLoading" class="px-4 py-8 text-center text-text-secondary text-sm">暂无分类</div>
+
+          <template v-for="node in catFlat" :key="node.id">
+            <!-- Category row -->
+            <div
+              :style="{ paddingLeft: `${(node.level - 1) * 24 + 16}px` }"
+              class="flex items-center gap-2 pr-4 py-2.5 hover:bg-gray-50 transition-colors min-h-[44px]"
+            >
+              <!-- Expand arrow -->
+              <button
+                v-if="node.children && node.children.length"
+                @click="toggleExpand(node.id)"
+                class="w-5 h-5 flex items-center justify-center text-text-secondary hover:text-text-primary shrink-0"
+              >
+                <span class="material-symbols-outlined text-[16px] transition-transform"
+                  :class="expandedIds.includes(node.id) ? 'rotate-90' : ''">chevron_right</span>
+              </button>
+              <span v-else class="w-5 shrink-0"></span>
+
+              <!-- Level badge -->
+              <span :class="[
+                'text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0',
+                node.level === 1 ? 'bg-primary/10 text-primary' :
+                node.level === 2 ? 'bg-success/10 text-success' :
+                node.level === 3 ? 'bg-warning/10 text-warning' :
+                'bg-danger/10 text-danger'
+              ]">L{{ node.level }}</span>
+
+              <!-- Name / Edit input -->
+              <template v-if="catEditId !== node.id">
+                <span class="flex-1 text-sm text-text-primary font-medium">{{ node.name }}</span>
+              </template>
+              <template v-else>
+                <input
+                  v-model="catEditName"
+                  type="text"
+                  class="flex-1 border border-primary rounded-lg px-2 py-1 text-sm focus:ring-1 focus:ring-primary focus:outline-none"
+                  @keyup.enter="saveEditCat(node)"
+                  @keyup.esc="cancelEditCat"
+                  autofocus
+                />
+                <button @click="saveEditCat(node)" class="text-white bg-primary hover:bg-primary-hover text-xs px-2.5 py-1 rounded-lg shrink-0">保存</button>
+                <button @click="cancelEditCat" class="text-text-secondary hover:text-text-primary text-xs px-2 py-1 shrink-0">取消</button>
+              </template>
+
+              <!-- Actions (only when not editing) -->
+              <template v-if="catEditId !== node.id">
+                <button
+                  v-if="node.level < 4"
+                  @click="startAddChild(node)"
+                  class="text-success hover:text-green-700 text-xs font-medium px-2 py-1 rounded hover:bg-green-50 transition-colors shrink-0"
+                >+子级</button>
+                <button
+                  @click="startEditCat(node)"
+                  class="text-primary hover:text-primary-hover text-xs font-medium px-2 py-1 rounded hover:bg-primary/5 transition-colors shrink-0"
+                >编辑</button>
+                <button
+                  @click="deleteCat(node)"
+                  class="text-danger hover:text-red-700 text-xs font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors shrink-0"
+                >删除</button>
+              </template>
+            </div>
+
+            <!-- Inline add-child input row -->
+            <div
+              v-if="addingChildOf === node.id"
+              :style="{ paddingLeft: `${node.level * 24 + 16}px` }"
+              class="flex items-center gap-2 pr-4 py-2 bg-green-50 border-l-2 border-success"
+            >
+              <span class="material-symbols-outlined text-success text-[16px] shrink-0">add_circle_outline</span>
+              <input
+                v-model="childCatName"
+                type="text"
+                :placeholder="`输入 L${node.level + 1} 子分类名称`"
+                class="flex-1 border border-success rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-success focus:outline-none bg-white"
+                @keyup.enter="saveChildCat(node.id)"
+                @keyup.esc="addingChildOf = null"
+                autofocus
+              />
+              <button @click="saveChildCat(node.id)" class="text-white bg-success hover:bg-green-700 text-xs px-2.5 py-1.5 rounded-lg shrink-0">添加</button>
+              <button @click="addingChildOf = null" class="text-text-secondary hover:text-text-primary text-xs px-2 py-1.5 shrink-0">取消</button>
+            </div>
+          </template>
+        </div>
+
+        <!-- Add top-level category -->
+        <div class="flex items-center gap-3 border border-dashed border-gray-200 rounded-lg px-4 py-3 bg-gray-50/50">
+          <span class="material-symbols-outlined text-[18px] text-text-secondary shrink-0">add_circle_outline</span>
+          <input
+            v-model="catNewName"
+            type="text"
+            placeholder="输入顶级分类名称，按回车或点击添加"
+            class="flex-1 bg-transparent text-sm text-text-primary placeholder-text-secondary focus:outline-none"
+            @keyup.enter="addCategory"
+          />
+          <button
+            @click="addCategory"
+            class="text-white bg-primary hover:bg-primary-hover text-xs font-medium px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap shrink-0"
+          >新增顶级分类</button>
+        </div>
+      </div>
+
+      <!-- ── Manage Roles ── -->
+      <div v-if="activeTab === 'manage-roles'" class="p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-bold text-text-primary">角色管理</h3>
+          <button
+            @click="openAddRole"
+            class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            <span class="material-symbols-outlined text-[18px]">add</span>
+            新增角色
+          </button>
+        </div>
+
+        <div v-if="rolesLoading" class="py-8 text-center text-text-secondary text-sm">加载中...</div>
+
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div v-if="!roles.length" class="md:col-span-2 py-8 text-center text-text-secondary text-sm">暂无角色数据</div>
+
+          <div
+            v-for="r in roles" :key="r.id"
+            class="border border-gray-100 rounded-lg p-4 hover:shadow-card-hover transition-shadow"
+          >
+            <div class="flex items-start justify-between gap-2 mb-2">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-[20px] text-primary">shield</span>
+                <div>
+                  <h4 class="font-bold text-text-primary text-sm leading-tight">{{ r.label }}</h4>
+                  <p class="text-xs text-text-secondary font-mono">{{ r.name }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-1.5 flex-shrink-0">
+                <span v-if="r.is_system" class="text-xs bg-warning/10 text-warning px-2 py-0.5 rounded font-medium">系统</span>
+                <template v-if="!r.is_system">
+                  <button
+                    @click="openEditRole(r)"
+                    class="text-primary hover:text-primary-hover text-xs font-medium px-2 py-1 rounded hover:bg-primary/5 transition-colors"
+                  >编辑</button>
+                  <button
+                    @click="deleteRole(r)"
+                    class="text-danger hover:text-red-700 text-xs font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                  >删除</button>
+                </template>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <span class="text-xs text-text-secondary">
+                权限数量：<span class="font-medium text-text-primary">{{ Array.isArray(r.permissions) ? r.permissions.length : 0 }}</span> 项
+              </span>
+            </div>
+
+            <div class="flex flex-wrap gap-1.5">
+              <template v-if="Array.isArray(r.permissions) && r.permissions.length">
+                <span
+                  v-for="pkey in r.permissions" :key="pkey"
+                  class="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded"
+                >{{ ALL_PAGES.find(p => p.key === pkey)?.label || pkey }}</span>
+              </template>
+              <span v-else class="text-xs text-text-secondary italic">无权限配置</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Warehouses ── -->
+      <div v-if="activeTab === 'warehouses'" class="p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-bold text-text-primary">{{ $t('settings.warehouseSettings') }}</h3>
+          <div class="flex items-center gap-2">
+            <button v-if="selectedWarehouses.length > 0" @click="batchDeleteWarehouses" class="flex items-center gap-1 px-3 py-2 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600 transition-colors">
+              <span class="material-symbols-outlined text-[16px]">delete</span>
+              批量删除 ({{ selectedWarehouses.length }})
+            </button>
+            <button @click="openAddWarehouse" class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+              <span class="material-symbols-outlined text-[18px]">add</span>
+              {{ $t('settings.addWarehouse') }}
+            </button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
+              <tr>
+                <th class="px-4 py-3 font-medium w-12">
+                  <input type="checkbox" v-model="selectAllWarehouses" @change="toggleSelectAllWarehouses" class="rounded border-gray-300 text-primary focus:ring-primary" />
+                </th>
+                <th class="px-4 py-3 font-medium">{{ $t('settings.warehouseName') }}</th>
+                <th class="px-4 py-3 font-medium">{{ $t('common.address') }}</th>
+                <th class="px-4 py-3 font-medium">{{ $t('settings.type') }}</th>
+                <th class="px-4 py-3 font-medium">{{ $t('settings.manager') }}</th>
+                <th class="px-4 py-3 font-medium text-center">{{ $t('common.status') }}</th>
+                <th class="px-4 py-3 font-medium text-right">{{ $t('common.action') }}</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="wh in warehouses" :key="wh.id" class="hover:bg-gray-50 transition-colors">
+                <td class="px-4 py-3">
+                  <input type="checkbox" :checked="selectedWarehouses.includes(wh.id)" @change="toggleSelectWarehouse(wh.id)" class="rounded border-gray-300 text-primary focus:ring-primary" />
+                </td>
+                <td class="px-4 py-3 font-medium text-text-primary">{{ wh.name }}</td>
+                <td class="px-4 py-3 text-text-secondary text-xs">{{ wh.address }}</td>
+                <td class="px-4 py-3"><StatusTag type="primary" :text="wh.type" /></td>
+                <td class="px-4 py-3 text-text-primary">{{ wh.manager }}</td>
+                <td class="px-4 py-3 text-center"><StatusTag type="success" :text="$t('common.active')" /></td>
+                <td class="px-4 py-3 text-right">
+                  <button @click="openEditWarehouse(wh)" class="text-primary hover:text-primary-hover text-xs font-medium mr-3">{{ $t('common.edit') }}</button>
+                  <button @click="deleteWarehouse(wh)" class="text-danger hover:text-red-700 text-xs font-medium">{{ $t('common.delete') }}</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── DingTalk ── -->
+      <div v-if="activeTab === 'dingtalk'" class="p-6">
+        <h3 class="font-bold text-text-primary mb-4">{{ $t('settings.dingtalConfig') }}</h3>
+        <div class="max-w-2xl space-y-4">
+          <div><label class="block text-sm font-medium text-text-primary mb-1">AppKey</label>
+            <input type="text" value="ding_xxxxxxxx" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none bg-gray-50" readonly /></div>
+          <div><label class="block text-sm font-medium text-text-primary mb-1">AppSecret</label>
+            <input type="password" value="xxxxxxxxxxxxxx" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none bg-gray-50" readonly /></div>
+          <div><label class="block text-sm font-medium text-text-primary mb-1">{{ $t('settings.callbackUrl') }}</label>
+            <input type="text" value="https://claw.gdqshop.cn/api/dingtalk/callback" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" /></div>
+          <button class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            <span class="material-symbols-outlined text-[18px]">save</span>{{ $t('settings.saveConfig') }}
+          </button>
+        </div>
+      </div>
+
+      <!-- ── WeCom ── -->
+      <div v-if="activeTab === 'wecom'" class="p-6">
+        <h3 class="font-bold text-text-primary mb-4">{{ $t('settings.wecomConfig') }}</h3>
+        <div class="max-w-2xl space-y-4">
+          <div><label class="block text-sm font-medium text-text-primary mb-1">CorpID</label>
+            <input v-model="wecomCorpId" type="text" placeholder="CorpID" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" /></div>
+          <div><label class="block text-sm font-medium text-text-primary mb-1">AgentId</label>
+            <input v-model="wecomAgentId" type="text" placeholder="AgentId" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" /></div>
+          <div><label class="block text-sm font-medium text-text-primary mb-1">Secret</label>
+            <div class="relative">
+              <input v-model="wecomSecret" :type="showWecomSecret ? 'text' : 'password'" placeholder="Secret" class="w-full border border-gray-200 rounded-lg px-3 py-2 pr-10 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+              <button @click="showWecomSecret = !showWecomSecret" class="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary transition-colors">
+                <span class="material-symbols-outlined text-[18px]">{{ showWecomSecret ? 'visibility_off' : 'visibility' }}</span>
+              </button>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <button @click="saveWecomSettings" class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+              <span class="material-symbols-outlined text-[18px]">save</span>{{ $t('settings.saveConfig') }}
+            </button>
+            <span v-if="wecomSaveSuccess" class="text-sm text-success flex items-center gap-1">
+              <span class="material-symbols-outlined text-[16px]">check_circle</span>{{ $t('settings.saved') }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── OpenClaw ── -->
+      <div v-if="activeTab === 'openclaw'" class="p-6">
+        <h3 class="font-bold text-text-primary mb-4">{{ $t('settings.openclawConfig') }}</h3>
+        <div class="max-w-2xl space-y-4">
+          <div><label class="block text-sm font-medium text-text-primary mb-1">Gateway URL</label>
+            <input type="text" value="http://localhost:3578" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" /></div>
+          <div><label class="block text-sm font-medium text-text-primary mb-1">Webhook Token</label>
+            <input type="password" value="xxxxxxxxxxxxxx" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" /></div>
+          <button class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            <span class="material-symbols-outlined text-[18px]">save</span>{{ $t('settings.saveConfig') }}
+          </button>
+        </div>
+      </div>
+
+      <!-- ── AI Assistant ── -->
+      <div v-if="activeTab === 'ai'" class="p-6">
+        <h3 class="font-bold text-text-primary mb-4">{{ $t('settings.aiAssistantConfig') }}</h3>
+        <div class="max-w-2xl space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">GLM API Key</label>
+            <div class="relative">
+              <input v-model="aiKeyInput" :type="showApiKey ? 'text' : 'password'" :placeholder="$t('settings.glmKeyPlaceholder')" class="w-full border border-gray-200 rounded-lg px-3 py-2 pr-10 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+              <button @click="showApiKey = !showApiKey" class="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary transition-colors">
+                <span class="material-symbols-outlined text-[18px]">{{ showApiKey ? 'visibility_off' : 'visibility' }}</span>
+              </button>
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('settings.modelSelection') }}</label>
+            <select v-model="aiModelInput" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none bg-white">
+              <option v-for="m in aiModels" :key="m.value" :value="m.value">{{ m.label }}</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-3">
+            <button @click="saveAiSettings" class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+              <span class="material-symbols-outlined text-[18px]">save</span>{{ $t('settings.saveConfig') }}
+            </button>
+            <span v-if="aiSaveSuccess" class="text-sm text-success flex items-center gap-1">
+              <span class="material-symbols-outlined text-[16px]">check_circle</span>{{ $t('settings.saved') }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Department Modal ── -->
+    <div v-if="showDeptModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+          <h3 class="text-lg font-bold text-text-primary">{{ editingDept ? '编辑部门' : '添加部门' }}</h3>
+          <button @click="showDeptModal = false" class="text-text-secondary hover:text-text-primary">
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>
+        <div class="px-6 py-4 space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">部门名称 <span class="text-danger">*</span></label>
+            <input v-model="deptForm.name" type="text" placeholder="请输入部门名称" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">上级部门</label>
+            <select v-model="deptForm.parent_id" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+              <option :value="null">无上级部门</option>
+              <option v-for="dept in departments.filter(d => d.id !== editingDept?.id)" :key="dept.id" :value="dept.id">
+                {{ dept.name }}
+              </option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">部门负责人</label>
+            <select v-model="deptForm.manager_id" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+              <option :value="null">无负责人</option>
+              <option v-for="u in users" :key="u.id" :value="u.id">
+                {{ u.name }} ({{ u.phone }})
+              </option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">排序</label>
+            <input v-model.number="deptForm.sort_order" type="number" placeholder="0" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+          </div>
+          <div v-if="deptError" class="text-sm text-danger bg-red-50 px-3 py-2 rounded-lg">{{ deptError }}</div>
+        </div>
+        <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+          <button @click="showDeptModal = false" class="px-4 py-2 text-sm text-text-secondary border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">取消</button>
+          <button @click="saveDept" :disabled="deptLoading" class="px-4 py-2 text-sm text-white bg-primary hover:bg-primary-hover rounded-lg transition-colors disabled:opacity-50">
+            {{ deptLoading ? '保存中...' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Job Level Modal ── -->
+    <div v-if="showLevelModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+          <h3 class="text-lg font-bold text-text-primary">{{ editingLevel ? '编辑职级' : '添加职级' }}</h3>
+          <button @click="showLevelModal = false" class="text-text-secondary hover:text-text-primary">
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>
+        <div class="px-6 py-4 space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">职级名称 <span class="text-danger">*</span></label>
+            <input v-model="levelForm.name" type="text" placeholder="如：总监" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">等级 <span class="text-danger">*</span></label>
+            <input v-model.number="levelForm.level" type="number" placeholder="数字越大权限越高" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+            <p class="text-xs text-text-secondary mt-1">数字越大权限越高，如：总监=5，经理=3，专员=1</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">描述</label>
+            <textarea v-model="levelForm.description" placeholder="职级描述" rows="3" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"></textarea>
+          </div>
+          <div v-if="levelError" class="text-sm text-danger bg-red-50 px-3 py-2 rounded-lg">{{ levelError }}</div>
+        </div>
+        <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+          <button @click="showLevelModal = false" class="px-4 py-2 text-sm text-text-secondary border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">取消</button>
+          <button @click="saveLevel" :disabled="levelLoading" class="px-4 py-2 text-sm text-white bg-primary hover:bg-primary-hover rounded-lg transition-colors disabled:opacity-50">
+            {{ levelLoading ? '保存中...' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Add/Edit User Modal ── -->
+    <div v-if="showUserModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" @click.self="showUserModal = false">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h3 class="font-bold text-text-primary">{{ editingUser ? '编辑用户' : '添加用户' }}</h3>
+          <button @click="showUserModal = false" class="text-text-secondary hover:text-text-primary">
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <div class="px-6 py-4 space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-text-primary mb-1">姓名 <span class="text-danger">*</span></label>
+              <input v-model="userForm.name" type="text" placeholder="请输入姓名" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-text-primary mb-1">部门</label>
+              <input v-model="userForm.department" type="text" placeholder="如：销售部" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">供货商关联 <span class="text-xs text-text-secondary font-normal">（可多选，设置后仅可查看这些供货商的商品/二维码）</span></label>
+            <div class="border border-gray-200 rounded-lg p-3 bg-white max-h-48 overflow-y-auto">
+              <label v-for="s in suppliers" :key="s.id" class="flex items-center gap-2 py-1.5 hover:bg-gray-50 rounded px-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  :value="s.id"
+                  v-model="userForm.supplier_ids"
+                  class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary focus:ring-2"
+                />
+                <span class="text-sm text-text-primary">{{ s.name }}</span>
+              </label>
+              <div v-if="suppliers.length === 0" class="text-sm text-text-secondary text-center py-2">
+                暂无供货商
+              </div>
+            </div>
+            <p v-if="userForm.supplier_ids.length > 0" class="text-xs text-text-secondary mt-1">
+              已选择 {{ userForm.supplier_ids.length }} 个供货商
+            </p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">手机号 <span class="text-danger">*</span></label>
+            <input v-model="userForm.phone" type="text" placeholder="请输入手机号" :disabled="!!editingUser" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none disabled:bg-gray-50 disabled:text-text-secondary" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">直属上级</label>
+            <select v-model="userForm.supervisor_id" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+              <option :value="null">无上级</option>
+              <option v-for="u in users.filter(user => user.id !== editingUser?.id)" :key="u.id" :value="u.id">
+                {{ u.name }} ({{ u.phone }})
+              </option>
+            </select>
+            <p class="text-xs text-text-secondary mt-1">
+              设置后，该用户的上级可以给其分配任务
+            </p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">密码 {{ editingUser ? '（留空则不修改）' : '*' }}</label>
+            <input v-model="userForm.password" type="password" placeholder="请输入密码" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">角色 <span class="text-danger">*</span></label>
+            <select v-model="userForm.role" @change="onRoleChange" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+              <optgroup label="预设角色">
+                <option value="admin">超级管理员</option>
+                <option value="manager">经理</option>
+                <option value="operator">操作员</option>
+              </optgroup>
+              <optgroup label="自定义角色" v-if="roles.length > 0">
+                <option v-for="role in roles" :key="role.id" :value="role.name">
+                  {{ role.label }}
+                </option>
+              </optgroup>
+              <optgroup label="其他">
+                <option value="custom">自定义权限（临时）</option>
+              </optgroup>
+            </select>
+            <p class="text-xs text-text-secondary mt-1">
+              选择已创建的角色会自动继承该角色的权限配置
+            </p>
+          </div>
+
+          <!-- Custom permissions -->
+          <div v-if="userForm.role === 'custom' || (userForm.role !== 'admin' && userForm.role !== 'manager' && userForm.role !== 'operator' && userForm.permissions.length > 0)" class="border border-gray-100 rounded-lg p-4">
+            <p class="text-sm font-medium text-text-primary mb-3">
+              {{ userForm.role === 'custom' ? '选择可访问的页面' : '该角色的权限（继承自角色配置）' }}
+            </p>
+            <div class="grid grid-cols-2 gap-2">
+              <label v-for="page in ALL_PAGES" :key="page.key"
+                :class="['flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors text-sm',
+                  userForm.permissions.includes(page.key) ? 'border-primary bg-primary/5 text-primary' : 'border-gray-100 text-text-secondary hover:border-gray-200',
+                  userForm.role !== 'custom' ? 'cursor-not-allowed opacity-60' : 'cursor-pointer']"
+                @click="userForm.role === 'custom' ? togglePermission(page.key) : null">
+                <span class="material-symbols-outlined text-[16px]">
+                  {{ userForm.permissions.includes(page.key) ? 'check_box' : 'check_box_outline_blank' }}
+                </span>
+                {{ page.label }}
+              </label>
+            </div>
+            <p v-if="userForm.role !== 'custom'" class="text-xs text-text-secondary mt-2">
+              💡 提示：这些权限继承自所选角色，如需修改请到"角色管理"中编辑该角色
+            </p>
+          </div>
+
+          <div v-if="userError" class="text-sm text-danger bg-red-50 px-3 py-2 rounded-lg">{{ userError }}</div>
+        </div>
+        <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+          <button @click="showUserModal = false" class="px-4 py-2 text-sm text-text-secondary border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">取消</button>
+          <button @click="saveUser" :disabled="userLoading" class="px-4 py-2 text-sm text-white bg-primary hover:bg-primary-hover rounded-lg transition-colors disabled:opacity-50">
+            {{ userLoading ? '保存中...' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Add/Edit Role Modal ── -->
+    <div v-if="showRoleModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" @click.self="showRoleModal = false">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h3 class="font-bold text-text-primary">{{ editingRole ? '编辑角色' : '新增角色' }}</h3>
+          <button @click="showRoleModal = false" class="text-text-secondary hover:text-text-primary">
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <div class="px-6 py-4 space-y-4">
+          <!-- Role name (identifier) - only editable when adding -->
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">
+              角色标识 <span class="text-danger">*</span>
+              <span class="text-xs font-normal text-text-secondary ml-1">（英文，如：viewer）</span>
+            </label>
+            <input
+              v-model="roleForm.name"
+              type="text"
+              placeholder="如：viewer"
+              :disabled="!!editingRole"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none disabled:bg-gray-50 disabled:text-text-secondary font-mono"
+            />
+          </div>
+          <!-- Role label (display name) -->
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">角色名称 <span class="text-danger">*</span></label>
+            <input
+              v-model="roleForm.label"
+              type="text"
+              placeholder="如：查看员"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+            />
+          </div>
+          <!-- Permissions -->
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-3">
+              页面权限
+              <span class="text-xs font-normal text-text-secondary ml-1">（勾选该角色可访问的页面）</span>
+            </label>
+            <div class="grid grid-cols-2 gap-2">
+              <label
+                v-for="page in ALL_PAGES" :key="page.key"
+                :class="['flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer border transition-colors text-sm',
+                  roleForm.permissions.includes(page.key) ? 'border-primary bg-primary/5 text-primary' : 'border-gray-100 text-text-secondary hover:border-gray-200']"
+                @click="toggleRolePermission(page.key)"
+              >
+                <span class="material-symbols-outlined text-[16px]">
+                  {{ roleForm.permissions.includes(page.key) ? 'check_box' : 'check_box_outline_blank' }}
+                </span>
+                {{ page.label }}
+              </label>
+            </div>
+          </div>
+
+          <div v-if="roleError" class="text-sm text-danger bg-red-50 px-3 py-2 rounded-lg">{{ roleError }}</div>
+        </div>
+        <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+          <button @click="showRoleModal = false" class="px-4 py-2 text-sm text-text-secondary border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">取消</button>
+          <button @click="saveRole" :disabled="roleLoading" class="px-4 py-2 text-sm text-white bg-primary hover:bg-primary-hover rounded-lg transition-colors disabled:opacity-50">
+            {{ roleLoading ? '保存中...' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Add/Edit Warehouse Modal ── -->
+    <div v-if="showWarehouseModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" @click.self="showWarehouseModal = false">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-lg">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h3 class="font-bold text-text-primary">{{ editingWarehouse ? '编辑仓库' : '新增仓库' }}</h3>
+          <button @click="showWarehouseModal = false" class="text-text-secondary hover:text-text-primary">
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <div class="px-6 py-4 space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">仓库名称 <span class="text-danger">*</span></label>
+            <input
+              v-model="warehouseForm.name"
+              type="text"
+              placeholder="请输入仓库名称"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">地址</label>
+            <input
+              v-model="warehouseForm.address"
+              type="text"
+              placeholder="请输入仓库地址"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">类型</label>
+            <input
+              v-model="warehouseForm.type"
+              type="text"
+              placeholder="如：主仓、分仓"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">负责人</label>
+            <input
+              v-model="warehouseForm.manager"
+              type="text"
+              placeholder="请输入负责人姓名"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">联系方式</label>
+            <input
+              v-model="warehouseForm.contact"
+              type="text"
+              placeholder="请输入联系电话"
+              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+            />
+          </div>
+        </div>
+        <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+          <button @click="showWarehouseModal = false" class="px-4 py-2 text-sm text-text-secondary border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">取消</button>
+          <button @click="saveWarehouse" :disabled="warehouseLoading" class="px-4 py-2 text-sm text-white bg-primary hover:bg-primary-hover rounded-lg transition-colors disabled:opacity-50">
+            {{ warehouseLoading ? '保存中...' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>

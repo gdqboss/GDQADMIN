@@ -28,5 +28,14 @@ export default defineConfig({
     sourcemap: false,
     minify: 'esbuild',
     base: 'auto',
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          if (id.includes('i18n/') || id.includes('/zh.js') || id.includes('/en.js') || id.includes('/ms.js')) {
+            return 'i18n'
+          }
+        }
+      }
+    }
   }
 })

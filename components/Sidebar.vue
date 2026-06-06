@@ -22,6 +22,19 @@ const giftApprovalCount = ref(0)
 // 数据库菜单配置（从后端加载）
 const dbMenuConfig = ref([])
 
+// 服务器允许的模块列表（从后端 public-settings 加载）
+const serverModules = ref([])
+
+// 加载服务器模块列表
+async function loadServerModules() {
+  try {
+    const res = await api.get('/public-settings')
+    if (res.code === 0 && res.data && res.data.modules) {
+      serverModules.value = res.data.modules
+    }
+  } catch { /* ignore */ }
+}
+
 // 菜单显隐配置（key=菜单key, value=visible）
 const menuVisibility = ref({})
 
@@ -46,6 +59,7 @@ async function loadMenuConfig() {
 }
 
 onMounted(async () => {
+  await loadServerModules()
   await loadMenuConfig()
   try {
     const res = await api.get('/users/roles')
@@ -221,6 +235,7 @@ const menuGroups = computed(() => [
     children: [
       { key: 'bi:excel', label: t('nav.excelAnalyzer'), to: '/excel-analyzer' },
       { key: 'bi:report', label: t('nav.reportManage'), to: '/excel-report-manage' },
+      { key: 'bi:excel', label: t('nav.storeSales'), to: '/store-sales' },
       { key: 'qrcode:write', label: t('nav.qrcode'), to: '/qrcode' },
       { key: 'referral:read', label: t('nav.referral'), to: '/referral' },
       { key: 'report:read', label: t('nav.reports'), to: '/reports' },
@@ -240,6 +255,40 @@ const menuGroups = computed(() => [
   },
 ])
 
+// 路由路径 → module_key 映射（用于按服务器模块过滤）
+// module_key 格式与 PROFILE_MODULES / server_modules.module_key 保持一致
+const routeToModule = {
+  '/': 'dashboard',
+  '/ai-classroom': 'ai-classroom',
+  '/tasks': 'tasks',
+  '/logs/work-logs': 'tasks',
+  '/logs/visit-logs': 'tasks',
+  '/oa/attendance': 'oa',
+  '/approvals': 'oa',
+  '/products': 'products',
+  '/in-out': 'in-out',
+  '/warehouses': 'warehouses',
+  '/alerts': 'alerts',
+  '/transfer': 'transfer',
+  '/inventory/returns': 'returns',
+  '/finance': 'finance',
+  '/retail': 'retail',
+  '/finance/invoices': 'finance',
+  '/orders': 'orders',
+  '/qrcode': 'qrcode',
+  '/aftersale': 'aftersale',
+  '/suppliers': 'suppliers',
+  '/dealers': 'dealers',
+  '/stores': 'stores',
+  '/excel-analyzer': 'excel-analyzer',
+  '/excel-report-manage': 'excel-analyzer',
+  '/reports': 'reports',
+  '/settings': 'settings',
+  '/settings/users': 'users',
+  '/settings/roles': 'roles',
+  '/settings/server-profiles': 'server_profiles',
+}
+
 // 过滤后的菜单分组
 const filteredGroups = computed(() => {
   return menuGroups.value
@@ -248,12 +297,31 @@ const filteredGroups = computed(() => {
       if (group.key === 'dashboard') {
         return { ...group, label: t('nav.dashboard') }
       }
-      // 用权限 key 过滤子菜单
-    const filteredChildren = group.children
-      .filter(child => canAccess(child.key))
-      .map(child => ({ ...child }))
-    // 规则：有children但全部被过滤则隐藏；无children（独立一级菜单）始终显示
-    if (group.children.length > 0 && filteredChildren.length === 0) return null
+      // 独立一级菜单（如 AI课堂）：按 module_key 过滤
+      if (!group.children || group.children.length === 0) {
+        const mod = routeToModule[group.to]
+        // serverModules 未加载（=[]）时，有 module_key 映射的项先隐藏，加载完再过滤
+        if (mod && serverModules.value.length === 0) return null
+        if (mod && serverModules.value.length > 0 && !serverModules.value.includes(mod)) {
+          return null
+        }
+        return { ...group, label: group.label }
+      }
+      // 有 children 的分组：按模块过滤子菜单
+      const filteredChildren = group.children
+        .filter(child => {
+          if (!canAccess(child.key)) return false
+          const mod = routeToModule[child.to]
+          // serverModules 未加载（=[]）时，有 module_key 映射的项先隐藏
+          if (mod && serverModules.value.length === 0) return false
+          if (mod && serverModules.value.length > 0 && !serverModules.value.includes(mod)) {
+            return false
+          }
+          return true
+        })
+        .map(child => ({ ...child }))
+      // 规则：有children但全部被过滤则隐藏；无children（独立一级菜单）始终显示
+      if (group.children.length > 0 && filteredChildren.length === 0) return null
       return { ...group, children: filteredChildren }
     })
     .filter(Boolean)

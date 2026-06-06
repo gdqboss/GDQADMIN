@@ -62,6 +62,8 @@ const routes = [
       { path: 'excel-report-manage', name: 'ExcelReportManage', component: lazyLoad(() => import('../views/bi/ExcelReportManage.vue')), meta: { title: '报告管理', parent: 'BI', permission: 'bi:report' } },
       { path: 'import-records', name: 'ImportRecords', component: lazyLoad(() => import('../views/import/ImportRecords.vue')), meta: { title: '导入记录', parent: 'BI', permission: 'bi:excel' } },
       { path: 'import-detail/:id', name: 'ImportDetail', component: lazyLoad(() => import('../views/import/ImportDetail.vue')), meta: { title: '导入明细', parent: 'BI', permission: 'bi:excel' } },
+      { path: 'import-detail-multi/:ids', name: 'ImportDetailMulti', component: lazyLoad(() => import('../views/import/ImportDetailMulti.vue')), meta: { title: '多选门店分析', parent: 'BI', permission: 'bi:excel' } },
+      { path: 'store-sales', name: 'StoreSales', component: lazyLoad(() => import('../views/import/StoreSalesReport.vue')), meta: { title: '门店销售报表', parent: 'BI', permission: 'bi:excel' } },
 
       // ── 消息 ────────────────────────────────────────────────
       { path: 'wecom', name: 'WeCom', component: lazyLoad(() => import('../views/wecom/WeComChat.vue')), meta: { title: '企业微信', parent: '消息', permission: 'wecom:read' } },

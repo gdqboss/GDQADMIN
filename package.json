@@ -5,6 +5,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:sg": "bash scripts/build-for-profile.sh 1",
+    "build:bj": "bash scripts/build-for-profile.sh 2",
+    "build:3hk": "bash scripts/build-for-profile.sh 3",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -7,6 +7,18 @@
       </div>
     </div>
 
+    <!-- Multi-select Analysis Bar -->
+    <div class="multi-bar" v-if="list.length > 0">
+      <label class="checkbox-label">
+        <input type="checkbox" v-model="selectAll" @change="toggleSelectAll" />
+        {{ $t('importRecords.selectAll') || '全选' }}
+      </label>
+      <span class="selected-count">{{ selected.length }} {{ $t('importRecords.selected') || '已选' }}</span>
+      <button class="btn btn-analysis" :disabled="selected.length < 2" @click="multiAnalysis">
+        📊 {{ $t('importRecords.multiAnalysis') || '多选分析' }}
+      </button>
+    </div>
+
     <!-- Stats Overview -->
     <div class="stats-grid" v-if="stats">
       <div class="stat-card purple">
@@ -37,6 +49,7 @@
       <table class="data-table">
         <thead>
           <tr>
+            <th class="col-check"></th>
             <th>{{ $t('importRecords.fileName') }}</th>
             <th>{{ $t('importRecords.type') }}</th>
             <th>{{ $t('importRecords.uploadTime') }}</th>
@@ -47,7 +60,10 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(record, i) in list" :key="record.id">
+          <tr v-for="(record, i) in list" :key="record.id" :class="{ 'row-selected': selected.includes(record.id) }">
+            <td class="col-check">
+              <input type="checkbox" :value="record.id" v-model="selected" />
+            </td>
             <td class="file-name">{{ record.file_name }}</td>
             <td><span :class="['badge', record.file_type.toLowerCase()]">{{ record.file_type }}</span></td>
             <td>{{ formatDate(record.uploaded_at) }}</td>
@@ -62,7 +78,7 @@
             </td>
           </tr>
           <tr v-if="list.length === 0">
-            <td colspan="7" class="empty-cell">
+            <td colspan="8" class="empty-cell">
               {{ locale === 'zh' ? '暂无导入记录，请先在分析器中上传Excel' : 'No records. Please upload an Excel in the analyzer first.' }}
             </td>
           </tr>
@@ -93,8 +109,24 @@ const page = ref(1)
 const pageSize = 20
 const total = ref(0)
 const searchKeyword = ref('')
+const selected = ref([])
+const selectAll = ref(false)
 
 let searchTimer = null
+
+function toggleSelectAll() {
+  if (selectAll.value) {
+    selected.value = list.value.map(r => r.id)
+  } else {
+    selected.value = []
+  }
+}
+
+function multiAnalysis() {
+  if (selected.value.length < 2) return
+  const ids = selected.value.join(',')
+  window.location.hash = `/import-detail-multi/${ids}`
+}
 
 function debounceSearch() {
   clearTimeout(searchTimer)
@@ -223,6 +255,14 @@ onMounted(() => loadList(1))
 .stat-card.green .stat-value { color: #16a34a; }
 .stat-card.orange .stat-value { color: #ea580c; }
 
+/* Multi-select Bar */
+.multi-bar { display: flex; align-items: center; gap: 16px; background: white; padding: 12px 20px; border-radius: 8px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.checkbox-label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; color: #606266; }
+.selected-count { font-size: 13px; color: #909399; }
+.btn-analysis { background: #67c23a; border-color: #67c23a; color: white; }
+.btn-analysis:hover { background: #85ce61; border-color: #85ce61; }
+.btn-analysis:disabled { background: #c0c4cc; border-color: #c0c4cc; cursor: not-allowed; }
+
 /* Table */
 .report-section {
   background: white;
@@ -245,6 +285,8 @@ onMounted(() => loadList(1))
 .data-table .file-name { font-weight: 600; color: #303133; }
 .data-table .empty-cell { text-align: center; color: #999; padding: 40px; }
 .data-table tr:hover td { background: #f9fafb; }
+.data-table .row-selected td { background: #ecf5ff; }
+.col-check { width: 40px; text-align: center; }
 
 /* Badges */
 .badge {
