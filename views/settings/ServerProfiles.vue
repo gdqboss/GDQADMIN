@@ -67,6 +67,9 @@ const syncResult = ref(null)
 const syncDialogVisible = ref(false)
 const syncLoading = ref(false)
 
+// 进度条状态
+const syncProgress = ref({ percent: 0, label: '', step: 0, logs: [] })
+
 // ─── Load ───────────────────────────────────────────────────────────────────
 async function loadProfiles() {
   loading.value = true
@@ -264,17 +267,59 @@ async function handleSync(row) {
 async function confirmSync() {
   if (!syncResult.value) return
   syncLoading.value = true
+  syncProgress.value = { percent: 0, label: '正在连接服务器...', step: 0, logs: [], status: 'running' }
+
+  const token = localStorage.getItem('caimeite_token') || ''
+  const profileId = syncResult.value.profile.id
+
   try {
-    const res = await serverProfileApi.execSync(syncResult.value.profile.id)
-    if (res.code === 0) {
-      ElMessage.success('同步完成')
-      syncDialogVisible.value = false
-    } else {
-      ElMessage.error(res.message || '同步失败')
+    // Step 1: 启动同步，立即获取 taskId
+    const startRes = await fetch('/api/server-profiles/' + profileId + '/exec-sync', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+      }
+    })
+    const startData = await startRes.json()
+    if (!startData.data?.taskId) throw new Error('启动同步失败: ' + JSON.stringify(startData))
+    const taskId = startData.data.taskId
+    syncProgress.value.label = '同步已启动，等待服务器响应...'
+
+    // Step 2: 每2秒轮询进度
+    const poll = async () => {
+      while (true) {
+        await new Promise(r => setTimeout(r, 2000))
+        const progRes = await fetch('/api/server-profiles/' + profileId + '/sync-progress/' + taskId, {
+          headers: { 'Authorization': 'Bearer ' + token }
+        })
+        const progData = await progRes.json()
+        const p = progData.data
+        if (!p || p.status === 'not_found') {
+          //任务还没创建，等一下
+          continue
+        }
+        syncProgress.value.percent = p.percent
+        syncProgress.value.label = p.label
+        syncProgress.value.step = p.step
+        if (p.logs) syncProgress.value.logs = p.logs
+
+        if (p.status === 'done') {
+          syncLoading.value = false
+          syncDialogVisible.value = false
+          ElMessage.success('同步完成')
+          return
+        } else if (p.status === 'error') {
+          ElMessage.error('同步失败: ' + p.label)
+          syncLoading.value = false
+          return
+        }
+        // running，继续轮询
+      }
     }
-  } catch (e) {
-    ElMessage.error(e.message)
-  } finally {
+    poll()
+  } catch (err) {
+    ElMessage.error('同步连接失败: ' + err.message)
     syncLoading.value = false
   }
 }
@@ -584,6 +629,25 @@ onMounted(() => {
       <div v-if="syncing" class="text-center py-8 text-gray-500">
         <div class="mb-2">{{ $t('serverProfiles.syncing') }}</div>
       </div>
+
+      <!-- 同步进度条（确认同步后显示） -->
+      <div v-else-if="syncLoading" class="py-4">
+        <div class="mb-3 text-center font-medium text-blue-700">{{ syncProgress.label || '正在同步...' }}</div>
+        <div class="relative h-3 bg-gray-200 rounded-full overflow-hidden mb-2">
+          <div class="absolute left-0 top-0 h-full bg-blue-600 rounded-full transition-all duration-300"
+               :style="{ width: syncProgress.percent + '%' }"></div>
+        </div>
+        <div class="flex justify-between text-xs text-gray-400 mb-4">
+          <span>0%</span>
+          <span>{{ syncProgress.percent }}%</span>
+          <span>100%</span>
+        </div>
+        <!-- 日志输出 -->
+        <div v-if="syncProgress.logs.length > 0" class="bg-gray-900 text-green-400 rounded-lg p-3 text-xs font-mono max-h-32 overflow-y-auto">
+          <div v-for="(log, i) in syncProgress.logs" :key="i" class="leading-relaxed">{{ log }}</div>
+        </div>
+      </div>
+
       <div v-else-if="syncResult">
         <div class="mb-4 p-3 bg-blue-50 rounded-lg">
           <div class="font-medium text-blue-800">{{ syncResult.profile.name }} ({{ syncResult.profile.ip }})</div>
@@ -607,8 +671,8 @@ onMounted(() => {
       </div>
       <template #footer>
         <button @click="syncDialogVisible = false" class="px-4 py-2 text-gray-600 hover:text-gray-800">{{ $t('common.cancel') }}</button>
-        <button v-if="syncResult" @click="confirmSync" :disabled="syncLoading" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">
-          {{ syncLoading ? '同步中...' : ($t('serverProfiles.confirmSyncBtn') || '确认同步') }}
+        <button v-if="syncResult && !syncLoading" @click="confirmSync" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+          {{ $t('serverProfiles.confirmSyncBtn') || '确认同步' }}
         </button>
       </template>
     </el-dialog>

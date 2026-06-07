@@ -344,6 +344,8 @@ function toggleGroup(key) {
 function isActive(to) {
   if (!to) return false
   if (to === '/') return route.path === '/'
+  // 系统设置精确匹配，避免子页面也匹配父级
+  if (to === '/settings') return route.path === '/settings'
   return route.path.startsWith(to)
 }
 

@@ -73,6 +73,7 @@
                    :style="{ width: getBarWidth(s, storeTab === 'top' ? storeHot : storeCold, 'qty') + '%' }"></div>
             </div>
             <span class="bar-value">{{ Number(s.qty).toLocaleString() }}{{ $t('importDetail.pcs') || '件' }}</span>
+            <button class="btn-xs" @click="loadStoreSummary(s.store_code)">📊</button>
           </div>
           <div v-if="(storeTab === 'top' ? storeHot : storeCold).length === 0" class="empty-chart">{{ $t('importDetail.noData') || '暂无数据' }}</div>
         </div>
@@ -166,7 +167,55 @@
           <div v-if="(modelTab === 'top' ? topModels : bottomModels).length === 0" class="empty-chart">{{ $t('importDetail.noData') || '暂无数据' }}</div>
         </div>
       </div>
+    </div>
 
+    <!-- 门店下钻详情面板 -->
+    <div v-if="storeDetail" class="store-detail-panel">
+      <div class="store-detail-header">
+        <div class="store-detail-info">
+          <h2>🏪 {{ storeDetail.store?.store_name || storeDetail.store?.store_code }}</h2>
+          <span class="store-code-tag">{{ storeDetail.store?.store_code }}</span>
+        </div>
+        <div class="store-detail-stats">
+          <span class="stat-chip">销量 <strong>{{ Number(storeDetail.store?.total_qty || 0).toLocaleString() }}</strong> 件</span>
+          <span class="stat-chip">销售额 <strong>¥{{ Number(storeDetail.store?.total_amount || 0).toLocaleString() }}</strong></span>
+          <span class="stat-chip">型号 <strong>{{ storeDetail.store?.model_count }}</strong> 个</span>
+          <span class="stat-chip">SKU <strong>{{ storeDetail.store?.sku_count }}</strong> 个</span>
+        </div>
+        <button class="btn-small btn-gray" @click="storeDetail = null">✕ 关闭</button>
+      </div>
+
+      <!-- 型号分布 -->
+      <div class="report-section">
+        <h3>📦 型号分布</h3>
+        <div class="model-bar-list">
+          <div v-for="(m, i) in storeDetail.byModel" :key="i" class="model-bar-item">
+            <span class="model-rank">#{{ i + 1 }}</span>
+            <span class="model-name" :title="m.model">{{ m.model || '-' }}</span>
+            <span class="model-skus">{{ m.sku_count }} SKU</span>
+            <div class="bar-wrap" style="max-width: 300px;">
+              <div class="bar bar-green" :style="{ width: getBarWidth(m, storeDetail.byModel, 'qty') + '%' }"></div>
+            </div>
+            <span class="model-qty">{{ Number(m.qty).toLocaleString() }}件</span>
+          </div>
+          <div v-if="!storeDetail.byModel?.length" class="empty-section">暂无型号数据</div>
+        </div>
+      </div>
+
+      <!-- 颜色×尺码 矩阵 -->
+      <div class="report-section">
+        <h3>🔥 颜色 × 尺码 热销组合</h3>
+        <div class="matrix-grid">
+          <div v-for="(cs, i) in storeDetail.byColorSize" :key="i" class="matrix-item"
+               :title="`${getColorDisplay({color: cs.color})} + ${cs.size}`">
+            <span class="matrix-rank">#{{ i + 1 }}</span>
+            <span class="matrix-color">{{ getColorDisplay({color: cs.color})?.substring(0, 8) || '-' }}</span>
+            <span class="matrix-size">{{ cs.size }}</span>
+            <span class="matrix-qty">{{ Number(cs.qty).toLocaleString() }}件</span>
+          </div>
+          <div v-if="!storeDetail.byColorSize?.length" class="empty-section">暂无组合数据</div>
+        </div>
+      </div>
     </div>
 
     <!-- Items Table -->
@@ -231,6 +280,7 @@ const recordId = window.location.hash.split('/import-detail/').pop()
 const record = ref(null)
 const items = ref([])
 const summary = ref(null)
+const storeDetail = ref(null) // 门店下钻数据
 const page = ref(1)
 const pageSize = 50
 const total = ref(0)
@@ -304,6 +354,15 @@ async function loadSummary() {
     if (res.success) summary.value = res.summary
   } catch (e) {
     console.error('[ImportDetail] load summary error:', e)
+  }
+}
+
+async function loadStoreSummary(storeCode) {
+  try {
+    const res = await api.get(`/import/records/${recordId}/summary/by-store/${storeCode}`)
+    if (res.success) storeDetail.value = res
+  } catch (e) {
+    console.error('[ImportDetail] load store summary error:', e)
   }
 }
 
@@ -423,4 +482,23 @@ onMounted(() => {
 .btn-small:hover { background: #66b1ff; }
 .btn-gray { background: #909399; }
 .btn-gray:hover { background: #a6a9ad; }
+.btn-xs { padding: 2px 6px; background: #409eff; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px; margin-left: 4px; }
+.btn-xs:hover { background: #66b1ff; }
+
+/* 门店下钻面板 */
+.store-detail-panel { background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 2px solid #409eff; }
+.store-detail-header { display: flex; align-items: center; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; background: #ecf5ff; border-radius: 8px; padding: 16px; }
+.store-detail-info { display: flex; align-items: center; gap: 10px; }
+.store-detail-info h2 { margin: 0; font-size: 18px; }
+.store-code-tag { background: #409eff; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+.store-detail-stats { display: flex; gap: 16px; flex-wrap: wrap; flex: 1; }
+.stat-chip { background: white; padding: 6px 14px; border-radius: 20px; font-size: 13px; color: #606266; border: 1px solid #dcdfe6; }
+.stat-chip strong { color: #409eff; font-size: 15px; }
+.model-bar-list { display: flex; flex-direction: column; gap: 8px; }
+.model-bar-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #f5f7fa; border-radius: 6px; }
+.model-rank { width: 28px; color: #909399; font-size: 12px; font-weight: 600; }
+.model-name { width: 120px; font-size: 13px; font-weight: 600; color: #303133; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-skus { width: 60px; font-size: 11px; color: #909399; }
+.model-qty { width: 60px; text-align: right; font-size: 13px; color: #67c23a; font-weight: bold; }
+.empty-section { text-align: center; color: #909399; padding: 24px; font-size: 13px; }
 </style>

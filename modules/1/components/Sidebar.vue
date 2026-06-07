@@ -235,7 +235,6 @@ const menuGroups = computed(() => [
     children: [
       { key: 'bi:excel', label: t('nav.excelAnalyzer'), to: '/excel-analyzer' },
       { key: 'bi:report', label: t('nav.reportManage'), to: '/excel-report-manage' },
-      { key: 'bi:excel', label: t('nav.storeSales'), to: '/store-sales' },
       { key: 'qrcode:write', label: t('nav.qrcode'), to: '/qrcode' },
       { key: 'referral:read', label: t('nav.referral'), to: '/referral' },
       { key: 'report:read', label: t('nav.reports'), to: '/reports' },
