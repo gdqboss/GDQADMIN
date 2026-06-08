@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import i18n from '../i18n/index.js'
 import { useUserStore } from '../stores/user'
+import { systemSettings } from '../stores/system'
 import api from '../services/api'
 
 // Migrate old localStorage keys on login page load
@@ -118,20 +119,28 @@ async function handleResetPassword() {
   }
 }
 
-const localeCycle = ['zh', 'en', 'ms']
-const localeLabels = { zh: 'EN', en: 'MS', ms: '中文' }
-
-async function toggleLocale() {
-  const current = i18n.global.locale.value
-  const currentIdx = localeCycle.indexOf(current)
-  const nextIdx = (currentIdx + 1) % localeCycle.length
-  const newLocale = localeCycle[nextIdx]
-  // 动态加载语言包（如果尚未加载）
-  if (i18n.setLocaleMessage) {
-    await i18n.setLocaleMessage(newLocale)
+const localeCycle = computed(() => systemSettings.languages)
+const localeLabels = computed(() => {
+  const labels = {}
+  for (const l of systemSettings.languages) {
+    labels[l] = l === 'zh' ? '中文' : l === 'en' ? 'English' : l
   }
-  i18n.global.locale.value = newLocale
-  localStorage.setItem('caimeite_locale', newLocale)
+  return labels
+})
+const showLangDropdown = ref(false)
+
+async function switchLocale(lang) {
+  showLangDropdown.value = false
+  if (lang === i18n.global.locale.value) return
+  if (i18n.setLocaleMessage) {
+    await i18n.setLocaleMessage(lang)
+  }
+  i18n.global.locale.value = lang
+  localStorage.setItem('caimeite_locale', lang)
+}
+
+function langLabel(l) {
+  return localeLabels[l] || l.toUpperCase()
 }
 
 async function handleLogin() {
@@ -239,12 +248,26 @@ async function handleRegister() {
       <div class="w-full max-w-[460px] bg-white rounded-xl shadow-card overflow-hidden">
         <!-- Header -->
         <div class="pt-6 sm:pt-8 md:pt-10 pb-3 sm:pb-4 md:pb-6 px-4 sm:px-6 md:px-8 text-center relative">
-          <!-- Language Toggle - Top Right of Card -->
-          <button @click="toggleLocale" class="absolute top-4 right-4 flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-700 hover:border-primary transition-all">
-            <span class="material-symbols-outlined text-[16px] sm:text-[18px]">language</span>
-            <span class="hidden sm:inline">{{ localeLabels[i18n.global.locale.value] }}</span>
-            <span class="sm:hidden">{{ localeLabels[i18n.global.locale.value] }}</span>
-          </button>
+          <!-- Language Toggle - Dropdown for 3 languages -->
+          <div class="absolute top-4 right-4 relative">
+            <button @click="showLangDropdown = !showLangDropdown" class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-700 hover:border-primary transition-all">
+              <span class="material-symbols-outlined text-[16px] sm:text-[18px]">language</span>
+              <span class="hidden sm:inline">{{ langLabel(i18n.global.locale.value) }}</span>
+              <span class="sm:hidden">{{ langLabel(i18n.global.locale.value) }}</span>
+              <span v-if="localeCycle.length > 2" class="material-symbols-outlined text-[14px]">expand_more</span>
+            </button>
+            <div v-if="showLangDropdown" class="absolute right-0 mt-1 w-28 bg-white rounded-lg shadow-lg border z-50 py-1" @click.stop>
+              <button
+                v-for="lang in localeCycle"
+                :key="lang"
+                @click="switchLocale(lang)"
+                class="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 transition-colors"
+                :class="lang === i18n.global.locale.value ? 'text-primary font-semibold' : 'text-text-primary'"
+              >
+                {{ langLabel(lang) }}
+              </button>
+            </div>
+          </div>
 
           <div class="flex justify-center mb-2 sm:mb-3 md:mb-4">
             <div class="h-10 w-10 sm:h-12 sm:w-12 md:h-14 md:w-14 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
