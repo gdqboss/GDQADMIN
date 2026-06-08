@@ -6,10 +6,10 @@ const systemSettings = reactive({
   loaded: false,
   locale: 'zh',
   languages: ['zh', 'en'],
-  bot_name: 'SmartBiz',
-  site_name: '智能商业系统',
-  system_name_en: 'SmartBiz',
-  site_name_en: 'SmartBiz Dev',
+  bot_name: '美特',
+  site_name: '彩美特',
+  system_name_en: 'TRAVELMATE',
+  site_name_en: 'TRAVELMATE',
 })
 
 // 加载系统设置（从后端公开接口）
