@@ -129,9 +129,8 @@ async function toggleLocale() {
   // 动态加载语言包（如果尚未加载）
   if (i18n.setLocaleMessage) {
     await i18n.setLocaleMessage(newLocale)
-  } else {
-    i18n.global.locale.value = newLocale
   }
+  i18n.global.locale.value = newLocale
   localStorage.setItem('caimeite_locale', newLocale)
 }
 
