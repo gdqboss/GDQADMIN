@@ -3547,6 +3547,7 @@ export default {
         amount: 'Amount',
         color: 'Color',
         size: 'Size',
+        sku: 'SKU',
         saleDate: 'Tarikh',
         noItems: 'Tiada item',
         modelAnalysis: 'Model Analysis',

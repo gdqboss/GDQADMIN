@@ -3680,6 +3680,7 @@ export default {
     amount: '金额',
     color: '颜色',
     size: '尺寸',
+    sku: 'SKU',
     saleDate: '日期',
     noItems: '暂无明细数据',
     modelAnalysis: '型号分析',

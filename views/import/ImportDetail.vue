@@ -412,7 +412,7 @@ async function loadSummary() {
 async function loadStoreSummary(storeCode) {
   try {
     const res = await api.get(`/import/records/${recordId}/summary/by-store/${storeCode}`)
-    if (res.success) storeDetail.value = res
+    storeDetail.value = res
   } catch (e) {
     console.error('[ImportDetail] load store summary error:', e)
   }
