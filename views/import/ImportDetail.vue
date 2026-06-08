@@ -60,7 +60,7 @@
       <!-- 门店分析：独占一行 -->
       <div class="store-section">
         <div class="chart-card chart-full">
-          <h3>🏪 {{ $t('importDetail.storeAnalysis') || '门店分析' }}<span class="text-gray">({{ allStores.length }}家)</span></h3>
+          <h3>🏪 {{ $t('importDetail.storeAnalysis') }}<span class="text-gray">({{ allStores.length }})</span></h3>
           <div class="chart-placeholder">
           <div v-for="(s, i) in allStores" :key="s.store_code" class="store-row-wrap">
             <!-- 主行：可展开 -->
@@ -70,53 +70,76 @@
               <div class="bar-wrap">
                 <div class="bar bar-green" :style="{ width: getBarWidth(s, allStores, 'qty') + '%' }"></div>
               </div>
-              <span class="bar-value">{{ Number(s.qty).toLocaleString() }}件</span>
+              <span class="bar-value">{{ Number(s.qty).toLocaleString() }} {{ $t('importDetail.pcs') }}</span>
               <span class="expand-icon">{{ expandedStore === s.store_code ? '▲' : '▼' }}</span>
             </div>
             <!-- 展开详情：门店下钻 -->
             <div v-if="expandedStore === s.store_code" class="store-expand-detail">
               <div v-if="storeDetail && storeDetail.store?.store_code === s.store_code" class="store-expand-inner">
                 <div class="store-expand-stats">
-                  <span class="stat-chip">销量 <strong>{{ Number(storeDetail.store?.total_qty || 0).toLocaleString() }}</strong> 件</span>
-                  <span class="stat-chip">销售额 <strong>¥{{ Number(storeDetail.store?.total_amount || 0).toLocaleString() }}</strong></span>
-                  <span class="stat-chip">型号 <strong>{{ storeDetail.store?.model_count }}</strong> 个</span>
-                  <span class="stat-chip">SKU <strong>{{ storeDetail.store?.sku_count }}</strong> 个</span>
+                  <span class="stat-chip">{{ $t('importDetail.salesQty') }} <strong>{{ Number(storeDetail.store?.total_qty || 0).toLocaleString() }}</strong> {{ $t('importDetail.pcs') }}</span>
+                  <span class="stat-chip">{{ $t('importDetail.salesAmount') }} <strong>¥{{ Number(storeDetail.store?.total_amount || 0).toLocaleString() }}</strong></span>
+                  <span class="stat-chip">{{ $t('importDetail.modelCount') }} <strong>{{ storeDetail.store?.model_count }}</strong></span>
+                  <span class="stat-chip">{{ $t('importDetail.skuCount') }} <strong>{{ storeDetail.store?.sku_count }}</strong></span>
                 </div>
                 <!-- 型号分布 -->
                 <div class="report-section sub-section">
-                  <h4>📦 型号分布 ({{ storeDetail.byModel?.length || 0 }})</h4>
+                  <h4>📦 {{ $t('importDetail.modelDistribution') }} ({{ storeDetail.byModel?.length || 0 }})</h4>
                   <div class="model-bar-list">
                     <div v-for="(m, mi) in storeDetail.byModel" :key="mi" class="model-bar-item">
                       <span class="model-rank">#{{ mi + 1 }}</span>
+                      <img v-if="m.image_url" :src="m.image_url" class="model-thumb" alt="" />
+                      <div v-else class="model-thumb-placeholder">📦</div>
                       <span class="model-name" :title="m.model">{{ (m.model || '-').substring(0, 14) }}</span>
-                      <span class="model-skus">{{ m.sku_count }}SKU</span>
+                      <span class="model-skus">{{ m.sku_count }} {{ $t('importDetail.skuCount') }}</span>
                       <div class="bar-wrap" style="max-width: 200px;">
                         <div class="bar bar-green" :style="{ width: getBarWidth(m, storeDetail.byModel, 'qty') + '%' }"></div>
                       </div>
-                      <span class="model-qty">{{ Number(m.qty).toLocaleString() }}件</span>
+                      <span class="model-qty">{{ Number(m.qty).toLocaleString() }} {{ $t('importDetail.pcs') }}</span>
+                      <button class="btn-expand-model" @click="toggleModel(m.model)">
+                        {{ expandedModel === m.model ? '▲' : '▼' }}
+                      </button>
                     </div>
-                    <div v-if="!storeDetail.byModel?.length" class="empty-section">暂无型号数据</div>
+                    <!-- 型号展开：SKU明细 -->
+                    <div v-if="expandedModel && modelSkus.length > 0" class="model-sku-detail">
+                      <div class="sku-detail-header">
+                        <span>{{ $t('importDetail.image') }}</span>
+                        <span>{{ $t('importDetail.sku') }}</span>
+                        <span>{{ $t('importDetail.color') }}</span>
+                        <span>{{ $t('importDetail.size') }}</span>
+                        <span>{{ $t('importDetail.quantity') }}</span>
+                      </div>
+                      <div v-for="sku in modelSkus" :key="sku.sku + sku.color + sku.size" class="sku-detail-row">
+                        <img v-if="sku.image_url" :src="sku.image_url" class="sku-thumb" alt="" />
+                        <div v-else class="sku-thumb-placeholder">📦</div>
+                        <span class="sku-code">{{ sku.sku }}</span>
+                        <span>{{ getColorDisplay(sku) || '-' }}</span>
+                        <span>{{ sku.size || '-' }}</span>
+                        <span class="qty">{{ Number(sku.total_qty).toLocaleString() }} {{ $t('importDetail.pcs') }}</span>
+                      </div>
+                    </div>
+                    <div v-if="!storeDetail.byModel?.length" class="empty-section">{{ $t('importDetail.noModelData') }}</div>
                   </div>
                 </div>
                 <!-- 颜色×尺码矩阵 -->
                 <div class="report-section sub-section">
-                  <h4>🔥 颜色 × 尺码 ({{ storeDetail.byColorSize?.length || 0 }})</h4>
+                  <h4>🔥 {{ $t('importDetail.colorSizeHotCombo') }} ({{ storeDetail.byColorSize?.length || 0 }})</h4>
                   <div class="matrix-grid">
                     <div v-for="(cs, ci) in storeDetail.byColorSize" :key="ci" class="matrix-item"
                          :title="`${getColorDisplay({color: cs.color})} + ${cs.size}`">
                       <span class="matrix-rank">#{{ ci + 1 }}</span>
                       <span class="matrix-color">{{ getColorDisplay({color: cs.color})?.substring(0, 8) || '-' }}</span>
                       <span class="matrix-size">{{ cs.size }}</span>
-                      <span class="matrix-qty">{{ Number(cs.qty).toLocaleString() }}件</span>
+                      <span class="matrix-qty">{{ Number(cs.qty).toLocaleString() }} {{ $t('importDetail.pcs') }}</span>
                     </div>
-                    <div v-if="!storeDetail.byColorSize?.length" class="empty-section">暂无组合数据</div>
+                    <div v-if="!storeDetail.byColorSize?.length" class="empty-section">{{ $t('importDetail.noComboData') }}</div>
                   </div>
                 </div>
               </div>
-              <div v-else class="empty-section">加载中...</div>
+              <div v-else class="empty-section">{{ $t('importDetail.noData') || 'Loading...' }}</div>
             </div>
           </div>
-          <div v-if="allStores.length === 0" class="empty-chart">{{ $t('importDetail.noData') || '暂无数据' }}</div>
+          <div v-if="allStores.length === 0" class="empty-chart">{{ $t('importDetail.noData') }}</div>
           </div>
         </div>
       </div>
@@ -126,10 +149,10 @@
         <div class="global-grid">
           <!-- 商品分析 -->
           <div class="chart-card">
-            <h3>📦 {{ $t('importDetail.productAnalysis') || '商品分析' }} <span class="tag-global">全局</span></h3>
+            <h3>📦 {{ $t('importDetail.productAnalysis') }} <span class="tag-global">Global</span></h3>
             <div class="chart-tabs">
-              <button :class="{active: productTab === 'top'}" @click="productTab = 'top'">{{ $t('importDetail.hotTop') || '爆款 TOP' }}</button>
-              <button :class="{active: productTab === 'bottom'}" @click="productTab = 'bottom'">{{ $t('importDetail.coldBottom') || '滞销 BOTTOM' }}</button>
+              <button :class="{active: productTab === 'top'}" @click="productTab = 'top'">{{ $t('importDetail.hotTop') }}</button>
+              <button :class="{active: productTab === 'bottom'}" @click="productTab = 'bottom'">{{ $t('importDetail.coldBottom') }}</button>
             </div>
             <div class="chart-placeholder">
               <div v-for="(p, i) in (productTab === 'top' ? productHot : productCold)" :key="i" class="bar-item">
@@ -140,15 +163,15 @@
                   <div class="bar" :class="productTab === 'top' ? 'bar-green' : 'bar-red'"
                        :style="{ width: getBarWidth(p, productTab === 'top' ? productHot : productCold, 'qty') + '%' }"></div>
                 </div>
-                <span class="bar-value">{{ Number(p.qty).toLocaleString() }}{{ $t('importDetail.pcs') || '件' }}</span>
+                <span class="bar-value">{{ Number(p.qty).toLocaleString() }} {{ $t('importDetail.pcs') }}</span>
               </div>
-              <div v-if="(productTab === 'top' ? productHot : productCold).length === 0" class="empty-chart">{{ $t('importDetail.noData') || '暂无数据' }}</div>
+              <div v-if="(productTab === 'top' ? productHot : productCold).length === 0" class="empty-chart">{{ $t('importDetail.noData') }}</div>
             </div>
           </div>
 
           <!-- 颜色分析 -->
           <div class="chart-card">
-            <h3>🎨 {{ $t('importDetail.colorAnalysis') || '颜色销量分析' }} <span class="tag-global">全局</span></h3>
+            <h3>🎨 {{ $t('importDetail.colorAnalysis') }} <span class="tag-global">Global</span></h3>
             <div class="chart-placeholder">
               <div v-for="(c, i) in summary.byColor?.slice(0, 12)" :key="i" class="bar-item">
                 <span class="bar-rank">{{ i + 1 }}</span>
@@ -156,15 +179,15 @@
                 <div class="bar-wrap">
                   <div class="bar bar-purple" :style="{ width: getBarWidth(c, summary.byColor, 'qty') + '%' }"></div>
                 </div>
-                <span class="bar-value">{{ Number(c.qty).toLocaleString() }}{{ $t('importDetail.pcs') || '件' }}</span>
+                <span class="bar-value">{{ Number(c.qty).toLocaleString() }} {{ $t('importDetail.pcs') }}</span>
               </div>
-              <div v-if="!summary.byColor?.length" class="empty-chart">{{ $t('importDetail.noData') || '暂无颜色数据' }}</div>
+              <div v-if="!summary.byColor?.length" class="empty-chart">{{ $t('importDetail.noData') }}</div>
             </div>
           </div>
 
           <!-- 尺码分析 -->
           <div class="chart-card">
-            <h3>📏 {{ $t('importDetail.sizeAnalysis') || '尺码销量分析' }} <span class="tag-global">全局</span></h3>
+            <h3>📏 {{ $t('importDetail.sizeAnalysis') }} <span class="tag-global">Global</span></h3>
             <div class="chart-placeholder">
               <div v-for="(s, i) in summary.bySize?.slice(0, 12)" :key="i" class="bar-item">
                 <span class="bar-rank">{{ i + 1 }}</span>
@@ -172,9 +195,9 @@
                 <div class="bar-wrap">
                   <div class="bar bar-orange" :style="{ width: getBarWidth(s, summary.bySize, 'qty') + '%' }"></div>
                 </div>
-                <span class="bar-value">{{ Number(s.qty).toLocaleString() }}{{ $t('importDetail.pcs') || '件' }}</span>
+                <span class="bar-value">{{ Number(s.qty).toLocaleString() }} {{ $t('importDetail.pcs') }}</span>
               </div>
-              <div v-if="!summary.bySize?.length" class="empty-chart">{{ $t('importDetail.noData') || '暂无尺码数据' }}</div>
+              <div v-if="!summary.bySize?.length" class="empty-chart">{{ $t('importDetail.noData') }}</div>
             </div>
           </div>
         </div>
@@ -183,36 +206,36 @@
         <div class="global-wide">
           <!-- 型号总销量 -->
           <div class="chart-card chart-wide">
-            <h3>🏆 {{ $t('importDetail.modelAnalysis') || '型号分析' }} <span class="tag-global">全局</span></h3>
+            <h3>🏆 {{ $t('importDetail.modelAnalysis') }} <span class="tag-global">Global</span></h3>
             <div class="chart-tabs">
-              <button :class="{active: modelTab === 'top'}" @click="modelTab = 'top'">{{ $t('importDetail.hotTop') || '爆款 TOP' }}</button>
-              <button :class="{active: modelTab === 'bottom'}" @click="modelTab = 'bottom'">{{ $t('importDetail.coldBottom') || '滞销 BOTTOM' }}</button>
+              <button :class="{active: modelTab === 'top'}" @click="modelTab = 'top'">{{ $t('importDetail.hotTop') }}</button>
+              <button :class="{active: modelTab === 'bottom'}" @click="modelTab = 'bottom'">{{ $t('importDetail.coldBottom') }}</button>
             </div>
             <div class="chart-placeholder">
               <div v-for="(m, i) in (modelTab === 'top' ? topModels : bottomModels)" :key="i" class="bar-item">
                 <span class="bar-rank">{{ i + 1 }}</span>
                 <span class="bar-label" :title="m.model">{{ m.model ? m.model.substring(0, 16) : '-' }}</span>
-                <span class="bar-sku">{{ m.sku_count }}{{ $t('importDetail.skuCount') || 'SKU' }}</span>
+                <span class="bar-sku">{{ m.sku_count }}{{ $t('importDetail.skuCount') }}</span>
                 <div class="bar-wrap">
                   <div class="bar" :class="modelTab === 'top' ? 'bar-green' : 'bar-red'" :style="{ width: getBarWidth(m, modelTab === 'top' ? topModels : bottomModels, 'qty') + '%' }"></div>
                 </div>
-                <span class="bar-value">{{ Number(m.qty).toLocaleString() }}{{ $t('importDetail.pcs') || '件' }}</span>
+                <span class="bar-value">{{ Number(m.qty).toLocaleString() }} {{ $t('importDetail.pcs') }}</span>
               </div>
-              <div v-if="(modelTab === 'top' ? topModels : bottomModels).length === 0" class="empty-chart">{{ $t('importDetail.noData') || '暂无数据' }}</div>
+              <div v-if="(modelTab === 'top' ? topModels : bottomModels).length === 0" class="empty-chart">{{ $t('importDetail.noData') }}</div>
             </div>
           </div>
 
           <!-- 颜色×尺码 -->
           <div class="chart-card chart-wide">
-            <h3>🔥 {{ $t('importDetail.colorSizeCombo') || '颜色×尺码 热销组合' }} <span class="tag-global">全局</span></h3>
+            <h3>🔥 {{ $t('importDetail.colorSizeCombo') }} <span class="tag-global">Global</span></h3>
             <div class="matrix-grid">
               <div v-for="(cs, i) in summary.byColorSize?.slice(0, 20)" :key="i" class="matrix-item" :title="`${getColorDisplay({color: cs.color})} + ${cs.size}`">
                 <span class="matrix-rank">#{{ i + 1 }}</span>
                 <span class="matrix-color">{{ getColorDisplay({color: cs.color })?.substring(0, 8) }}</span>
                 <span class="matrix-size">{{ cs.size }}</span>
-                <span class="matrix-qty">{{ Number(cs.qty).toLocaleString() }}件</span>
+                <span class="matrix-qty">{{ Number(cs.qty).toLocaleString() }} {{ $t('importDetail.pcs') }}</span>
               </div>
-              <div v-if="!summary.byColorSize?.length" class="empty-chart">暂无组合数据</div>
+              <div v-if="!summary.byColorSize?.length" class="empty-chart">{{ $t('importDetail.noData') }}</div>
             </div>
           </div>
         </div>
@@ -307,6 +330,7 @@ const allStores = computed(() => {
 })
 
 const expandedStore = ref(null)
+const expandedModel = ref(null)
 
 async function toggleStore(storeCode) {
   if (expandedStore.value === storeCode) {
@@ -314,8 +338,22 @@ async function toggleStore(storeCode) {
     return
   }
   expandedStore.value = storeCode
+  expandedModel.value = null
   storeDetail.value = null
   await loadStoreSummary(storeCode)
+}
+
+const modelSkus = computed(() => {
+  if (!storeDetail.value?.bySku) return []
+  return storeDetail.value.bySku.filter(s => s.model === expandedModel.value)
+})
+
+function toggleModel(model) {
+  if (expandedModel.value === model) {
+    expandedModel.value = null
+  } else {
+    expandedModel.value = model
+  }
 }
 
 // 商品热销/滞销
@@ -399,7 +437,7 @@ function getColorDisplay(item) {
 }
 
 function exportCSV() {
-  const headers = ['SKU', '商品名称', '型号', '门店', '数量', '单价', '金额', '颜色', '尺寸', '日期', '图片']
+  const headers = ['SKU', 'Product Name', 'Model', 'Store', 'Qty', 'Unit Price', 'Amount', 'Color', 'Size', 'Date', 'Image']
   const rows = items.value.map(item => [
     item.sku, item.product_name, item.model, item.store_name || item.store_code,
     item.quantity, item.unit_price, item.amount, item.color, item.size, item.sale_date, item.image_url || ''
@@ -516,4 +554,18 @@ onMounted(() => {
 .sub-section h4 { margin: 0 0 10px; font-size: 13px; color: #606266; }
 .sub-section:last-child { margin-bottom: 0; }
 .text-gray { color: #909399; font-weight: normal; font-size: 13px; margin-left: 8px; }
+
+/* Model bar with image */
+.model-bar-item { display: flex; align-items: center; gap: 6px; position: relative; }
+.model-thumb { width: 36px; height: 36px; object-fit: cover; border-radius: 4px; border: 1px solid #ebeef5; flex-shrink: 0; }
+.model-thumb-placeholder { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: #f5f7fa; border-radius: 4px; font-size: 16px; flex-shrink: 0; }
+.btn-expand-model { padding: 2px 8px; background: #409eff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; flex-shrink: 0; }
+.model-sku-detail { background: #f0f2f5; border-radius: 8px; margin-top: 8px; padding: 8px 12px; }
+.sku-detail-header { display: grid; grid-template-columns: 48px 100px 80px 60px 80px; gap: 8px; padding: 4px 0; font-size: 11px; font-weight: 600; color: #909399; border-bottom: 1px solid #e0e0e0; margin-bottom: 6px; }
+.sku-detail-row { display: grid; grid-template-columns: 48px 100px 80px 60px 80px; gap: 8px; padding: 4px 0; align-items: center; font-size: 12px; border-bottom: 1px solid #f0f0f0; }
+.sku-detail-row:last-child { border-bottom: none; }
+.sku-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; border: 1px solid #ebeef5; }
+.sku-thumb-placeholder { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: #f5f7fa; border-radius: 4px; font-size: 16px; }
+.sku-code { font-family: monospace; font-size: 11px; color: #409eff; overflow: hidden; text-overflow: ellipsis; }
+.sku-detail-row .qty { color: #67c23a; font-weight: 600; }
 </style>

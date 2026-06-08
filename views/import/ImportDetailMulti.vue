@@ -66,15 +66,15 @@
           </div>
         </div>
 
-        <!-- 颜色×尺码热销组合 -->
+        <!-- Colors×尺码热销组合 -->
         <div class="chart-card chart-wide">
           <h3>🔥 {{ $t('importMulti.colorSizeCombo') || '颜色×尺码 热销组合' }}</h3>
           <div class="matrix-grid">
             <div v-for="(cs, i) in data.byColorSize" :key="i" class="matrix-item">
               <span class="matrix-rank">#{{ i + 1 }}</span>
               <span class="matrix-color">{{ getColorDisplay({ color: cs.color })?.substring(0, 8) || '-' }}</span>
-              <span class="matrix-size">{{ cs.size }}</span>
-              <span class="matrix-qty">{{ Number(cs.qty).toLocaleString() }}{{ $t('importMulti.pcs') || '件' }}</span>
+              <span class="matrix-size">{{ cs.size || '-' }}</span>
+              <span class="matrix-qty">{{ Number(cs.qty).toLocaleString() }} {{ $t('importMulti.pcs') || '件' }}</span>
             </div>
             <div v-if="!data.byColorSize?.length" class="empty-chart">{{ $t('importMulti.noData') || '暂无数据' }}</div>
           </div>
@@ -100,6 +100,7 @@
           <table class="data-table">
             <thead>
               <tr>
+                <th style="width:60px">{{ $t('importMulti.image') || '图片' }}</th>
                 <th>{{ $t('importMulti.model') || '型号' }}</th>
                 <th>{{ $t('importMulti.qty') || '销量' }}</th>
                 <th>{{ $t('importMulti.amount') || '销售额' }}</th>
@@ -108,13 +109,18 @@
             </thead>
             <tbody>
               <tr v-for="m in storeModels" :key="m.model" @click="selectModel(m)" class="clickable-row" :class="{ 'row-active': selectedModel?.model === m.model }">
+                <td>
+                  <img v-if="m.image_url" :src="m.image_url" class="table-img-thumb" alt=""
+                       @error="m.image_url = null" />
+                  <span v-else class="img-placeholder">📦</span>
+                </td>
                 <td class="model-cell">{{ m.model || '-' }}</td>
                 <td class="num">{{ Number(m.qty).toLocaleString() }}</td>
                 <td class="num">¥{{ Number(m.amount).toLocaleString() }}</td>
                 <td class="num">{{ m.sku_count }}</td>
               </tr>
               <tr v-if="storeModels.length === 0">
-                <td colspan="4" class="empty-cell">{{ $t('importMulti.noModelData') || '暂无型号数据' }}</td>
+                <td colspan="5" class="empty-cell">{{ $t('importMulti.noModelData') || '暂无型号数据' }}</td>
               </tr>
             </tbody>
           </table>
@@ -122,11 +128,13 @@
 
         <!-- SKUs for selected model in this store -->
         <div v-if="selectedModel" class="sku-section">
-          <h3>🏷️ {{ selectedModel.model }} — SKU 明细</h3>
+          <h3>🏷️ {{ selectedModel.model }} — {{ $t('importMulti.sku') || 'SKU' }} {{ $t('importMulti.model') || '明细' }}</h3>
           <table class="data-table">
             <thead>
               <tr>
-                <th>SKU</th>
+                <th style="width:60px">{{ $t('importMulti.image') || '图片' }}</th>
+                <th>{{ $t('importMulti.sku') || 'SKU' }}</th>
+                <th>{{ $t('importMulti.productName') || '商品名称' }}</th>
                 <th>{{ $t('importMulti.color') || '颜色' }}</th>
                 <th>{{ $t('importMulti.size') || '尺码' }}</th>
                 <th>{{ $t('importMulti.qty') || '销量' }}</th>
@@ -136,7 +144,13 @@
             </thead>
             <tbody>
               <tr v-for="sku in modelSkus" :key="sku.sku">
+                <td>
+                  <img v-if="sku.image_url" :src="sku.image_url" class="table-img-thumb" alt=""
+                       @error="sku.image_url = null" />
+                  <span v-else class="img-placeholder">🏷️</span>
+                </td>
                 <td class="sku-cell">{{ sku.sku }}</td>
+                <td>{{ sku.product_name || '-' }}</td>
                 <td>{{ getColorDisplay({ color: sku.color }) || '-' }}</td>
                 <td>{{ sku.size || '-' }}</td>
                 <td class="num">{{ Number(sku.total_qty).toLocaleString() }}</td>
@@ -144,7 +158,7 @@
                 <td class="num">{{ sku.order_count }}</td>
               </tr>
               <tr v-if="modelSkus.length === 0">
-                <td colspan="6" class="empty-cell">{{ $t('importMulti.noSkuData') || '暂无SKU数据' }}</td>
+                <td colspan="8" class="empty-cell">{{ $t('importMulti.noSkuData') || '暂无SKU数据' }}</td>
               </tr>
             </tbody>
           </table>
@@ -323,6 +337,8 @@ onMounted(() => {
 .num { text-align: right; font-family: monospace; }
 .amount-cell { color: #e6a23c; font-weight: 600; }
 .empty-cell { text-align: center; color: #909399; padding: 30px; }
+.table-img-thumb { width: 48px; height: 48px; object-fit: cover; border-radius: 4px; }
+.img-placeholder { font-size: 20px; }
 .pagination { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 20px; }
 
 .btn-back { padding: 8px 16px; background: #909399; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
