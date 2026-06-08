@@ -66,7 +66,7 @@
             <!-- 主行：可展开 -->
             <div class="bar-item store-main-row" :class="{ expanded: expandedStore === s.store_code }" @click="toggleStore(s.store_code)">
               <span class="bar-rank">{{ i + 1 }}</span>
-              <span class="store-name" :title="s.store_name || s.store_code">{{ (s.store_name || s.store_code || '-').substring(0, 12) }}</span>
+              <span class="store-name" :title="s.store_name || s.store_code">{{ s.store_name || s.store_code || '-' }}</span>
               <div class="bar-wrap">
                 <div class="bar bar-green" :style="{ width: getBarWidth(s, allStores, 'qty') + '%' }"></div>
               </div>
@@ -507,7 +507,7 @@ onMounted(() => {
 .store-main-row { cursor: pointer; border-radius: 6px; transition: background 0.2s; }
 .store-main-row:hover { background: #f5f7fa; }
 .store-main-row.expanded { background: #ecf5ff; }
-.store-name { width: 80px; font-size: 12px; color: #303133; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.store-name { max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: #303133; flex-shrink: 0; }
 .expand-icon { font-size: 10px; color: #909399; width: 16px; }
 .store-expand-detail { padding: 12px 0 8px 28px; }
 .store-expand-inner { background: #fafafa; border-radius: 8px; padding: 12px; }
