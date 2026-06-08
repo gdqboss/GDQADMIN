@@ -433,7 +433,7 @@ onMounted(() => {
 .chart-placeholder { display: flex; flex-direction: column; gap: 6px; }
 .bar-item { display: flex; align-items: center; gap: 6px; }
 .bar-rank { width: 18px; font-size: 11px; color: #909399; text-align: center; }
-.bar-label { width: 50px; font-size: 11px; color: #606266; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-label { width: 70px; font-size: 11px; color: #606266; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bar-sku { width: 70px; font-size: 10px; color: #409eff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bar-label.color-label { width: 60px; }
 .bar-label.size-label { width: 40px; text-align: center; }
