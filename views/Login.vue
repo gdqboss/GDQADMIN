@@ -132,11 +132,8 @@ const showLangDropdown = ref(false)
 async function switchLocale(lang) {
   showLangDropdown.value = false
   if (lang === i18n.global.locale.value) return
-  if (i18n.setLocaleMessage) {
-    await i18n.setLocaleMessage(lang)
-  }
-  i18n.global.locale.value = lang
   localStorage.setItem('caimeite_locale', lang)
+  window.location.reload()
 }
 
 function langLabel(l) {

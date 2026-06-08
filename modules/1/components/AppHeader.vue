@@ -117,12 +117,8 @@ async function toggleLocale() {
   const cur = i18n.global.locale.value
   const idx = langs.indexOf(cur)
   const newLocale = idx >= 0 && idx < langs.length - 1 ? langs[idx + 1] : langs[0]
-  if (i18n.setLocaleMessage) {
-    await i18n.setLocaleMessage(newLocale)
-  } else {
-    i18n.global.locale.value = newLocale
-  }
   localStorage.setItem('caimeite_locale', newLocale)
+  window.location.reload()
 }
 
 const fetchUnreadCount = async () => {

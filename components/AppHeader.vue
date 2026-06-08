@@ -120,11 +120,8 @@ const currentLangLabel = computed(() => langLabel(i18n.global.locale.value))
 async function switchLang(lang) {
   showLangDropdown.value = false
   if (lang === i18n.global.locale.value) return
-  if (i18n.setLocaleMessage) {
-    await i18n.setLocaleMessage(lang)
-  }
-  i18n.global.locale.value = lang
   localStorage.setItem('caimeite_locale', lang)
+  window.location.reload()
 }
 
 async function toggleLocale() {
@@ -132,11 +129,8 @@ async function toggleLocale() {
   const cur = i18n.global.locale.value
   const idx = langs.indexOf(cur)
   const newLocale = idx >= 0 && idx < langs.length - 1 ? langs[idx + 1] : langs[0]
-  if (i18n.setLocaleMessage) {
-    await i18n.setLocaleMessage(newLocale)
-  }
-  i18n.global.locale.value = newLocale
   localStorage.setItem('caimeite_locale', newLocale)
+  window.location.reload()
 }
 
 const fetchUnreadCount = async () => {

@@ -120,13 +120,8 @@ async function handleResetPassword() {
 
 async function toggleLocale() {
   const newLocale = i18n.global.locale.value === 'zh' ? 'en' : 'zh'
-  // 动态加载语言包（如果尚未加载）
-  if (i18n.setLocaleMessage) {
-    await i18n.setLocaleMessage(newLocale)
-  } else {
-    i18n.global.locale.value = newLocale
-  }
   localStorage.setItem('caimeite_locale', newLocale)
+  window.location.reload()
 }
 
 async function handleLogin() {
