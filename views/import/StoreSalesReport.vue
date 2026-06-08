@@ -107,10 +107,15 @@
 
       <!-- 型号汇总 -->
       <div class="report-section">
-        <h3>📦 {{ $t('storeSales.modelSummary') || '型号汇总' }}</h3>
+        <h3>📦 {{ $t('storeSales.modelSummary') }}</h3>
         <div class="model-grid" v-if="byModel.length">
-          <div v-for="(m, i) in byModel" :key="i" class="model-card">
+          <div v-for="(m, i) in byModel" :key="i" class="model-card"
+               :class="{ 'has-image': !!m._img }"
+               @click="viewModelSkus(m)">
             <div class="model-rank">#{{ i + 1 }}</div>
+            <img v-if="m._img" :src="m._img" class="model-thumb" alt=""
+                 @error="m._img = null" />
+            <div v-if="!m._img" class="model-thumb-placeholder">📦</div>
             <div class="model-info">
               <div class="model-name" :title="m.model">{{ m.model || '-' }}</div>
               <div class="model-meta">
@@ -118,28 +123,58 @@
                 <span>¥{{ Number(m.total_amount).toLocaleString() }}</span>
               </div>
             </div>
-            <div class="model-qty">{{ Number(m.total_qty).toLocaleString() }}件</div>
+            <div class="model-qty">{{ Number(m.total_qty).toLocaleString() }}{{ $t('storeSales.pcs') || '件' }}</div>
           </div>
         </div>
-        <div v-else class="empty-section">{{ $t('storeSales.noData') || '暂无型号数据' }}</div>
+        <div v-else class="empty-section">{{ $t('storeSales.noData') }}</div>
       </div>
 
-      <!-- SKU汇总 -->
+      <!-- SKU汇总（可点击型号过滤 or 多SKU码展开） -->
       <div class="report-section">
-        <h3>🏷️ {{ $t('storeSales.skuSummary') || 'SKU汇总' }}</h3>
-        <div class="sku-list" v-if="bySku.length">
-          <div v-for="(s, i) in bySku" :key="i" class="sku-item">
+        <div class="section-header">
+          <h3>🏷️ {{ $t('storeSales.skuSummary') }}</h3>
+          <div class="section-actions" v-if="currentModelFilter">
+            <span class="filter-tag">{{ $t('storeSales.model') }}: <strong>{{ currentModelFilter }}</strong></span>
+            <button class="btn-small" @click="clearModelFilter">{{ $t('common.clear') || '清除' }}</button>
+          </div>
+        </div>
+        <div class="sku-list" v-if="filteredSku.length">
+          <div v-for="(s, i) in filteredSku" :key="i" class="sku-item"
+               @click="expandSkuDetail(s)">
+            <img v-if="s._img" :src="s._img" class="sku-thumb" alt=""
+                 @error="s._img = null" />
+            <div v-if="!s._img" class="sku-thumb-placeholder">🏷️</div>
             <span class="sku-rank">{{ i + 1 }}</span>
             <span class="sku-val">{{ s.sku }}</span>
             <span class="sku-name">{{ s.product_name || '-' }}</span>
             <span class="sku-model">{{ s.model || '-' }}</span>
             <span class="sku-color">{{ getColorDisplay(s.color) || '-' }}</span>
             <span class="sku-size">{{ s.size || '-' }}</span>
-            <span class="sku-qty">{{ Number(s.total_qty).toLocaleString() }}件</span>
+            <span class="sku-qty">{{ Number(s.total_qty).toLocaleString() }}{{ $t('storeSales.pcs') || '件' }}</span>
             <span class="sku-amount">¥{{ Number(s.total_amount).toLocaleString() }}</span>
           </div>
         </div>
-        <div v-else class="empty-section">{{ $t('storeSales.noData') || '暂无SKU数据' }}</div>
+        <div v-else class="empty-section">{{ $t('storeSales.noData') }}</div>
+      </div>
+
+      <!-- SKU展开详情（多门店/多情况/图片） -->
+      <div class="report-section" v-if="expandedSku">
+        <h3>🔍 {{ $t('storeSales.skuDetail') || 'SKU 明细' }}: {{ expandedSku.sku }}</h3>
+        <div class="sku-detail">
+          <img v-if="expandedSku._img" :src="expandedSku._img" class="sku-detail-img" alt=""
+               @error="expandedSku._img = null" />
+          <div class="sku-detail-info">
+            <div class="detail-row"><span class="label">{{ $t('storeSales.sku') || 'SKU' }}:</span> <span class="val">{{ expandedSku.sku }}</span></div>
+            <div class="detail-row"><span class="label">{{ $t('storeSales.model') || '型号' }}:</span> <span class="val">{{ expandedSku.model }}</span></div>
+            <div class="detail-row"><span class="label">{{ $t('storeSales.productName') || '商品名称' }}:</span> <span class="val">{{ expandedSku.product_name }}</span></div>
+            <div class="detail-row"><span class="label">{{ $t('storeSales.color') || '颜色' }}:</span> <span class="val">{{ getColorDisplay(expandedSku.color) }}</span></div>
+            <div class="detail-row"><span class="label">{{ $t('storeSales.size') || '尺码' }}:</span> <span class="val">{{ expandedSku.size }}</span></div>
+            <div class="detail-row"><span class="label">{{ $t('storeSales.totalQty') || '总销量' }}:</span> <span class="val highlight">{{ Number(expandedSku.total_qty).toLocaleString() }}{{ $t('storeSales.pcs') || '件' }}</span></div>
+            <div class="detail-row"><span class="label">{{ $t('storeSales.totalAmount') || '总销售额' }}:</span> <span class="val amount">¥{{ Number(expandedSku.total_amount).toLocaleString() }}</span></div>
+            <div class="detail-row"><span class="label">{{ $t('storeSales.storeCount') || '涉及门店' }}:</span> <span class="val">{{ expandedSku.store_count }}{{ $t('storeSales.stores') || '个' }}</span></div>
+          </div>
+        </div>
+        <button class="btn-small" style="margin-top:12px" @click="expandedSku = null">{{ $t('common.close') || '关闭' }}</button>
       </div>
 
       <!-- 原始明细 -->
@@ -204,7 +239,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import i18n from '@/i18n'
 import api from '@/services/api.js'
 
@@ -227,7 +262,31 @@ const pageSizeItems = 50
 const totalItems = ref(0)
 const itemSortBy = ref('quantity')
 
+// 展开/过滤
+const currentModelFilter = ref('')
+const expandedSku = ref(null)
+
 const showChart = ref(false)
+
+// 型号点击 → 过滤SKU列表
+function viewModelSkus(m) {
+  currentModelFilter.value = m.model
+  expandedSku.value = null
+}
+
+function clearModelFilter() {
+  currentModelFilter.value = ''
+}
+
+// SKU点击 → 展开详情
+function expandSkuDetail(s) {
+  expandedSku.value = s
+}
+
+const filteredSku = computed(() => {
+  if (!currentModelFilter.value) return bySku.value
+  return bySku.value.filter(s => s.model === currentModelFilter.value)
+})
 
 async function loadStoreSales(p = 1) {
   try {
@@ -272,8 +331,8 @@ async function loadStoreAgg() {
       params: { store_code: currentStore.value.store_code }
     })
     if (res.code === 0 && res.data) {
-      byModel.value = res.data.storeModel || []
-      bySku.value = res.data.modelSku || []
+      byModel.value = (res.data.storeModel || []).map(m => ({ ...m, _img: m.image_url || null }))
+      bySku.value = (res.data.modelSku || []).map(s => ({ ...s, _img: s.image_url || null }))
     }
   } catch (e) {
     console.error('[StoreSales] load agg error:', e)
@@ -285,6 +344,8 @@ function backToList() {
   byModel.value = []
   bySku.value = []
   items.value = []
+  currentModelFilter.value = ''
+  expandedSku.value = null
 }
 
 const COLOR_DISPLAY = {
@@ -339,15 +400,24 @@ onMounted(() => {
 .empty-cell { text-align: center; color: #909399; padding: 40px; }
 .empty-section { text-align: center; color: #909399; padding: 20px; font-size: 14px; }
 .model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
-.model-card { background: #f5f7fa; border-radius: 8px; padding: 12px; display: flex; align-items: center; gap: 10px; }
+.model-card { background: #f5f7fa; border-radius: 8px; padding: 12px; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: background 0.2s; }
+.model-card:hover { background: #e3f2fd; }
+.model-card.has-image { border: 2px solid #409eff; }
 .model-rank { font-size: 12px; color: #909399; width: 24px; }
+.model-thumb { width: 48px; height: 48px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
+.model-thumb-placeholder { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; background: #e3f2fd; border-radius: 4px; font-size: 20px; flex-shrink: 0; }
 .model-info { flex: 1; min-width: 0; }
 .model-name { font-size: 13px; font-weight: 600; color: #303133; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-meta { display: flex; gap: 8px; font-size: 11px; color: #909399; margin-top: 2px; }
 .model-qty { font-size: 14px; font-weight: bold; color: #409eff; }
+.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+.section-actions { display: flex; align-items: center; gap: 8px; }
+.filter-tag { background: #ecf5ff; color: #409eff; padding: 4px 10px; border-radius: 4px; font-size: 13px; }
 .sku-list { display: flex; flex-direction: column; gap: 4px; }
-.sku-item { display: flex; align-items: center; gap: 8px; padding: 8px; border-bottom: 1px solid #f0f0f0; font-size: 12px; }
+.sku-item { display: flex; align-items: center; gap: 8px; padding: 8px; border-bottom: 1px solid #f0f0f0; font-size: 12px; cursor: pointer; transition: background 0.15s; border-radius: 4px; }
 .sku-item:hover { background: #f5f7fa; }
+.sku-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
+.sku-thumb-placeholder { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: #f5f7fa; border-radius: 4px; font-size: 18px; flex-shrink: 0; }
 .sku-rank { width: 24px; color: #909399; font-size: 11px; }
 .sku-val { font-family: monospace; color: #409eff; width: 80px; }
 .sku-name { flex: 1; color: #303133; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -356,6 +426,14 @@ onMounted(() => {
 .sku-size { color: #909399; width: 50px; text-align: center; }
 .sku-qty { color: #409eff; font-weight: bold; width: 60px; text-align: right; }
 .sku-amount { color: #e6a23c; width: 80px; text-align: right; }
+.sku-detail { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; padding: 8px 0; }
+.sku-detail-img { width: 160px; height: 160px; object-fit: cover; border-radius: 8px; border: 1px solid #ebeef5; }
+.sku-detail-info { flex: 1; min-width: 280px; display: flex; flex-direction: column; gap: 8px; }
+.detail-row { display: flex; gap: 8px; font-size: 14px; }
+.detail-row .label { color: #909399; width: 100px; flex-shrink: 0; }
+.detail-row .val { color: #303133; font-weight: 500; }
+.detail-row .val.highlight { color: #409eff; font-size: 16px; font-weight: bold; }
+.detail-row .val.amount { color: #e6a23c; font-size: 16px; font-weight: bold; }
 .filter-bar { display: flex; gap: 10px; margin-bottom: 16px; }
 .sort-select { padding: 8px 12px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 14px; }
 .pagination { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 20px; }
