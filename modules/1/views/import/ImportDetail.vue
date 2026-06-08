@@ -67,7 +67,7 @@
         <div class="chart-placeholder">
           <div v-for="(s, i) in (storeTab === 'top' ? storeHot : storeCold)" :key="i" class="bar-item">
             <span class="bar-rank">{{ i + 1 }}</span>
-            <span class="bar-label" :title="s.store_name || s.store_code">{{ s.store_name || s.store_code || '-' }}</span>
+            <span class="bar-label" :title="s.store_name || s.store_code" :style="{ width: '220px !important', flexShrink: '0' }">{{ s.store_name || s.store_code || '-' }}</span>
             <div class="bar-wrap">
               <div class="bar" :class="storeTab === 'top' ? 'bar-green' : 'bar-red'" 
                    :style="{ width: getBarWidth(s, storeTab === 'top' ? storeHot : storeCold, 'qty') + '%' }"></div>

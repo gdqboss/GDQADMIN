@@ -300,8 +300,8 @@ const filteredGroups = computed(() => {
       // 独立一级菜单（如 AI课堂）：按 module_key 过滤
       if (!group.children || group.children.length === 0) {
         const mod = routeToModule[group.to]
-        // serverModules 未加载（=[]）时，有 module_key 映射的项先隐藏，加载完再过滤
-        if (mod && serverModules.value.length === 0) return null
+        // modules 为空（北京等无 server_profiles 表的服务器）→ 不过滤，显示全部
+        // modules 非空 → 按模块过滤
         if (mod && serverModules.value.length > 0 && !serverModules.value.includes(mod)) {
           return null
         }
@@ -312,8 +312,7 @@ const filteredGroups = computed(() => {
         .filter(child => {
           if (!canAccess(child.key)) return false
           const mod = routeToModule[child.to]
-          // serverModules 未加载（=[]）时，有 module_key 映射的项先隐藏
-          if (mod && serverModules.value.length === 0) return false
+          // modules 为空 → 不过滤，显示全部；modules 非空 → 按模块过滤
           if (mod && serverModules.value.length > 0 && !serverModules.value.includes(mod)) {
             return false
           }

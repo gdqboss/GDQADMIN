@@ -66,7 +66,7 @@
             <!-- 主行：可展开 -->
             <div class="bar-item store-main-row" :class="{ expanded: expandedStore === s.store_code }" @click="toggleStore(s.store_code)">
               <span class="bar-rank">{{ i + 1 }}</span>
-              <span class="store-name" :title="s.store_name || s.store_code">{{ s.store_name || s.store_code || '-' }}</span>
+              <span class="store-name" :title="s.store_name || s.store_code" :style="{ minWidth: '200px', flexShrink: 0 }">{{ s.store_name || s.store_code || '-' }}</span>
               <div class="bar-wrap">
                 <div class="bar bar-green" :style="{ width: getBarWidth(s, allStores, 'qty') + '%' }"></div>
               </div>
@@ -451,7 +451,7 @@ onMounted(() => {
 .chart-placeholder { display: flex; flex-direction: column; gap: 6px; }
 .bar-item { display: flex; align-items: center; gap: 6px; }
 .bar-rank { width: 18px; font-size: 11px; color: #909399; text-align: center; }
-.bar-label { width: 50px; font-size: 11px; color: #606266; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-label { min-width: 120px; max-width: 240px; font-size: 12px; color: #606266; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
 .bar-sku { width: 70px; font-size: 10px; color: #409eff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bar-label.color-label { width: 60px; }
 .bar-label.size-label { width: 40px; text-align: center; }
@@ -507,7 +507,7 @@ onMounted(() => {
 .store-main-row { cursor: pointer; border-radius: 6px; transition: background 0.2s; }
 .store-main-row:hover { background: #f5f7fa; }
 .store-main-row.expanded { background: #ecf5ff; }
-.store-name { width: 120px; font-size: 12px; color: #303133; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; text-align: left; }
+.store-name { min-width: 220px; max-width: 400px; font-size: 12px; color: #303133; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; text-align: left; }
 .expand-icon { font-size: 10px; color: #909399; width: 16px; }
 .store-expand-detail { padding: 12px 0 8px 28px; }
 .store-expand-inner { background: #fafafa; border-radius: 8px; padding: 12px; }
