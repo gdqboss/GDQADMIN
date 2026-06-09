@@ -235,9 +235,54 @@ const menuGroups = computed(() => [
     children: [
       { key: 'bi:excel', label: t('nav.excelAnalyzer'), to: '/excel-analyzer' },
       { key: 'bi:report', label: t('nav.reportManage'), to: '/excel-report-manage' },
+      { key: 'bi:excel', label: t('nav.storeSales'), to: '/store-sales' },
       { key: 'qrcode:write', label: t('nav.qrcode'), to: '/qrcode' },
       { key: 'referral:read', label: t('nav.referral'), to: '/referral' },
       { key: 'report:read', label: t('nav.reports'), to: '/reports' },
+    ]
+  },
+  {
+    key: 'restaurant',
+    icon: 'restaurant',
+    label: '餐饮管理',
+    to: null,
+    children: [
+      { key: 'restaurant:read', label: '餐饮仪表盘', to: '/restaurant' },
+      { key: 'restaurant:write', label: '桌台管理', to: '/restaurant/tables' },
+      { key: 'restaurant:write', label: '菜品管理', to: '/restaurant/dishes' },
+      { key: 'restaurant:read', label: '堂食订单', to: '/restaurant/dine-orders' },
+      { key: 'restaurant:read', label: '外卖订单', to: '/restaurant/takeout' },
+      { key: 'restaurant:read', label: '预订管理', to: '/restaurant/reservations' },
+      { key: 'restaurant:read', label: '排队叫号', to: '/restaurant/queue' },
+      { key: 'restaurant:write', label: '收银管理', to: '/restaurant/cashier' },
+    ]
+  },
+  {
+    key: 'hotel',
+    icon: 'hotel',
+    label: '酒店管理',
+    to: null,
+    children: [
+      { key: 'hotel:read', label: '酒店仪表盘', to: '/hotel' },
+      { key: 'hotel:write', label: '房型管理', to: '/hotel/room-types' },
+      { key: 'hotel:write', label: '价格日历', to: '/hotel/price-calendar' },
+      { key: 'hotel:read', label: '酒店订单', to: '/hotel/orders' },
+      { key: 'hotel:read', label: '评价管理', to: '/hotel/reviews' },
+    ]
+  },
+  {
+    key: 'mall',
+    icon: 'shopping_bag',
+    label: '商城',
+    to: null,
+    children: [
+      { key: 'mall:score', label: '积分商品', to: '/score-products' },
+      { key: 'order:read', label: '积分订单', to: '/score-orders' },
+      { key: 'order:read', label: '优惠券管理', to: '/coupon-manage' },
+      { key: 'logistics:read', label: '物流管理', to: '/logistics' },
+      { key: 'articles:read', label: '文章管理', to: '/articles' },
+      { key: 'yuyue:read', label: '预约服务', to: '/yuyue' },
+      { key: 'kefu:read', label: '客服消息', to: '/kefu' },
     ]
   },
   {
@@ -280,8 +325,31 @@ const routeToModule = {
   '/dealers': 'dealers',
   '/stores': 'stores',
   '/excel-analyzer': 'excel-analyzer',
-  '/excel-report-manage': 'excel-analyzer',
+  '/referral': 'referral',
   '/reports': 'reports',
+  '/restaurant': 'restaurant',
+  '/restaurant/tables': 'restaurant',
+  '/restaurant/dishes': 'restaurant',
+  '/restaurant/dine-orders': 'restaurant',
+  '/restaurant/takeout': 'restaurant',
+  '/restaurant/reservations': 'restaurant',
+  '/restaurant/queue': 'restaurant',
+  '/restaurant/cashier': 'restaurant',
+  '/hotel': 'hotel',
+  '/hotel/room-types': 'hotel',
+  '/hotel/price-calendar': 'hotel',
+  '/hotel/orders': 'hotel',
+  '/hotel/reviews': 'hotel',
+  '/score-products': 'score_shop',
+  '/score-orders': 'score_shop',
+  '/coupon-manage': 'coupon',
+  '/logistics': 'logistics',
+  '/logistics/express': 'logistics',
+  '/logistics/templates': 'logistics',
+  '/logistics/channels': 'logistics',
+  '/articles': 'article',
+  '/yuyue': 'yuyue',
+  '/kefu': 'kefu',
   '/settings': 'settings',
   '/settings/users': 'users',
   '/settings/roles': 'roles',
@@ -299,6 +367,8 @@ const filteredGroups = computed(() => {
       // 独立一级菜单（如 AI课堂）：按 module_key 过滤
       if (!group.children || group.children.length === 0) {
         const mod = routeToModule[group.to]
+        // modules 为空（北京等无 server_profiles 表的服务器）→ 不过滤，显示全部
+        // modules 非空 → 按模块过滤
         if (mod && serverModules.value.length > 0 && !serverModules.value.includes(mod)) {
           return null
         }
@@ -309,6 +379,11 @@ const filteredGroups = computed(() => {
         .filter(child => {
           if (!canAccess(child.key)) return false
           const mod = routeToModule[child.to]
+          // server_profiles 永远不在被管理方显示（无论 modules 是否为空）
+          if (mod === 'server_profiles' && !serverModules.value.includes('server_profiles')) {
+            return false
+          }
+          // modules 为空 → 不过滤，显示全部；modules 非空 → 按模块过滤
           if (mod && serverModules.value.length > 0 && !serverModules.value.includes(mod)) {
             return false
           }
@@ -339,6 +414,8 @@ function toggleGroup(key) {
 function isActive(to) {
   if (!to) return false
   if (to === '/') return route.path === '/'
+  // 系统设置精确匹配，避免子页面也匹配父级
+  if (to === '/settings') return route.path === '/settings'
   return route.path.startsWith(to)
 }
 

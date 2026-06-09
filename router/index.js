@@ -168,6 +168,10 @@ const routes = [
       { path: 'dealers', name: 'Dealers', component: lazyLoad(() => import('../views/dealers/DealerList.vue')), meta: { title: '经销商管理', parent: '合作伙伴', permission: 'dealer:write' } },
       { path: 'stores', name: 'Stores', component: lazyLoad(() => import('../views/stores/StoreList.vue')), meta: { title: '门店管理', parent: '合作伙伴', permission: 'store:write' } },
 
+      // ── 拼团管理 ──────────────────────────────────────────────
+      { path: 'collage', name: 'CollageDashboard', component: lazyLoad(() => import('../views/collage/CollageDashboard.vue')), meta: { title: '拼团管理', permission: 'collage:read' } },
+      { path: 'collage/products', name: 'CollageProductList', component: lazyLoad(() => import('../views/collage/CollageProductList.vue')), meta: { title: '拼团商品', parent: '拼团管理', permission: 'collage:write' } },
+      { path: 'collage/orders', name: 'CollageOrderList', component: lazyLoad(() => import('../views/collage/CollageOrderList.vue')), meta: { title: '拼团订单', parent: '拼团管理', permission: 'collage:read' } },
       // ── 酒店管理 ──────────────────────────────────────────────
       { path: 'hotel', name: 'HotelDashboard', component: lazyLoad(() => import('../views/hotel/HotelDashboard.vue')), meta: { title: '酒店管理', permission: 'hotel:read' } },
       { path: 'hotel/room-types', name: 'HotelRoomTypes', component: lazyLoad(() => import('../views/hotel/RoomTypeList.vue')), meta: { title: '房型管理', parent: '酒店管理', permission: 'hotel:write' } },
