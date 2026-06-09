@@ -567,6 +567,7 @@ export default {
         formManagerPlaceholder: 'Manager name',
         formDomain: 'Domain',
         formWebsite: 'Website',
+        formWechatAppid: 'WeChat AppID',
         formSiteNameZh: 'Chinese Name',
         formSiteNameEn: 'English Name',
         formLanguage: 'Interface Language (multi-select)',

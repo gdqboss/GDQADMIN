@@ -59,6 +59,7 @@ const form = ref({
   ssh_key_path: '/root/clawgdqshop.pem', description: '', env: 'production',
   build_date: '', manager: '', domain: '', pem_content: '', website: '',
   modules: [], site_name_zh: '', site_name_en: '', language: [], currency: '', industry: '',
+  wechat_appid: '',
 })
 
 // 同步状态
@@ -556,6 +557,9 @@ onMounted(() => {
             </el-form-item>
             <el-form-item :label="$t('serverProfiles.formWebsite')" class="col-span-2 md:col-span-1">
               <el-input v-model="form.website" placeholder="https://wecom.gdqshop.cn" />
+            </el-form-item>
+            <el-form-item :label="$t('serverProfiles.formWechatAppid')" class="col-span-2 md:col-span-1">
+              <el-input v-model="form.wechat_appid" placeholder="wx90a47bdbe0bf89cb" clearable />
             </el-form-item>
           </el-form>
         </div>

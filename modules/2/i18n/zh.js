@@ -645,6 +645,7 @@ export default {
     formManagerPlaceholder: '负责人姓名',
     formDomain: '域名',
     formWebsite: '网站',
+    formWechatAppid: '微信小程序AppID',
     formSiteNameZh: '中文名称',
     formSiteNameEn: '英文名称',
     formLanguage: '界面语言（可多选）',
