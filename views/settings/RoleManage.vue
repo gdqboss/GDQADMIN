@@ -36,6 +36,7 @@ const categoryOrder = [
   'leave', 'shift', 'schedule', 'task',
   'qrcode', 'referral', 'wecom', 'ai-automation',
   'workflow', 'workbench',
+  'navigation', 'quick-action', 'action',
 ]
 
 const sortedCategories = computed(() => {
