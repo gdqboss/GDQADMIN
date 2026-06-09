@@ -18,6 +18,11 @@ const routes = [
       { path: 'orders', name: 'MallOrderList', component: lazyLoad(() => import('../views/store/OrderList.vue')), meta: { public: true } },
       { path: 'login', name: 'MallLogin', component: lazyLoad(() => import('../views/store/MallLogin.vue')), meta: { public: true } },
       { path: 'register', name: 'MallRegister', component: lazyLoad(() => import('../views/store/MallRegister.vue')), meta: { public: true } },
+      { path: 'score-shop', name: 'ScoreShopHome', component: lazyLoad(() => import('../views/store/ScoreShopHome.vue')), meta: { public: true } },
+      { path: 'score-product/:id', name: 'ScoreProductDetail', component: lazyLoad(() => import('../views/store/ScoreProductDetail.vue')), meta: { public: true } },
+      { path: 'coupons', name: 'CouponList', component: lazyLoad(() => import('../views/store/CouponList.vue')), meta: { public: true } },
+      { path: 'score-orders', name: 'ScoreOrderList', component: lazyLoad(() => import('../views/store/ScoreOrderList.vue')), meta: { public: true } },
+      { path: 'score-order/:id', name: 'ScoreOrderDetail', component: lazyLoad(() => import('../views/store/ScoreOrderDetail.vue')), meta: { public: true } },
     ],
   },
   // 登录页独立于 MainLayout，不带侧边栏
@@ -50,6 +55,24 @@ const routes = [
       { path: 'orders/:id', name: 'OrderDetail', component: lazyLoad(() => import('../views/orders/OrderDetail.vue')), meta: { title: '订单详情', parent: '商城', permission: 'order:read' } },
       { path: 'referral', name: 'ReferralManage', component: lazyLoad(() => import('../views/orders/ReferralManage.vue')), meta: { title: '推荐裂变', parent: '商城', permission: 'referral:read' } },
 
+      // ── 物流管理 ──────────────────────────────────────────────
+      { path: 'logistics', name: 'LogisticsDashboard', component: lazyLoad(() => import('../views/logistics/LogisticsDashboard.vue')), meta: { title: '物流管理', parent: '商城', permission: 'logistics:read' } },
+      { path: 'logistics/express', name: 'ExpressList', component: lazyLoad(() => import('../views/logistics/ExpressList.vue')), meta: { title: '快递公司', parent: '物流管理', permission: 'express_read' } },
+      { path: 'logistics/templates', name: 'ShippingTemplate', component: lazyLoad(() => import('../views/logistics/ShippingTemplate.vue')), meta: { title: '运费模板', parent: '物流管理', permission: 'freight_read' } },
+      { path: 'logistics/channels', name: 'ChannelLogistics', component: lazyLoad(() => import('../views/logistics/ChannelLogistics.vue')), meta: { title: '渠道物流', parent: '物流管理', permission: 'channel_read' } },
+
+      // ── 预约 ────────────────────────────────────────────────
+      { path: 'yuyue', name: 'YuyueList', component: lazyLoad(() => import('../views/yuyue/YuyueList.vue')), meta: { title: '预约管理', permission: 'yuyue:read' } },
+      { path: 'yuyue/:id', name: 'YuyueDetail', component: lazyLoad(() => import('../views/yuyue/YuyueDetail.vue')), meta: { title: '预约详情', permission: 'yuyue:read' } },
+      { path: 'articles', name: 'ArticleList', component: lazyLoad(() => import('../views/articles/ArticleList.vue')), meta: { title: '文章管理', parent: '商城', permission: 'articles_read' } },
+      { path: 'articles/new', name: 'ArticleNew', component: lazyLoad(() => import('../views/articles/ArticleDetail.vue')), meta: { title: '新增文章', parent: '商城', permission: 'articles_write' } },
+      { path: 'articles/:id', name: 'ArticleDetail', component: lazyLoad(() => import('../views/articles/ArticleDetail.vue')), meta: { title: '文章详情', parent: '商城', permission: 'articles_read' } },
+
+      // ── 积分商城 / 优惠券 ─────────────────────────────────────
+      { path: 'score-products', name: 'ScoreProductManage', component: lazyLoad(() => import('../views/mall/ScoreProductManage.vue')), meta: { title: '积分商品管理', parent: '商城', permission: 'product:write' } },
+      { path: 'score-orders', name: 'ScoreOrderManage', component: lazyLoad(() => import('../views/mall/ScoreOrderManage.vue')), meta: { title: '积分订单管理', parent: '商城', permission: 'order:read' } },
+      { path: 'coupon-manage', name: 'CouponManage', component: lazyLoad(() => import('../views/mall/CouponManage.vue')), meta: { title: '优惠券管理', parent: '商城', permission: 'order:read' } },
+
       // ── 调货/退货 ────────────────────────────────────────────
       { path: 'transfer', name: 'TransferList', component: lazyLoad(() => import('../views/transfer/TransferList.vue')), meta: { title: '调货管理', permission: 'transfer:read' } },
       { path: 'transfer/create', name: 'TransferCreate', component: lazyLoad(() => import('../views/transfer/TransferCreate.vue')), meta: { title: '创建调货单', permission: 'transfer:write' } },
@@ -67,6 +90,7 @@ const routes = [
 
       // ── 消息 ────────────────────────────────────────────────
       { path: 'wecom', name: 'WeCom', component: lazyLoad(() => import('../views/wecom/WeComChat.vue')), meta: { title: '企业微信', parent: '消息', permission: 'wecom:read' } },
+      { path: 'kefu', name: 'Kefu', component: lazyLoad(() => import('../views/kefu/KefuChat.vue')), meta: { title: '客服消息', parent: '消息', permission: 'kefu:read' } },
       { path: 'ai-automation', name: 'AiAutomation', component: lazyLoad(() => import('../views/automation/AiAutomation.vue')), meta: { title: 'AI 自动化', parent: 'OpenClaw', permission: 'ai-automation:write' } },
 
       // ── OA 办公 ──────────────────────────────────────────────
@@ -133,6 +157,14 @@ const routes = [
       { path: 'suppliers', name: 'Suppliers', component: lazyLoad(() => import('../views/suppliers/SupplierList.vue')), meta: { title: '供货商管理', parent: '合作伙伴', permission: 'supplier:write' } },
       { path: 'dealers', name: 'Dealers', component: lazyLoad(() => import('../views/dealers/DealerList.vue')), meta: { title: '经销商管理', parent: '合作伙伴', permission: 'dealer:write' } },
       { path: 'stores', name: 'Stores', component: lazyLoad(() => import('../views/stores/StoreList.vue')), meta: { title: '门店管理', parent: '合作伙伴', permission: 'store:write' } },
+
+      // ── 酒店管理 ──────────────────────────────────────────────
+      { path: 'hotel', name: 'HotelDashboard', component: lazyLoad(() => import('../views/hotel/HotelDashboard.vue')), meta: { title: '酒店管理', permission: 'hotel:read' } },
+      { path: 'hotel/room-types', name: 'HotelRoomTypes', component: lazyLoad(() => import('../views/hotel/RoomTypeList.vue')), meta: { title: '房型管理', parent: '酒店管理', permission: 'hotel:write' } },
+      { path: 'hotel/price-calendar', name: 'HotelPriceCalendar', component: lazyLoad(() => import('../views/hotel/PriceCalendar.vue')), meta: { title: '价格日历', parent: '酒店管理', permission: 'hotel:write' } },
+      { path: 'hotel/orders', name: 'HotelOrderList', component: lazyLoad(() => import('../views/hotel/HotelOrderList.vue')), meta: { title: '酒店订单', parent: '酒店管理', permission: 'hotel:read' } },
+      { path: 'hotel/orders/:id', name: 'HotelOrderDetail', component: lazyLoad(() => import('../views/hotel/HotelOrderDetail.vue')), meta: { title: '订单详情', parent: '酒店管理', permission: 'hotel:read' } },
+      { path: 'hotel/reviews', name: 'HotelReviews', component: lazyLoad(() => import('../views/hotel/ReviewList.vue')), meta: { title: '评价管理', parent: '酒店管理', permission: 'hotel:read' } },
     ],
   },
 ]
