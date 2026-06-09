@@ -175,7 +175,6 @@ const menuGroups = computed(() => [
     children: [
       { key: 'task:read', label: t('tasks.title'), to: '/tasks' },
       { key: 'work_log:read', label: t('logs.workLog'), to: '/logs/work-logs' },
-      { key: 'work_log:read', label: t('logs.visitLog'), to: '/logs/visit-logs' },
       { key: 'attendance:manage', label: t('nav.qaAttendance'), to: '/oa/attendance' },
       { key: 'approval:read', label: t('nav.approvals'), to: '/approvals' },
     ]
