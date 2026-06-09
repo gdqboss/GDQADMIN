@@ -70,6 +70,13 @@ const syncLoading = ref(false)
 // 进度条状态
 const syncProgress = ref({ percent: 0, label: '', step: 0, logs: [] })
 
+// 模块管理
+const profileModules = ref([])
+const profileModulesLoading = ref(false)
+const moduleOpLoading = ref(false)
+const newModuleKey = ref('')
+const bulkModuleKeys = ref([])
+
 // ─── Load ───────────────────────────────────────────────────────────────────
 async function loadProfiles() {
   loading.value = true
@@ -111,7 +118,7 @@ function openAdd() {
   dialogVisible.value = true
 }
 
-function openEdit(row) {
+async function openEdit(row) {
   dialogTitle.value = t('serverProfiles.editServer')
   isEditing.value = true
   editingId.value = row.id
@@ -133,7 +140,10 @@ function openEdit(row) {
     site_name_zh: row.site_name_zh || '', site_name_en: row.site_name_en || '',
     language: langArray, currency: row.currency || '', industry: row.industry || '',
   }
+  newModuleKey.value = ''
+  bulkModuleKeys.value = []
   dialogVisible.value = true
+  await loadProfileModules(row.id)
 }
 
 async function submitForm() {
@@ -353,6 +363,78 @@ function getIndustryLabel(ind) {
   return industryNameMap[ind] || ind || '-'
 }
 
+// ─── Module Management ───────────────────────────────────────────────────────
+async function loadProfileModules(profileId) {
+  if (!profileId) return
+  profileModulesLoading.value = true
+  try {
+    const res = await serverProfileApi.getModules(profileId)
+    if (res.code === 0) profileModules.value = res.data
+  } catch (e) {
+    ElMessage.error('加载模块失败: ' + e.message)
+  } finally {
+    profileModulesLoading.value = false
+  }
+}
+
+async function handleAddModule() {
+  if (!newModuleKey.value) return
+  if (!editingId.value) {
+    ElMessage.warning('请先保存服务器配置后再添加模块')
+    return
+  }
+  moduleOpLoading.value = true
+  try {
+    await serverProfileApi.addModule(editingId.value, newModuleKey.value)
+    await loadProfileModules(editingId.value)
+    newModuleKey.value = ''
+    ElMessage.success('模块添加成功')
+  } catch (e) {
+    ElMessage.error('添加模块失败: ' + e.message)
+  } finally {
+    moduleOpLoading.value = false
+  }
+}
+
+async function handleRemoveModule(moduleKey) {
+  try {
+    await ElMessageBox.confirm('确认移除模块「' + moduleKey + '」？', t('common.confirm'), { type: 'warning' })
+  } catch (e) { return }
+  if (!editingId.value) {
+    ElMessage.warning('请先保存服务器配置后再操作模块')
+    return
+  }
+  moduleOpLoading.value = true
+  try {
+    await serverProfileApi.removeModule(editingId.value, moduleKey)
+    await loadProfileModules(editingId.value)
+    ElMessage.success('模块已移除')
+  } catch (e) {
+    ElMessage.error('移除模块失败: ' + e.message)
+  } finally {
+    moduleOpLoading.value = false
+  }
+}
+
+async function handleBulkSyncModules() {
+  if (!bulkModuleKeys.value.length) return
+  if (!editingId.value) {
+    ElMessage.warning('请先保存服务器配置后再批量同步模块')
+    return
+  }
+  moduleOpLoading.value = true
+  try {
+    await serverProfileApi.syncModules(editingId.value, bulkModuleKeys.value)
+    await loadProfileModules(editingId.value)
+    bulkModuleKeys.value = []
+    ElMessage.success('批量同步成功')
+  } catch (e) {
+    ElMessage.error('批量同步失败: ' + e.message)
+  } finally {
+    moduleOpLoading.value = false
+  }
+}
+
 onMounted(() => {
   loadProfiles()
   loadAvailableModules()
@@ -512,6 +594,83 @@ onMounted(() => {
           <el-form-item :label="$t('serverProfiles.formPem')">
             <el-input v-model="form.pem_content" type="textarea" :rows="3" placeholder="-----BEGIN RSA PRIVATE KEY-----" class="font-mono text-xs" />
           </el-form-item>
+        </div>
+
+        <!-- 模块管理（独立Tab） -->
+        <div class="bg-gray-50 rounded-lg p-4">
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">模块管理</div>
+
+          <!-- 已有模块列表 -->
+          <div class="mb-3">
+            <div class="text-xs text-gray-500 mb-2">当前已启用的模块（{{ profileModules.length }} 个）</div>
+            <div v-if="profileModulesLoading" class="text-sm text-gray-400 py-2">加载中...</div>
+            <div v-else-if="profileModules.length === 0" class="text-sm text-gray-400 py-2">暂无已启用的模块</div>
+            <div v-else class="flex flex-wrap gap-2 mb-3">
+              <span
+                v-for="mod in profileModules"
+                :key="mod.module_key"
+                class="inline-flex items-center gap-1 px-2 py-1 text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded"
+              >
+                {{ mod.label_zh || mod.module_key }}
+                <button
+                  @click="handleRemoveModule(mod.module_key)"
+                  class="ml-1 text-blue-400 hover:text-red-500 font-bold leading-none"
+                  title="移除"
+                >×</button>
+              </span>
+            </div>
+          </div>
+
+          <!-- 新增单个模块 &批量同步 -->
+          <div class="flex flex-col gap-3">
+            <!-- 新增单个模块 -->
+            <div class="flex items-center gap-2">
+              <el-select
+                v-model="newModuleKey"
+                placeholder="选择要添加的模块"
+                filterable
+                size="small"
+                class="flex-1"
+              >
+                <el-option
+                  v-for="m in availableModules"
+                  :key="m.module_key"
+                  :label="(m.label_zh || m.module_key) + ' (' + m.module_key + ')'"
+                  :value="m.module_key"
+                  :disabled="profileModules.some(pm => pm.module_key === m.module_key)"
+                />
+              </el-select>
+              <button
+                @click="handleAddModule"
+                :disabled="!newModuleKey || moduleOpLoading"
+                class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              >新增</button>
+            </div>
+
+            <!-- 批量同步 -->
+            <div class="flex items-center gap-2">
+              <el-select
+                v-model="bulkModuleKeys"
+                multiple
+                filterable
+                placeholder="选择模块后批量同步到服务器"
+                size="small"
+                class="flex-1"
+              >
+                <el-option
+                  v-for="m in availableModules"
+                  :key="m.module_key"
+                  :label="(m.label_zh || m.module_key) + ' (' + m.module_key + ')'"
+                  :value="m.module_key"
+                />
+              </el-select>
+              <button
+                @click="handleBulkSyncModules"
+                :disabled="!bulkModuleKeys.length || moduleOpLoading"
+                class="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+              >批量同步</button>
+            </div>
+          </div>
         </div>
 
         <!-- 模块勾选：行业模板 + 精细调整 -->

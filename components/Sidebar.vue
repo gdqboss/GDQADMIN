@@ -312,6 +312,10 @@ const filteredGroups = computed(() => {
         .filter(child => {
           if (!canAccess(child.key)) return false
           const mod = routeToModule[child.to]
+          // server_profiles 永远不在被管理方显示（无论 modules 是否为空）
+          if (mod === 'server_profiles' && !serverModules.value.includes('server_profiles')) {
+            return false
+          }
           // modules 为空 → 不过滤，显示全部；modules 非空 → 按模块过滤
           if (mod && serverModules.value.length > 0 && !serverModules.value.includes(mod)) {
             return false
