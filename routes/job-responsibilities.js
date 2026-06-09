@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { pool } from '../db/connection.js'
+import { checkPerm } from '../utils/permission.js'
 
 const router = Router()
 
@@ -84,7 +85,7 @@ router.get('/my', async (req, res, next) => {
 router.post('/', async (req, res, next) => {
   try {
     // 权限检查：仅管理员可操作
-    if (req.user.role !== 'admin') {
+    if (!(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 403, message: '无权限操作' })
     }
 
@@ -125,7 +126,7 @@ router.post('/', async (req, res, next) => {
 router.put('/:id', async (req, res, next) => {
   try {
     // 权限检查：仅管理员可操作
-    if (req.user.role !== 'admin') {
+    if (!(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 403, message: '无权限操作' })
     }
 
@@ -159,7 +160,7 @@ router.put('/:id', async (req, res, next) => {
 router.delete('/:id', async (req, res, next) => {
   try {
     // 权限检查：仅管理员可操作
-    if (req.user.role !== 'admin') {
+    if (!(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 403, message: '无权限操作' })
     }
 

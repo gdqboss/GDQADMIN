@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { pool } from '../db/connection.js'
 import { auth } from '../middleware/auth.js'
 import { parsePagination } from '../utils/pagination.js'
+import { checkPerm } from '../utils/permission.js'
 
 const router = Router()
 
@@ -187,7 +188,7 @@ router.post('/', auth, async (req, res, next) => {
 // PUT /api/returns/:id/approve - 审批退货
 router.put('/:id/approve', auth, async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+    if (!(await checkPerm(req, 'retail:write'))) {
       return res.status(403).json({ code: 403, message: '权限不足' })
     }
 
@@ -218,7 +219,7 @@ router.put('/:id/approve', auth, async (req, res, next) => {
 // PUT /api/returns/:id/reject - 拒绝退货
 router.put('/:id/reject', auth, async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+    if (!(await checkPerm(req, 'retail:write'))) {
       return res.status(403).json({ code: 403, message: '权限不足' })
     }
 

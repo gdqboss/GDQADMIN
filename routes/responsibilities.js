@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { pool } from '../db/connection.js'
+import { checkPerm } from '../utils/permission.js'
 
 const router = Router()
 
@@ -32,7 +33,7 @@ router.get('/:role', async (req, res, next) => {
 // POST /api/responsibilities - 创建/更新角色权责（仅管理员）
 router.post('/', async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin') {
+    if (!(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 403, message: '仅管理员可创建角色权责' })
     }
 
@@ -72,7 +73,7 @@ router.post('/', async (req, res, next) => {
 // PUT /api/responsibilities/:role - 更新角色权责（仅管理员）
 router.put('/:role', async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin') {
+    if (!(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 403, message: '仅管理员可更新角色权责' })
     }
 
@@ -114,7 +115,7 @@ router.put('/:role', async (req, res, next) => {
 // DELETE /api/responsibilities/:role - 删除角色权责（仅管理员）
 router.delete('/:role', async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin') {
+    if (!(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 403, message: '仅管理员可删除角色权责' })
     }
 

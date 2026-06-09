@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { pool } from '../db/connection.js'
 import { auth } from '../middleware/auth.js'
 import { parsePagination } from '../utils/pagination.js'
+import { checkPerm } from '../utils/permission.js'
 
 const router = Router()
 
@@ -276,7 +277,7 @@ router.put('/:id/cancel', auth, async (req, res, next) => {
       return res.status(400).json({ code: 400, message: '已收货的调货单不能取消' })
     }
 
-    if (transfer.initiated_by !== req.user.id && req.user.role !== 'admin') {
+    if (transfer.initiated_by !== req.user.id && !(await checkPerm(req, 'stock:write'))) {
       return res.status(403).json({ code: 403, message: '只有发起人或管理员可以取消调货单' })
     }
 

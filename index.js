@@ -4,6 +4,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
 import path from 'path'
+import fs from 'fs'
 import { fileURLToPath } from 'url'
 import 'dotenv/config'
 import { pool } from './db/connection.js'
@@ -33,14 +34,17 @@ import wecomAdminRoutes from './routes/wecom-admin.js'
 import supplierRoutes from './routes/suppliers.js'
 import dealerRoutes from './routes/dealers.js'
 import storeRoutes from './routes/stores.js'
+import mallRoutes from './routes/mall.js'
 import userRoutes from './routes/users.js'
 import categoryRoutes from './routes/categories.js'
 import uploadRoutes from './routes/upload.js'
+import importRoutes from './routes/import.js'
 import imageRoutes from './routes/images.js'
 import h5Routes from './routes/h5.js'
 import retailRoutes from './routes/retail.js'
 import aftersalesRoutes from './routes/aftersales.js'
 import scanRoutes from './routes/scan.js'
+import referralRoutes from './routes/referral.js'
 import h5AdminRoutes from './routes/h5-admin.js'
 import transferRoutes from './routes/transfer.js'
 import identityRoutes from './routes/identity.js'
@@ -73,6 +77,16 @@ import rbacPermissionRoutes from './routes/rbac/permissions.js'
 import rbacMenuRoutes from './routes/rbac/menus.js'
 import rbacRoleRoutes from './routes/rbac/roles.js'
 import rbacUserRoleRoutes from './routes/rbac/userRoles.js'
+import serverProfilesRoutes from './routes/server-profiles.js'
+import collageRoutes from './routes/collage.js'
+import restaurantRoutes from './routes/restaurant.js'
+import hotelRoutes from './routes/hotel.js'
+import logisticsRoutes from './routes/logistics.js'
+import articleRoutes from './routes/articles.js'
+import yuyueRoutes from './routes/yuyue.js'
+import scoreShopRoutes from './routes/score_shop.js'
+import couponRoutes from './routes/coupon.js'
+import kefuRoutes from './routes/kefu.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -166,6 +180,32 @@ app.use('/api/ai-config', auth, aiConfigRoutes)
 app.use('/api/ai-class', auth, aiClassRoutes)
 app.use('/api/kb', auth, kbRoutes)
 app.use('/api/scan', scanRoutes)
+
+// Public referral QR endpoint (no auth) — must be before prefix router
+app.get('/api/referral/qr/:token', async (req, res, next) => {
+  try {
+    const { token } = req.params
+    const [[table]] = await pool.query('SELECT * FROM restaurant_tables WHERE qr_token = ?', [token])
+    if (!table) return res.status(404).json({ code: 404, message: '桌码不存在' })
+
+    const qrUrl = `https://wecom.gdqshop.cn/api/referral/scan/${token}`
+    const filePath = path.join(__dirname, 'uploads/qrcodes', `${token}.png`)
+
+    if (!fs.existsSync(filePath)) {
+      const QRCode = (await import('qrcode')).default
+      await QRCode.toFile(filePath, qrUrl, {
+        type: 'png', width: 300, margin: 2,
+        color: { dark: '#000000', light: '#ffffff' },
+      })
+    }
+
+    res.setHeader('Content-Type', 'image/png')
+    res.setHeader('Cache-Control', 'public, max-age=86400')
+    res.sendFile(filePath)
+  } catch (err) { next(err) }
+})
+
+app.use('/api/referral', auth, apiLimiter, referralRoutes)
 
 // Public scan endpoint (no auth, rate-limited)
 app.post('/api/qrcodes/:id/scan', scanLimiter, async (req, res, next) => {
@@ -314,6 +354,17 @@ app.get('/health', async (req, res) => {
 // H5 public routes (no auth)
 app.use('/api/h5', h5Routes)
 
+// Collage 拼团 (public - 商品浏览)
+app.use('/api/collage', collageRoutes)
+app.use('/api/restaurant', auth, apiLimiter, restaurantRoutes)
+app.use('/api/hotel', auth, apiLimiter, hotelRoutes)
+app.use('/api/logistics', auth, apiLimiter, logisticsRoutes)
+app.use('/api/article', auth, apiLimiter, articleRoutes)
+app.use('/api/yuyue', auth, apiLimiter, yuyueRoutes)
+app.use('/api/score-shop', auth, apiLimiter, scoreShopRoutes)
+app.use('/api/coupon', auth, apiLimiter, couponRoutes)
+app.use('/api/kefu', auth, apiLimiter, kefuRoutes)
+
 // Protected routes (with API rate limiting)
 app.use('/api/products', auth, apiLimiter, productRoutes)
 app.use('/api/materials', materialRoutes)
@@ -333,11 +384,51 @@ app.use('/api/gift-approvals', auth, apiLimiter, giftApprovalRoutes)
 app.use('/api/aftersales', auth, apiLimiter, aftersalesRoutes)
 app.use('/api/wecom', auth, apiLimiter, wecomRoutes)
 app.use('/api/settings', auth, apiLimiter, requireRole('admin'), settingsRoutes)
+// 公开系统设置（无需登录）
+app.get('/api/public-settings', async (req, res, next) => {
+  try {
+    const locale = req.query.locale || 'zh'
+    const [rows] = await pool.query("SELECT `key`, value FROM settings")
+    const data = { locale }
+    for (const row of rows) {
+      data[row.key] = row.value
+    }
+    data.site_name = data.site_name || '智能商业系统'
+    data.site_name_en = data.site_name_en || 'SmartBiz'
+    data.bot_name = data.bot_name || '美特'
+
+    // Load modules + languages from server_profiles
+    let profileId = null
+    if (data.server_profile_id) {
+      profileId = parseInt(data.server_profile_id)
+    } else {
+      const [[spRow]] = await pool.query('SELECT id FROM server_profiles WHERE ip = ? LIMIT 1', [process.env.SERVER_IP || ''])
+      if (spRow) profileId = spRow.id
+    }
+    data.modules = []
+    data.languages = ['zh', 'en']
+    if (profileId) {
+      const [modRows] = await pool.query('SELECT module_key FROM server_modules WHERE server_profile_id = ?', [profileId])
+      data.modules = modRows.map(r => r.module_key)
+      const [[spRow]] = await pool.query('SELECT language FROM server_profiles WHERE id = ?', [profileId])
+      if (spRow && spRow.language) {
+        try {
+          const langRaw = spRow.language.trim()
+          data.languages = langRaw.startsWith('[') ? JSON.parse(langRaw) : langRaw.split(',').map(l => l.trim())
+        } catch {}
+      }
+    }
+
+    res.json({ code: 0, data })
+  } catch (err) { next(err) }
+})
 app.use('/api/system', auth, apiLimiter, requireRole('admin'), systemRoutes)
 app.use('/api/wecom-admin', auth, apiLimiter, requireRole('admin'), wecomAdminRoutes)
 app.use('/api/suppliers', auth, apiLimiter, supplierRoutes)
 app.use('/api/dealers', auth, apiLimiter, dealerRoutes)
 app.use('/api/stores', auth, apiLimiter, storeRoutes)
+// Mall公开路由 - 不需要auth中间件
+app.use('/api/mall', apiLimiter, mallRoutes)
 // Allow certain /api/users endpoints for all authenticated users, require admin for others
 app.use('/api/users', auth, apiLimiter, (req, res, next) => {
   const openPaths = ['/roles', '/subordinates', '/list']
@@ -348,6 +439,7 @@ app.use('/api/users', auth, apiLimiter, (req, res, next) => {
 }, userRoutes)
 app.use('/api/categories', auth, apiLimiter, categoryRoutes)
 app.use('/api/upload', auth, apiLimiter, uploadRoutes)
+app.use('/api/import', auth, apiLimiter, importRoutes)
 app.use('/api/images', auth, apiLimiter, imageRoutes)
 app.use('/api/h5-admin', auth, apiLimiter, h5AdminRoutes)
 app.use('/api/transfer', auth, apiLimiter, transferRoutes)
@@ -372,6 +464,7 @@ app.use('/api/rbac/permissions', auth, apiLimiter, rbacPermissionRoutes)
 app.use('/api/rbac/menus', auth, apiLimiter, rbacMenuRoutes)
 app.use('/api/rbac/roles', auth, apiLimiter, rbacRoleRoutes)
 app.use('/api/rbac/users', auth, apiLimiter, rbacUserRoleRoutes)
+app.use('/api/server-profiles', auth, apiLimiter, requireRole('admin'), serverProfilesRoutes)
 app.use('/api', auth, apiLimiter, inventoryRoutes)
 
 app.use(errorHandler)

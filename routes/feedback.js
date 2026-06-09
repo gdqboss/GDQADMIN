@@ -4,6 +4,7 @@ import { auth } from '../middleware/auth.js'
 import { h5Auth } from '../middleware/h5Auth.js'
 import { uploadFeedback } from '../middleware/upload.js'
 import { parsePagination } from '../utils/pagination.js'
+import { checkPerm } from '../utils/permission.js'
 
 const router = Router()
 
@@ -72,7 +73,7 @@ router.get('/', auth, async (req, res, next) => {
     const countParams = []
 
     // Non-admin users only see their own feedback
-    if (req.user.role !== 'admin') {
+    if (!(await checkPerm(req, 'system:config'))) {
       where += ' AND (f.user_id = ? OR f.assigned_to = ?)'
       params.push(req.user.id, req.user.id)
       countParams.push(req.user.id, req.user.id)
@@ -155,7 +156,7 @@ router.get('/', auth, async (req, res, next) => {
 // GET /api/feedback/stats - Feedback statistics (admin only)
 router.get('/stats', auth, async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin') {
+    if (!(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 403, message: '权限不足' })
     }
 
@@ -240,7 +241,7 @@ router.get('/:id', auth, async (req, res, next) => {
     const feedback = rows[0]
 
     // Check permission
-    if (req.user.role !== 'admin' &&
+    if (!(await checkPerm(req, 'system:config')) &&
         feedback.user_id !== req.user.id &&
         feedback.assigned_to !== req.user.id) {
       return res.status(403).json({ code: 403, message: '权限不足' })
@@ -266,7 +267,7 @@ router.get('/:id', auth, async (req, res, next) => {
 // PUT /api/feedback/:id/assign - Assign feedback (admin only)
 router.put('/:id/assign', auth, async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin') {
+    if (!(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 403, message: '权限不足' })
     }
 
@@ -309,7 +310,7 @@ router.put('/:id/reply', auth, async (req, res, next) => {
       return res.status(404).json({ code: 404, message: '反馈不存在' })
     }
 
-    if (req.user.role !== 'admin' && feedback.assigned_to !== req.user.id) {
+    if (!(await checkPerm(req, 'system:config')) && feedback.assigned_to !== req.user.id) {
       return res.status(403).json({ code: 403, message: '权限不足' })
     }
 
@@ -327,7 +328,7 @@ router.put('/:id/reply', auth, async (req, res, next) => {
 // PUT /api/feedback/:id/close - Close feedback (admin only)
 router.put('/:id/close', auth, async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin') {
+    if (!(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 403, message: '权限不足' })
     }
 

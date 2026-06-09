@@ -8,27 +8,57 @@ import { sendSmsCode, generateCode } from '../utils/sms.js'
 
 const router = Router()
 
+// 从 rbac_role_permissions 表获取角色权限（优先），fallback 到旧 roles 表
+async function getRbacPermissions(roleName) {
+  try {
+    // 查 rbac_roles 表
+    const [roleRows] = await pool.query('SELECT id FROM rbac_roles WHERE name = ?', [roleName])
+    if (!roleRows.length) return null
+    const [permRows] = await pool.query(
+      `SELECT p.name FROM rbac_permissions p
+       JOIN rbac_role_permissions rp ON p.id = rp.permission_id
+       WHERE rp.role_id = ?`,
+      [roleRows[0].id]
+    )
+    return permRows.map(r => r.name)
+  } catch { return null }
+}
+
 function parsePermissions(perms) {
   if (Array.isArray(perms)) return perms
   if (!perms) return null
   try {
     return JSON.parse(perms)
   } catch {
-    // Fall back to comma-separated string format
     return perms.split(',').map(s => s.trim()).filter(Boolean)
   }
+}
+
+// 统一权限解析：从 user.permissions 优先取，没有则查 rbac_roles
+async function resolvePermissions(user) {
+  // 1. 用户个人权限（最高优先）
+  let userPerms = parsePermissions(user.permissions)
+  if (userPerms && userPerms.length > 0) return userPerms
+  // 2. RBAC 动态权限
+  if (user.role) {
+    userPerms = await getRbacPermissions(user.role)
+    if (userPerms) return userPerms
+  }
+  return []
 }
 
 router.post('/login', loginLimiter, async (req, res, next) => {
   try {
     const { email, password } = req.body
-    if (!email || !password) {
+    // 兼容 account 字段（新加坡前端用这个）
+    const loginField = email || req.body.account
+    if (!loginField || !password) {
       return res.status(400).json({ code: 400, message: '请输入邮箱或手机号和密码' })
     }
 
     // 判断是邮箱还是手机号
-    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-    const isPhone = /^\+?\d{6,20}$/.test(email)
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginField)
+    const isPhone = /^\+?\d{6,20}$/.test(loginField)
 
     if (!isEmail && !isPhone) {
       return res.status(400).json({ code: 400, message: '请输入有效的邮箱或手机号' })
@@ -36,7 +66,7 @@ router.post('/login', loginLimiter, async (req, res, next) => {
 
     // 根据邮箱或手机号查询用户
     const query = isEmail ? 'SELECT * FROM users WHERE email = ?' : 'SELECT * FROM users WHERE phone = ?'
-    const [rows] = await pool.query(query, [email])
+    const [rows] = await pool.query(query, [loginField])
 
     if (!rows.length) {
       return res.status(401).json({ code: 401, message: '邮箱/手机号或密码错误' })
@@ -60,14 +90,8 @@ router.post('/login', loginLimiter, async (req, res, next) => {
     }
     await pool.query('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id])
 
-    // 解析用户权限，为空时从角色表取默认权限
-    let userPerms = parsePermissions(user.permissions)
-    if (!userPerms && user.role) {
-      const [roleRows] = await pool.query('SELECT permissions FROM roles WHERE name = ?', [user.role])
-      if (roleRows.length) {
-        userPerms = parsePermissions(roleRows[0].permissions)
-      }
-    }
+    // 解析用户权限：优先用户个人权限，没有则从 RBAC 角色表动态获取
+    const userPerms = await resolvePermissions(user)
 
     const token = jwt.sign(
       { id: user.id, name: user.name, role: user.role, department: user.department, supplier_id: user.supplier_id || null },
@@ -97,27 +121,20 @@ router.post('/logout', (req, res) => {
 router.get('/me', auth, async (req, res, next) => {
   try {
     const [rows] = await pool.query(
-      'SELECT id, name, email, phone, role, department, department_id, responsibility_id, job_level_id, status, permissions, supplier_id, hire_date, last_login, created_at FROM users WHERE id = ?',
+      'SELECT id, name, email, phone, role, department, department_id, responsibility_id, job_level_id, status, permissions, supplier_id, hire_date, last_login, created_at, avatar, life_photos FROM users WHERE id = ?',
       [req.user.id]
     )
     if (!rows.length) return res.status(404).json({ code: 404, message: '用户不存在' })
     const u = rows[0]
-    let userPerms = parsePermissions(u.permissions)
-    if (!userPerms && u.role) {
-      const [roleRows] = await pool.query('SELECT permissions FROM roles WHERE name = ?', [u.role])
-      if (roleRows.length) {
-        userPerms = parsePermissions(roleRows[0].permissions)
-      }
-    }
-    u.permissions = userPerms
+    u.permissions = await resolvePermissions(u)
     res.json({ code: 0, data: u, message: 'ok' })
   } catch (err) { next(err) }
 })
 
-// 修改个人信息（姓名、手机号、邮箱）
+// 修改个人信息（姓名、手机号、邮箱、头像、生活照）
 router.put('/profile', auth, async (req, res, next) => {
   try {
-    const { name, phone, email } = req.body
+    const { name, phone, email, avatar, life_photos } = req.body
     const updates = []
     const params = []
 
@@ -128,7 +145,6 @@ router.put('/profile', auth, async (req, res, next) => {
     }
     if (phone !== undefined) {
       if (phone && !/^\+?\d{6,20}$/.test(phone)) return res.status(400).json({ code: 400, message: '手机号格式不正确' })
-      // 检查手机号唯一性
       if (phone) {
         const [[dup]] = await pool.query('SELECT id FROM users WHERE phone = ? AND id != ?', [phone, req.user.id])
         if (dup) return res.status(400).json({ code: 400, message: '该手机号已被其他用户使用' })
@@ -144,6 +160,14 @@ router.put('/profile', auth, async (req, res, next) => {
       }
       updates.push('email = ?')
       params.push(email || null)
+    }
+    if (avatar !== undefined) {
+      updates.push('avatar = ?')
+      params.push(avatar || null)
+    }
+    if (life_photos !== undefined) {
+      updates.push('life_photos = ?')
+      params.push(JSON.stringify(life_photos || []))
     }
 
     if (!updates.length) return res.status(400).json({ code: 400, message: '没有要更新的字段' })

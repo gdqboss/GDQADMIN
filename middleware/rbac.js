@@ -11,58 +11,58 @@ const PERMISSIONS = {
   WAREHOUSES_READ: 'warehouses_read',
   WAREHOUSES_WRITE: 'warehouses_write',
   WAREHOUSES_DELETE: 'warehouses_delete',
-  
+
   // 库存相关
   INVENTORY_READ: 'inventory_read',
   INVENTORY_WRITE: 'inventory_write',
   INVENTORY_DELETE: 'inventory_delete',
-  
+
   // 产品相关
   PRODUCTS_READ: 'products_read',
   PRODUCTS_WRITE: 'products_write',
   PRODUCTS_DELETE: 'products_delete',
-  
+
   // 二维码相关
   QRCODE_READ: 'qrcode_read',
   QRCODE_WRITE: 'qrcode_write',
   QRCODE_DELETE: 'qrcode_delete',
-  
+
   // 销售/零售相关
   SALES_READ: 'sales_read',
   SALES_WRITE: 'sales_write',
-  
+
   // 报表
   REPORTS_READ: 'reports_read',
-  
+
   // 财务
   FINANCE_READ: 'finance_read',
-  
+
   // OA办公
   OA_READ: 'oa_read',
   OA_WRITE: 'oa_write',
-  
+
   // 用户管理
   USERS_READ: 'users_read',
   USERS_WRITE: 'users_write',
-  
+
   // 审批
   APPROVALS_READ: 'approvals_read',
   APPROVALS_WRITE: 'approvals_write',
-  
+
   // 供应商/经销商
   SUPPLIERS_READ: 'suppliers_read',
   DEALERS_READ: 'dealers_read',
-  
+
   // 门店
   STORES_READ: 'stores_read',
-  
+
   // 任务
   TASKS_READ: 'tasks_read',
-  
+
   // 售后
   AFTERSALE_READ: 'aftersale_read',
   AFTERSALE_WRITE: 'aftersale_write',
-  
+
   // 提醒/预警
   ALERTS_READ: 'alerts_read',
   ALERTS_WRITE: 'alerts_write',
@@ -72,12 +72,38 @@ const PERMISSIONS = {
   WORK_LOG_WRITE: 'work_log:write',
   WORK_LOG_TEMPLATE_READ: 'work_log_template:read',
   WORK_LOG_TEMPLATE_MANAGE: 'work_log_template:manage',
+
+  // 快捷操作相关（QUICK_ACTION）
+  QUICK_ACTION_READ: 'quick_action:read',
+  QUICK_ACTION_WRITE: 'quick_action:write',
+  QUICK_ACTION_MANAGE: 'quick_action:manage',
+  QUICK_ACTION_DELETE: 'quick_action:delete',
+  // 兼容ai-class使用的短横线格式
+  QUICK_ACTION_SALES: 'quick-action-sales',
+  QUICK_ACTION_INVENTORY: 'quick-action-inventory',
+
+  // 文章管理
+  ARTICLES_READ: 'articles_read',
+  ARTICLES_WRITE: 'articles_write',
+  ARTICLES_DELETE: 'articles_delete',
+}
+
+// 角色常量
+const ROLES = {
+  ADMIN: 'admin',
+  MANAGER: 'manager',
+  SUPERADMIN: 'superadmin',
+  OPERATOR: 'operator',
+  WAREHOUSE: 'warehouse',
+  SALES: 'sales',
+  FINANCE: 'finance',
+  MEMBER: 'member',
 }
 
 // 角色默认权限映射（可在数据库动态配置）
 const ROLE_PERMISSION_MAP = {
-  admin: [...Object.values(PERMISSIONS), 'work_log:read', 'work_log:write', 'work_log_template:read', 'work_log_template:manage'],
-  manager: [
+  [ROLES.ADMIN]: [...Object.values(PERMISSIONS), 'work_log:read', 'work_log:write', 'work_log_template:read', 'work_log_template:manage', 'quick_action:read', 'quick_action:write', 'quick_action:manage', 'quick_action:delete'],
+  [ROLES.MANAGER]: [
     PERMISSIONS.WAREHOUSES_READ, PERMISSIONS.WAREHOUSES_WRITE,
     PERMISSIONS.INVENTORY_READ, PERMISSIONS.INVENTORY_WRITE,
     PERMISSIONS.PRODUCTS_READ, PERMISSIONS.PRODUCTS_WRITE, PERMISSIONS.PRODUCTS_DELETE, PERMISSIONS.PRODUCTS_WRITE,
@@ -93,7 +119,7 @@ const ROLE_PERMISSION_MAP = {
     PERMISSIONS.AFTERSALE_READ, PERMISSIONS.AFTERSALE_WRITE,
     PERMISSIONS.ALERTS_READ, PERMISSIONS.ALERTS_WRITE,
   ],
-  warehouse: [
+  [ROLES.WAREHOUSE]: [
     PERMISSIONS.WAREHOUSES_READ, PERMISSIONS.WAREHOUSES_WRITE,
     PERMISSIONS.INVENTORY_READ, PERMISSIONS.INVENTORY_WRITE,
     PERMISSIONS.PRODUCTS_READ, PERMISSIONS.PRODUCTS_WRITE, PERMISSIONS.PRODUCTS_DELETE,
@@ -102,13 +128,13 @@ const ROLE_PERMISSION_MAP = {
     PERMISSIONS.ALERTS_READ, PERMISSIONS.ALERTS_WRITE,
     PERMISSIONS.AFTERSALE_READ,
   ],
-  operator: [
+  [ROLES.OPERATOR]: [
     PERMISSIONS.PRODUCTS_READ, PERMISSIONS.PRODUCTS_WRITE, PERMISSIONS.PRODUCTS_DELETE, PERMISSIONS.PRODUCTS_WRITE,
     PERMISSIONS.QRCODE_READ, PERMISSIONS.QRCODE_WRITE, PERMISSIONS.QRCODE_DELETE,
     PERMISSIONS.INVENTORY_READ,
     PERMISSIONS.SALES_READ,
   ],
-  sales: [
+  [ROLES.SALES]: [
     PERMISSIONS.PRODUCTS_READ, PERMISSIONS.PRODUCTS_WRITE, PERMISSIONS.PRODUCTS_DELETE,
     PERMISSIONS.QRCODE_READ,
     PERMISSIONS.SALES_READ, PERMISSIONS.SALES_WRITE,
@@ -116,43 +142,27 @@ const ROLE_PERMISSION_MAP = {
     PERMISSIONS.STORES_READ,
     PERMISSIONS.TASKS_READ,
   ],
-  finance: [
+  [ROLES.FINANCE]: [
     PERMISSIONS.FINANCE_READ,
     PERMISSIONS.REPORTS_READ,
     PERMISSIONS.APPROVALS_READ, PERMISSIONS.APPROVALS_WRITE,
     PERMISSIONS.SUPPLIERS_READ, PERMISSIONS.DEALERS_READ,
   ],
-  member: [
+  [ROLES.MEMBER]: [
     PERMISSIONS.OA_READ, // 只读自己的OA信息
   ],
 }
 
 /**
  * 获取用户的所有权限（动态优先，回退到旧硬编码）
- * 1. 先查 rbac_user_roles → rbac_role_permissions → rbac_permissions（动态）
- * 2. 再查 users.permissions 字段（个性化扩展）
+ * 1. 先查 users.permissions 字段（个性化扩展）
+ * 2. 再查 rbac_role_permissions → rbac_permissions（按 users.role 找 rbac_roles.id）
  * 3. 最后回退到 ROLE_PERMISSION_MAP（兼容旧逻辑）
  */
 async function getUserPermissions(userId, role) {
   let dynamicPerms = []
 
-  // 1. 动态 RBAC 查库
-  try {
-    const [rows] = await pool.query(
-      `SELECT DISTINCT p.name FROM rbac_permissions p
-       JOIN rbac_role_permissions rp ON p.id = rp.permission_id
-       JOIN rbac_user_roles ur ON rp.role_id = ur.role_id
-       WHERE ur.user_id = ?`,
-      [userId]
-    )
-    if (rows.length > 0) {
-      dynamicPerms = rows.map(r => r.name)
-    }
-  } catch (e) {
-    // 表可能不存在，忽略
-  }
-
-  // 2. 用户个性化权限字段（users.permissions JSON数组）
+  // 1. 用户个性化权限字段（users.permissions JSON数组）
   try {
     const [users] = await pool.query(
       'SELECT permissions FROM users WHERE id = ?',
@@ -161,14 +171,33 @@ async function getUserPermissions(userId, role) {
     if (users.length && users[0].permissions) {
       const customPerms = JSON.parse(users[0].permissions)
       if (Array.isArray(customPerms) && customPerms.length > 0) {
-        dynamicPerms = [...new Set([...dynamicPerms, ...customPerms])]
+        dynamicPerms = customPerms
       }
     }
-  } catch (e) {
-    // ignore
+  } catch (e) { /* ignore */ }
+
+  // 2. 动态 RBAC 查库（通过 users.role 找 rbac_roles）
+  if (dynamicPerms.length === 0 && role) {
+    try {
+      const [roleRows] = await pool.query(
+        'SELECT id FROM rbac_roles WHERE name = ?',
+        [role]
+      )
+      if (roleRows.length > 0) {
+        const [permRows] = await pool.query(
+          `SELECT p.name FROM rbac_permissions p
+           JOIN rbac_role_permissions rp ON p.id = rp.permission_id
+           WHERE rp.role_id = ?`,
+          [roleRows[0].id]
+        )
+        if (permRows.length > 0) {
+          dynamicPerms = permRows.map(r => r.name)
+        }
+      }
+    } catch (e) { /* 表可能不存在，忽略 */ }
   }
 
-  // 3. 如果动态表有数据就返回，否则用旧硬编码回退
+  // 3. 如果有动态权限就返回，否则用旧硬编码回退
   if (dynamicPerms.length > 0) {
     return dynamicPerms
   }
@@ -249,4 +278,4 @@ export function requireAnyPermission(...requiredPerms) {
 }
 
 // 导出权限常量供路由使用
-export { PERMISSIONS }
+export { PERMISSIONS, ROLES }

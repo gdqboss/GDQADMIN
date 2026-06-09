@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { pool } from '../db/connection.js'
 import { parsePagination } from '../utils/pagination.js'
 import * as XLSX from 'xlsx'
+import { ROLES } from '../middleware/rbac.js'
 
 const router = Router()
 
@@ -51,7 +52,7 @@ router.get('/', async (req, res, next) => {
 router.post('/', async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
-    const allowedRoles = ['salesperson', 'cashier', 'admin', 'superadmin', 'manager', 'operator']
+    const allowedRoles = ['salesperson', 'cashier', ROLES.ADMIN, ROLES.SUPERADMIN, ROLES.MANAGER, ROLES.OPERATOR]
     if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).json({ code: 403, message: '无权限创建零售记录' })
     }
@@ -164,7 +165,7 @@ router.put('/:id/buyer', async (req, res, next) => {
     if (!record) return res.status(404).json({ code: 404, message: '记录不存在' })
 
     // 已有信息的不允许普通员工修改
-    if (record.buyer_name && record.buyer_phone && req.user.role !== 'admin') {
+    if (record.buyer_name && record.buyer_phone && req.user.role !== ROLES.ADMIN) {
       return res.status(400).json({ code: 400, message: '该记录已有客户信息，无法修改' })
     }
 

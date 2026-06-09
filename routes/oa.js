@@ -1,7 +1,8 @@
 import { Router } from 'express'
 import { pool } from '../db/connection.js'
 import { parsePagination } from '../utils/pagination.js'
-import { requireRole } from '../middleware/rbac.js'
+import { requireRole, ROLES } from '../middleware/rbac.js'
+import { checkPerm } from '../utils/permission.js'
 
 const router = Router()
 
@@ -199,7 +200,7 @@ router.post('/auto-clock/permission', async (req, res, next) => {
 })
 
 // GET /api/oa/auto-clock/permissions - 管理员查看所有申请列表
-router.get('/auto-clock/permissions', requireRole('admin'), async (req, res, next) => {
+router.get('/auto-clock/permissions', requireRole(ROLES.ADMIN), async (req, res, next) => {
   try {
     const { status } = req.query
     const { page, size } = parsePagination(req.query)
@@ -238,7 +239,7 @@ router.get('/auto-clock/permissions', requireRole('admin'), async (req, res, nex
 })
 
 // PUT /api/oa/auto-clock/permission/:id - 审批自动打卡权限
-router.put('/auto-clock/permission/:id', requireRole('admin'), async (req, res, next) => {
+router.put('/auto-clock/permission/:id', requireRole(ROLES.ADMIN), async (req, res, next) => {
   try {
     const { id } = req.params
     const { status, reject_reason } = req.body
@@ -367,7 +368,7 @@ router.get('/attendance', async (req, res, next) => {
     const params = []
 
     // 权限控制：自己可见，上级可见，超级管理员全部可见
-    if (currentUserRole === 'admin') {
+    if (currentUserRole === ROLES.ADMIN) {
       // 超级管理员可以查看所有人
       if (user_id) { where += ' AND a.user_id = ?'; params.push(user_id) }
     } else {
@@ -462,7 +463,7 @@ router.post('/attendance/:id/explain', async (req, res, next) => {
 })
 
 // PUT /api/oa/attendance/:id/approve - Approve abnormal attendance
-router.put('/attendance/:id/approve', requireRole('admin', 'manager'), async (req, res, next) => {
+router.put('/attendance/:id/approve', requireRole(ROLES.ADMIN, ROLES.MANAGER), async (req, res, next) => {
   try {
     const { approved } = req.body
     const approverId = req.user.id
@@ -508,7 +509,7 @@ router.get('/work-log-templates', async (req, res, next) => {
 })
 
 // POST /api/oa/work-log-templates - Create template
-router.post('/work-log-templates', requireRole('admin', 'manager'), async (req, res, next) => {
+router.post('/work-log-templates', requireRole(ROLES.ADMIN, ROLES.MANAGER), async (req, res, next) => {
   try {
     const { name, fields, is_default } = req.body
     if (!name || !Array.isArray(fields) || fields.length === 0) {
@@ -525,7 +526,7 @@ router.post('/work-log-templates', requireRole('admin', 'manager'), async (req, 
 })
 
 // PUT /api/oa/work-log-templates/:id - Update template
-router.put('/work-log-templates/:id', requireRole('admin', 'manager'), async (req, res, next) => {
+router.put('/work-log-templates/:id', requireRole(ROLES.ADMIN, ROLES.MANAGER), async (req, res, next) => {
   try {
     const { id } = req.params;
     const { name, fields, is_default, status } = req.body;
@@ -2074,7 +2075,7 @@ router.post('/workflow-instances', async (req, res, next) => {
           // Find first user with role
           const [[user]] = await conn.query(
             'SELECT id FROM users WHERE role = ? AND status = ? LIMIT 1',
-            [node.assignee || 'manager', 'active']
+            [node.assignee || ROLES.MANAGER, 'active']
           )
           if (user) assigneeId = user.id
         }
@@ -2306,7 +2307,7 @@ router.get('/leave', async (req, res, next) => {
     const params = []
 
     // Permission control
-    if (currentUserRole === 'admin') {
+    if (currentUserRole === ROLES.ADMIN) {
       if (user_id) { where += ' AND l.user_id = ?'; params.push(user_id) }
     } else {
       // Get subordinates
@@ -2402,7 +2403,7 @@ router.put('/leave/:id/approve', async (req, res, next) => {
       return res.status(404).json({ code: 404, message: '请假记录不存在' })
     }
 
-    if (leave.approver_id !== approverId && req.user.role !== 'admin') {
+    if (leave.approver_id !== approverId && !(await checkPerm(req, 'oa:write'))) {
       return res.status(403).json({ code: 403, message: '无权审批此请假申请' })
     }
 
@@ -2433,7 +2434,7 @@ router.delete('/leave/:id', async (req, res, next) => {
       return res.status(404).json({ code: 404, message: '请假记录不存在' })
     }
 
-    if (leave.user_id !== userId && req.user.role !== 'admin') {
+    if (leave.user_id !== userId && !(await checkPerm(req, 'oa:write'))) {
       return res.status(403).json({ code: 403, message: '无权删除此请假申请' })
     }
 

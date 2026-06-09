@@ -2,6 +2,7 @@ import express from 'express'
 import { pool } from '../db/connection.js'
 import { auth } from '../middleware/auth.js'
 import crypto from 'crypto'
+import { checkPerm } from '../utils/permission.js'
 
 const router = express.Router()
 
@@ -45,7 +46,7 @@ router.put('/employees/:id/card', auth, async (req, res, next) => {
     const { id } = req.params
     const userId = req.user.id
 
-    if (userId != id && req.user.role !== 'admin') {
+    if (userId != id && !(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 403, message: '无权修改' })
     }
 

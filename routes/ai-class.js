@@ -6,6 +6,7 @@
 import { Router } from 'express'
 import { pool } from '../db/connection.js'
 import { auth } from '../middleware/auth.js'
+import { ROLES, PERMISSIONS } from '../middleware/rbac.js'
 
 const router = Router()
 
@@ -46,7 +47,63 @@ function formatReply(text) {
   // 9. 去除首尾空白
   text = text.trim()
 
-  return text
+  // 10. 去掉"根据..."开头的解释性段落（AI在描述思考过程，不是回复）
+  // Match "根据X...Y" where Y is a punctuation, not a table row
+  text = text.replace(/^根据[^，。\n]{0,50}(的话|情况|结果|显示)[^\n]*$/gim, '')
+  text = text.replace(/^根据规则[：:]?\s*/gim, '')
+  text = text.replace(/^根据要求[：:]?\s*/gim, '')
+  text = text.replace(/^根据知识库[：:]?\s*/gim, '')
+  text = text.replace(/^根据已有信息[：:]?\s*/gim, '')
+
+  // 11. 去掉AI思考过程前缀
+  text = text.replace(/^(我需要|让我想想|让我|首先|其次|最后|接下来|然后)\s*([：:，,])/gm, '')
+  text = text.replace(/^(不过|但是|而且|同时|另外|除此之外)\s+/gm, '')
+
+  // 12. 去掉格式"检查"类文字（AI在描述格式要求，不是真正回复）
+  text = text.replace(/^格式要求[：:]?.*$/gim, '')
+  text = text.replace(/^回复格式[：:]?.*$/gim, '')
+  text = text.replace(/^格式示例[：:]?.*$/gim, '')
+  text = text.replace(/^(回复：|结论：|然后|这样应该|这样就|可以这样|我来组织|我来整理|我来输出)/gim, '')
+
+  // 13. 去掉描述AI思考过程的句子
+  text = text.replace(/^(我想想|我觉得|我以为|似乎|可能|大概是|估计|应该说|这样说|这个问题)/gim, '')
+  text = text.replace(/^(结合|综上|总的来说|总而言之)/gim, '')
+
+  // 14. 去掉"知识库显示/中/里"开头的解释
+  text = text.replace(/^知识库(显示|中|里)\s*[^\n]{0,60}/gim, '')
+
+  // 15. 去掉"不需要调用"类句子
+  text = text.replace(/^(不需要调用|不需要使用|不需要查询|不需要搜索)\s*[^\n]{0,50}/gim, '')
+
+  // 19. 去掉 AI 内部思考过程（多行分析块）
+  // 匹配"用户说...这是..."类解释句子
+  text = text.replace(/^用户[^\n]{0,30}(的话|说|问|可能|或许)?[^\n]*$/gm, '')
+  text = text.replace(/^从[^\n]{0,50}$/gm, '')
+  // 匹配"我注意到/我发现/我觉得"开头的分析句（后面跟2个以上换行符说明是分析块）
+  text = text.replace(/^(我注意到|我发现|我可以|我不适合|我的回复|这点|其实|考虑到|不过话说)/gm, '')
+
+  // 去掉所有 [N] 标签引用（MiniMax思考步骤标签）
+  text = text.replace(/\[\d+\]\s*/g, '')
+  // 去掉 "Step N" 类的推理步骤文字
+  text = text.replace(/^(Step \d+[:：]\s*|第\s*\d+\s*步[:：]\s*)/gim, '')
+  // 去掉多行推理块（连续3+行以"我"或"用户"或"首先"开头）
+  const lines = text.split('\n')
+  const filtered = []
+  let skipCount = 0
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].trim()
+    const isInternal = /^(用户|从|我注意到|我发现|我不|这点|考虑到|其实|我可以|不过话|这是|不调用|直接|自然地|我的回复|首先|其次|最后|然后|我需要|让我)/.test(l)
+    const prevIsInternal = i > 0 && /^(用户|从|我注意到|我发现|我不|这点|考虑到|其实|我可以|不过话|这是|不调用|直接|自然地|我的回复|首先|其次|最后|然后|我需要|让我)/.test(lines[i-1].trim())
+    if (isInternal && prevIsInternal) { skipCount++; continue }
+    if (skipCount > 0 && !isInternal) skipCount = 0
+    filtered.push(l)
+  }
+  text = filtered.join('\n')
+
+  // 23. 去除多余空行
+  text = text.replace(/\n{3,}/g, '\n\n')
+
+  return text.trim()
 }
 
 // ==================== 网络搜索辅助函数（Node.js内置fetch）====================
@@ -177,7 +234,7 @@ router.delete('/knowledge/:id', auth, async (req, res, next) => {
     const [rows] = await pool.query('SELECT created_by FROM ai_class_knowledge WHERE id = ?', [req.params.id])
     if (!rows.length) return res.json({ code: 404, message: '知识不存在' })
     
-    const isAdmin = req.user.role === 'admin'
+    const isAdmin = req.user.role === ROLES.ADMIN
     const isOwner = rows[0].created_by === req.user.id
     
     if (!isAdmin && !isOwner) {
@@ -230,7 +287,7 @@ router.delete('/memory/:id', auth, async (req, res, next) => {
     const [rows] = await pool.query('SELECT user_id FROM ai_class_memory WHERE id = ?', [req.params.id])
     if (!rows.length) return res.json({ code: 404, message: '记忆不存在' })
     
-    const isAdmin = req.user.role === 'admin'
+    const isAdmin = req.user.role === ROLES.ADMIN
     const isOwner = rows[0].user_id === req.user.id
     
     if (!isAdmin && !isOwner) {
@@ -393,144 +450,21 @@ router.post('/chat', auth, async (req, res, next) => {
     const userName = userRow?.name || ''
 
     // 6. 增强的System Prompt（>500字，通用多租户系统）
-    const systemPrompt = `你是${botName}，一个通用的企业管理助手，服务于多个企业客户。
-
-## 一、回答规则（必须严格遵守，优先级最高）
-
-1. **不知道就说不知道**：如果知识库、记忆、系统数据都没有相关信息，请明确说"抱歉，我目前没有这方面的信息"。严禁编造、猜测、填充占位符内容。
-2. **准确引用，注明来源**：知识库内容请用自己的话概括，不要原文照抄；系统数据要注明"根据系统查询结果"。
-3. **使用用户的真实称呼**：在记忆中找到用户姓名则用姓名称呼，否则用"您"；不要假设用户是任何人。
-4. **保护隐私**：不主动询问隐私，不透露其他用户信息。
-5. **多轮对话连贯**：结合历史对话和记忆，避免重复询问已确认的信息。
-6. **权限智能过滤**：如果用户询问的功能没有对应权限，明确告知"您没有权限访问该功能"。
-
-## 二、系统模块知识（彩美特管理系统功能覆盖）
-
-当用户询问以下功能时，请主动使用对应的Function Calling查询数据：
-
-### 2.1 考勤打卡（attendance）
-- 打卡记录表字段：user_id, date, clock_in, clock_out, status(normal/late/early/absent/leave), late_minutes, early_minutes, overtime_hours, location, device_info, check_in_time, check_out_time
-- 查询今日考勤：SELECT * FROM attendance WHERE user_id=? AND date=CURDATE()
-- 查询本月考勤：SELECT * FROM attendance WHERE user_id=? AND date BETWEEN DATE_FORMAT(NOW(),'%Y-%m-01') AND LAST_DAY(NOW())
-- 注意：没有quick-action-check-in权限的用户不能使用打卡功能
-
-### 2.2 工作日志（work_logs）
-- 字段：id, user_id, title, content, work_date, status, created_at, updated_at
-- 查询用户日志：SELECT * FROM work_logs WHERE user_id=? ORDER BY work_date DESC LIMIT 10
-- 没有quick-action-worklog权限的用户不能使用工作日志功能
-
-### 2.3 任务管理（tasks）
-- 字段：id, title, description, assignee_id, creator_id, status, priority, due_date, created_at
-- 查询我的任务：SELECT * FROM tasks WHERE assignee_id=? ORDER BY created_at DESC LIMIT 10
-- 没有quick-action-task权限的用户不能使用任务管理功能
-
-### 2.4 报销申请（expense_records）
-- 字段：id, user_id, amount, category, description, status, created_at
-- 查询我的报销：SELECT * FROM expense_records WHERE user_id=? ORDER BY created_at DESC LIMIT 10
-- 没有quick-action-reimbursement权限的用户不能使用报销功能
-
-### 2.5 产品与库存
-- products表：id, name, category, price, unit, status
-- inventory表：product_id, quantity, warehouse_id
-- 可用Function：get_products, get_inventory
-
-### 2.6 权限说明
-当前用户的权限列表：${userPermissions.length > 0 ? userPermissions.join(', ') : '（无 explicit 权限，按角色默认）'}
-
-权限key格式说明：
-- quick-action-check-in = 考勤打卡
-- quick-action-worklog = 工作日志
-- quick-action-task = 我的任务
-- quick-action-reimbursement = 报销申请
-- quick-action-attendance = 考勤记录查看（管理员）
-- quick-action-profile = 个人信息
-
-如果用户询问某个功能，先检查权限列表，如果没有对应权限权限，告知用户。
-
-## 三、知识库系统
-
-知识库存放各企业的产品和业务信息。回答时：
-- 优先从知识库检索相关企业/产品/客服内容
-- 如果知识库中没有该企业的信息，明确告知用户"当前企业知识库中暂无此信息"
-- 知识库是动态的，每个企业不同，不要假设企业业务
-
-## 四、系统数据查询
-
-可通过Function Calling查询实时数据：产品列表、库存、订单、用户信息、考勤等。
-查询后结合结果回答，不要凭记忆编造数字。
-
-### 4.1 网络搜索（web_search）
-当用户询问以下类型问题时，必须使用 web_search：
-- 实时新闻、行业动态，政策法规
-- 天气预报、地理位置信息
-- 公司信息、市场行情
-- 任何需要"最新"互联网数据的问题
-
-使用方法：直接调用 web_search(query, max_results) 函数，返回格式化搜索结果。
-
-### 4.2 销售报表（get_sales_report）
-需要 quick-action-sales 权限。按日期范围返回：订单数、总销售额、客户数。
-日期范围：today/month/quarter/year
-
-### 4.3 库存预警（get_inventory_alert）
-需要 quick-action-inventory 权限。返回低于安全库存的产品列表。
-
-### 4.4 Hermes Agent 委托（hermes_delegate）
-适用于多步骤复杂任务：代码编写、数据分析、报告生成、深入研究。
-当用户询问需要多步操作、搜索、多文件处理时使用。
-参数：task（任务描述）、toolsets（工具集：web,terminal,file,browser,vision）
-
-## 五、记忆系统
-
-系统有分层记忆：
-- 【系统公共记忆】：所有企业共享的基础信息
-- 【用户相关事实】：该用户的历史信息（姓名、职位、公司等）
-- 【用户偏好】：用户的个人偏好设置
-
-## 七、回复格式规范（必须严格执行！）
-
-你的回复**必须**按以下格式，违反者将被惩罚：
-
-**第一行**：一句话总结答案（不超过30字）
-
-**第二行起**（根据内容选择一种或多种）：
-- **加粗**标注关键数字和指标，如：**今日销售额：12,800元**
-- 用表格呈现多维数据（用纯文本格式，不用代码块）：
-  商品 | 销量 | 库存
-  --- | --- | ---
-  A产品 | 50件 | 200件
-- 用列表列出要点：
-  - 要点1：...
-  - 要点2：...
-
-**严禁**：换行少、流水账、一坨文字、不分段。严禁说"让我想想""根据搜索结果"等废话。严禁输出思考过程。回答完毕直接结束，不要加"还有其他问题吗"。
-
-**格式示例**：
-一句话总结。
-
-**核心数据**
-商品 | 销量 | 销售额
---- | --- | ---
-螺丝M6 | 120件 | 960元
-
-**要点**
-- 要点1：内容
-- 要点2：内容
-
-## 八、欢迎语规范
-
-根据是否有用户姓名判断：
-- 有姓名：使用"您好，{姓名}！我是{botName}，有什么可以帮您？"
-- 无姓名：使用"您好！我是{botName}，有什么可以帮您？"
-- 严禁说"波哥"或其他未经记忆确认的称呼
-
-请严格遵循以上规则！`
+    // 极简System Prompt（Hermes/OpenClaw风格）
+    // 核心原则：有话直说，不废话，不编造，不输出思考过程
+    const permNote = userPermissions.length > 0
+      ? `\n注意：用户权限包括：${userPermissions.join('、')}。涉及这些功能的操作需要相应权限。`
+      : ''
+    const systemPrompt = `你是${botName}。
+直接、务实、有温度——像一位熟悉业务的同事那样回答问题。
+不知道就说不知道，不废话，不重复问题，直接给答案。
+绝对禁止在回复中输出任何内部思考、推理过程、分析步骤——只输出对用户真正有用的回复。${permNote}`
 
     const historyContext = reversedHistory.length > 0
-      ? `\n\n以下是对话历史：\n${reversedHistory.map(h => `用户: ${h.query}\n${botName}: ${h.response}`).join('\n')}`
+      ? `\n\n对话历史：\n${reversedHistory.map(h => `用户: ${h.query}\n${botName}: ${h.response}`).join('\n')}`
       : ''
 
-    // 7. 构建带RAG + 实时搜索的完整prompt
+    // 构建完整prompt
     const fullPrompt = `${systemPrompt}${memoryContext}${ragContext}${realtimeContext}${historyContext}\n\n用户: ${message}\n${botName}:`
 
     // 8. 定义Function Calling工具
@@ -677,12 +611,18 @@ router.post('/chat', auth, async (req, res, next) => {
       }
     ]
 
-    // 9. 调用AI（支持function calling，带10秒超时）
+    // 9. 调用AI（支持function calling，带30秒超时）
     let reply = 'AI服务暂时繁忙，请稍后再试。'
 
     try {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 30000)
+
+      const toolNames = [
+        'get_attendance', 'get_products', 'get_inventory',
+        'get_orders', 'get_user_info', 'search_knowledge',
+        'web_search', 'get_sales_report', 'get_inventory_alert'
+      ]
 
       const response = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
@@ -791,7 +731,7 @@ router.post('/chat', auth, async (req, res, next) => {
               }
               case 'get_sales_report': {
                 // 检查权限
-                if (!userPermissions.includes('quick-action-sales')) {
+                if (!userPermissions.includes(PERMISSIONS.QUICK_ACTION_SALES)) {
                   functionResult = JSON.stringify({ error: '您没有权限访问销售报表' })
                   break
                 }
@@ -810,7 +750,7 @@ router.post('/chat', auth, async (req, res, next) => {
               }
               case 'get_inventory_alert': {
                 // 检查权限
-                if (!userPermissions.includes('quick-action-inventory')) {
+                if (!userPermissions.includes(PERMISSIONS.QUICK_ACTION_INVENTORY)) {
                   functionResult = JSON.stringify({ error: '您没有权限访问库存数据' })
                   break
                 }
@@ -872,6 +812,7 @@ router.post('/chat', auth, async (req, res, next) => {
                   content: functionResult
                 }
               ],
+              tools: functions,
               max_tokens: 1500,
               temperature: 0.3
             }),

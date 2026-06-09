@@ -1,6 +1,7 @@
 import express from 'express';
 import { pool } from '../db/connection.js';
 import { auth } from '../middleware/auth.js';
+import { ROLES } from '../middleware/rbac.js';
 
 const router = express.Router();
 
@@ -519,7 +520,7 @@ router.delete('/:id', async (req, res) => {
       [userRows[0].role_id]
     );
 
-    const isAdmin = roleRows.length > 0 && roleRows[0].name === 'admin';
+    const isAdmin = roleRows.length > 0 && roleRows[0].name === ROLES.ADMIN;
     const isCreator = existingRows[0].user_id === req.user.id;
 
     if (!isAdmin && !isCreator) {

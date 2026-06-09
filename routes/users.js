@@ -2,6 +2,8 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { auth } from '../middleware/auth.js'
 import { pool } from '../db/connection.js'
+import { checkPerm } from '../utils/permission.js'
+import { ROLES } from '../middleware/rbac.js'
 
 const router = Router()
 
@@ -10,11 +12,15 @@ router.get('/', async (req, res, next) => {
   try {
     const [rows] = await pool.query(
       `SELECT u.id, u.name, u.email, u.role, u.phone, u.department, u.status, u.permissions,
-              u.supplier_id, s.name as supplier_name, u.supervisor_id,
+              u.supplier_id, s.name as supplier_name, u.supervisor_id, u.responsibility_id,
+              u.require_attendance, u.require_worklog,
+              COALESCE(u.department_id, d.id) as department_id,
+              d.name as department_name,
               sup.name as supervisor_name, u.last_login, u.created_at
        FROM users u
        LEFT JOIN suppliers s ON u.supplier_id = s.id
        LEFT JOIN users sup ON u.supervisor_id = sup.id
+       LEFT JOIN departments d ON d.name = u.department OR d.id = u.department_id
        ORDER BY u.created_at DESC`
     )
 
@@ -68,9 +74,10 @@ router.post('/', async (req, res, next) => {
     }
     const hash = await bcrypt.hash(password, 10)
     const perms = role === 'custom' && Array.isArray(permissions) ? JSON.stringify(permissions) : null
+    const autoEmail = email || `${phone}@gdqshop.cn`
     const [result] = await conn.query(
       'INSERT INTO users (name, email, password, role, department, permissions, phone, supplier_id, supervisor_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, email || null, hash, role || 'operator', department || '', perms, phone, supplier_id || null, supervisor_id || null]
+      [name, autoEmail, hash, role || ROLES.OPERATOR, department || '', perms, phone, supplier_id || null, supervisor_id || null]
     )
 
     const userId = result.insertId
@@ -148,7 +155,7 @@ router.put('/:id', async (req, res, next) => {
     await conn.beginTransaction()
 
     const id = parseInt(req.params.id)
-    const { name, role, department, status, permissions, password, phone, supplier_id, supplier_ids, supervisor_id } = req.body
+    const { name, role, department, department_id, status, permissions, password, phone, supplier_id, supplier_ids, supervisor_id, responsibility_id, require_attendance, require_worklog } = req.body
 
     if (status === 'disabled' && id === req.user.id) {
       return res.status(400).json({ code: 400, message: '不能禁用自己的账号' })
@@ -156,13 +163,17 @@ router.put('/:id', async (req, res, next) => {
 
     const updates = []
     const values = []
-    if (name !== undefined)        { updates.push('name = ?');        values.push(name) }
-    if (role !== undefined)        { updates.push('role = ?');        values.push(role) }
-    if (department !== undefined)  { updates.push('department = ?');  values.push(department) }
-    if (status !== undefined)      { updates.push('status = ?');      values.push(status) }
-    if (phone !== undefined)       { updates.push('phone = ?');       values.push(phone) }
-    if (supplier_id !== undefined) { updates.push('supplier_id = ?'); values.push(supplier_id || null) }
-    if (supervisor_id !== undefined) { updates.push('supervisor_id = ?'); values.push(supervisor_id || null) }
+    if (name !== undefined)          { updates.push('name = ?');            values.push(name) }
+    if (role !== undefined)          { updates.push('role = ?');            values.push(role) }
+    if (department_id !== undefined) { updates.push('department = ?');       values.push(department_id) }
+    if (department !== undefined)    { updates.push('department = ?');       values.push(department) }
+    if (status !== undefined)        { updates.push('status = ?');          values.push(status) }
+    if (phone !== undefined)         { updates.push('phone = ?');           values.push(phone) }
+    if (supplier_id !== undefined)  { updates.push('supplier_id = ?');      values.push(supplier_id || null) }
+    if (supervisor_id !== undefined){ updates.push('supervisor_id = ?');   values.push(supervisor_id || null) }
+    if (responsibility_id !== undefined) { updates.push('responsibility_id = ?'); values.push(responsibility_id || null) }
+    if (require_attendance !== undefined) { updates.push('require_attendance = ?'); values.push(require_attendance ? 1 : 0) }
+    if (require_worklog !== undefined)    { updates.push('require_worklog = ?');    values.push(require_worklog ? 1 : 0) }
 
     if (role === 'custom' && Array.isArray(permissions)) {
       updates.push('permissions = ?')
@@ -205,73 +216,6 @@ router.put('/:id', async (req, res, next) => {
   } finally {
     conn.release()
   }
-})
-
-// ── Roles CRUD ─────────────────────────────────────────────────────────────────
-
-// GET /api/roles
-router.get('/roles', async (req, res, next) => {
-  try {
-    const [rows] = await pool.query('SELECT * FROM roles ORDER BY is_system DESC, id ASC')
-    res.json({ code: 0, data: rows, message: 'ok' })
-  } catch (err) { next(err) }
-})
-
-// POST /api/roles
-router.post('/roles', async (req, res, next) => {
-  try {
-    const { name, label, permissions } = req.body
-    if (!name || !label) return res.status(400).json({ code: 400, message: 'name 和 label 必填' })
-    const [result] = await pool.query(
-      'INSERT INTO roles (name, label, permissions, is_system) VALUES (?,?,?,0)',
-      [name, label, permissions ? JSON.stringify(permissions) : JSON.stringify([])]
-    )
-    res.json({ code: 0, data: { id: result.insertId }, message: '角色创建成功' })
-  } catch (err) {
-    if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ code: 400, message: '角色名已存在' })
-    next(err)
-  }
-})
-
-// PUT /api/roles/:id
-router.put('/roles/:id', async (req, res, next) => {
-  try {
-    const { label, permissions } = req.body
-    const [[role]] = await pool.query('SELECT is_system FROM roles WHERE id = ?', [req.params.id])
-    if (!role) return res.status(404).json({ code: 404, message: '角色不存在' })
-    const updates = []
-    const values = []
-    if (label !== undefined) { updates.push('label = ?'); values.push(label) }
-    if (permissions !== undefined) { updates.push('permissions = ?'); values.push(JSON.stringify(permissions)) }
-    if (!updates.length) return res.status(400).json({ code: 400, message: '没有更新内容' })
-    values.push(req.params.id)
-    await pool.query(`UPDATE roles SET ${updates.join(', ')} WHERE id = ?`, values)
-    res.json({ code: 0, data: null, message: 'ok' })
-  } catch (err) { next(err) }
-})
-
-// DELETE /api/roles/:id - 删除角色（超级管理员/member不可删）
-router.delete('/roles/:id', async (req, res, next) => {
-  try {
-    const roleId = parseInt(req.params.id)
-    // 仅超级管理员(id=1)不可删除
-    if (roleId === 1) {
-      return res.status(400).json({ code: 400, message: '超级管理员不可删除' })
-    }
-    const [[role]] = await pool.query('SELECT id, name FROM roles WHERE id = ?', [roleId])
-    if (!role) return res.status(404).json({ code: 404, message: '角色不存在' })
-
-    // 先把关联用户 reassign 到"公司员工"角色(member)，如果不存在则先创建
-    let [[defaultRole]] = await pool.query("SELECT name FROM roles WHERE name = 'member' LIMIT 1")
-    if (!defaultRole) {
-      await pool.query("INSERT INTO roles (name, label, is_system) VALUES ('member', '公司员工', 0)")
-      ;[[defaultRole]] = await pool.query("SELECT name FROM roles WHERE name = 'member' LIMIT 1")
-    }
-    await pool.query('UPDATE users SET role = ? WHERE role = ?', [defaultRole.name, role.name])
-
-    await pool.query('DELETE FROM roles WHERE id = ?', [roleId])
-    res.json({ code: 0, data: null, message: 'ok' })
-  } catch (err) { next(err) }
 })
 
 // GET /api/users/pending - 获取待审核的员工申请
@@ -353,7 +297,7 @@ router.delete('/:id', async (req, res, next) => {
     const userId = parseInt(req.params.id)
 
     // 只有超级管理员可以删除用户
-    if (req.user.role !== 'admin') {
+    if (req.user.role !== ROLES.ADMIN) {
       await conn.release()
       return res.status(403).json({ code: 403, message: '只有超级管理员可以删除用户' })
     }
@@ -528,8 +472,8 @@ router.post('/job-levels/create', async (req, res, next) => {
     }
 
     const [result] = await pool.query(
-      'INSERT INTO job_levels (name, level, description) VALUES (?, ?, ?)',
-      [name, level, description || null]
+      'INSERT INTO job_levels (name, level, description, responsibility_desc) VALUES (?, ?, ?, ?)',
+      [name, level, description || null, req.body.responsibility_desc || null]
     )
 
     res.json({ code: 0, data: { id: result.insertId }, message: '职级创建成功' })
@@ -578,6 +522,11 @@ router.put('/job-levels/:id', async (req, res, next) => {
     if (description !== undefined) {
       updates.push('description = ?')
       values.push(description)
+    }
+
+    if (responsibility_desc !== undefined) {
+      updates.push('responsibility_desc = ?')
+      values.push(responsibility_desc)
     }
 
     if (updates.length === 0) {

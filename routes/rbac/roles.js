@@ -11,7 +11,11 @@ const router = Router()
 router.get('/', auth, async (req, res, next) => {
   try {
     const [rows] = await pool.query(
-      `SELECT r.*, (SELECT COUNT(*) FROM rbac_user_roles WHERE role_id=r.id) as user_count
+      `SELECT r.*,
+       (SELECT COUNT(*) FROM rbac_role_permissions WHERE role_id=r.id) as permission_count,
+       (SELECT GROUP_CONCAT(p.name) FROM rbac_role_permissions rp JOIN rbac_permissions p ON rp.permission_id=p.id WHERE rp.role_id=r.id) as permission_names,
+       (SELECT GROUP_CONCAT(rp.permission_id) FROM rbac_role_permissions rp WHERE rp.role_id=r.id) as permission_ids,
+       (SELECT COUNT(*) FROM users WHERE role=r.name COLLATE utf8mb4_bin) as user_count
        FROM rbac_roles r ORDER BY r.sort_order, r.id`
     )
     res.json({ code: 0, data: rows })

@@ -2,6 +2,8 @@ import { Router } from 'express'
 import { pool } from '../db/connection.js'
 import { parsePagination } from '../utils/pagination.js'
 import * as XLSX from 'xlsx'
+import { checkPerm } from '../utils/permission.js'
+import { ROLES } from '../middleware/rbac.js'
 import {
   exportPurchaseCosts,
   exportSalesRevenues,
@@ -493,7 +495,7 @@ router.post('/expenses', async (req, res, next) => {
     // 如果需要审批，自动创建审批单
     if (needsApproval) {
       // 获取管理员作为审批人
-      const [[admin]] = await conn.query('SELECT id FROM users WHERE role = "admin" LIMIT 1')
+      const [[admin]] = await conn.query(`SELECT id FROM users WHERE role = '${ROLES.ADMIN}' LIMIT 1`)
       if (!admin) {
         await conn.rollback()
         return res.status(400).json({ code: 400, message: '未找到审批人' })
@@ -834,6 +836,141 @@ router.post('/receipts', async (req, res, next) => {
   } finally {
     conn.release()
   }
+})
+
+// GET /api/finance-simple/receipts - 收款记录列表
+router.get('/receipts', async (req, res, next) => {
+  try {
+    const { page, size } = parsePagination(req.query)
+    const { customer_phone, date_start, date_end, payment_method } = req.query
+
+    let where = 'WHERE 1=1'
+    const params = [], countParams = []
+
+    if (customer_phone) { where += ' AND rr.customer_phone LIKE ?'; const p = `%${customer_phone}%`; params.push(p); countParams.push(p) }
+    if (date_start) { where += ' AND rr.receipt_date >= ?'; params.push(date_start); countParams.push(date_start) }
+    if (date_end) { where += ' AND rr.receipt_date <= ?'; params.push(date_end); countParams.push(date_end) }
+    if (payment_method) { where += ' AND rr.payment_method = ?'; params.push(payment_method); countParams.push(payment_method) }
+
+    const sql = `
+      SELECT rr.*, fa.account_name, u.name as creator_name
+      FROM receipt_records rr
+      LEFT JOIN fund_accounts fa ON rr.account_id = fa.id
+      LEFT JOIN users u ON rr.creator_id = u.id
+      ${where}
+      ORDER BY rr.receipt_date DESC, rr.id DESC
+      LIMIT ? OFFSET ?
+    `
+    const countSql = `SELECT COUNT(*) as total FROM receipt_records rr ${where}`
+
+    params.push(size, (page - 1) * size)
+    const [[{ total }]] = await pool.query(countSql, countParams)
+    const [rows] = await pool.query(sql, params)
+
+    res.json({ code: 0, data: { list: rows, total, page, size } })
+  } catch (err) { next(err) }
+})
+
+// GET /api/finance-simple/payments - 付款记录列表
+router.get('/payments', async (req, res, next) => {
+  try {
+    const { page, size } = parsePagination(req.query)
+    const { supplier_id, date_start, date_end, payment_method } = req.query
+
+    let where = 'WHERE 1=1'
+    const params = [], countParams = []
+
+    if (supplier_id) { where += ' AND pr.supplier_id = ?'; params.push(supplier_id); countParams.push(supplier_id) }
+    if (date_start) { where += ' AND pr.payment_date >= ?'; params.push(date_start); countParams.push(date_start) }
+    if (date_end) { where += ' AND pr.payment_date <= ?'; params.push(date_end); countParams.push(date_end) }
+    if (payment_method) { where += ' AND pr.payment_method = ?'; params.push(payment_method); countParams.push(payment_method) }
+
+    const sql = `
+      SELECT pr.*, s.name as supplier_name, fa.account_name, u.name as creator_name
+      FROM payment_records pr
+      LEFT JOIN suppliers s ON pr.supplier_id = s.id
+      LEFT JOIN fund_accounts fa ON pr.account_id = fa.id
+      LEFT JOIN users u ON pr.creator_id = u.id
+      ${where}
+      ORDER BY pr.payment_date DESC, pr.id DESC
+      LIMIT ? OFFSET ?
+    `
+    const countSql = `SELECT COUNT(*) as total FROM payment_records pr ${where}`
+
+    params.push(size, (page - 1) * size)
+    const [[{ total }]] = await pool.query(countSql, countParams)
+    const [rows] = await pool.query(sql, params)
+
+    res.json({ code: 0, data: { list: rows, total, page, size } })
+  } catch (err) { next(err) }
+})
+
+// PUT /api/finance-simple/receipts/:id - 更新收款记录
+router.put('/receipts/:id', async (req, res, next) => {
+  const conn = await pool.getConnection()
+  try {
+    const { receipt_date, customer_phone, customer_name, amount, payment_method, account_id, note } = req.body
+    if (!receipt_date || !customer_phone || !amount || !payment_method) {
+      return res.status(400).json({ code: 400, message: '必填字段缺失' })
+    }
+
+    await conn.beginTransaction()
+
+    await conn.query(
+      `UPDATE receipt_records SET receipt_date=?, customer_phone=?, customer_name=?, amount=?, payment_method=?, account_id=?, note=? WHERE id=?`,
+      [receipt_date, customer_phone, customer_name, amount, payment_method, account_id || null, note, req.params.id]
+    )
+
+    await conn.commit()
+    res.json({ code: 0, message: '更新成功' })
+  } catch (err) {
+    await conn.rollback()
+    next(err)
+  } finally {
+    conn.release()
+  }
+})
+
+// DELETE /api/finance-simple/receipts/:id - 删除收款记录
+router.delete('/receipts/:id', async (req, res, next) => {
+  try {
+    await pool.query('DELETE FROM receipt_records WHERE id = ?', [req.params.id])
+    res.json({ code: 0, message: '删除成功' })
+  } catch (err) { next(err) }
+})
+
+// PUT /api/finance-simple/payments/:id - 更新付款记录
+router.put('/payments/:id', async (req, res, next) => {
+  const conn = await pool.getConnection()
+  try {
+    const { payment_date, supplier_id, amount, payment_method, account_id, note } = req.body
+    if (!payment_date || !supplier_id || !amount || !payment_method) {
+      return res.status(400).json({ code: 400, message: '必填字段缺失' })
+    }
+
+    await conn.beginTransaction()
+
+    await conn.query(
+      `UPDATE payment_records SET payment_date=?, supplier_id=?, amount=?, payment_method=?, account_id=?, note=? WHERE id=?`,
+      [payment_date, supplier_id, amount, payment_method, account_id || null, note, req.params.id]
+    )
+
+    await conn.commit()
+    res.json({ code: 0, message: '更新成功' })
+  } catch (err) {
+    await conn.rollback()
+    next(err)
+  } finally {
+    conn.release()
+  }
+})
+
+// DELETE /api/finance-simple/payments/:id - 删除付款记录
+router.delete('/payments/:id', async (req, res, next) => {
+  try {
+    await pool.query('DELETE FROM payment_records WHERE id = ?', [req.params.id])
+    res.json({ code: 0, message: '删除成功' })
+  } catch (err) { next(err) }
 })
 
 // ============================================
@@ -1257,7 +1394,7 @@ router.get('/config', async (req, res, next) => {
 router.put('/config', async (req, res, next) => {
   try {
     // 检查权限
-    if (req.user.role !== 'admin') {
+    if (!(await checkPerm(req, 'finance:read'))) {
       return res.status(403).json({ code: 403, message: '仅管理员可修改配置' })
     }
 

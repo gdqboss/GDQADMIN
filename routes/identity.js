@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import { pool } from '../db/connection.js'
 import { auth } from '../middleware/auth.js'
 import { generateIdentityCode, generateIdentityQRCode, verifyIdentityCode, logIdentityScan } from '../utils/identity.js'
+import { checkPerm } from '../utils/permission.js'
 
 const router = Router()
 
@@ -11,7 +12,7 @@ router.post('/system/generate', auth, async (req, res, next) => {
   try {
     const { userId } = req.body
 
-    if (req.user.role !== 'admin') {
+    if (!(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 1, message: '仅管理员可生成身份码' })
     }
 
@@ -52,7 +53,7 @@ router.post('/system/generate', auth, async (req, res, next) => {
 // DELETE /api/identity/system/:userId - Delete system user identity code (admin only)
 router.delete('/system/:userId', auth, async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin') {
+    if (!(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 1, message: '仅管理员可删除身份码' })
     }
 
@@ -74,7 +75,7 @@ router.post('/h5/generate', auth, async (req, res, next) => {
   try {
     const { userId } = req.body
 
-    if (req.user.role !== 'admin') {
+    if (!(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 1, message: '仅管理员可生成身份码' })
     }
 
@@ -328,7 +329,7 @@ router.put('/system/change-password', auth, async (req, res, next) => {
 // PUT /api/identity/h5/:userId/parent - Change H5 user parent (superadmin only)
 router.put('/h5/:userId/parent', auth, async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin') {
+    if (!(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 1, message: '仅超级管理员可修改推荐关系' })
     }
 

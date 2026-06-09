@@ -1,6 +1,8 @@
 import express from 'express'
 import { pool } from '../db/connection.js'
 import { auth } from '../middleware/auth.js'
+import { checkPerm } from '../utils/permission.js'
+import { ROLES } from '../middleware/rbac.js'
 
 const router = express.Router()
 
@@ -14,7 +16,7 @@ router.get('/', async (req, res, next) => {
     const params = []
     
     // 普通用户只能看自己的图片，admin/manager可以看全部
-    if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+    if (req.user.role !== ROLES.ADMIN && req.user.role !== ROLES.MANAGER) {
       where += ' AND (user_id = ? OR user_id IS NULL)'
       params.push(req.user.id)
     } else if (user_id) {
@@ -89,7 +91,7 @@ router.delete('/:id', auth, async (req, res, next) => {
     }
     
     // 普通用户只能删除自己的图片
-    if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+    if (req.user.role !== ROLES.ADMIN && req.user.role !== ROLES.MANAGER) {
       if (img.user_id !== req.user.id) {
         return res.status(403).json({ code: 403, message: '无权限删除' })
       }

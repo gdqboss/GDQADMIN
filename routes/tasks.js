@@ -1,5 +1,7 @@
 import { Router } from 'express'
 import { pool } from '../db/connection.js'
+import { checkPerm } from '../utils/permission.js'
+import { ROLES } from '../middleware/rbac.js'
 
 const router = Router()
 
@@ -12,7 +14,7 @@ async function canAccessTask(userId, userRole, taskId) {
   if (!task) return false
 
   // Admin can access all tasks
-  if (userRole === 'admin') return true
+  if (userRole === ROLES.ADMIN) return true
 
   // User can access tasks assigned to them or by them
   if (task.assigned_to === userId || task.assigned_by === userId) return true
@@ -153,7 +155,7 @@ router.get('/assigned', async (req, res, next) => {
 // GET /api/tasks/all - 获取所有任务（仅管理员）
 router.get('/all', async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin') {
+    if (!(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 403, message: '仅管理员可查看所有任务' })
     }
 
@@ -252,7 +254,7 @@ router.get('/stats', async (req, res, next) => {
     let whereClause = ''
     let params = []
 
-    if (userRole === 'admin') {
+    if (userRole === ROLES.ADMIN) {
       whereClause = 'WHERE 1=1'
     } else {
       whereClause = 'WHERE (assigned_to = ? OR assigned_by = ?)'
@@ -297,6 +299,39 @@ router.get('/stats', async (req, res, next) => {
       },
       message: 'ok'
     })
+  } catch (err) { next(err) }
+})
+
+// GET /api/tasks/unread-count - 获取当前用户新任务数量（红点用）
+router.get('/unread-count', async (req, res, next) => {
+  try {
+    const [[{ count }]] = await pool.query(
+      'SELECT COUNT(*) as count FROM tasks WHERE assigned_to = ? AND is_new = 1 AND status IN ("pending", "in_progress")',
+      [req.user.id]
+    )
+    res.json({ code: 0, data: { count } })
+  } catch (err) { next(err) }
+})
+
+// POST /api/tasks/:id/mark-read - 标记任务为已读
+router.post('/:id/mark-read', async (req, res, next) => {
+  try {
+    await pool.query(
+      'UPDATE tasks SET is_new = 0 WHERE id = ? AND assigned_to = ?',
+      [req.params.id, req.user.id]
+    )
+    res.json({ code: 0, message: '已标记已读' })
+  } catch (err) { next(err) }
+})
+
+// POST /api/tasks/mark-all-read - 标记当前用户所有新任务为已读（进入"我的任务"Tab时调用）
+router.post('/mark-all-read', async (req, res, next) => {
+  try {
+    await pool.query(
+      'UPDATE tasks SET is_new = 0 WHERE assigned_to = ? AND is_new = 1',
+      [req.user.id]
+    )
+    res.json({ code: 0, message: '全部已标记已读' })
   } catch (err) { next(err) }
 })
 
@@ -348,7 +383,7 @@ router.get('/:id', async (req, res, next) => {
 // POST /api/tasks - 创建任务
 router.post('/', async (req, res, next) => {
   try {
-    const { title, content, assigned_to, scheduled_date, due_date, priority } = req.body
+    const { title, description, assigned_to, due_date, priority } = req.body
 
     if (!title || !assigned_to) {
       return res.status(400).json({ code: 400, message: '标题和指派对象必填' })
@@ -361,7 +396,7 @@ router.post('/', async (req, res, next) => {
     }
 
     // Check permission: admin can assign to anyone, others can only assign to their subordinates
-    if (req.user.role !== 'admin') {
+    if (!(await checkPerm(req, 'system:config'))) {
       const isSubordinate = await isInSupervisorChain(req.user.id, assigned_to)
       if (!isSubordinate) {
         return res.status(403).json({ code: 403, message: '只能给自己的下级或下下级分配任务' })
@@ -369,9 +404,9 @@ router.post('/', async (req, res, next) => {
     }
 
     const [result] = await pool.query(
-      `INSERT INTO tasks (title, description, assigned_to, assigned_by, due_date, priority, status)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
-      [title, content || null, assigned_to, req.user.id, due_date || null, priority || 'medium']
+      `INSERT INTO tasks (title, description, assigned_to, assigned_by, created_by, due_date, priority, status, is_new)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 1)`,
+      [title, description || null, assigned_to, req.user.id, req.user.id, due_date || null, priority || 'medium']
     )
 
     res.json({ code: 0, data: { id: result.insertId }, message: '任务创建成功' })
@@ -391,7 +426,7 @@ router.put('/:id', async (req, res, next) => {
     }
 
     // Only task creator or admin can update
-    if (task.assigned_by !== req.user.id && req.user.role !== 'admin') {
+    if (task.assigned_by !== req.user.id && !(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 403, message: '无权修改此任务' })
     }
 
@@ -499,7 +534,7 @@ router.put('/:id/complete', async (req, res, next) => {
     }
 
     // Only task creator or admin can complete
-    if (task.assigned_by !== req.user.id && req.user.role !== 'admin') {
+    if (task.assigned_by !== req.user.id && !(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 403, message: '只能审核自己指派的任务' })
     }
 
@@ -541,7 +576,7 @@ router.put('/:id/reject', async (req, res, next) => {
     }
 
     // Only task creator or admin can reject
-    if (task.assigned_by !== req.user.id && req.user.role !== 'admin') {
+    if (task.assigned_by !== req.user.id && !(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 403, message: '只能驳回自己指派的任务' })
     }
 
@@ -587,7 +622,7 @@ router.put('/:id/review', async (req, res, next) => {
     }
 
     // 检查权限：只有指派人可以审核
-    if (task.assigned_by !== req.user.id && req.user.role !== 'admin') {
+    if (task.assigned_by !== req.user.id && !(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 403, message: '无权审核此任务' })
     }
 
@@ -599,11 +634,9 @@ router.put('/:id/review', async (req, res, next) => {
        SET status = ?,
            review_note = ?,
            reviewed_by = ?,
-           reviewed_at = ?,
-           completed_at = ?
+           reviewed_at = ?
        WHERE id = ?`,
-      [newStatus, review_notes || null, req.user.id, now,
-       action === 'approve' ? now : null, taskId]
+      [newStatus, review_notes || null, req.user.id, now, taskId]
     )
 
     res.json({ code: 0, message: action === 'approve' ? '任务已批准' : '任务已拒绝' })
@@ -627,7 +660,7 @@ router.delete('/:id', async (req, res, next) => {
     }
 
     // Only task creator or admin can delete
-    if (task.assigned_by !== req.user.id && req.user.role !== 'admin') {
+    if (task.assigned_by !== req.user.id && !(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 403, message: '只能删除自己创建的任务' })
     }
 

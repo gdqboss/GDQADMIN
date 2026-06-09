@@ -6,6 +6,7 @@ import { Router } from 'express'
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
 import { pool } from '../db/connection.js'
+import { ROLES } from '../middleware/rbac.js'
 
 const router = Router()
 
@@ -28,7 +29,7 @@ router.get('/gen-link', async (req, res, next) => {
     
     try {
       const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET)
-      if (decoded.role !== 'admin') {
+      if (decoded.role !== ROLES.ADMIN) {
         return res.status(403).json({ code: 403, message: '需要管理员权限' })
       }
     } catch (e) {

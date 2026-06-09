@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import { pool } from '../db/connection.js'
 import { auth } from '../middleware/auth.js'
+import { checkPerm } from '../utils/permission.js'
+import { ROLES } from '../middleware/rbac.js'
 
 const router = Router()
 
@@ -10,7 +12,7 @@ router.use(auth)
 // GET /api/h5-admin/users - List H5 users with pagination
 router.get('/users', async (req, res, next) => {
   try {
-    if (!['admin', 'manager'].includes(req.user.role)) {
+    if (![ROLES.ADMIN, ROLES.MANAGER].includes(req.user.role)) {
       return res.status(403).json({ code: 403, message: '权限不足' })
     }
 
@@ -60,7 +62,7 @@ router.get('/users', async (req, res, next) => {
 // PUT /api/h5-admin/users/:id - Update H5 user (role, store, level, status, is_internal)
 router.put('/users/:id', async (req, res, next) => {
   try {
-    if (!['admin', 'manager'].includes(req.user.role)) {
+    if (![ROLES.ADMIN, ROLES.MANAGER].includes(req.user.role)) {
       return res.status(403).json({ code: 403, message: '权限不足' })
     }
 
@@ -111,7 +113,7 @@ router.put('/users/:id', async (req, res, next) => {
 // PUT /api/h5-admin/users/:id/parent - Update referral relationship (superadmin only)
 router.put('/users/:id/parent', async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin') {
+    if (!(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 403, message: '仅超级管理员可修改推荐关系' })
     }
 

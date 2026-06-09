@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import { pool } from '../db/connection.js'
 import { parsePagination } from '../utils/pagination.js'
+import { checkPerm } from '../utils/permission.js'
+import { ROLES } from '../middleware/rbac.js'
 
 const router = Router()
 
@@ -29,7 +31,7 @@ router.get('/approvers', async (req, res, next) => {
 
     // 2. 所有管理员
     const [admins] = await pool.query(
-      "SELECT id, name, role, department FROM users WHERE role IN ('admin','manager') AND status = 'active' AND id != ?",
+      `SELECT id, name, role, department FROM users WHERE role IN ('${ROLES.ADMIN}','${ROLES.MANAGER}') AND status = 'active' AND id != ?`,
       [userId]
     )
     for (const a of admins) {
@@ -242,7 +244,7 @@ router.put('/:id/resolve', async (req, res, next) => {
     if (ga.status !== 'rejected') return res.status(400).json({ code: 400, message: '只能解决被拒绝的申请' })
 
     // 仅审批人或管理员可解决
-    if (ga.approver_id !== req.user.id && req.user.role !== 'admin') {
+    if (ga.approver_id !== req.user.id && !(await checkPerm(req, 'system:config'))) {
       return res.status(403).json({ code: 403, message: '无权操作' })
     }
 

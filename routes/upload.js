@@ -24,6 +24,36 @@ async function saveToImageLibrary(url, userId, category = 'other', filename = nu
   }
 }
 
+// GET /api/upload/images - 获取当前用户的已上传图片列表
+router.get('/images', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1
+    const limit = parseInt(req.query.limit) || 30
+    const offset = (page - 1) * limit
+    const category = req.query.category || null
+
+    let where = 'WHERE user_id = ?'
+    const params = [req.user.id]
+    if (category) {
+      where += ' AND category = ?'
+      params.push(category)
+    }
+
+    const [rows] = await pool.query(
+      `SELECT id, category, url, filename, size, created_at FROM images ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    )
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) as total FROM images ${where}`, params
+    )
+
+    res.json({ code: 0, data: { list: rows, total, page, limit } })
+  } catch (e) {
+    console.error('获取图片列表失败:', e)
+    res.status(500).json({ code: 500, message: '获取图片列表失败' })
+  }
+})
+
 // POST /api/upload/product-image - 带压缩
 router.post('/product-image', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ code: 400, message: '未收到文件' })

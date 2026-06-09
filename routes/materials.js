@@ -11,7 +11,7 @@ const router = Router()
 // 获取所有材料类目
 router.get('/categories', async (req, res) => {
     try {
-        const [rows] = await pool.query('SELECT * FROM material_categories ORDER BY id DESC');
+        const [rows] = await pool.query('SELECT mc.*, s.name AS supplier_name, s.type AS supplier_type FROM material_categories mc LEFT JOIN suppliers s ON mc.supplier_id = s.id ORDER BY mc.id DESC');
         if (req.lang === 'en') {
             await translateFields(rows, ['name', 'unit', 'remark'])
         }
@@ -24,12 +24,12 @@ router.get('/categories', async (req, res) => {
 // 添加材料类目
 router.post('/categories', async (req, res) => {
     try {
-        const { name, unit, remark } = req.body;
+        const { name, unit, remark, supplier_id } = req.body;
         if (!name) return res.status(400).json({ success: false, error: '名称不能为空' });
         
         const [result] = await pool.query(
-            'INSERT INTO material_categories (name, unit, remark) VALUES (?, ?, ?)',
-            [name, unit || '', remark || '']
+            'INSERT INTO material_categories (name, unit, remark, supplier_id) VALUES (?, ?, ?, ?)',
+            [name, unit || '', remark || '', supplier_id || null]
         );
         res.json({ success: true, id: result.insertId });
     } catch (error) {
@@ -41,10 +41,10 @@ router.post('/categories', async (req, res) => {
 router.put('/categories/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, unit, remark } = req.body;
+        const { name, unit, remark, supplier_id } = req.body;
         await pool.query(
-            'UPDATE material_categories SET name=?, unit=?, remark=? WHERE id=?',
-            [name, unit || '', remark || '', id]
+            'UPDATE material_categories SET name=?, unit=?, remark=?, supplier_id=? WHERE id=?',
+            [name, unit || '', remark || '', supplier_id || null, id]
         );
         res.json({ success: true });
     } catch (error) {

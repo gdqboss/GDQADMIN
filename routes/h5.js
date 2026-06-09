@@ -40,10 +40,6 @@ import { h5Auth } from '../middleware/h5Auth.js'
 
 const router = Router()
 
-// CRITICAL: JWT_SECRET must be set in environment
-if (!process.env.JWT_SECRET) {
-  throw new Error('JWT_SECRET environment variable is required')
-}
 const JWT_SECRET = process.env.JWT_SECRET
 
 // POST /api/h5/register - Role-based registration with SMS verification

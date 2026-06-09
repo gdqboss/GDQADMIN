@@ -1,7 +1,8 @@
 import express from 'express';
 import { pool } from '../db/connection.js';
 import { auth } from '../middleware/auth.js';
-import { PERMISSIONS, requirePermission } from '../middleware/rbac.js';
+import { PERMISSIONS, ROLES, requirePermission } from '../middleware/rbac.js';
+import { checkPerm } from '../utils/permission.js';
 
 const router = express.Router();
 
@@ -209,7 +210,7 @@ router.delete('/templates/:id', requirePermission(PERMISSIONS.WORK_LOG_TEMPLATE_
 // POST /api/work-logs/templates/init-defaults - Initialize preset templates (admin only)
 router.post('/templates/init-defaults', async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin') {
+    if (!(await checkPerm(req, 'work_log:write'))) {
       return res.status(403).json({ code: 403, message: 'Admin permission required' })
     }
 
@@ -379,7 +380,7 @@ router.post('/', async (req, res, next) => {
 router.get('/', async (req, res, next) => {
   try {
     // Admin/Manager默认看全部日志，普通人看自己的
-    const isAdmin = req.user.role === 'admin' || req.user.role === 'manager' || req.user.role === 'director';
+    const isAdmin = [ROLES.ADMIN, ROLES.MANAGER, ROLES.DIRECTOR].includes(req.user.role);
     
     const {
       type,
@@ -520,7 +521,7 @@ router.get('/:id', async (req, res, next) => {
     const log = logs[0];
 
     // Check permission: creator or recipient or admin
-    const isAdmin = req.user.role === 'admin' || req.user.role === 'manager' || req.user.role === 'director';
+    const isAdmin = [ROLES.ADMIN, ROLES.MANAGER, ROLES.DIRECTOR].includes(req.user.role);
     const recipients = safeParse(log.recipients);
     if (!isAdmin && log.user_id !== req.user.id && !recipients.includes(req.user.id)) {
       return res.status(403).json({
@@ -585,7 +586,7 @@ router.put('/:id', async (req, res, next) => {
        WHERE log_id = ? AND type IN ('comment','like','dislike','forward')`,
       [id]
     );
-    if (interactions[0].cnt > 0 && req.user.role !== 'admin') {
+    if (interactions[0].cnt > 0 && !(await checkPerm(req, 'work_log:write'))) {
       return res.status(403).json({
         code: 403,
         message: '此日志已有互动，仅管理员可编辑'
@@ -667,14 +668,14 @@ router.delete('/:id', async (req, res, next) => {
        WHERE log_id = ? AND type IN ('comment','like','dislike','forward')`,
       [id]
     );
-    if (interactions[0].cnt > 0 && req.user.role !== 'admin') {
+    if (interactions[0].cnt > 0 && req.user.role !== ROLES.ADMIN) {
       return res.status(403).json({
         code: 403,
         message: '此日志已有互动，仅管理员可删除'
       });
     }
 
-    if (logs[0].user_id !== req.user.id && req.user.role !== 'admin') {
+    if (logs[0].user_id !== req.user.id && req.user.role !== ROLES.ADMIN) {
       return res.status(403).json({
         code: 403,
         message: '仅创建者或管理员可删除'
