@@ -125,7 +125,6 @@ function canAction(status, action) {
 import { watch } from 'vue'
 watch([activeTab], () => { currentPage.value = 1; fetchOrders() })
 watch(currentPage, fetchOrders)
-import { onMounted } from 'vue'
 onMounted(fetchOrders)
 </script>
 

@@ -69,7 +69,6 @@ async function changeStatus(row, action, label) {
 
 watch(dateFilter, () => { fetchReservations() })
 onMounted(fetchReservations)
-import { onMounted } from 'vue'
 </script>
 
 <template>

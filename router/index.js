@@ -55,6 +55,16 @@ const routes = [
       { path: 'orders/:id', name: 'OrderDetail', component: lazyLoad(() => import('../views/orders/OrderDetail.vue')), meta: { title: '订单详情', parent: '商城', permission: 'order:read' } },
       { path: 'referral', name: 'ReferralManage', component: lazyLoad(() => import('../views/orders/ReferralManage.vue')), meta: { title: '推荐裂变', parent: '商城', permission: 'referral:read' } },
 
+      // ── 餐饮管理 ──────────────────────────────────────────────
+      { path: 'restaurant', name: 'RestaurantDashboard', component: lazyLoad(() => import('../views/restaurant/RestaurantDashboard.vue')), meta: { title: '餐饮管理', permission: 'restaurant:read' } },
+      { path: 'restaurant/tables', name: 'TableManage', component: lazyLoad(() => import('../views/restaurant/TableManage.vue')), meta: { title: '桌台管理', parent: '餐饮管理', permission: 'restaurant:write' } },
+      { path: 'restaurant/dishes', name: 'DishManage', component: lazyLoad(() => import('../views/restaurant/DishManage.vue')), meta: { title: '菜品管理', parent: '餐饮管理', permission: 'restaurant:write' } },
+      { path: 'restaurant/dine-orders', name: 'DineOrderList', component: lazyLoad(() => import('../views/restaurant/DineOrderList.vue')), meta: { title: '堂食订单', parent: '餐饮管理', permission: 'restaurant:read' } },
+      { path: 'restaurant/takeout', name: 'TakeoutOrderList', component: lazyLoad(() => import('../views/restaurant/TakeoutOrderList.vue')), meta: { title: '外卖订单', parent: '餐饮管理', permission: 'restaurant:read' } },
+      { path: 'restaurant/reservations', name: 'ReservationManage', component: lazyLoad(() => import('../views/restaurant/ReservationManage.vue')), meta: { title: '预订管理', parent: '餐饮管理', permission: 'restaurant:read' } },
+      { path: 'restaurant/queue', name: 'QueueManage', component: lazyLoad(() => import('../views/restaurant/QueueManage.vue')), meta: { title: '排队叫号', parent: '餐饮管理', permission: 'restaurant:read' } },
+      { path: 'restaurant/cashier', name: 'CashierManage', component: lazyLoad(() => import('../views/restaurant/CashierManage.vue')), meta: { title: '收银管理', parent: '餐饮管理', permission: 'restaurant:write' } },
+
       // ── 物流管理 ──────────────────────────────────────────────
       { path: 'logistics', name: 'LogisticsDashboard', component: lazyLoad(() => import('../views/logistics/LogisticsDashboard.vue')), meta: { title: '物流管理', parent: '商城', permission: 'logistics:read' } },
       { path: 'logistics/express', name: 'ExpressList', component: lazyLoad(() => import('../views/logistics/ExpressList.vue')), meta: { title: '快递公司', parent: '物流管理', permission: 'express_read' } },

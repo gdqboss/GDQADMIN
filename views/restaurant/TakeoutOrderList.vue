@@ -103,7 +103,6 @@ function canAction(status, action) {
 watch([activeTab, searchKeyword, dateRange], () => { currentPage.value = 1; fetchOrders() })
 watch(currentPage, fetchOrders)
 onMounted(fetchOrders)
-import { onMounted } from 'vue'
 </script>
 
 <template>
