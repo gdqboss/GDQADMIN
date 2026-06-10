@@ -30,7 +30,7 @@ const permissionsByCategory = computed(() => {
 
 const categoryOrder = [
   'system', 'product', 'warehouse', 'stock',
-  'finance', 'retail', 'aftersale', 'oa',
+  'finance', 'retail', 'aftersale', 'ai',
   'supply', 'work_log', 'bi', 'report',
   'inventory', 'order', 'approval', 'attendance',
   'leave', 'shift', 'schedule', 'task',
