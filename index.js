@@ -52,6 +52,8 @@ import financeSimpleRoutes from './routes/finance-simple.js'
 import financeReportRoutes from './routes/finance-report.js'
 import invoiceRoutes from './routes/invoices.js'
 import cardRoutes from './routes/card.js'
+import ordersRoutes from './routes/orders.js'
+import reportsRoutes from './routes/reports.js'
 import bossChatRoutes from './routes/boss-chat.js'
 import aiClassRoutes from './routes/ai-class.js'
 import aiConfigRoutes from './routes/ai-config.js'
@@ -374,6 +376,8 @@ app.use('/api/approvals', auth, apiLimiter, approvalRoutes)
 app.use('/api/dashboard', auth, apiLimiter, dashboardRoutes)
 app.use('/api/bi', auth, apiLimiter, biRoutes)
 app.use('/api/excel-report', auth, apiLimiter, excelReportRoutes)
+app.use('/api/orders', auth, apiLimiter, ordersRoutes)
+app.use('/api/reports', auth, apiLimiter, reportsRoutes)
 app.use('/api/qrcodes', auth, apiLimiter, qrcodeRoutes)
 app.use('/api/delivery', auth, apiLimiter, deliveryRoutes)
 app.use('/api/oa', cardRoutes)

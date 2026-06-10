@@ -5,87 +5,78 @@ import { pool } from '../db/connection.js'
  * 每个接口按需要的最小权限来设置
  */
 
-// 权限列表
+// 权限列表（与rbac_permissions表name字段一致）
 const PERMISSIONS = {
   // 仓库相关
-  WAREHOUSES_READ: 'warehouses_read',
-  WAREHOUSES_WRITE: 'warehouses_write',
-  WAREHOUSES_DELETE: 'warehouses_delete',
+  WAREHOUSES_READ: 'warehouse:read',
+  WAREHOUSES_WRITE: 'warehouse:write',
+  WAREHOUSES_DELETE: 'warehouse:delete',
 
   // 库存相关
-  INVENTORY_READ: 'inventory_read',
-  INVENTORY_WRITE: 'inventory_write',
-  INVENTORY_DELETE: 'inventory_delete',
+  INVENTORY_READ: 'inventory:read',
+  INVENTORY_WRITE: 'inventory:write',
+  INVENTORY_DELETE: 'inventory:delete',
 
   // 产品相关
-  PRODUCTS_READ: 'products_read',
-  PRODUCTS_WRITE: 'products_write',
-  PRODUCTS_DELETE: 'products_delete',
+  PRODUCTS_READ: 'product:read',
+  PRODUCTS_WRITE: 'product:write',
+  PRODUCTS_DELETE: 'product:delete',
 
   // 二维码相关
-  QRCODE_READ: 'qrcode_read',
-  QRCODE_WRITE: 'qrcode_write',
-  QRCODE_DELETE: 'qrcode_delete',
+  QRCODE_READ: 'qrcode:read',
+  QRCODE_WRITE: 'qrcode:write',
+  QRCODE_DELETE: 'qrcode:delete',
 
   // 销售/零售相关
-  SALES_READ: 'sales_read',
-  SALES_WRITE: 'sales_write',
+  SALES_READ: 'sales:read',
+  SALES_WRITE: 'sales:write',
 
   // 报表
-  REPORTS_READ: 'reports_read',
+  REPORTS_READ: 'report:read',
 
   // 财务
-  FINANCE_READ: 'finance_read',
+  FINANCE_READ: 'finance:read',
 
   // OA办公
-  OA_READ: 'oa_read',
-  OA_WRITE: 'oa_write',
+  OA_READ: 'oa:read',
+  OA_WRITE: 'oa:write',
 
   // 用户管理
-  USERS_READ: 'users_read',
-  USERS_WRITE: 'users_write',
+  USERS_READ: 'user:read',
+  USERS_WRITE: 'user:write',
 
   // 审批
-  APPROVALS_READ: 'approvals_read',
-  APPROVALS_WRITE: 'approvals_write',
+  APPROVALS_READ: 'approval:read',
+  APPROVALS_WRITE: 'approval:write',
 
   // 供应商/经销商
-  SUPPLIERS_READ: 'suppliers_read',
-  DEALERS_READ: 'dealers_read',
+  SUPPLIERS_READ: 'supplier:read',
+  DEALERS_READ: 'dealer:read',
 
   // 门店
-  STORES_READ: 'stores_read',
+  STORES_READ: 'store:read',
 
   // 任务
-  TASKS_READ: 'tasks_read',
+  TASKS_READ: 'task:read',
 
   // 售后
-  AFTERSALE_READ: 'aftersale_read',
-  AFTERSALE_WRITE: 'aftersale_write',
+  AFTERSALE_READ: 'aftersale:read',
+  AFTERSALE_WRITE: 'aftersale:write',
 
   // 提醒/预警
-  ALERTS_READ: 'alerts_read',
-  ALERTS_WRITE: 'alerts_write',
-
-  // 工作日志
-  WORK_LOG_READ: 'work_log:read',
-  WORK_LOG_WRITE: 'work_log:write',
-  WORK_LOG_TEMPLATE_READ: 'work_log_template:read',
-  WORK_LOG_TEMPLATE_MANAGE: 'work_log_template:manage',
+  ALERTS_READ: 'alerts:read',
+  ALERTS_WRITE: 'alerts:write',
 
   // 快捷操作相关（QUICK_ACTION）
   QUICK_ACTION_READ: 'quick_action:read',
   QUICK_ACTION_WRITE: 'quick_action:write',
   QUICK_ACTION_MANAGE: 'quick_action:manage',
   QUICK_ACTION_DELETE: 'quick_action:delete',
-  // 兼容ai-class使用的短横线格式
-  QUICK_ACTION_SALES: 'quick-action-sales',
-  QUICK_ACTION_INVENTORY: 'quick-action-inventory',
 
   // 文章管理
-  ARTICLES_READ: 'articles_read',
-  ARTICLES_WRITE: 'articles_write',
-  ARTICLES_DELETE: 'articles_delete',
+  ARTICLES_READ: 'articles:read',
+  ARTICLES_WRITE: 'articles:write',
+  ARTICLES_DELETE: 'articles:delete',
 }
 
 // 角色常量

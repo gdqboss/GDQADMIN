@@ -381,3 +381,108 @@ INSERT INTO warehouse_stock (warehouse_id, product_id, quantity, location) VALUE
 (2, 1, 40, 'A-01-01'), (2, 2, 20, 'A-01-02'), (2, 3, 50, 'B-01-01'),
 (3, 1, 30, 'A-01-01'), (3, 3, 30, 'A-02-01'), (3, 4, 20, 'B-01-01'), (3, 5, 15, 'B-01-02')
 ON DUPLICATE KEY UPDATE quantity=VALUES(quantity);
+
+CREATE TABLE IF NOT EXISTS menu_modules (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  `key` VARCHAR(50) NOT NULL UNIQUE COMMENT '菜单key唯一标识',
+  label_zh VARCHAR(100) NOT NULL COMMENT '中文名称',
+  label_en VARCHAR(100) NOT NULL COMMENT '英文名称',
+  icon VARCHAR(50) DEFAULT 'circle' COMMENT 'Material Symbol图标名',
+  route VARCHAR(100) NOT NULL COMMENT '路由路径',
+  category ENUM('main','partner','restaurant') DEFAULT 'main' COMMENT '所属分组',
+  sort_order INT DEFAULT 99 COMMENT '默认排序',
+  required BOOLEAN DEFAULT FALSE COMMENT '是否必选（不能取消）',
+  env_flags JSON DEFAULT NULL COMMENT '允许的环境，如["singapore","beijing"]，NULL表示全部',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS menu_config (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  env VARCHAR(30) NOT NULL COMMENT '环境标识 singapore/beijing/warehouse3',
+  role VARCHAR(30) DEFAULT 'admin' COMMENT '角色',
+  user_id INT DEFAULT NULL COMMENT '用户ID，NULL表示该role的默认配置',
+  menu_key VARCHAR(50) NOT NULL COMMENT '关联menu_modules.key',
+  visible BOOLEAN DEFAULT TRUE COMMENT '是否显示',
+  position INT DEFAULT 99 COMMENT '排序位置',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_env_role_user_menu (env, role, user_id, menu_key)
+);
+
+-- 菜单模块初始化数据
+INSERT INTO menu_modules (`key`, label_zh, label_en, icon, route, category, sort_order, required, env_flags) VALUES
+('dashboard',     '工作台',      'Dashboard',     'dashboard',      '/',              'main', 1,  TRUE,  NULL),
+('ai-classroom',  'AI课堂',      'AI Classroom',  'school',         '/ai-classroom',  'main', 2,  FALSE, NULL),
+('excel-analyzer','Excel分析',   'Excel Analyzer', 'description',   '/excel-analyzer','main', 3,  FALSE, NULL),
+('oa',            '办公OA',      'OA',            'badge',          '/oa',            'main', 4,  FALSE, NULL),
+('finance',       '财务',        'Finance',       'payments',       '/finance',       'main', 5,  FALSE, NULL),
+('tasks',         '任务管理',    'Tasks',         'task_alt',        '/tasks',         'main', 6,  FALSE, NULL),
+('qrcode',        '二维码',      'QR Code',       'qr_code_2',       '/qrcode',        'main', 7,  FALSE, NULL),
+('products',      '商品管理',    'Products',      'inventory_2',     '/products',      'main', 8,  FALSE, NULL),
+('in-out',        '出入库记录',  'In/Out',        'swap_horiz',      '/in-out',        'main', 9,  FALSE, NULL),
+('warehouses',    '仓库管理',    'Warehouses',    'warehouse',       '/warehouses',    'main', 10, FALSE, NULL),
+('alerts',        '库存预警',    'Alerts',        'warning',         '/alerts',        'main', 11, FALSE, NULL),
+('transfer',      '库存调拨',    'Transfer',      'sync_alt',        '/transfer',      'main', 12, FALSE, NULL),
+('returns',       '退货管理',    'Returns',       'keyboard_return', '/inventory/returns','main',13,FALSE,NULL),
+('retail',        '零售',        'Retail',        'receipt_long',    '/retail',        'main', 14, FALSE, NULL),
+('gift-approvals','赠送审批',    'Gift Approvals', 'card_giftcard',  '/gift-approvals','main', 15, FALSE, NULL),
+('aftersale',     '售后管理',    'After Sale',    'support_agent',   '/aftersale',     'main', 16, FALSE, NULL),
+('reports',       '报表中心',    'Reports',       'bar_chart',       '/reports',       'main', 17, FALSE, NULL),
+('suppliers',     '供货商',      'Suppliers',     'local_shipping',  '/suppliers',     'partner', 1, FALSE, NULL),
+('dealers',       '经销商',      'Dealers',       'handshake',       '/dealers',       'partner', 2, FALSE, NULL),
+('stores',        '门店',        'Stores',        'storefront',       '/stores',       'partner', 3, FALSE, NULL),
+('orders',        '订单管理',    'Orders',        'shopping_cart',   '/orders',       'restaurant', 1, FALSE, NULL),
+('referral',      '推荐好友',    'Referral',      'diversity_3',     '/referral',     'restaurant', 2, FALSE, NULL)
+ON DUPLICATE KEY UPDATE label_zh=VALUES(label_zh);
+
+-- 新加坡环境默认全开
+INSERT INTO menu_config (env, role, menu_key, visible, position) 
+SELECT 'singapore', 'admin', `key`, TRUE, sort_order FROM menu_modules
+ON DUPLICATE KEY UPDATE visible=VALUES(visible), position=VALUES(position);
+
+-- 初始化新加坡默认排序
+UPDATE menu_config mc SET mc.position = (
+  SELECT mm.sort_order FROM menu_modules mm WHERE mm.`key` = mc.menu_key
+) WHERE mc.env = 'singapore';
+
+-- Orders (商城订单)
+CREATE TABLE IF NOT EXISTS orders (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  order_no VARCHAR(32) NOT NULL UNIQUE COMMENT '订单号',
+  member_id INT DEFAULT NULL COMMENT '买家会员ID',
+  member_name VARCHAR(100) DEFAULT NULL COMMENT '买家姓名',
+  member_phone VARCHAR(20) DEFAULT NULL COMMENT '买家电话',
+  total_amount DECIMAL(12,2) NOT NULL DEFAULT 0 COMMENT '订单总金额',
+  freight_amount DECIMAL(10,2) DEFAULT 0 COMMENT '运费',
+  discount_amount DECIMAL(10,2) DEFAULT 0 COMMENT '优惠金额',
+  pay_amount DECIMAL(12,2) NOT NULL DEFAULT 0 COMMENT '实付金额',
+  pay_type VARCHAR(20) DEFAULT NULL COMMENT '支付方式 wechat/alipay/cash',
+  wechat_trade_no VARCHAR(64) DEFAULT NULL COMMENT '微信订单号',
+  status ENUM('pending_pay','paid','shipped','completed','cancelled','refunded') DEFAULT 'pending_pay',
+  remark TEXT DEFAULT NULL COMMENT '买家留言',
+  admin_remark TEXT DEFAULT NULL COMMENT '管理员备注',
+  paid_at DATETIME DEFAULT NULL COMMENT '支付时间',
+  shipped_at DATETIME DEFAULT NULL COMMENT '发货时间',
+  completed_at DATETIME DEFAULT NULL COMMENT '完成时间',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_status (status),
+  INDEX idx_member_id (member_id),
+  INDEX idx_created_at (created_at),
+  INDEX idx_order_no (order_no)
+);
+
+CREATE TABLE IF NOT EXISTS order_items (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  order_id INT NOT NULL,
+  product_id INT NOT NULL,
+  product_name VARCHAR(200) NOT NULL,
+  product_spec VARCHAR(200) DEFAULT NULL COMMENT '规格',
+  product_image VARCHAR(500) DEFAULT NULL,
+  price DECIMAL(10,2) NOT NULL COMMENT '单价',
+  number INT NOT NULL DEFAULT 1 COMMENT '数量',
+  subtotal DECIMAL(12,2) NOT NULL COMMENT '小计',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_order_id (order_id),
+  INDEX idx_product_id (product_id)
+);

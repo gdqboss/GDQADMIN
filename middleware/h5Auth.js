@@ -1,10 +1,5 @@
 import jwt from 'jsonwebtoken'
 
-// CRITICAL: JWT_SECRET must be set in environment
-if (!process.env.JWT_SECRET) {
-  throw new Error('JWT_SECRET environment variable is required for H5 authentication')
-}
-
 const JWT_SECRET = process.env.JWT_SECRET
 
 /**
@@ -12,6 +7,9 @@ const JWT_SECRET = process.env.JWT_SECRET
  * Verifies JWT token from Authorization header
  */
 export function h5Auth(req, res, next) {
+  if (!JWT_SECRET) {
+    return res.status(500).json({ code: 500, message: 'JWT_SECRET not configured' })
+  }
   const token = req.headers['authorization']?.replace('Bearer ', '')
 
   if (!token) {
