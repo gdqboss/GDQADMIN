@@ -11,17 +11,24 @@ const formLoading = ref(false)
 const editingId = ref(null)
 const categories = ref([])
 
+// 商品库选择器
+const pickerVisible = ref(false)
+const pickerLoading = ref(false)
+const pickerProducts = ref([])
+const pickerKeyword = ref('')
+const pickerSelected = ref(null)
+
 const dialogTitle = computed(() => editingId.value ? '编辑商品' : '新增商品')
 
 const form = ref({
-  cid: 0, name: "", procode: "", pic: "", pics: [], detail: "",
+  cid: 0, goods_sn: '', name: "", procode: "", pic: "", pics: [], detail: "",
   market_price: 0, sell_price: 0, leader_price: 0, cost_price: 0,
   weight: 0, stock: 0, sort: 0, status: 1, teamnum: 2, teamhour: 24,
 })
 
 function resetForm() {
   editingId.value = null
-  form.value = { cid: 0, name: "", procode: "", pic: "", pics: [], detail: "",
+  form.value = { cid: 0, goods_sn: '', name: "", procode: "", pic: "", pics: [], detail: "",
     market_price: 0, sell_price: 0, leader_price: 0, cost_price: 0,
     weight: 0, stock: 0, sort: 0, status: 1, teamnum: 2, teamhour: 24 }
 }
@@ -45,7 +52,7 @@ async function fetchCategories() {
 function openAdd() { resetForm(); dialogVisible.value = true }
 function openEdit(row) {
   editingId.value = row.id
-  form.value = { cid: row.cid, name: row.name, procode: row.procode || "",
+  form.value = { cid: row.cid, goods_sn: row.goods_sn || '', name: row.name, procode: row.procode || "",
     pic: row.pic || "", detail: row.detail || "",
     market_price: row.market_price, sell_price: row.sell_price,
     leader_price: row.leader_price, cost_price: row.cost_price,
@@ -78,6 +85,42 @@ async function deleteProduct(row) {
     if (res.code === 0) { ElMessage.success("删除成功"); fetchProducts() }
     else ElMessage.error(res.message)
   } catch (e) { ElMessage.error(e.message) }
+}
+
+// 商品库选择
+async function openPicker() {
+  pickerVisible.value = true
+  pickerKeyword.value = ''
+  pickerSelected.value = null
+  await fetchPickerProducts('')
+}
+
+async function fetchPickerProducts(keyword) {
+  pickerLoading.value = true
+  try {
+    const res = await api.get("/collage/product-options", { keyword })
+    if (res.code === 0) pickerProducts.value = res.data || []
+  } catch (e) { ElMessage.error(e.message) }
+  finally { pickerLoading.value = false }
+}
+
+function onPickerSearch() {
+  fetchPickerProducts(pickerKeyword.value)
+}
+
+function selectFromPicker(product) {
+  pickerSelected.value = product
+}
+
+function confirmFromPicker() {
+  if (!pickerSelected.value) { ElMessage.warning("请选择一个商品"); return }
+  // 自动填充表单
+  form.value.goods_sn = pickerSelected.value.sku
+  form.value.name = pickerSelected.value.name
+  form.value.pic = pickerSelected.value.image_main || ''
+  form.value.sell_price = pickerSelected.value.sale_price || 0
+  form.value.stock = pickerSelected.value.stock || 0
+  pickerVisible.value = false
 }
 
 onMounted(() => { fetchProducts(); fetchCategories() })
@@ -116,8 +159,18 @@ onMounted(() => { fetchProducts(); fetchCategories() })
         </el-table-column>
       </el-table>
     </div>
+
+    <!-- 新增/编辑弹窗 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="700px">
       <el-form :model="form" label-width="80px">
+        <el-form-item label="商品来源">
+          <div class="flex gap-2">
+            <el-button type="primary" plain @click="openPicker">从商品库选择</el-button>
+            <span v-if="form.goods_sn" class="text-gray-500 text-sm self-center">
+              已选: {{ form.goods_sn }} - {{ form.name }}
+            </span>
+          </div>
+        </el-form-item>
         <el-form-item label="商品名称"><el-input v-model="form.name" /></el-form-item>
         <div class="grid grid-cols-2 gap-4">
           <el-form-item label="拼团价"><el-input-number v-model="form.sell_price" :min="0" :precision="2" /></el-form-item>
@@ -140,6 +193,31 @@ onMounted(() => { fetchProducts(); fetchCategories() })
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="formLoading" @click="submitForm">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 商品库选择器 -->
+    <el-dialog v-model="pickerVisible" title="从商品库选择" width="600px">
+      <div class="mb-4 flex gap-2">
+        <el-input v-model="pickerKeyword" placeholder="搜索商品名称或SKU" clearable @clear="onPickerSearch" @keyup.enter="onPickerSearch" />
+        <el-button type="primary" @click="onPickerSearch">搜索</el-button>
+      </div>
+      <el-table :data="pickerProducts" stripe v-loading="pickerLoading" height="350" @row-click="selectFromPicker">
+        <el-table-column label="商品名称" prop="name" min-width="140" />
+        <el-table-column label="SKU" prop="sku" width="100" />
+        <el-table-column label="售价" width="80" align="right">
+          <template #default="{ row }">¥ {{ row.sale_price }}</template>
+        </el-table-column>
+        <el-table-column label="库存" prop="stock" width="60" align="center" />
+        <el-table-column label="选择" width="60" align="center">
+          <template #default="{ row }">
+            <el-radio v-model="pickerSelected" :label="row">&nbsp;</el-radio>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="pickerVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmFromPicker">确认选择</el-button>
       </template>
     </el-dialog>
   </div>
