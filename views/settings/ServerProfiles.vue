@@ -48,9 +48,13 @@ const industryOptions = [
 
 // 行业分类中文名
 const industryNameMap = {
-  ecommerce: '电商', sales: '销售CRM', education: '教育',
-  company: '企业管理', realestate: '房地产', restaurant: '餐饮', hotel: '酒店',
-  main: '基础', partner: '合作伙伴'
+  general: '通用基础',
+  business: '业务模块',
+  restaurant: '餐饮专用',
+  hotel: '酒店专用',
+  mall: '商城专用',
+  company: '企业管理',
+  education: 'AI课堂',
 }
 
 // 表单
@@ -231,7 +235,7 @@ const filteredModules = computed(() => {
   )
 })
 
-const categoryOrder = ['ecommerce', 'restaurant', 'hotel', 'sales', 'education', 'company', 'main', 'partner']
+const categoryOrder = ['general', 'business', 'restaurant', 'hotel', 'mall', 'company', 'education']
 
 function getCategoryName(cat) {
   return industryNameMap[cat] || cat
