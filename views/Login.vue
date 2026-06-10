@@ -267,9 +267,7 @@ async function handleRegister() {
           </div>
 
           <div class="flex justify-center mb-2 sm:mb-3 md:mb-4">
-            <div class="h-10 w-10 sm:h-12 sm:w-12 md:h-14 md:w-14 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
-              <span class="material-symbols-outlined text-[24px] sm:text-[28px] md:text-[32px]">business</span>
-            </div>
+            <img src="/mywh3-logo.jpg" alt="logo" class="h-36 w-36 sm:h-42 sm:w-42 md:h-48 md:w-48 object-contain rounded-lg" />
           </div>
           <h1 class="text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-slate-900 mb-1">{{ $t('system.fullName') }}</h1>
           <p class="text-xs sm:text-sm text-slate-500">{{ $t('system.motto') }}</p>
