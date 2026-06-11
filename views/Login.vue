@@ -24,7 +24,7 @@ const userStore = useUserStore()
 const { t } = useI18n()
 
 const showRegister = ref(false)
-const account = ref('')
+const phone = ref('')
 const password = ref(localStorage.getItem('caimeite_password') || '')
 const rememberMe = ref(localStorage.getItem('caimeite_remember') === 'true')
 const showPassword = ref(false)
@@ -144,16 +144,16 @@ async function handleLogin() {
   error.value = ''
 
   // Validate inputs
-  if (!account.value || !password.value) {
+  if (!phone.value || !password.value) {
     error.value = t('login.requiredFields')
     return
   }
 
   loading.value = true
   try {
-    const res = await userStore.login(account.value, password.value)
+    const res = await userStore.login(phone.value, password.value)
     if (res.code === 0) {
-      if (rememberMe.value) { localStorage.setItem('caimeite_remember', 'true'); localStorage.setItem('caimeite_account', account.value); localStorage.setItem('caimeite_password', password.value) } else { localStorage.setItem('caimeite_remember', 'false'); localStorage.removeItem('caimeite_account'); localStorage.removeItem('caimeite_password') }
+      if (rememberMe.value) { localStorage.setItem('caimeite_remember', 'true'); localStorage.setItem('caimeite_phone', phone.value); localStorage.setItem('caimeite_password', password.value) } else { localStorage.setItem('caimeite_remember', 'false'); localStorage.removeItem('caimeite_phone'); localStorage.removeItem('caimeite_password') }
       router.push('/')
     } else {
       error.value = res.message || t('login.error')
@@ -281,7 +281,7 @@ async function handleRegister() {
                 <div class="pl-2 sm:pl-3 text-slate-400 flex items-center justify-center">
                   <span class="material-symbols-outlined text-[16px] sm:text-[18px] md:text-[20px]">person</span>
                 </div>
-                <input v-model="account" type="text" id="account" :placeholder="$t('login.accountPlaceholder')" class="w-full border-none bg-transparent py-2 sm:py-2.5 pl-1 sm:pl-2 pr-3 sm:pr-4 text-[16px] text-slate-900 placeholder:text-slate-400 focus:ring-0 focus:outline-none" />
+                <input v-model="phone" type="text" id="account" :placeholder="$t('login.accountPlaceholder')" class="w-full border-none bg-transparent py-2 sm:py-2.5 pl-1 sm:pl-2 pr-3 sm:pr-4 text-[16px] text-slate-900 placeholder:text-slate-400 focus:ring-0 focus:outline-none" />
               </div>
             </div>
             <div class="space-y-1 sm:space-y-1.5">

@@ -36,8 +36,8 @@ export const useUserStore = defineStore('user', () => {
     return perms.includes(permKey)
   }
 
-  async function login(email, password) {
-    const res = await api.post('/auth/login', { email, password })
+  async function login(phone, password) {
+    const res = await api.post('/auth/login', { phone, password })
     if (res.code === 0) {
       user.value = res.data.user
       token.value = res.data.token
