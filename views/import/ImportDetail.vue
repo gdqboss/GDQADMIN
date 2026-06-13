@@ -99,40 +99,39 @@
                       <button class="btn-expand-model" @click="toggleModel(m.model)">
                         {{ expandedModel === m.model ? '▲' : '▼' }}
                       </button>
-                    </div>
-                    <!-- 型号展开：SKU明细 -->
-                    <div v-if="expandedModel && modelSkus.length > 0" class="model-sku-detail">
-                      <div class="sku-detail-header">
-                        <span>{{ $t('importDetail.image') }}</span>
-                        <span>{{ $t('importDetail.sku') }}</span>
-                        <span>{{ $t('importDetail.color') }}</span>
-                        <span>{{ $t('importDetail.size') }}</span>
-                        <span>{{ $t('importDetail.quantity') }}</span>
+                      <!-- SKU明细嵌在每个型号行内部，紧跟其后 -->
+                      <div v-if="expandedModel === m.model && modelSkus.length > 0" class="model-sku-detail">
+                        <table class="sku-table">
+                          <thead>
+                            <tr>
+                              <th>{{ $t('importDetail.image') }}</th>
+                              <th>{{ $t('importDetail.sku') }}</th>
+                              <th>{{ $t('importDetail.color') }}</th>
+                              <th>{{ $t('importDetail.size') }}</th>
+                              <th>{{ $t('importDetail.unitPrice') }}</th>
+                              <th>{{ $t('importDetail.quantity') }}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr v-for="sku in modelSkus" :key="sku.sku + sku.color + sku.size">
+                              <td>
+                                <img v-if="sku.image_url" :src="sku.image_url" class="sku-thumb" alt="" />
+                                <div v-else class="sku-thumb-placeholder">📦</div>
+                              </td>
+                              <td class="sku-code">{{ sku.sku }}</td>
+                              <td>{{ getColorDisplay(sku) || '-' }}</td>
+                              <td>{{ sku.size || '-' }}</td>
+                              <td>
+                                <span v-if="sku.unit_price" class="num">¥{{ Number(sku.unit_price).toLocaleString() }}</span>
+                                <span v-else class="text-gray">-</span>
+                              </td>
+                              <td class="qty">{{ Number(sku.total_qty).toLocaleString() }} {{ $t('importDetail.pcs') }}</td>
+                            </tr>
+                          </tbody>
+                        </table>
                       </div>
-                      <div v-for="sku in modelSkus" :key="sku.sku + sku.color + sku.size" class="sku-detail-row">
-                        <img v-if="sku.image_url" :src="sku.image_url" class="sku-thumb" alt="" />
-                        <div v-else class="sku-thumb-placeholder">📦</div>
-                        <span class="sku-code">{{ sku.sku }}</span>
-                        <span>{{ getColorDisplay(sku) || '-' }}</span>
-                        <span>{{ sku.size || '-' }}</span>
-                        <span class="qty">{{ Number(sku.total_qty).toLocaleString() }} {{ $t('importDetail.pcs') }}</span>
-                      </div>
+                      <div v-if="expandedModel === m.model && modelSkus.length === 0" class="empty-section" style="padding:8px;color:#f56c6c;font-size:12px;">无SKU数据</div>
                     </div>
-                    <div v-if="!storeDetail.byModel?.length" class="empty-section">{{ $t('importDetail.noModelData') }}</div>
-                  </div>
-                </div>
-                <!-- 颜色×尺码矩阵 -->
-                <div class="report-section sub-section">
-                  <h4>🔥 {{ $t('importDetail.colorSizeHotCombo') }} ({{ storeDetail.byColorSize?.length || 0 }})</h4>
-                  <div class="matrix-grid">
-                    <div v-for="(cs, ci) in storeDetail.byColorSize" :key="ci" class="matrix-item"
-                         :title="`${getColorDisplay({color: cs.color})} + ${cs.size}`">
-                      <span class="matrix-rank">#{{ ci + 1 }}</span>
-                      <span class="matrix-color">{{ getColorDisplay({color: cs.color})?.substring(0, 8) || '-' }}</span>
-                      <span class="matrix-size">{{ cs.size }}</span>
-                      <span class="matrix-qty">{{ Number(cs.qty).toLocaleString() }} {{ $t('importDetail.pcs') }}</span>
-                    </div>
-                    <div v-if="!storeDetail.byColorSize?.length" class="empty-section">{{ $t('importDetail.noComboData') }}</div>
                   </div>
                 </div>
               </div>
@@ -225,19 +224,6 @@
             </div>
           </div>
 
-          <!-- 颜色×尺码 -->
-          <div class="chart-card chart-wide">
-            <h3>🔥 {{ $t('importDetail.colorSizeCombo') }} <span class="tag-global">Global</span></h3>
-            <div class="matrix-grid">
-              <div v-for="(cs, i) in summary.byColorSize?.slice(0, 20)" :key="i" class="matrix-item" :title="`${getColorDisplay({color: cs.color})} + ${cs.size}`">
-                <span class="matrix-rank">#{{ i + 1 }}</span>
-                <span class="matrix-color">{{ getColorDisplay({color: cs.color })?.substring(0, 8) }}</span>
-                <span class="matrix-size">{{ cs.size }}</span>
-                <span class="matrix-qty">{{ Number(cs.qty).toLocaleString() }} {{ $t('importDetail.pcs') }}</span>
-              </div>
-              <div v-if="!summary.byColorSize?.length" class="empty-chart">{{ $t('importDetail.noData') }}</div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -331,6 +317,7 @@ const allStores = computed(() => {
 
 const expandedStore = ref(null)
 const expandedModel = ref(null)
+const modelSkus = ref([])
 
 async function toggleStore(storeCode) {
   if (expandedStore.value === storeCode) {
@@ -339,20 +326,18 @@ async function toggleStore(storeCode) {
   }
   expandedStore.value = storeCode
   expandedModel.value = null
+  modelSkus.value = []
   storeDetail.value = null
   await loadStoreSummary(storeCode)
 }
 
-const modelSkus = computed(() => {
-  if (!storeDetail.value?.bySku) return []
-  return storeDetail.value.bySku.filter(s => s.model === expandedModel.value)
-})
-
 function toggleModel(model) {
   if (expandedModel.value === model) {
     expandedModel.value = null
+    modelSkus.value = []
   } else {
     expandedModel.value = model
+    modelSkus.value = storeDetail.value?.bySku?.filter(s => s.model === model) || []
   }
 }
 
@@ -561,9 +546,15 @@ onMounted(() => {
 .model-thumb-placeholder { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: #f5f7fa; border-radius: 4px; font-size: 16px; flex-shrink: 0; }
 .btn-expand-model { padding: 2px 8px; background: #409eff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; flex-shrink: 0; }
 .model-sku-detail { background: #f0f2f5; border-radius: 8px; margin-top: 8px; padding: 8px 12px; }
-.sku-detail-header { display: grid; grid-template-columns: 48px 100px 80px 60px 80px; gap: 8px; padding: 4px 0; font-size: 11px; font-weight: 600; color: #909399; border-bottom: 1px solid #e0e0e0; margin-bottom: 6px; }
-.sku-detail-row { display: grid; grid-template-columns: 48px 100px 80px 60px 80px; gap: 8px; padding: 4px 0; align-items: center; font-size: 12px; border-bottom: 1px solid #f0f0f0; }
-.sku-detail-row:last-child { border-bottom: none; }
+.sku-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.sku-table th { background: #e4e7ed; color: #606266; font-weight: 600; padding: 6px 8px; text-align: left; font-size: 11px; text-transform: uppercase; }
+.sku-table td { padding: 6px 8px; border-bottom: 1px solid #ebeef5; }
+.sku-table tr:last-child td { border-bottom: none; }
+.sku-thumb { width: 32px; height: 32px; object-fit: cover; border-radius: 4px; }
+.sku-thumb-placeholder { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: #f5f7fa; border-radius: 4px; font-size: 14px; }
+.sku-table .sku-code { font-family: monospace; color: #409eff; font-size: 11px; }
+.sku-table .qty { text-align: right; color: #67c23a; font-weight: 600; }
+
 .sku-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; border: 1px solid #ebeef5; }
 .sku-thumb-placeholder { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: #f5f7fa; border-radius: 4px; font-size: 16px; }
 .sku-code { font-family: monospace; font-size: 11px; color: #409eff; overflow: hidden; text-overflow: ellipsis; }
