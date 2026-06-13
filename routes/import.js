@@ -176,10 +176,37 @@ function detectFlpFormat(data) {
   return r0.includes('DOCUMENT') || r0.includes('TITLE')
 }
 
+// 从headers行查找日期列索引
+function findDateColIndex(headersRow) {
+  if (!headersRow || !Array.isArray(headersRow)) return -1
+  for (let j = 0; j < headersRow.length; j++) {
+    const h = String(headersRow[j] || '').toLowerCase()
+    if (/^(date|time|日期|时间|sale_date|transaction_date|post_date)$/i.test(h)) return j
+  }
+  return -1
+}
+
+// 提取日期值，兼容Excel serial/Date对象/字符串
+function extractSaleDate(val) {
+  if (!val) return null
+  if (val instanceof Date) return val.toISOString().slice(0, 19).replace('T', ' ')
+  const n = Number(val)
+  if (!isNaN(n) && n > 25000 && n < 60000) {
+    // Excel serial date (1900 epoch)
+    const d = new Date((n - 25569) * 86400 * 1000)
+    return d.toISOString().slice(0, 19).replace('T', ' ')
+  }
+  const s = String(val).trim().slice(0, 19)
+  if (/^\d{4}[-/]\d{2}[-/]\d{2}/.test(s)) return s.replace(/\//g, '-')
+  return null
+}
+
 // SM格式 - flp.xlsx专用解析（从row1开始，col5=门店, col8=SKU, col9=Description, col12=QTY）
 async function parseFlpSmFormat(data) {
   const items = []
   let totalAmount = 0
+  const headerRow = data[0] || []
+  const idxDate = findDateColIndex(headerRow)
   for (let i = 1; i < data.length; i++) {
     const row = data[i]
     if (!row || row.length < 13) continue
@@ -200,7 +227,7 @@ async function parseFlpSmFormat(data) {
       sku, product_name: parsed.product_name, model,
       store_code: storeInfo.store_code, store_name: storeInfo.store_name,
       quantity: qty, unit_price: 0, amount: 0,
-      color: parsed.color, size: parsed.size, sale_date: null,
+      color: parsed.color, size: parsed.size, sale_date: extractSaleDate(idxDate >= 0 ? row[idxDate] : null),
       image_url: imageUrl,
       extra_data: { source_row: i, original_name: description, color_display: parsed.color_display }
     })
@@ -221,11 +248,12 @@ if (file_type === 'SM') {
     const descIdx = header.findIndex(h => String(h).toUpperCase().includes('DESCRIPTION'));
     const priceIdx = header.findIndex(h => String(h).toUpperCase().includes('PRICE'));
     const storeNameIdx = header.findIndex(h => String(h).toUpperCase().includes('STORE') || String(h).toUpperCase().includes('LOCATION'));
+    const idxDate = findDateColIndex(header);
 
     for (let i = 3; i < data.length; i++) {
       const row = data[i];
       if (!row || row.length < 5) continue;
-      
+        
       const skuVal = skuIdx >= 0 ? row[skuIdx] : row[8];
       const sku = String(skuVal || '').trim();
       if (!sku || sku === 'undefined' || sku === '0') continue;
@@ -246,7 +274,7 @@ if (file_type === 'SM') {
         sku, product_name: parsed.product_name, model,
         store_code: storeInfo.store_code, store_name: storeInfo.store_name,
         quantity: qty || 1, unit_price: price || 0, amount: amount || 0,
-        color: parsed.color, size: parsed.size, sale_date: null,
+        color: parsed.color, size: parsed.size, sale_date: extractSaleDate(idxDate >= 0 ? row[idxDate] : null),
         image_url: imageUrl,
         extra_data: { source_row: i, original_name: description, color_display: parsed.color_display }
       });
@@ -254,6 +282,15 @@ if (file_type === 'SM') {
   }
 } else {
       // APPOLLOS format
+      // 找header行（包含STORE/SKU等关键词的行）
+      let apolloHeader = null
+      for (let h = 0; h < Math.min(3, data.length); h++) {
+        const rowH = data[h]
+        if (rowH && (String(rowH[3]||'').toUpperCase().includes('STORE') || String(rowH[10]||'').toUpperCase().includes('SKU'))) {
+          apolloHeader = rowH; break
+        }
+      }
+      const apolloIdxDate = apolloHeader ? findDateColIndex(apolloHeader) : -1
       for (let i = 3; i < data.length; i++) {
         const row = data[i];
         if (!row || row.length < 11) continue;
@@ -280,7 +317,7 @@ if (file_type === 'SM') {
           sku, product_name: parsed.product_name, model,
           store_code: storeInfo.store_code, store_name: storeInfo.store_name,
           quantity: qty || 1, unit_price: price || 0, amount: amount || 0,
-          color: parsed.color, size: parsed.size, sale_date: null,
+          color: parsed.color, size: parsed.size, sale_date: extractSaleDate(apolloIdxDate >= 0 ? row[apolloIdxDate] : null),
           image_url: imageUrl,
           extra_data: { upc, source_row: i, original_name: description, color_display: parsed.color_display }
         });
@@ -369,8 +406,15 @@ router.get('/records/:id/items', async (req, res) => {
     const orderCol = orderMap[sort_by] || 'id';
     const orderDir = sort_order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
+    // LEFT JOIN product_skus，优先取商品管理数据库的单价
     const [rows] = await pool.query(
-      `SELECT * FROM imported_excel_items WHERE ${where.join(' AND ')}
+      `SELECT i.*,
+              i.color AS color,
+              i.size AS size,
+              COALESCE(ps.sale_price, i.unit_price) AS unit_price
+       FROM imported_excel_items i
+       LEFT JOIN product_skus ps ON ps.sku = i.sku COLLATE utf8mb4_general_ci
+       WHERE ${where.join(' AND ')}
        ORDER BY ${orderCol} ${orderDir} LIMIT ? OFFSET ?`,
       [...params, parseInt(page_size), offset]
     );
@@ -479,8 +523,10 @@ router.get('/records/:id/summary', async (req, res) => {
 // GET /api/import/records/:id/summary/by-store/:storeCode — 门店下钻：型号+颜色×尺码
 router.get('/records/:id/summary/by-store/:storeCode', async (req, res) => {
   try {
-    const { id, storeCode } = req.params;
-
+    // 禁用 ONLY_FULL_GROUP_BY（连接池 initSQL 可能未生效）
+    await pool.query("SET SESSION sql_mode=(SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY',''))");
+    const { id } = req.params;
+    const { storeCode } = req.params;
     // 门店聚合
     const [[storeOverall]] = await pool.query(
       `SELECT store_code, store_name,
@@ -497,7 +543,7 @@ router.get('/records/:id/summary/by-store/:storeCode', async (req, res) => {
               MAX(image_url) as image_url, MAX(product_name) as product_name
        FROM imported_excel_items
        WHERE record_id = ? AND store_code = ? AND model IS NOT NULL AND model != ''
-       GROUP BY model ORDER BY qty DESC LIMIT 30`, [id, storeCode]
+       GROUP BY model ORDER BY qty DESC`, [id, storeCode]
     );
 
     // 颜色×尺码 矩阵
@@ -508,16 +554,44 @@ router.get('/records/:id/summary/by-store/:storeCode', async (req, res) => {
        GROUP BY color, size ORDER BY qty DESC LIMIT 40`, [id, storeCode]
     );
 
-    // SKU明细（按型号聚合）
-    const [bySku] = await pool.query(
-      `SELECT sku, model, color, size,
-              SUM(quantity) as total_qty, SUM(amount) as total_amount,
-              MAX(image_url) as image_url
-       FROM imported_excel_items
-       WHERE record_id = ? AND store_code = ? AND model IS NOT NULL AND model != ''
-       GROUP BY sku, model, color, size
+    // SKU明细（按型号聚合）- 先按sku聚合items，再JS层JOIN product_skus获取颜色/尺寸
+    // （北京MySQL有ONLY_FULL_GROUP_BY限制，ps.specs不能直接放入GROUP BY的SELECT）
+    const [skuRows] = await pool.query(
+      `SELECT i.sku, i.model,
+              i.color, i.size,
+              SUM(i.quantity) as total_qty, SUM(i.amount) as total_amount,
+              MAX(i.image_url) as image_url
+       FROM imported_excel_items i
+       WHERE i.record_id = ? AND i.store_code = ? AND i.model IS NOT NULL AND i.model != ''
+       GROUP BY i.sku, i.model, i.color, i.size
        ORDER BY total_qty DESC`, [id, storeCode]
     );
+
+    // 批量获取product_skus的specs（按sku去重）
+    const skus = skuRows.map(r => r.sku);
+    let specsMap = {};
+    if (skus.length > 0) {
+      const placeholders = skus.map(() => '?').join(',');
+      const [psRows] = await pool.query(
+        `SELECT sku, specs FROM product_skus WHERE sku IN (${placeholders})`, skus
+      );
+      specsMap = Object.fromEntries(psRows.map(r => [r.sku, r.specs || '{}']));
+    }
+
+    // JS层合并：优先取product_skus的颜色/尺寸，fallback到Excel原始值
+    // 注意：mysql2的JSON列自动解析为JS对象，无需JSON.parse
+    const bySku = skuRows.map(r => {
+      const specs = specsMap[r.sku];
+      let color = r.color;
+      let size = r.size;
+      if (specs && typeof specs === 'object') {
+        const colorVal = specs['COLOR'] || specs['color'] || specs['Color'];
+        const sizeVal = specs['SIZE '] || specs['SIZE'] || specs['size'] || specs['Size'];
+        if (colorVal) color = String(colorVal).trim();
+        if (sizeVal) size = String(sizeVal).trim();
+      }
+      return { ...r, color, size };
+    });
 
     res.json({ success: true, store: storeOverall, byModel, byColorSize, bySku });
   } catch (err) {
@@ -539,6 +613,8 @@ router.delete('/records/:id', async (req, res) => {
 // POST /api/import/multi-analysis — 多选记录聚合门店分析
 router.post('/multi-analysis', async (req, res) => {
   try {
+    // 禁用 ONLY_FULL_GROUP_BY
+    await pool.query("SET SESSION sql_mode=(SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY',''))");
     const { record_ids } = req.body;
     if (!Array.isArray(record_ids) || record_ids.length === 0) {
       return res.status(400).json({ success: false, message: 'record_ids required' });
@@ -572,16 +648,18 @@ router.post('/multi-analysis', async (req, res) => {
        GROUP BY model, store_code, store_name ORDER BY qty DESC`, [record_ids]
     );
 
-    // SKU明细（按门店+型号+SKU聚合）
+    // SKU明细（按门店+型号+SKU聚合）- 直接用Excel原始颜色/尺寸
     const [bySku] = await pool.query(
-      `SELECT store_code, store_name, model, sku, color, size,
-              SUM(quantity) as total_qty, SUM(amount) as total_amount,
+      `SELECT i.store_code, i.store_name, i.model, i.sku,
+              i.color, i.size,
+              SUM(i.quantity) as total_qty, SUM(i.amount) as total_amount,
               COUNT(*) as order_count,
-              MAX(image_url) as image_url,
-              MAX(product_name) as product_name
-       FROM imported_excel_items WHERE record_id IN (?)
-       GROUP BY store_code, store_name, model, sku, color, size
-       ORDER BY store_code, total_amount DESC`, [record_ids]
+              MAX(i.image_url) as image_url,
+              MAX(i.product_name) as product_name
+       FROM imported_excel_items i
+       WHERE i.record_id IN (?)
+       GROUP BY i.store_code, i.store_name, i.model, i.sku, i.color, i.size
+       ORDER BY i.store_code, total_amount DESC`, [record_ids]
     );
 
     // 颜色×尺码热销组合
