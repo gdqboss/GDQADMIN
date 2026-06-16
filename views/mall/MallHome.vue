@@ -105,7 +105,7 @@ function loadMore() {
 
 onMounted(async () => {
   await load()
-  const res = await fetch('/api/store-mall/categories')
+  const res = await fetch('/api/mall/categories')
   const cats = await res.json()
   topCategories.value = Array.isArray(cats) ? cats.slice(0, 8) : []
 })

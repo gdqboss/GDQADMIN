@@ -23,6 +23,33 @@ const router = useRouter()
 const userStore = useUserStore()
 const { t } = useI18n()
 
+// ─── 页面加载时：检测微信授权回调code ───
+const urlParams = new URLSearchParams(window.location.search)
+const wxCode = urlParams.get('code')
+if (wxCode) {
+  // 微信回调来了，自动完成登录
+  loading.value = true
+  api.post('/auth/wx-h5-login', { code: wxCode }).then(res => {
+    if (res.code === 0) {
+      localStorage.setItem('caimeite_token', res.data.token)
+      localStorage.setItem('caimeite_user', JSON.stringify(res.data.user))
+      userStore.token = res.data.token
+      userStore.user = res.data.user
+      // 清理URL参数后跳转
+      window.history.replaceState({}, '', window.location.pathname)
+      router.push('/')
+    } else {
+      error.value = res.message || t('login.wxLoginFailed')
+      loginMode.value = 'customer'
+    }
+  }).catch(() => {
+    error.value = t('login.wxLoginFailed')
+    loginMode.value = 'customer'
+  }).finally(() => {
+    loading.value = false
+  })
+}
+
 // ─── 登录模式切换 ───
 const loginMode = ref('employee') // 'employee' | 'customer'
 
@@ -149,6 +176,17 @@ function handleWxMpLogin() {
     // 提示用微信扫一扫
     error.value = t('login.wxScanTip')
   }
+}
+
+// 微信公众号H5静默授权登录（snsapi_base，无需用户点击确认）
+function handleWxH5Login() {
+  const appid = 'wx2947d27b4da69b1e'
+  // 回调到自己这个登录页面，code会挂在URL参数上
+  const redirectUri = encodeURIComponent(window.location.origin + window.location.pathname)
+  const state = Math.random().toString(36).slice(2)
+  sessionStorage.setItem('wx_oauth_state', state)
+  window.location.href =
+    `https://open.weixin.qq.com/connect/oauth2/authorize?appid=${appid}&redirect_uri=${redirectUri}&response_type=code&scope=snsapi_base&state=${state}#wechat_redirect`
 }
 
 // Apple登录
@@ -340,26 +378,6 @@ function langLabel(l) {
       <div class="absolute -bottom-[10%] -left-[10%] w-[40%] h-[40%] rounded-full bg-primary/10 blur-[80px]"></div>
     </div>
 
-    <!-- 模式切换 Tabs -->
-    <div class="relative z-10 pt-6 px-4 text-center">
-      <div class="inline-flex bg-white rounded-xl shadow-card p-1 gap-1">
-        <button
-          @click="loginMode = 'employee'; error = ''"
-          class="px-5 py-2 rounded-lg text-sm font-medium transition-all"
-          :class="loginMode === 'employee' ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'"
-        >
-          {{ $t('login.employeeLogin') || '员工登录' }}
-        </button>
-        <button
-          @click="loginMode = 'customer'; error = ''"
-          class="px-5 py-2 rounded-lg text-sm font-medium transition-all"
-          :class="loginMode === 'customer' ? 'bg-primary text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'"
-        >
-          {{ $t('login.customerLogin') || '顾客登录' }}
-        </button>
-      </div>
-    </div>
-
     <main class="relative z-10 flex-grow flex items-center justify-center p-3 sm:p-4 md:p-6 lg:p-8">
       <div class="w-full max-w-[460px] bg-white rounded-xl shadow-card overflow-hidden">
 
@@ -391,6 +409,26 @@ function langLabel(l) {
           </div>
           <h1 class="text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-slate-900 mb-1">{{ $t('system.fullName') }}</h1>
           <p class="text-xs sm:text-sm text-slate-500">{{ $t('system.motto') }}</p>
+        </div>
+
+        <!-- 模式切换 Tabs -->
+        <div class="px-4 sm:px-6 md:px-8 pb-2 text-center">
+          <div class="inline-flex bg-slate-100 rounded-xl p-1 gap-1">
+            <button
+              @click="loginMode = 'employee'; error = ''"
+              class="px-5 py-2 rounded-lg text-sm font-medium transition-all"
+              :class="loginMode === 'employee' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+            >
+              {{ $t('login.employeeLogin') || '员工登录' }}
+            </button>
+            <button
+              @click="loginMode = 'customer'; error = ''"
+              class="px-5 py-2 rounded-lg text-sm font-medium transition-all"
+              :class="loginMode === 'customer' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+            >
+              {{ $t('login.customerLogin') || '顾客登录' }}
+            </button>
+          </div>
         </div>
 
         <div class="px-4 sm:px-6 md:px-8 pb-6 sm:pb-8 md:pb-10">
@@ -446,9 +484,15 @@ function langLabel(l) {
             <div class="space-y-2 mb-5">
               <p class="text-xs text-slate-400 text-center mb-3">{{ $t('login.thirdPartyLogin') }}</p>
 
-              <!-- 微信小程序登录 -->
-              <button @click="handleWxMpLogin" class="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-slate-200 hover:bg-green-50 hover:border-green-300 transition-all text-sm font-medium text-slate-700">
+              <!-- 微信公众号H5扫码登录 -->
+              <button @click="handleWxH5Login" class="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-slate-200 hover:bg-green-50 hover:border-green-300 transition-all text-sm font-medium text-slate-700">
                 <svg class="w-5 h-5 text-green-500" viewBox="0 0 24 24" fill="currentColor"><path d="M8.5 11.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm7 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM8 16c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm8 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-4 4c-2 0-3.75-1.1-4.75-2.75L.59 19.5l1.5-1 1.5 1.5-1 1.5 1 1.5 2.41-2.25C6.5 21.5 7.15 22 8 22c.55 0 1.05-.15 1.5-.4L11 24h2l1.5-2.4c.45.25.95.4 1.5.4.85 0 1.5-.5 1.59-1.19L17 24h2l-1.16-2.25C19.75 23.9 18 25 16 25c-2.76 0-5-2.24-5-5z"/></svg>
+                {{ $t('login.wxH5Login') }}
+              </button>
+
+              <!-- 微信小程序登录 -->
+              <button @click="handleWxMpLogin" class="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 transition-all text-sm font-medium text-slate-600">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM8 18c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm4-3c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm4 3c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/></svg>
                 {{ $t('login.wxMpLogin') }}
               </button>
 

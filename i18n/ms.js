@@ -567,6 +567,7 @@ export default {
         formManagerPlaceholder: 'Manager name',
         formDomain: 'Domain',
         formWebsite: 'Laman Web',
+        formSiteLogo: 'Logo Laman Web',
         formSiteNameZh: 'Chinese Name',
         formSiteNameEn: 'English Name',
         formLanguage: 'Interface Language (multi-select)',

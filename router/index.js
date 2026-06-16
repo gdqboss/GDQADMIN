@@ -7,22 +7,55 @@ const lazyLoad = (loader) => () => loader()
 const routes = [
   {
     path: '/mall',
-    component: lazyLoad(() => import('../views/store/StoreLayout.vue')),
+    component: lazyLoad(() => import('../views/mall/MallLayout.vue')),
     meta: { public: true },
     children: [
-      { path: '', name: 'MallHome', component: lazyLoad(() => import('../views/store/MallHome.vue')), meta: { public: true } },
-      { path: 'category/:id', name: 'MallCategory', component: lazyLoad(() => import('../views/store/MallCategory.vue')), meta: { public: true } },
-      { path: 'product/:id', name: 'MallProductDetail', component: lazyLoad(() => import('../views/store/ProductDetail.vue')), meta: { public: true } },
-      { path: 'cart', name: 'MallCart', component: lazyLoad(() => import('../views/store/MallCart.vue')), meta: { public: true } },
-      { path: 'checkout', name: 'Checkout', component: lazyLoad(() => import('../views/store/Checkout.vue')), meta: { public: true } },
-      { path: 'orders', name: 'MallOrderList', component: lazyLoad(() => import('../views/store/OrderList.vue')), meta: { public: true } },
-      { path: 'login', name: 'MallLogin', component: lazyLoad(() => import('../views/store/MallLogin.vue')), meta: { public: true } },
-      { path: 'register', name: 'MallRegister', component: lazyLoad(() => import('../views/store/MallRegister.vue')), meta: { public: true } },
+      { path: '', name: 'MallHome', component: lazyLoad(() => import('../views/mall/MallHome.vue')), meta: { public: true } },
+      { path: 'category/:id', name: 'MallCategory', component: lazyLoad(() => import('../views/mall/MallCategory.vue')), meta: { public: true } },
+      { path: 'product/:id', name: 'MallProductDetail', component: lazyLoad(() => import('../views/mall/ProductDetail.vue')), meta: { public: true } },
+      { path: 'cart', name: 'MallCart', component: lazyLoad(() => import('../views/mall/MallCart.vue')), meta: { public: true } },
+      { path: 'checkout', name: 'Checkout', component: lazyLoad(() => import('../views/mall/Checkout.vue')), meta: { public: true } },
+      { path: 'orders', name: 'MallOrderList', component: lazyLoad(() => import('../views/mall/OrderList.vue')), meta: { public: true } },
+      { path: 'order/:id', name: 'MallOrderDetail', component: lazyLoad(() => import('../views/h5/H5OrderDetail.vue')), meta: { public: true } },
+      { path: 'address', name: 'H5AddressList', component: lazyLoad(() => import('../views/h5/H5AddressList.vue')), meta: { public: true } },
+      { path: 'address/edit', name: 'H5AddressEdit', component: lazyLoad(() => import('../views/h5/H5AddressEdit.vue')), meta: { public: true } },
+      { path: 'login', name: 'MallLogin', component: lazyLoad(() => import('../views/mall/MallLogin.vue')), meta: { public: true } },
+      { path: 'register', name: 'MallRegister', component: lazyLoad(() => import('../views/mall/MallRegister.vue')), meta: { public: true } },
       { path: 'score-shop', name: 'ScoreShopHome', component: lazyLoad(() => import('../views/store/ScoreShopHome.vue')), meta: { public: true } },
       { path: 'score-product/:id', name: 'ScoreProductDetail', component: lazyLoad(() => import('../views/store/ScoreProductDetail.vue')), meta: { public: true } },
       { path: 'coupons', name: 'CouponList', component: lazyLoad(() => import('../views/store/CouponList.vue')), meta: { public: true } },
       { path: 'score-orders', name: 'ScoreOrderList', component: lazyLoad(() => import('../views/store/ScoreOrderList.vue')), meta: { public: true } },
       { path: 'score-order/:id', name: 'ScoreOrderDetail', component: lazyLoad(() => import('../views/store/ScoreOrderDetail.vue')), meta: { public: true } },
+    ],
+  },
+  // ── H5移动端商城 ──────────────────────────────────────────────────
+  {
+    path: '/h5',
+    component: lazyLoad(() => import('../views/h5/H5Layout.vue')),
+    meta: { public: true, h5: true },
+    children: [
+      { path: '', name: 'H5Home', component: lazyLoad(() => import('../views/h5/H5Home.vue')), meta: { public: true } },
+      { path: 'home', name: 'H5Home2', redirectTo: '/h5' },
+      { path: 'categories', name: 'H5Categories', component: lazyLoad(() => import('../views/h5/H5Categories.vue')), meta: { public: true } },
+      { path: 'cart', name: 'H5Cart', component: lazyLoad(() => import('../views/h5/H5Cart.vue')), meta: { public: true } },
+      { path: 'profile', name: 'H5Profile', component: lazyLoad(() => import('../views/h5/H5Profile.vue')), meta: { public: true } },
+      { path: 'product/:id', name: 'H5ProductDetail', component: lazyLoad(() => import('../views/h5/H5ProductDetail.vue')), meta: { public: true } },
+      { path: 'checkout', name: 'H5Checkout', component: lazyLoad(() => import('../views/h5/H5Checkout.vue')), meta: { public: true } },
+      { path: 'order-pay', name: 'H5OrderPay', component: lazyLoad(() => import('../views/h5/H5OrderPay.vue')), meta: { public: true } },
+      { path: 'orders', name: 'H5Orders', component: lazyLoad(() => import('../views/h5/H5Orders.vue')), meta: { public: true } },
+      { path: 'order/:id', name: 'H5OrderDetail', component: lazyLoad(() => import('../views/h5/H5OrderDetail.vue')), meta: { public: true } },
+      { path: 'seckill', name: 'H5Seckill', component: lazyLoad(() => import('../views/h5/H5Seckill.vue')), meta: { public: true } },
+      { path: 'collage/:id', name: 'H5Collage', component: lazyLoad(() => import('../views/h5/H5Collage.vue')), meta: { public: true } },
+      { path: 'address/list', name: 'H5AddressList', component: lazyLoad(() => import('../views/h5/H5AddressList.vue')), meta: { public: true } },
+      { path: 'address/edit', name: 'H5AddressEdit', component: lazyLoad(() => import('../views/h5/H5AddressEdit.vue')), meta: { public: true } },
+      { path: 'coupons', name: 'H5Coupons', component: lazyLoad(() => import('../views/h5/H5Coupons.vue')), meta: { public: true } },
+      { path: 'score-history', name: 'H5ScoreHistory', component: lazyLoad(() => import('../views/h5/H5ScoreHistory.vue')), meta: { public: true } },
+      { path: 'score-detail', name: 'H5ScoreDetail', component: lazyLoad(() => import('../views/h5/H5ScoreDetail.vue')), meta: { public: true } },
+      { path: 'wallet', name: 'H5Wallet', component: lazyLoad(() => import('../views/h5/H5Wallet.vue')), meta: { public: true } },
+      { path: 'settings', name: 'H5Settings', component: lazyLoad(() => import('../views/h5/H5Settings.vue')), meta: { public: true } },
+      { path: 'profile/edit', name: 'H5ProfileEdit', component: lazyLoad(() => import('../views/h5/H5ProfileEdit.vue')), meta: { public: true } },
+      { path: 'password', name: 'H5Password', component: lazyLoad(() => import('../views/h5/H5Password.vue')), meta: { public: true } },
+      { path: 'bind-phone', name: 'H5BindPhone', component: lazyLoad(() => import('../views/h5/H5BindPhone.vue')), meta: { public: true } },
     ],
   },
   // 登录页独立于 MainLayout，不带侧边栏
@@ -82,6 +115,10 @@ const routes = [
       { path: 'score-products', name: 'ScoreProductManage', component: lazyLoad(() => import('../views/mall/ScoreProductManage.vue')), meta: { title: '积分商品管理', parent: '商城', permission: 'product:write' } },
       { path: 'score-orders', name: 'ScoreOrderManage', component: lazyLoad(() => import('../views/mall/ScoreOrderManage.vue')), meta: { title: '积分订单管理', parent: '商城', permission: 'order:read' } },
       { path: 'coupon-manage', name: 'CouponManage', component: lazyLoad(() => import('../views/mall/CouponManage.vue')), meta: { title: '优惠券管理', parent: '商城', permission: 'order:read' } },
+      { path: 'wallet-manage', name: 'WalletManage', component: lazyLoad(() => import('../views/finance/WalletManage.vue')), meta: { title: '会员钱包管理', parent: '财务管理', permission: 'finance:read' } },
+      { path: 'invite-manage', name: 'InviteManage', component: lazyLoad(() => import('../views/marketing/InviteManage.vue')), meta: { title: '邀请返现管理', parent: '营销', permission: 'marketing:read' } },
+      { path: 'seckill-manage', name: 'SeckillManage', component: lazyLoad(() => import('../views/marketing/SeckillManage/index.vue')), meta: { title: '秒杀管理', parent: '营销', permission: 'marketing:read' } },
+      { path: 'member-level-manage', name: 'MemberLevelManage', component: lazyLoad(() => import('../views/member/MemberLevelManage.vue')), meta: { title: '会员等级管理', parent: '会员', permission: 'user:read' } },
 
       // ── 调货/退货 ────────────────────────────────────────────
       { path: 'transfer', name: 'TransferList', component: lazyLoad(() => import('../views/transfer/TransferList.vue')), meta: { title: '调货管理', permission: 'transfer:read' } },
@@ -186,6 +223,13 @@ const routes = [
 const router = createRouter({
   history: createWebHashHistory(),
   routes,
+})
+
+// Catch-all for failed chunk loads → reload page once
+router.onError((err) => {
+  if (err.message && err.message.includes('Failed to fetch dynamically imported module')) {
+    window.location.reload()
+  }
 })
 
 // 路由切换加载状态

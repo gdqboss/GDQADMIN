@@ -62,12 +62,14 @@ const form = ref({
   name: '', ip: '', ssh_port: 22, ssh_user: 'ubuntu',
   ssh_key_path: '/root/clawgdqshop.pem', description: '', env: 'production',
   build_date: '', manager: '', domain: '', pem_content: '', website: '',
+  site_logo: '',
   modules: [], site_name_zh: '', site_name_en: '', language: [], currency: '', industry: '',
-  wechat_appid: '',
+  mysql_host: '', mysql_db: '', mysql_user: '', mysql_password: '', mysql_port: 3306,
 })
 
 // 同步状态
 const syncing = ref(false)
+const siteLogoTesting = ref(false)
 const syncResult = ref(null)
 const syncDialogVisible = ref(false)
 const syncLoading = ref(false)
@@ -118,7 +120,9 @@ function openAdd() {
     name: '', ip: '', ssh_port: 22, ssh_user: 'ubuntu',
     ssh_key_path: '/root/clawgdqshop.pem', description: '', env: 'production',
     build_date: '', manager: '', domain: '', pem_content: '', website: '',
+    site_logo: '',
     modules: [], site_name_zh: '', site_name_en: '', language: [], currency: '', industry: '',
+    mysql_host: '', mysql_db: '', mysql_user: '', mysql_password: '', mysql_port: 3306,
   }
   dialogVisible.value = true
 }
@@ -141,9 +145,12 @@ async function openEdit(row) {
     description: row.description || '', env: row.env || 'production',
     build_date: row.build_date || '', manager: row.manager || '',
     domain: row.domain || '', pem_content: row.pem_content || '',
-    website: row.website || '', modules: [...(row.modules || [])],
+    website: row.website || '', site_logo: row.site_logo || '',
+    modules: [...(row.modules || [])],
     site_name_zh: row.site_name_zh || '', site_name_en: row.site_name_en || '',
     language: langArray, currency: row.currency || '', industry: row.industry || '',
+    mysql_host: row.mysql_host || '', mysql_db: row.mysql_db || '', mysql_user: row.mysql_user || '',
+    mysql_password: row.mysql_password || '', mysql_port: row.mysql_port || 3306,
   }
   newModuleKey.value = ''
   bulkModuleKeys.value = []
@@ -250,6 +257,20 @@ function getModuleCount(modules) {
 }
 
 // ─── Sync ────────────────────────────────────────────────────────────────────
+async function testSiteLogo() {
+  const url = form.value.site_logo
+  if (!url) { ElMessage.warning('请先输入Logo URL'); return }
+  siteLogoTesting.value = true
+  try {
+    const img = new Image()
+    img.onload = () => ElMessage.success('Logo可访问')
+    img.onerror = () => ElMessage.error('Logo无法加载，请检查URL')
+    img.src = url
+  } finally {
+    setTimeout(() => { siteLogoTesting.value = false }, 3000)
+  }
+}
+
 async function handleSync(row) {
   try {
     await ElMessageBox.confirm(
@@ -562,6 +583,14 @@ onMounted(() => {
             <el-form-item :label="$t('serverProfiles.formWebsite')" class="col-span-2 md:col-span-1">
               <el-input v-model="form.website" placeholder="https://wecom.gdqshop.cn" />
             </el-form-item>
+            <!-- 网站Logo -->
+            <el-form-item :label="$t('serverProfiles.formSiteLogo')" class="col-span-2">
+              <div class="flex items-center gap-3">
+                <el-input v-model="form.site_logo" placeholder="https://example.com/logo.png" clearable class="flex-1" />
+                <el-button size="small" @click="testSiteLogo" :loading="siteLogoTesting">检测</el-button>
+                <img v-if="form.site_logo" :src="form.site_logo" class="h-8 w-auto object-contain border rounded" @error="form.site_logo = ''" />
+              </div>
+            </el-form-item>
             <el-form-item :label="$t('serverProfiles.formWechatAppid')" class="col-span-2 md:col-span-1">
               <el-input v-model="form.wechat_appid" placeholder="wx90a47bdbe0bf89cb" clearable />
             </el-form-item>
@@ -592,6 +621,28 @@ onMounted(() => {
               <el-select v-model="form.industry" placeholder="选择行业（可选）" class="w-full" clearable>
                 <el-option v-for="opt in industryOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
+            </el-form-item>
+          </el-form>
+        </div>
+
+        <!-- 数据库配置 -->
+        <div class="bg-gray-50 rounded-lg p-4">
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">数据库配置</div>
+          <el-form :model="form" label-width="120px" class="grid grid-cols-2 gap-x-4">
+            <el-form-item :label="$t('serverProfiles.mysqlHost')" class="col-span-2 md:col-span-1">
+              <el-input v-model="form.mysql_host" placeholder="localhost 或 IP地址" />
+            </el-form-item>
+            <el-form-item :label="$t('serverProfiles.mysqlPort')" class="col-span-2 md:col-span-1">
+              <el-input-number v-model="form.mysql_port" :min="1" :max="65535" controls-position="right" class="w-full" />
+            </el-form-item>
+            <el-form-item :label="$t('serverProfiles.mysqlDb')" class="col-span-2 md:col-span-1">
+              <el-input v-model="form.mysql_db" placeholder="gdq" />
+            </el-form-item>
+            <el-form-item :label="$t('serverProfiles.mysqlUser')" class="col-span-2 md:col-span-1">
+              <el-input v-model="form.mysql_user" placeholder="root / gdq" />
+            </el-form-item>
+            <el-form-item :label="$t('serverProfiles.mysqlPassword')" class="col-span-2">
+              <el-input v-model="form.mysql_password" type="password" show-password placeholder="数据库密码" />
             </el-form-item>
           </el-form>
         </div>

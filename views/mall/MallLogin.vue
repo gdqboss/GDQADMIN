@@ -50,7 +50,7 @@ async function login() {
   if (!form.value.phone || !form.value.password) { error.value = '请填写手机号和密码'; return }
   loading.value = true
   try {
-    const res = await fetch('/api/store-mall/login', {
+    const res = await fetch('/api/mall/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form.value)
@@ -73,6 +73,6 @@ async function login() {
 
 onMounted(() => {
   if (localStorage.getItem('mall_user_id')) router.push('/mall')
-  fetch('/api/store-mall/config').then(r => r.json()).then(d => { if (d.shop_name) shopName.value = d.shop_name }).catch(() => {})
+  fetch('/api/mall/config').then(r => r.json()).then(d => { if (d.shop_name) shopName.value = d.shop_name }).catch(() => {})
 })
 </script>

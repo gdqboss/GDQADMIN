@@ -122,7 +122,7 @@
                               <td>{{ getColorDisplay(sku) || '-' }}</td>
                               <td>{{ sku.size || '-' }}</td>
                               <td>
-                                <span v-if="sku.unit_price" class="num">¥{{ Number(sku.unit_price).toLocaleString() }}</span>
+                                <span v-if="sku.unit_price !== null && sku.unit_price !== undefined && sku.unit_price !== ''" class="num">¥{{ Number(sku.unit_price).toLocaleString() }}</span>
                                 <span v-else class="text-gray">-</span>
                               </td>
                               <td class="qty">{{ Number(sku.total_qty).toLocaleString() }} {{ $t('importDetail.pcs') }}</td>

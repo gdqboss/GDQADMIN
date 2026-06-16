@@ -72,7 +72,7 @@ const hasMore = ref(false)
 const loading = ref(false)
 
 async function loadCategory(id) {
-  const res = await fetch('/api/store-mall/categories')
+  const res = await fetch('/api/mall/categories')
   const cats = await res.json()
   const flat = flattenCats(cats)
   const cat = flat.find(c => c.id === Number(id))

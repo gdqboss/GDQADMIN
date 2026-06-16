@@ -72,7 +72,7 @@ window.addEventListener('mall_cart_updated', () => {
 })
 
 onMounted(() => {
-  fetch('/api/store-mall/config')
+  fetch('/api/mall/config')
     .then(r => r.json())
     .then(data => { if (data.shop_name) shopName.value = data.shop_name })
     .catch(() => {})

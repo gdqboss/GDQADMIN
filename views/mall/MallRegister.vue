@@ -51,7 +51,7 @@ async function register() {
   if (form.value.password.length < 6) { error.value = '密码至少6位'; return }
   loading.value = true
   try {
-    const res = await fetch('/api/store-mall/register', {
+    const res = await fetch('/api/mall/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: form.value.name, phone: form.value.phone, password: form.value.password })
