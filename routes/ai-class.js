@@ -299,19 +299,70 @@ router.delete('/memory/:id', auth, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
-// GET /api/ai-class/conversations - 获取指定session的对话历史
+// ==================== 会话管理路由 ====================
+// GET /api/ai-class/sessions - 获取用户所有会话
+router.get('/sessions', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    const [rows] = await pool.query(
+      `SELECT id, title, created_at, updated_at FROM ai_class_sessions
+       WHERE user_id = ? ORDER BY updated_at DESC LIMIT 50`,
+      [userId]
+    )
+    res.json({ code: 0, data: rows })
+  } catch (err) { next(err) }
+})
+
+// POST /api/ai-class/sessions - 创建新会话
+router.post('/sessions', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    const { title } = req.body
+    const [result] = await pool.query(
+      'INSERT INTO ai_class_sessions (user_id, title) VALUES (?, ?)',
+      [userId, title || '新对话']
+    )
+    res.json({ code: 0, data: { id: result.insertId, title: title || '新对话' } })
+  } catch (err) { next(err) }
+})
+
+// GET /api/ai-class/sessions/:id/messages - 获取会话的所有消息
+router.get('/sessions/:id/messages', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    const sessionId = parseInt(req.params.id)
+    const [rows] = await pool.query(
+      `SELECT id, role, content, model, created_at FROM ai_class_messages
+       WHERE session_id = ? ORDER BY created_at ASC`,
+      [sessionId]
+    )
+    res.json({ code: 0, data: rows })
+  } catch (err) { next(err) }
+})
+
+// DELETE /api/ai-class/sessions/:id - 删除会话
+router.delete('/sessions/:id', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    const sessionId = parseInt(req.params.id)
+    await pool.query('DELETE FROM ai_class_sessions WHERE id = ? AND user_id = ?', [sessionId, userId])
+    res.json({ code: 0, message: '删除成功' })
+  } catch (err) { next(err) }
+})
+
+// ==================== 对话历史兼容路由（保留） ====================
+// GET /api/ai-class/conversations - 获取指定session的对话历史（旧接口兼容）
 router.get('/conversations', auth, async (req, res, next) => {
   try {
     const { session_id } = req.query
     const userId = req.user.id
 
     const [rows] = await pool.query(
-      `SELECT id, query, response, created_at FROM ai_class_conversations 
+      `SELECT id, query, response, created_at FROM ai_class_conversations
        WHERE user_id = ? AND session_id = ?
        ORDER BY created_at ASC`,
       [userId, session_id || 'default']
     )
-
     res.json({ code: 0, data: rows })
   } catch (err) { next(err) }
 })
@@ -327,14 +378,30 @@ router.post('/chat', auth, async (req, res, next) => {
       return res.json({ code: 0, data: { reply: '请输入问题' } })
     }
 
-    // 1. 获取用户最近20条对话历史
-    const [history] = await pool.query(
-      `SELECT query, response FROM ai_class_conversations
-       WHERE user_id = ? AND session_id = ?
-       ORDER BY created_at DESC LIMIT 20`,
-      [userId, session_id || 'default']
+    // 0. 处理session：没有/无效则创建，有则更新title为第一条用户消息（前50字）
+    // 前端可能传 UUID 或数字 ID（uuid 用作 localStorage key，数字 ID 用于 DB 查询）
+    let sid = session_id && session_id !== 'undefined' && session_id !== 'null' ? session_id : null
+    // 如果 sid 不是数字（前端传的 UUID），当作新 session
+    if (sid && !/^\d+$/.test(sid.toString())) {
+      sid = null
+    }
+    if (!sid) {
+      const [r] = await pool.query(
+        'INSERT INTO ai_class_sessions (user_id, title) VALUES (?, ?)',
+        [userId, message.slice(0, 50)]
+      )
+      sid = r.insertId.toString()
+    } else {
+      // 更新session的updated_at
+      await pool.query('UPDATE ai_class_sessions SET updated_at=NOW() WHERE id=?', [parseInt(sid)])
+    }
+
+    // 1. 从新消息表获取历史对话（用于构建上下文）
+    const [historyMsgs] = await pool.query(
+      `SELECT role, content FROM ai_class_messages
+       WHERE session_id = ? ORDER BY created_at ASC LIMIT 30`,
+      [parseInt(sid)]
     )
-    const reversedHistory = history.reverse()
 
     // 2. 获取公共记忆和用户私人记忆
     const [publicMemory] = await pool.query(
@@ -344,7 +411,7 @@ router.post('/chat', auth, async (req, res, next) => {
       'SELECT content, memory_type FROM ai_class_memory WHERE user_id = ? ORDER BY created_at DESC LIMIT 10',
       [userId]
     )
-    
+
     // 构建分层记忆上下文（公共记忆 + 私人记忆分开）
     let memoryContext = ''
     if (publicMemory.length > 0) {
@@ -364,25 +431,21 @@ router.post('/chat', auth, async (req, res, next) => {
     // 3. RAG知识检索 - 从ai_class_knowledge表检索相关知识
     let ragContext = ''
     try {
-      // 提取关键词（中文：滑动窗口2-4字+标点分词，支持英文）
       const sentences = message.split(/[，。！？、；\n\r,.!?;]+/).filter(s => s.trim())
       const wordSet = new Set()
       for (const sentence of sentences) {
-        // 滑动窗口提取2-4字词（去重）
         for (let len = 2; len <= 4; len++) {
           for (let i = 0; i <= sentence.length - len; i++) {
             const w = sentence.substring(i, i + len)
             if (/^[\u4e00-\u9fa5]+$/.test(w)) wordSet.add(w)
           }
         }
-        // 英文词
         const enWords = sentence.match(/[a-zA-Z]{2,}/g) || []
         enWords.forEach(w => wordSet.add(w.toLowerCase()))
       }
       const allKeywords = [...wordSet]
 
       if (allKeywords.length > 0) {
-        // 构建LIKE查询条件
         const keywordConditions = allKeywords.map(() => '(title LIKE ? OR content LIKE ?)').join(' OR ')
         const queryParams = allKeywords.flatMap(k => [`%${k}%`, `%${k}%`])
 
@@ -408,10 +471,9 @@ router.post('/chat', auth, async (req, res, next) => {
     let realtimeContext = ''
     const msgLower = message.toLowerCase()
     const isWeatherQuery = /天气|温度|湿度|降雨|PM2|空气质量| forecast| weather/.test(msgLower)
-    const isNewsQuery = /新闻|最近|今日|昨天|明天|最新| today| news/.test(msgLower)
+    const isNewsQuery = /新闻|最近|今日|昨天|明天%|████████| today| news/.test(msgLower)
     if (isWeatherQuery || isNewsQuery) {
       try {
-        // 提取搜索词（去掉问号和常见前缀）
         const searchQuery = message.replace(/^(请问|查询|搜索|告诉我|我想知道|what is|what's|how is|how's|today'?s|请问一下|帮我查)/i, '').replace(/[?？。.]/g, '').trim()
         const r = await search_tavily(searchQuery.slice(0, 100), 5)
         if (r.success) {
@@ -431,41 +493,76 @@ router.post('/chat', auth, async (req, res, next) => {
     )
     const botName = botNameSetting?.value || '小智'
 
-    // 5. 获取默认LLM配置
-    const [[llmConfig]] = await pool.query(
-      'SELECT * FROM ai_config WHERE is_default = 1 AND category = "llm" LIMIT 1'
-    )
-
-// MiniMax-M2.7 配置（波哥主账号，高速+Function Calling）
-    const baseUrl = 'https://api.minimax.chat/v1'
-    const model = 'MiniMax-M2.7'
-    const miniMaxKey = process.env.MINIMAX_API_KEY
-
-    // 6. 获取用户权限（用于AI智能过滤）
+    // 5. 获取用户权限（用于AI智能过滤）
     const [[userRow]] = await pool.query(
       'SELECT name, permissions FROM users WHERE id = ?',
       [userId]
     )
     const userPermissions = userRow?.permissions ? JSON.parse(userRow.permissions) : []
-    const userName = userRow?.name || ''
 
-    // 6. 增强的System Prompt（>500字，通用多租户系统）
-    // 极简System Prompt（Hermes/OpenClaw风格）
-    // 核心原则：有话直说，不废话，不编造，不输出思考过程
+    // 4.5 加载默认系统知识库（system/business/table/glossary 4 类）
+    // 这些知识不进 LIKE 检索，直接拼到 System Prompt，让 AI 立即了解彩美特整套系统
+    const [defaultKnowledge] = await pool.query(
+      `SELECT title, content, doc_type FROM ai_class_knowledge
+       WHERE doc_type IN ('system','business','table','glossary')
+         AND (is_public = 1 OR is_public IS NULL)
+       ORDER BY FIELD(doc_type,'system','business','table','glossary'), id`
+    )
+    let systemKnowledgeContext = ''
+    if (defaultKnowledge.length > 0) {
+      systemKnowledgeContext = '\n\n【彩美特系统知识库（自动加载）】\n' + defaultKnowledge
+        .map(k => `### ${k.title}\n${k.content}`)
+        .join('\n\n')
+    }
+
+    // 4.6 识别用户身份（role 字段 + permissions + department）
+    const [[userProfile]] = await pool.query(
+      'SELECT name, role, department, title, hire_date, employee_code, supervisor_id FROM users WHERE id = ?',
+      [userId]
+    )
+    let userIdentityContext = ''
+    if (userProfile) {
+      const daysEmployed = userProfile.hire_date
+        ? Math.floor((Date.now() - new Date(userProfile.hire_date).getTime()) / 86400000)
+        : null
+      const isNewHire = daysEmployed !== null && daysEmployed < 30
+      userIdentityContext = `\n\n【当前用户身份】
+- 姓名：${userProfile.name || '未填'}
+- 角色：${userProfile.role || '未设'}
+- 部门：${userProfile.department || '未填'}
+- 职位：${userProfile.title || '未填'}
+- 工号：${userProfile.employee_code || '未填'}
+- 入职天数：${daysEmployed !== null ? daysEmployed + '天' : '未知'}${isNewHire ? '（新员工，需要详细培训）' : ''}`
+    }
+
+    // 极简System Prompt（Hermes/OpenClaw风格）+ 系统知识 + 用户身份
     const permNote = userPermissions.length > 0
-      ? `\n注意：用户权限包括：${userPermissions.join('、')}。涉及这些功能的操作需要相应权限。`
-      : ''
-    const systemPrompt = `你是${botName}。
-直接、务实、有温度——像一位熟悉业务的同事那样回答问题。
-不知道就说不知道，不废话，不重复问题，直接给答案。
-绝对禁止在回复中输出任何内部思考、推理过程、分析步骤——只输出对用户真正有用的回复。${permNote}`
+      ? `\n【用户权限】${userPermissions.join('、')}`
+      : '\n【用户权限】无（只能看公开信息）'
+    const systemContent = `你是${botName}，彩美特（Caimeite）管理系统的智能助手。
+直接、务实、有温度——像一位熟悉业务的资深同事那样回答问题。
 
-    const historyContext = reversedHistory.length > 0
-      ? `\n\n对话历史：\n${reversedHistory.map(h => `用户: ${h.query}\n${botName}: ${h.response}`).join('\n')}`
-      : ''
+【核心职责】
+1. 系统操作培训：用户问"怎么做"时，告诉他具体步骤（哪个菜单→哪按钮→怎么填）
+2. 业务答疑：用户问"为什么"或"是什么"时，用彩美特业务术语解释
+3. 数据查询：用户问"查什么"时，必须调用 Function Calling 工具查真实数据库，禁止编造
+4. 权限感知：用户没权限的功能，明确告知"您没有xxx权限，需要联系管理员"
+5. 新员工引导：识别新员工（入职<30天），主动介绍系统模块和基本操作
 
-    // 构建完整prompt
-    const fullPrompt = `${systemPrompt}${memoryContext}${ragContext}${realtimeContext}${historyContext}\n\n用户: ${message}\n${botName}:`
+【回复格式要求】
+- 先给结论（一句话）
+- 再用表格或列表展示详情
+- 像人写的报告，禁止一坨文字 / 流水账 / 原始 JSON
+- 禁止输出内部思考过程（"我需要/让我/首先/其次"）
+- 不知道就说"我不确定，建议联系管理员或查 X 模块"
+${permNote}${userIdentityContext}${systemKnowledgeContext}${memoryContext}${ragContext}${realtimeContext}`
+
+    // 6. 构建消息数组（真正的多轮上下文）
+    const messages = [
+      { role: 'system', content: systemContent },
+      ...historyMsgs.map(m => ({ role: m.role, content: m.content })),
+      { role: 'user', content: message }
+    ]
 
     // 8. 定义Function Calling工具
     const functions = [
@@ -611,6 +708,38 @@ router.post('/chat', auth, async (req, res, next) => {
       }
     ]
 
+    // 8.1 动态读 LLM 配置（ai_config 表 + ENV 兜底）
+    let llmConfig = {
+      base_url: 'https://api.minimaxi.com/anthropic/v1/messages',
+      api_key: process.env.MINIMAX_API_KEY || '',
+      model: 'MiniMax-M3-8k',
+      protocol: 'anthropic' // anthropic | openai
+    }
+    try {
+      const [aiConfigRows] = await pool.query(
+        "SELECT base_url, api_key, model, provider FROM ai_config WHERE category='llm' AND status=1 ORDER BY is_default DESC LIMIT 1"
+      )
+      if (aiConfigRows.length > 0) {
+        const cfg = aiConfigRows[0]
+        if (cfg.base_url) llmConfig.base_url = cfg.base_url
+        if (cfg.api_key) llmConfig.api_key = cfg.api_key
+        if (cfg.model) llmConfig.model = cfg.model
+        // 协议检测：URL 包含 /anthropic 走 anthropic 协议
+        if (cfg.base_url && cfg.base_url.includes('/anthropic')) {
+          llmConfig.protocol = 'anthropic'
+        } else if (cfg.provider === 'minimax' || cfg.provider === 'openai' || cfg.provider === 'nvidia') {
+          llmConfig.protocol = 'openai'
+        }
+      }
+    } catch (cfgErr) {
+      console.error('[ai-class] read ai_config error:', cfgErr.message)
+    }
+    const { base_url: baseUrl, api_key: apiKey, model, protocol } = llmConfig
+    if (!apiKey) {
+      console.error('[ai-class] no api_key configured')
+      return res.json({ code: 500, message: 'AI 服务未配置 API Key' })
+    }
+
     // 9. 调用AI（支持function calling，带30秒超时）
     let reply = 'AI服务暂时繁忙，请稍后再试。'
 
@@ -624,28 +753,87 @@ router.post('/chat', auth, async (req, res, next) => {
         'web_search', 'get_sales_report', 'get_inventory_alert'
       ]
 
-      const response = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
+      // 9.1 协议适配：构造请求
+      let llmRequest, requestUrl, requestHeaders, assistantMessage
+      if (protocol === 'anthropic') {
+        // Anthropic 协议：tools 用 input_schema，响应 content[] 数组
+        const systemPrompt = messages.find(m => m.role === 'system')?.content || ''
+        const userMessages = messages.filter(m => m.role !== 'system')
+        requestUrl = baseUrl
+        requestHeaders = {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${miniMaxKey}`
-        },
-        body: JSON.stringify({
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'Authorization': `Bearer ${apiKey}`
+        }
+        // Anthropic 工具定义：去掉 type 字段，加 input_schema
+        const anthropicTools = functions.map(f => ({
+          name: f.function.name,
+          description: f.function.description,
+          input_schema: f.function.parameters
+        }))
+        llmRequest = {
           model: model,
-          messages: [
-            { role: 'user', content: fullPrompt }
-          ],
+          max_tokens: 3000,
+          temperature: 0.3,
+          system: systemPrompt,
+          tools: anthropicTools,
+          messages: userMessages
+        }
+      } else {
+        // OpenAI 协议：原样
+        requestUrl = `${baseUrl}/chat/completions`
+        requestHeaders = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        }
+        llmRequest = {
+          model: model,
+          messages: messages,
           tools: functions,
           max_tokens: 3000,
           temperature: 0.3
-        }),
+        }
+      }
+
+      console.log('[ai-class] LLM request:', requestUrl, 'body-size:', JSON.stringify(llmRequest).length)
+      const response = await fetch(requestUrl, {
+        method: 'POST',
+        headers: requestHeaders,
+        body: JSON.stringify(llmRequest),
         signal: controller.signal
       })
       clearTimeout(timeout)
+      if (!response.ok) {
+        console.error('[ai-class] LLM API error:', response.status, 'URL:', requestUrl, 'body-size:', JSON.stringify(llmRequest).length, await response.text())
+      }
 
       if (response.ok) {
         const data = await response.json()
-        const assistantMessage = data.choices?.[0]?.message
+
+        // 9.2 协议适配：解析响应
+        if (protocol === 'anthropic') {
+          // Anthropic 响应：{ content: [{type: 'text'|'tool_use', ...}], stop_reason }
+          const contentArr = data.content || []
+          const textParts = contentArr.filter(c => c.type === 'text').map(c => c.text)
+          const toolUses = contentArr.filter(c => c.type === 'tool_use')
+          if (toolUses.length > 0) {
+            assistantMessage = {
+              role: 'assistant',
+              content: textParts.join('\n') || null,
+              tool_calls: toolUses.map(tu => ({
+                id: tu.id,
+                type: 'function',
+                function: { name: tu.name, arguments: JSON.stringify(tu.input || {}) }
+              }))
+            }
+          } else {
+            assistantMessage = { role: 'assistant', content: textParts.join('\n') }
+          }
+        } else {
+          // OpenAI 响应：{ choices: [{message: {content, function_call, tool_calls}}] }
+          assistantMessage = data.choices?.[0]?.message
+        }
 
         // 处理Function Calling响应
         if (assistantMessage?.function_call || assistantMessage?.tool_calls?.length) {
@@ -658,43 +846,87 @@ router.post('/chat', auth, async (req, res, next) => {
           try {
             switch (fnName) {
               case 'get_products': {
-                let query = 'SELECT id, name, category, price FROM products WHERE 1=1'
+                let query = 'SELECT id, name, category, sale_price, purchase_price, unit, stock, safe_stock, status FROM products WHERE 1=1'
                 const params = []
                 if (fnArgs.keyword) {
-                  query += ' AND name LIKE ?'
-                  params.push(`%${fnArgs.keyword}%`)
+                  query += ' AND (name LIKE ? OR sku LIKE ? OR spec LIKE ?)'
+                  const kw = `%${fnArgs.keyword}%`
+                  params.push(kw, kw, kw)
                 }
                 if (fnArgs.category) {
-                  query += ' AND category = ?'
-                  params.push(fnArgs.category)
+                  query += ' AND (category = ? OR category_id IN (SELECT id FROM categories WHERE name = ?))'
+                  params.push(fnArgs.category, fnArgs.category)
                 }
-                query += ' LIMIT 10'
+                query += ' ORDER BY stock ASC LIMIT 10'
                 const [rows] = await pool.query(query, params)
                 functionResult = JSON.stringify(rows)
                 break
               }
               case 'get_inventory': {
+                // inventory 表实际是 warehouse_stock（按 warehouse+product+sku 唯一）
                 const [rows] = await pool.query(
-                  'SELECT product_id, quantity FROM inventory WHERE product_id = ?',
+                  `SELECT ws.product_id, p.name as product_name, ws.sku_id, ws.warehouse_id,
+                          w.name as warehouse_name, ws.quantity, ws.location
+                   FROM warehouse_stock ws
+                   LEFT JOIN products p ON ws.product_id = p.id
+                   LEFT JOIN warehouses w ON ws.warehouse_id = w.id
+                   WHERE ws.product_id = ? AND ws.quantity > 0
+                   ORDER BY ws.warehouse_id, ws.sku_id LIMIT 20`,
                   [fnArgs.product_id]
                 )
-                functionResult = JSON.stringify(rows[0] || { message: '未找到库存信息' })
+                const totalRow = await pool.query(
+                  'SELECT COALESCE(SUM(quantity),0) as total FROM warehouse_stock WHERE product_id=?',
+                  [fnArgs.product_id]
+                )
+                functionResult = JSON.stringify({
+                  product_id: fnArgs.product_id,
+                  total_quantity: totalRow[0][0]?.total || 0,
+                  details: rows
+                })
                 break
               }
               case 'get_orders': {
-                const [rows] = await pool.query(
-                  'SELECT id, status, total_price, created_at FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 10',
-                  [fnArgs.user_id]
-                )
-                functionResult = JSON.stringify(rows)
+                // 权限：member 看自己的订单，admin/manager/warehouse 看全部
+                const userId = req.user.id
+                const userRole = req.user.role
+                const queryUserId = fnArgs.user_id || userId
+                let where = ''
+                const params = []
+                // 非管理员只能查自己的订单
+                if (!['admin', 'manager'].includes(userRole) && queryUserId !== userId) {
+                  functionResult = JSON.stringify({ error: '无权查询其他用户的订单' })
+                  break
+                }
+                // 按状态过滤
+                if (fnArgs.status) {
+                  where = 'WHERE status = ?'
+                  params.push(fnArgs.status)
+                  if (queryUserId) {
+                    where += ' AND member_id = ?'
+                    params.push(queryUserId)
+                  }
+                } else if (queryUserId) {
+                  where = 'WHERE member_id = ?'
+                  params.push(queryUserId)
+                }
+                const sql = `SELECT id, order_no, member_name, member_phone, total_amount, pay_amount, pay_type, status, paid_at, shipped_at, completed_at, created_at FROM orders ${where} ORDER BY created_at DESC LIMIT 20`
+                const [rows] = await pool.query(sql, params)
+                functionResult = JSON.stringify({ count: rows.length, list: rows })
                 break
               }
               case 'get_user_info': {
+                // users 表字段：name（非 username）、phone（非 email）、permissions JSON
                 const [rows] = await pool.query(
-                  'SELECT id, username, email, created_at FROM users WHERE id = ?',
+                  'SELECT id, name, phone, role, department, status, permissions, hire_date, employee_code, title FROM users WHERE id = ?',
                   [fnArgs.user_id]
                 )
-                functionResult = JSON.stringify(rows[0] || { message: '未找到用户信息' })
+                const user = rows[0]
+                if (user) {
+                  // 解析 permissions 数组
+                  try { user.permissions = JSON.parse(user.permissions || '[]') } catch { user.permissions = [] }
+                  delete user.password  // 安全：不返回密码
+                }
+                functionResult = JSON.stringify(user || { message: '未找到用户信息' })
                 break
               }
               case 'get_attendance': {
@@ -741,7 +973,7 @@ router.post('/chat', auth, async (req, res, next) => {
                 else if (dateRange === 'quarter') dateCond = "created_at >= DATE_SUB(NOW(), INTERVAL 3 MONTH)"
                 else if (dateRange === 'year') dateCond = "created_at >= DATE_FORMAT(NOW(), '%Y-01-01')"
                 const [rows] = await pool.query(
-                  `SELECT COUNT(*) as order_count, COALESCE(SUM(total_price),0) as total_sales, COUNT(DISTINCT user_id) as customer_count
+                  `SELECT COUNT(*) as order_count, COALESCE(SUM(total_amount),0) as total_sales, COUNT(DISTINCT member_id) as customer_count
                    FROM orders WHERE status != 'cancelled' AND ${dateCond}`,
                   []
                 )
@@ -754,15 +986,19 @@ router.post('/chat', auth, async (req, res, next) => {
                   functionResult = JSON.stringify({ error: '您没有权限访问库存数据' })
                   break
                 }
-                // 查找库存低于安全库存的产品（假设安全库存=10）
+                // 查找库存低于安全库存的产品（warehouse_stock 汇总 vs products.safe_stock）
                 const [rows] = await pool.query(
-                  `SELECT p.id, p.name, p.category, COALESCE(i.quantity,0) as quantity
-                   FROM products p LEFT JOIN inventory i ON p.id=i.product_id
-                   WHERE COALESCE(i.quantity,0) < 10 AND p.status='active'
+                  `SELECT p.id, p.name, p.category, p.safe_stock,
+                          COALESCE(SUM(ws.quantity), 0) as quantity
+                   FROM products p
+                   LEFT JOIN warehouse_stock ws ON ws.product_id = p.id
+                   WHERE p.status = 'active' OR p.status IS NULL
+                   GROUP BY p.id, p.name, p.category, p.safe_stock
+                   HAVING quantity < COALESCE(p.safe_stock, 10)
                    ORDER BY quantity ASC LIMIT 20`,
                   []
                 )
-                functionResult = JSON.stringify({ alerts: rows })
+                functionResult = JSON.stringify({ alerts: rows, threshold: '低于安全库存' })
                 break
               }
               case 'hermes_delegate': {
@@ -792,19 +1028,67 @@ router.post('/chat', auth, async (req, res, next) => {
             functionResult = `数据库查询失败: ${dbErr.message}`
           }
 
-          // 将function_result告诉AI，让它生成最终回复
+          // 9.3 协议适配：第二次调用，把工具结果回传给 AI
           const controller2 = new AbortController()
           const timeout2 = setTimeout(() => controller2.abort(), 30000)
-          const response2 = await fetch(`${baseUrl}/chat/completions`, {
-            method: 'POST',
-            headers: {
+          let response2, request2, url2, headers2
+          if (protocol === 'anthropic') {
+            const systemPrompt = messages.find(m => m.role === 'system')?.content || ''
+            const prevUserMessages = messages.filter(m => m.role !== 'system')
+            // Anthropic 协议：工具结果作为 user 消息，content 是 tool_result 数组
+                        // 注意：assistantMessage 里是 OpenAI 格式的 tool_calls，
+                        // 但 Anthropic 第二次调用需要 Anthropic 格式的 tool_use 消息
+                        const toolUseContent = (assistantMessage.tool_calls || []).map(tc => ({
+                          type: 'tool_use',
+                          id: tc.id,
+                          name: tc.function?.name,
+                          input: (() => {
+                            try { return JSON.parse(tc.function?.arguments || '{}') }
+                            catch { return {} }
+                          })()
+                        }))
+                        const toolResultContent = (assistantMessage.tool_calls || []).map(tc => ({
+                          type: 'tool_result',
+                          tool_use_id: tc.id,  // Anthropic 用 tool_use_id 字段
+                          content: functionResult
+                        }))
+                        url2 = baseUrl
+                        headers2 = {
+                          'Content-Type': 'application/json',
+                          'x-api-key': apiKey,
+                          'anthropic-version': '2023-06-01',
+                          'Authorization': `Bearer ${apiKey}`
+                        }
+                        const anthropicTools2 = functions.map(f => ({
+                          name: f.function.name,
+                          description: f.function.description,
+                          input_schema: f.function.parameters
+                        }))
+                        request2 = {
+                          model: model,
+                          max_tokens: 1500,
+                          temperature: 0.3,
+                          system: systemPrompt,
+                          tools: anthropicTools2,
+                          messages: [
+                            ...prevUserMessages,
+                            // Anthropic 格式的 assistant 消息：content 是 tool_use 数组
+                            { role: 'assistant', content: toolUseContent },
+                            // Anthropic 格式的 user 消息：content 是 tool_result 数组
+                            { role: 'user', content: toolResultContent }
+                          ]
+                        }
+          } else {
+            // OpenAI 协议：tool_call_id + role=tool
+            url2 = baseUrl.includes('/chat/completions') ? baseUrl : `${baseUrl.replace(/\/$/, '')}/chat/completions`
+            headers2 = {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${miniMaxKey}`
-            },
-            body: JSON.stringify({
+              'Authorization': `Bearer ${apiKey}`
+            }
+            request2 = {
               model: model,
               messages: [
-                { role: 'user', content: fullPrompt },
+                ...messages,
                 assistantMessage,
                 {
                   role: 'tool',
@@ -815,15 +1099,35 @@ router.post('/chat', auth, async (req, res, next) => {
               tools: functions,
               max_tokens: 1500,
               temperature: 0.3
-            }),
+            }
+          }
+
+          response2 = await fetch(url2, {
+            method: 'POST',
+            headers: headers2,
+            body: JSON.stringify(request2),
             signal: controller2.signal
           })
           clearTimeout(timeout2)
 
           if (response2.ok) {
             const data2 = await response2.json()
-            reply = data2.choices?.[0]?.message?.content || reply
+            // 9.4 协议适配：解析第二次响应
+            let reply2
+            if (protocol === 'anthropic') {
+              const textParts2 = (data2.content || []).filter(c => c.type === 'text').map(c => c.text)
+              reply2 = textParts2.join('\n')
+            } else {
+              reply2 = data2.choices?.[0]?.message?.content
+            }
+            reply = reply2 || reply
             reply = formatReply(reply)
+          } else {
+            console.error('[ai-class] LLM API error 2nd call:', response2.status, 'URL:', url2, await response2.text())
+            // 第二次失败时，至少用第一次的部分文本（如果有）
+            if (assistantMessage?.content) {
+              reply = assistantMessage.content + '\n\n（AI 服务暂时繁忙，无法生成完整回复）'
+            }
           }
         } else {
           reply = assistantMessage?.content || reply
@@ -836,13 +1140,17 @@ router.post('/chat', auth, async (req, res, next) => {
       console.error('[ai-class] LLM fetch error:', fetchErr.message)
     }
 
-    // 10. 保存对话
+    // 10. 保存对话到新消息表
     await pool.query(
-      'INSERT INTO ai_class_conversations (user_id, session_id, query, response, model) VALUES (?, ?, ?, ?, ?)',
-      [userId, session_id || 'default', message, reply, model]
+      'INSERT INTO ai_class_messages (session_id, role, content, model) VALUES (?, ?, ?, ?)',
+      [parseInt(sid), 'user', message, model]
+    )
+    await pool.query(
+      'INSERT INTO ai_class_messages (session_id, role, content, model) VALUES (?, ?, ?, ?)',
+      [parseInt(sid), 'assistant', reply, model]
     )
 
-    res.json({ code: 0, data: { reply } })
+    res.json({ code: 0, data: { reply, session_id: sid } })
   } catch (err) {
     next(err)
   }

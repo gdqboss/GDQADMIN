@@ -5,6 +5,27 @@ import { requirePermission, requireRole, PERMISSIONS } from '../middleware/rbac.
 
 const router = Router()
 
+// 一物一码生成 helper（复用 qrcode.js /batch 的编码规则）
+async function generateQrcodes(conn, { count, product_id, sku_id, warehouse_id, operator, inbound_item_id }) {
+  if (!count || count <= 0) return []
+  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const [[{ maxSeq }]] = await conn.query(
+    "SELECT COUNT(*) as maxSeq FROM qrcodes WHERE code LIKE ?",
+    [`GDQ-${dateStr}%`]
+  )
+  const codes = []
+  for (let i = 0; i < count; i++) {
+    const seq = String(maxSeq + i + 1).padStart(6, '0')
+    const code = `GDQ-${dateStr}-${seq}`
+    await conn.query(
+      'INSERT INTO qrcodes (code, product_id, sku_id, warehouse_id, status, inbound_by, inbound_item_id) VALUES (?,?,?,?,?,?,?)',
+      [code, product_id, sku_id || null, warehouse_id, 'inStock', operator, inbound_item_id || null]
+    )
+    codes.push(code)
+  }
+  return codes
+}
+
 // ---- Inbound ----
 router.get('/inbound', async (req, res, next) => {
   try {
@@ -19,8 +40,12 @@ router.get('/inbound', async (req, res, next) => {
     if (rows.length) {
       const ids = rows.map(r => r.id)
       const [allItems] = await pool.query(
-        `SELECT i.*, p.name as product_name, p.sku, p.image_main FROM inbound_items i
-         JOIN products p ON i.product_id = p.id WHERE i.record_id IN (?)`, [ids]
+        `SELECT i.*, p.name as product_name, p.sku, p.image_main,
+                ps.sku as sku_code, ps.specs as sku_specs
+         FROM inbound_items i
+         JOIN products p ON i.product_id = p.id
+         LEFT JOIN product_skus ps ON i.sku_id = ps.id
+         WHERE i.record_id IN (?)`, [ids]
       )
       const itemsByRecord = {}
       for (const item of allItems) {
@@ -57,14 +82,47 @@ router.post('/inbound', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (r
           [recordNo, warehouse_id, supplier || '', totalQty, operator, 'completed']
         )
         for (const item of items) {
-          await conn.query('INSERT INTO inbound_items (record_id, product_id, sku_id, quantity) VALUES (?,?,?,?)',
-            [result.insertId, item.product_id, item.sku_id || null, item.quantity])
+          // 查询商品是否需要一物一码
+          const [[prod]] = await conn.query(
+            'SELECT require_qrcode FROM products WHERE id = ?', [item.product_id])
+          const needQrcode = prod?.require_qrcode === 1
+
+          // 入库明细记录（qrcode_count 标识生成了几个二维码）
+          const [itemRes] = await conn.query(
+            'INSERT INTO inbound_items (record_id, product_id, sku_id, qrcode_count, quantity) VALUES (?,?,?,?,?)',
+            [result.insertId, item.product_id, item.sku_id || null,
+             needQrcode ? item.quantity : 0, item.quantity])
+          const inboundItemId = itemRes.insertId
+
+          // 一物一码：每个实物生成独立 qrcode
+          if (needQrcode && item.quantity > 0) {
+            await generateQrcodes(conn, {
+              count: item.quantity,
+              product_id: item.product_id,
+              sku_id: item.sku_id,
+              warehouse_id,
+              operator,
+              inbound_item_id: inboundItemId
+            })
+          }
+
+          // 库存聚合（拆 SKU 维度：warehouse_id + product_id + sku_id 唯一）
+          // sku_id 为 null 时按 product 聚合（兼容无规格商品）
+          if (item.sku_id) {
+            await conn.query(
+              `INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,?,?)
+               ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)`,
+              [warehouse_id, item.product_id, item.sku_id, item.quantity])
+          } else {
+            // 兼容老逻辑（无 SKU），product 级聚合
+            await conn.query(
+              `INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,NULL,?)
+               ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)`,
+              [warehouse_id, item.product_id, item.quantity])
+          }
           await conn.query(
-            `INSERT INTO warehouse_stock (warehouse_id, product_id, quantity) VALUES (?,?,?)
-             ON DUPLICATE KEY UPDATE quantity = quantity + ?`,
-            [warehouse_id, item.product_id, item.quantity, item.quantity])
-          await conn.query(
-            'UPDATE products SET stock = COALESCE(stock, 0) + ? WHERE id = ?', [item.quantity, item.product_id])
+            'UPDATE products SET stock = COALESCE(stock, 0) + ? WHERE id = ?',
+            [item.quantity, item.product_id])
         }
         await conn.commit()
         return res.json({ code: 0, data: { id: result.insertId, record_no: recordNo }, message: 'ok' })
@@ -129,8 +187,13 @@ router.post('/outbound', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (
     const { warehouse_id, customer, items, batch_mode, start_qrcode, quantity } = req.body
     const operator = req.user?.name || req.body.operator || ''
 
-    // Handle batch mode
-    let finalItems = items || []
+    // Normalize: 如果传了 qrcodes 数组，自动用 qrcodes.length 作为 quantity
+    const normalizedItems = (items || []).map(it => ({
+      ...it,
+      quantity: it.quantity || (it.qrcodes?.length) || (it.qrcode_id ? 1 : 0) || 0
+    }))
+
+    let finalItems = normalizedItems
     if (batch_mode && start_qrcode && quantity) {
       try {
         const codes = getConsecutiveCodes(start_qrcode, quantity)
@@ -149,14 +212,15 @@ router.post('/outbound', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (
           })
         }
 
-        // Group by product_id
+        // Group by product_id (含 sku_id 拆分：每个 SKU 独立一行)
         const productMap = {}
         for (const qr of qrcodes) {
-          if (!productMap[qr.product_id]) {
-            productMap[qr.product_id] = { product_id: qr.product_id, quantity: 0, qrcodes: [] }
+          const key = `${qr.product_id}_${qr.sku_id || 'NULL'}`
+          if (!productMap[key]) {
+            productMap[key] = { product_id: qr.product_id, sku_id: qr.sku_id, quantity: 0, qrcodes: [] }
           }
-          productMap[qr.product_id].quantity++
-          productMap[qr.product_id].qrcodes.push(qr.id)
+          productMap[key].quantity++
+          productMap[key].qrcodes.push(qr.id)
         }
 
         finalItems = Object.values(productMap)
@@ -172,17 +236,21 @@ router.post('/outbound', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (
 
     // 校验库存 & require_qrcode
     for (const item of finalItems) {
-      const [[stock]] = await conn.query(
-        'SELECT quantity FROM warehouse_stock WHERE warehouse_id = ? AND product_id = ?',
-        [warehouse_id, item.product_id]
-      )
+      // 库存按 SKU 维度校验（兼容无 SKU 商品）
+      const stockSql = item.sku_id
+        ? 'SELECT quantity FROM warehouse_stock WHERE warehouse_id = ? AND product_id = ? AND sku_id = ?'
+        : 'SELECT quantity FROM warehouse_stock WHERE warehouse_id = ? AND product_id = ? AND sku_id IS NULL'
+      const stockParams = item.sku_id
+        ? [warehouse_id, item.product_id, item.sku_id]
+        : [warehouse_id, item.product_id]
+      const [[stock]] = await conn.query(stockSql, stockParams)
       if (!stock || stock.quantity < item.quantity) {
         await conn.rollback()
         return res.status(400).json({ code: 400, message: `商品ID ${item.product_id} 库存不足` })
       }
-      // 检查是否需要一物一码
+      // 检查是否需要一物一码（支持 qrcode_id 单个 + qrcodes 数组）
       const [[prod]] = await conn.query('SELECT require_qrcode FROM products WHERE id = ?', [item.product_id])
-      if (prod?.require_qrcode && !item.qrcode_id) {
+      if (prod?.require_qrcode && !item.qrcode_id && !(item.qrcodes && item.qrcodes.length > 0)) {
         await conn.rollback()
         return res.status(400).json({ code: 400, message: `商品ID ${item.product_id} 出库必须绑定一物一码` })
       }
@@ -216,9 +284,14 @@ router.post('/outbound', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (
               await conn.query("UPDATE qrcodes SET status = 'shipped' WHERE id = ?", [item.qrcode_id])
             }
           }
-          const [wsResult] = await conn.query(
-            'UPDATE warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_id = ? AND quantity >= ?',
-            [item.quantity, warehouse_id, item.product_id, item.quantity])
+          // warehouse_stock 扣减（拆 SKU 维度）
+          const wsSql = item.sku_id
+            ? 'UPDATE warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_id = ? AND sku_id = ? AND quantity >= ?'
+            : 'UPDATE warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_id = ? AND sku_id IS NULL AND quantity >= ?'
+          const wsParams = item.sku_id
+            ? [item.quantity, warehouse_id, item.product_id, item.sku_id, item.quantity]
+            : [item.quantity, warehouse_id, item.product_id, item.quantity]
+          const [wsResult] = await conn.query(wsSql, wsParams)
           if (wsResult.affectedRows === 0) {
             throw Object.assign(new Error(`商品ID ${item.product_id} 库存不足`), { status: 400 })
           }
@@ -345,15 +418,16 @@ router.post('/returns', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (r
     const { warehouse_id, source, items, qrcode_id, reason } = req.body
     const operator = req.user?.name || req.body.operator || ''
 
-    // Support scan-based return
+    // Support scan-based return（含 sku_id + warehouse_id）
     let finalItems = items || []
     if (qrcode_id && !items) {
-      const [[qr]] = await conn.query('SELECT product_id FROM qrcodes WHERE id = ?', [qrcode_id])
+      const [[qr]] = await conn.query(
+        'SELECT product_id, sku_id, warehouse_id FROM qrcodes WHERE id = ?', [qrcode_id])
       if (!qr) {
         await conn.rollback()
         return res.status(404).json({ code: 404, message: '二维码不存在' })
       }
-      finalItems = [{ product_id: qr.product_id, quantity: 1, qrcode_id }]
+      finalItems = [{ product_id: qr.product_id, sku_id: qr.sku_id, warehouse_id: qr.warehouse_id || warehouse_id, quantity: 1, qrcode_id }]
     }
 
     if (!warehouse_id || !finalItems?.length) {
@@ -375,16 +449,31 @@ router.post('/returns', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (r
         for (const item of finalItems) {
           await conn.query('INSERT INTO return_items (record_id, product_id, sku_id, quantity, qrcode_id) VALUES (?,?,?,?,?)',
             [result.insertId, item.product_id, item.sku_id || null, item.quantity, item.qrcode_id || null])
-          await conn.query(
-            `INSERT INTO warehouse_stock (warehouse_id, product_id, quantity) VALUES (?,?,?)
-             ON DUPLICATE KEY UPDATE quantity = quantity + ?`,
-            [warehouse_id, item.product_id, item.quantity, item.quantity])
+          // warehouse_stock 数量回退（拆 SKU 维度，兼容无 SKU）
+          if (item.sku_id) {
+            await conn.query(
+              `INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,?,?)
+               ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)`,
+              [item.warehouse_id || warehouse_id, item.product_id, item.sku_id, item.quantity]
+            )
+          } else {
+            await conn.query(
+              `INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,NULL,?)
+               ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)`,
+              [item.warehouse_id || warehouse_id, item.product_id, item.quantity]
+            )
+          }
+
           await conn.query(
             'UPDATE products SET stock = COALESCE(stock, 0) + ? WHERE id = ?', [item.quantity, item.product_id])
 
-          // Update qrcode status if applicable
+          // 决策 2: 退货直接 inStock 重新可卖（不是 returned）
+          // 同时恢复 warehouse_id/sku_id/product_id（防丢关联）
           if (item.qrcode_id) {
-            await conn.query("UPDATE qrcodes SET status = 'returned' WHERE id = ?", [item.qrcode_id])
+            await conn.query(
+              "UPDATE qrcodes SET status='inStock', warehouse_id=?, sku_id=?, product_id=? WHERE id=?",
+              [warehouse_id, item.sku_id || null, item.product_id, item.qrcode_id]
+            )
           }
         }
         await conn.commit()
@@ -545,12 +634,34 @@ router.delete('/inbound/:id', requireRole('admin'), async (req, res, next) => {
     // Get items
     const [items] = await conn.query('SELECT * FROM inbound_items WHERE record_id = ?', [recordId])
 
-    // Rollback stock changes
+    // Rollback stock changes + qrcode status
     for (const item of items) {
-      await conn.query(
-        'UPDATE warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_id = ?',
-        [item.quantity, record.warehouse_id, item.product_id]
-      )
+      // 1. qrcode 状态恢复（如果生成了，禁用并清空商品关联）
+      //    按 (product_id, sku_id, warehouse_id, status='inStock') 匹配 N 个（删除前先查 count）
+      if (item.qrcode_count > 0) {
+        await conn.query(
+          `UPDATE qrcodes SET status='disabled', warehouse_id=NULL, sku_id=NULL, product_id=NULL, inbound_item_id=NULL
+           WHERE product_id=? AND (sku_id <=> ?) AND warehouse_id=? AND status='inStock'
+           LIMIT ?`,
+          [item.product_id, item.sku_id, record.warehouse_id, item.qrcode_count]
+        )
+      }
+
+      // 2. warehouse_stock 扣减（拆 SKU 维度）
+      if (item.sku_id) {
+        await conn.query(
+          `UPDATE warehouse_stock SET quantity = quantity - ?
+           WHERE warehouse_id=? AND product_id=? AND sku_id=? AND quantity >= ?`,
+          [item.quantity, record.warehouse_id, item.product_id, item.sku_id, item.quantity]
+        )
+      } else {
+        await conn.query(
+          'UPDATE warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_id = ? AND sku_id IS NULL AND quantity >= ?',
+          [item.quantity, record.warehouse_id, item.product_id, item.quantity]
+        )
+      }
+
+      // 3. products.stock
       await conn.query('UPDATE products SET stock = stock - ? WHERE id = ?', [item.quantity, item.product_id])
     }
 
@@ -588,16 +699,39 @@ router.delete('/outbound/:id', requireRole('admin'), async (req, res, next) => {
 
     // Rollback stock changes and qrcode status
     for (const item of items) {
-      await conn.query(
-        `INSERT INTO warehouse_stock (warehouse_id, product_id, quantity) VALUES (?,?,?)
-         ON DUPLICATE KEY UPDATE quantity = quantity + ?`,
-        [record.warehouse_id, item.product_id, item.quantity, item.quantity]
-      )
+      // 1. 库存回退（拆 SKU 维度）
+      if (item.sku_id) {
+        await conn.query(
+          `INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,?,?)
+           ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)`,
+          [record.warehouse_id, item.product_id, item.sku_id, item.quantity]
+        )
+      } else {
+        await conn.query(
+          `INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,NULL,?)
+           ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)`,
+          [record.warehouse_id, item.product_id, item.quantity]
+        )
+      }
       await conn.query('UPDATE products SET stock = stock + ? WHERE id = ?', [item.quantity, item.product_id])
 
-      // Reset qrcode status if applicable
-      if (item.qrcode_id) {
-        await conn.query("UPDATE qrcodes SET status = 'bound' WHERE id = ?", [item.qrcode_id])
+      // 2. qrcode 状态恢复（按 qrcode_count 个数从 shipped → inStock）
+      if (item.qrcode_count > 0) {
+        // 优先按 qrcode_id 恢复单个（精确）
+        if (item.qrcode_id) {
+          await conn.query(
+            "UPDATE qrcodes SET status='inStock' WHERE id=? AND status='shipped'",
+            [item.qrcode_id]
+          )
+        } else {
+          // 批量模式：按 (product_id, sku_id, warehouse_id) 找 shipped 状态恢复
+          await conn.query(
+            `UPDATE qrcodes SET status='inStock'
+             WHERE product_id=? AND (sku_id <=> ?) AND warehouse_id=? AND status='shipped'
+             LIMIT ?`,
+            [item.product_id, item.sku_id, record.warehouse_id, item.qrcode_count]
+          )
+        }
       }
     }
 
@@ -714,6 +848,109 @@ router.delete('/returns/:id', requireRole('admin'), async (req, res, next) => {
   } finally {
     conn.release()
   }
+})
+
+// ═══ 一物一码 P0 新功能（波哥 2026-06-17 决策）═══════════════════════════════
+
+// POST /api/inventory/stocktake - 盘点接口（决策 3）
+router.post('/stocktake', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (req, res, next) => {
+  try {
+    const { warehouse_id, qrcode_ids = [], blind_mode = false } = req.body
+    if (!warehouse_id) return res.status(400).json({ code: 400, message: 'warehouse_id 必填' })
+
+    // 1. 查所有该仓库 inStock 的 qrcode
+    const [stockQrcodes] = await pool.query(
+      `SELECT id, code, product_id, sku_id FROM qrcodes 
+       WHERE warehouse_id=? AND status='inStock'`, [warehouse_id]
+    )
+    const stockSet = new Set(stockQrcodes.map(q => q.id))
+    const scannedSet = new Set(qrcode_ids.map(Number))
+
+    // 2. 分类
+    const matched = []   // 扫到的
+    const missing = []   // 系统有但没扫到
+    const extra = []     // 扫到但系统没
+
+    for (const q of stockQrcodes) {
+      if (scannedSet.has(q.id)) {
+        matched.push(blind_mode ? { id: q.id, code: '***' } : q)
+      } else {
+        missing.push(q)
+      }
+    }
+    for (const sid of scannedSet) {
+      if (!stockSet.has(sid)) extra.push({ id: sid, note: '二维码不在该仓库或已出库' })
+    }
+
+    // 3. 统计 + warehouse_stock 对比
+    const diff = []
+    if (!blind_mode) {
+      const [stockRows] = await pool.query(
+        `SELECT product_id, sku_id, CAST(SUM(quantity) AS UNSIGNED) as total_qty
+         FROM warehouse_stock WHERE warehouse_id=? GROUP BY product_id, sku_id`, [warehouse_id]
+      )
+      // 扫码按 (product_id, sku_id) 聚合
+      const scannedMap = {}
+      for (const q of stockQrcodes) {
+        if (scannedSet.has(q.id)) {
+          const k = `${q.product_id}_${q.sku_id || 'NULL'}`
+          scannedMap[k] = (scannedMap[k] || 0) + 1
+        }
+      }
+      for (const row of stockRows) {
+        const k = `${row.product_id}_${row.sku_id || 'NULL'}`
+        const actual = scannedMap[k] || 0
+        const sysQty = Number(row.total_qty)
+        if (actual !== sysQty) {
+          diff.push({ product_id: row.product_id, sku_id: row.sku_id, system_qty: sysQty, actual_qty: actual, delta: actual - sysQty })
+        }
+      }
+    }
+
+    res.json({
+      code: 0, message: 'ok',
+      data: {
+        warehouse_id, blind_mode,
+        summary: { total_stock: stockQrcodes.length, scanned: qrcode_ids.length, matched: matched.length, missing: missing.length, extra: extra.length },
+        matched, missing, extra, diff: blind_mode ? [] : diff
+      }
+    })
+  } catch (err) { next(err) }
+})
+
+// POST /api/inventory/reconcile - 盘点对账（从 qrcodes 重算 warehouse_stock）
+router.post('/reconcile', requireRole('admin'), async (req, res, next) => {
+  const conn = await pool.getConnection()
+  try {
+    await conn.beginTransaction()
+    // 1. 收集所有 inStock qrcode 按 (warehouse, product, sku) 计数
+    const [rows] = await conn.query(
+      `SELECT warehouse_id, product_id, sku_id, COUNT(*) as cnt
+       FROM qrcodes WHERE status='inStock' AND warehouse_id IS NOT NULL AND product_id IS NOT NULL
+       GROUP BY warehouse_id, product_id, sku_id`
+    )
+    let synced = 0, created = 0
+    for (const r of rows) {
+      // 检查 warehouse_stock 是否存在
+      const [exist] = await conn.query(
+        'SELECT id FROM warehouse_stock WHERE warehouse_id=? AND product_id=? AND (sku_id <=> ?)', [r.warehouse_id, r.product_id, r.sku_id]
+      )
+      if (exist.length) {
+        await conn.query('UPDATE warehouse_stock SET quantity=? WHERE id=?', [r.cnt, exist[0].id])
+        synced++
+      } else {
+        await conn.query(
+          'INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,?,?)',
+          [r.warehouse_id, r.product_id, r.sku_id, r.cnt]
+        )
+        created++
+      }
+    }
+    await conn.commit()
+    res.json({ code: 0, message: '对账完成', data: { synced, created, total_rows: rows.length } })
+  } catch (err) {
+    await conn.rollback(); next(err)
+  } finally { conn.release() }
 })
 
 export default router

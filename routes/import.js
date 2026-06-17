@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import XLSX from 'xlsx';
+import { createHash } from 'crypto';
 import { pool } from '../db/connection.js';
 
 const router = Router();
@@ -156,6 +157,23 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     const { file_type = 'SM' } = req.body;
     const fileBuffer = req.file.buffer;
     const fileName = req.file.originalname;
+
+    // ① 计算文件内容 hash（去重用：同一文件+同类型=同 hash）
+    const contentHash = createHash('sha256').update(fileBuffer).digest('hex');
+
+    // ② 查重：同 file_type + 同 content_hash 的旧记录
+    const [duplicates] = await pool.query(
+      'SELECT id FROM imported_excel_records WHERE file_type = ? AND content_hash = ? ORDER BY uploaded_at DESC',
+      [file_type, contentHash]
+    );
+    if (duplicates.length > 0) {
+      const dupIds = duplicates.map(d => d.id);
+      // 删除旧 items
+      await pool.query('DELETE FROM imported_excel_items WHERE record_id IN (?)', [dupIds]);
+      // 删除旧 records
+      await pool.query('DELETE FROM imported_excel_records WHERE id IN (?)', [dupIds]);
+      console.log(`[DEDUP] removed ${dupIds.length} duplicate record(s) for ${fileName} (hash ${contentHash.slice(0,8)}...)`);
+    }
 
     const workbook = XLSX.read(fileBuffer, { type: 'buffer', cellDates: true });
     const sheetName = workbook.SheetNames[0];
@@ -325,9 +343,9 @@ if (file_type === 'SM') {
     }
 
     const [recordResult] = await pool.query(
-      `INSERT INTO imported_excel_records (file_name, file_type, total_records, total_amount, status)
-       VALUES (?, ?, ?, ?, 'completed')`,
-      [fileName, file_type, items.length, totalAmount]
+      `INSERT INTO imported_excel_records (file_name, file_type, total_records, total_amount, status, content_hash)
+       VALUES (?, ?, ?, ?, 'completed', ?)`,
+      [fileName, file_type, items.length, totalAmount, contentHash]
     );
     const recordId = recordResult.insertId;
 
@@ -345,7 +363,14 @@ if (file_type === 'SM') {
       );
     }
 
-    res.json({ success: true, record_id: recordId, items_saved: items.length, total_amount: totalAmount });
+    res.json({
+      success: true,
+      record_id: recordId,
+      items_saved: items.length,
+      total_amount: totalAmount,
+      deduplicated: duplicates.length,  // 去重掉的旧记录数
+      content_hash: contentHash
+    });
   } catch (err) {
     console.error('Import upload error:', err);
     res.status(500).json({ success: false, message: err.message });
@@ -554,32 +579,36 @@ router.get('/records/:id/summary/by-store/:storeCode', async (req, res) => {
        GROUP BY color, size ORDER BY qty DESC LIMIT 40`, [id, storeCode]
     );
 
-    // SKU明细（按型号聚合）- 先按sku聚合items，再JS层JOIN product_skus获取颜色/尺寸
+    // SKU明细（按型号聚合）- 先按sku聚合items，再JS层JOIN product_skus获取颜色/尺寸/单价
     // （北京MySQL有ONLY_FULL_GROUP_BY限制，ps.specs不能直接放入GROUP BY的SELECT）
     const [skuRows] = await pool.query(
       `SELECT i.sku, i.model,
               i.color, i.size,
               SUM(i.quantity) as total_qty, SUM(i.amount) as total_amount,
-              MAX(i.image_url) as image_url
+              MAX(i.image_url) as image_url,
+              ROUND(SUM(i.amount) / SUM(i.quantity), 2) as calc_unit_price
        FROM imported_excel_items i
        WHERE i.record_id = ? AND i.store_code = ? AND i.model IS NOT NULL AND i.model != ''
        GROUP BY i.sku, i.model, i.color, i.size
        ORDER BY total_qty DESC`, [id, storeCode]
     );
 
-    // 批量获取product_skus的specs（按sku去重）
+    // 批量获取product_skus的specs+售价（按sku去重）
     const skus = skuRows.map(r => r.sku);
     let specsMap = {};
+    let priceMap = {};
     if (skus.length > 0) {
       const placeholders = skus.map(() => '?').join(',');
       const [psRows] = await pool.query(
-        `SELECT sku, specs FROM product_skus WHERE sku IN (${placeholders})`, skus
+        `SELECT sku, specs, sale_price FROM product_skus WHERE sku IN (${placeholders})`, skus
       );
-      specsMap = Object.fromEntries(psRows.map(r => [r.sku, r.specs || '{}']));
+      psRows.forEach(r => {
+        specsMap[r.sku] = r.specs || '{}';
+        if (r.sale_price != null) priceMap[r.sku] = parseFloat(r.sale_price);
+      });
     }
 
-    // JS层合并：优先取product_skus的颜色/尺寸，fallback到Excel原始值
-    // 注意：mysql2的JSON列自动解析为JS对象，无需JSON.parse
+    // JS层合并：颜色/尺寸优先取product_skus，单价优先取Excel计算值其次商品库
     const bySku = skuRows.map(r => {
       const specs = specsMap[r.sku];
       let color = r.color;
@@ -590,7 +619,10 @@ router.get('/records/:id/summary/by-store/:storeCode', async (req, res) => {
         if (colorVal) color = String(colorVal).trim();
         if (sizeVal) size = String(sizeVal).trim();
       }
-      return { ...r, color, size };
+      // 单价：优先用Excel计算值（数字，非0），其次商品库售价兜底
+      const calcPrice = Number(r.calc_unit_price) || 0;
+      const unit_price = (calcPrice > 0) ? calcPrice : (priceMap[r.sku] || null);
+      return { ...r, color, size, unit_price };
     });
 
     res.json({ success: true, store: storeOverall, byModel, byColorSize, bySku });
@@ -648,14 +680,15 @@ router.post('/multi-analysis', async (req, res) => {
        GROUP BY model, store_code, store_name ORDER BY qty DESC`, [record_ids]
     );
 
-    // SKU明细（按门店+型号+SKU聚合）- 直接用Excel原始颜色/尺寸
+    // SKU明细（按门店+型号+SKU聚合）- 直接用Excel原始颜色/尺寸，含单价
     const [bySku] = await pool.query(
       `SELECT i.store_code, i.store_name, i.model, i.sku,
               i.color, i.size,
               SUM(i.quantity) as total_qty, SUM(i.amount) as total_amount,
               COUNT(*) as order_count,
               MAX(i.image_url) as image_url,
-              MAX(i.product_name) as product_name
+              MAX(i.product_name) as product_name,
+              ROUND(SUM(i.amount) / SUM(i.quantity), 2) as unit_price
        FROM imported_excel_items i
        WHERE i.record_id IN (?)
        GROUP BY i.store_code, i.store_name, i.model, i.sku, i.color, i.size
