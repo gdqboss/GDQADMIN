@@ -1016,6 +1016,13 @@ function saveReport() {
   .then(result => {
     if (result.success) {
       showSaveSuccess.value = true
+      // 提示用户去重信息
+      if (result.deduplicated > 0) {
+        const msg = locale.value === 'zh'
+          ? `已自动去重 ${result.deduplicated} 条相同文件的旧记录`
+          : `Auto-deduplicated ${result.deduplicated} old record(s) of the same file`
+        console.log('[DEDUP]', msg)
+      }
     } else {
       alert(result.message || (locale.value === 'zh' ? '保存失败' : 'Save failed'))
     }

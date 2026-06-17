@@ -81,6 +81,126 @@ function handleGenerate() {
   generateCount.value = 10
 }
 
+// ═══ 决策 3: 盘点对话框 ═══
+const showStocktake = ref(false)
+const stocktakeWarehouseId = ref(1)
+const stocktakeScannedIds = ref([])
+const stocktakeResult = ref(null)
+const stocktakeLoading = ref(false)
+const stocktakeBlindMode = ref(false)
+
+function openStocktake() {
+  showStocktake.value = true
+  stocktakeScannedIds.value = []
+  stocktakeResult.value = null
+}
+
+function addScannedId(id) {
+  const numId = parseInt(id)
+  if (numId && !stocktakeScannedIds.value.includes(numId)) {
+    stocktakeScannedIds.value.push(numId)
+  }
+}
+
+async function runStocktake() {
+  if (stocktakeScannedIds.value.length === 0) {
+    alert('请先扫码或输入二维码 ID')
+    return
+  }
+  stocktakeLoading.value = true
+  try {
+    const res = await fetch('/api/stocktake', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('caimeite_token')}` },
+      body: JSON.stringify({
+        warehouse_id: stocktakeWarehouseId.value,
+        qrcode_ids: stocktakeScannedIds.value,
+        blind_mode: stocktakeBlindMode.value
+      })
+    })
+    const data = await res.json()
+    if (data.code === 0) {
+      stocktakeResult.value = data.data
+    } else {
+      alert(`盘点失败: ${data.message}`)
+    }
+  } catch (e) {
+    alert(`盘点异常: ${e.message}`)
+  } finally {
+    stocktakeLoading.value = false
+  }
+}
+
+async function runReconcile() {
+  if (!confirm('对账将根据 qrcodes 表重新计算 warehouse_stock，确认执行？')) return
+  stocktakeLoading.value = true
+  try {
+    const res = await fetch('/api/reconcile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('caimeite_token')}` },
+      body: JSON.stringify({})
+    })
+    const data = await res.json()
+    if (data.code === 0) {
+      alert(`对账完成: 同步 ${data.data.synced} 行，新建 ${data.data.created} 行`)
+      stocktakeResult.value = null
+      stocktakeScannedIds.value = []
+    } else {
+      alert(`对账失败: ${data.message}`)
+    }
+  } catch (e) {
+    alert(`对账异常: ${e.message}`)
+  } finally {
+    stocktakeLoading.value = false
+  }
+}
+
+// ═══ 决策 5: 重新绑定对话框 ═══
+const showRebind = ref(false)
+const rebindQrcode = ref(null)
+const rebindProductId = ref(null)
+const rebindSkuId = ref(null)
+const rebindWarehouseId = ref(null)
+const rebindLoading = ref(false)
+const rebindResult = ref(null)
+
+function openRebind() {
+  if (selectedIds.value.length !== 1) return
+  rebindQrcode.value = store.qrcodes.find(q => q.id === selectedIds.value[0])
+  rebindProductId.value = rebindQrcode.value?.product_id || null
+  rebindSkuId.value = rebindQrcode.value?.sku_id || null
+  rebindWarehouseId.value = rebindQrcode.value?.warehouse_id || null
+  rebindResult.value = null
+  showRebind.value = true
+}
+
+async function runRebind() {
+  rebindLoading.value = true
+  try {
+    const res = await fetch(`/api/qrcodes/rebind/${rebindQrcode.value.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('caimeite_token')}` },
+      body: JSON.stringify({
+        product_id: rebindProductId.value,
+        sku_id: rebindSkuId.value,
+        warehouse_id: rebindWarehouseId.value
+      })
+    })
+    const data = await res.json()
+    if (data.code === 0) {
+      rebindResult.value = data.data
+      // 刷新列表
+      await store.fetchList()
+    } else {
+      alert(`重新绑定失败: ${data.message}`)
+    }
+  } catch (e) {
+    alert(`重新绑定异常: ${e.message}`)
+  } finally {
+    rebindLoading.value = false
+  }
+}
+
 // Selection for batch operations
 const selectedIds = ref([])
 const allSelected = computed(() =>
@@ -100,6 +220,11 @@ function toggleSelect(id) {
   const idx = selectedIds.value.indexOf(id)
   if (idx >= 0) selectedIds.value.splice(idx, 1)
   else selectedIds.value.push(id)
+}
+function toggleRow(checked, id) {
+  const idx = selectedIds.value.indexOf(id)
+  if (checked && idx < 0) selectedIds.value.push(id)
+  else if (!checked && idx >= 0) selectedIds.value.splice(idx, 1)
 }
 async function handleDelete(qr) {
   if (!confirm(t('qrcode.confirmDeleteQr', { code: qr.code }))) return
@@ -495,6 +620,20 @@ async function handleBatchEdit() {
             {{ $t('qrcode.exportExcelBtn') }}{{ selectedIds.length > 0 ? ` (${selectedIds.length})` : '' }}
           </button>
 
+          <!-- 决策 3: 盘点 -->
+          <button @click="openStocktake"
+            class="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            <span class="material-symbols-outlined text-[18px]">inventory_2</span>
+            {{ $t('qrcode.stocktake') }}
+          </button>
+
+          <!-- 决策 5: 重新绑定 -->
+          <button v-if="selectedIds.length === 1" @click="openRebind"
+            class="flex items-center gap-2 bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+            <span class="material-symbols-outlined text-[18px]">restart_alt</span>
+            {{ $t('qrcode.rebind') }}
+          </button>
+
           <button @click="showGenerate = true" class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
             <span class="material-symbols-outlined text-[18px]">add</span>
             {{ $t('qrcode.batchGenerate') }}
@@ -521,9 +660,9 @@ async function handleBatchEdit() {
             <tbody class="divide-y divide-gray-100">
               <tr v-for="qr in filteredQrcodes" :key="qr.id"
                 :class="['hover:bg-gray-50 transition-colors', selectedIds.includes(qr.id) ? 'bg-primary/5' : '']">
-                <td v-if="canSelect" class="px-4 py-3">
+                <td class="px-4 py-3">
                   <input type="checkbox" :checked="selectedIds.includes(qr.id)"
-                    @change="toggleSelect(qr.id)" class="rounded border-gray-300 text-primary cursor-pointer" />
+                    @click="toggleRow(!selectedIds.includes(qr.id), qr.id)" class="rounded border-gray-300 text-primary cursor-pointer" />
                 </td>
                 <td class="px-4 py-3">
                   <div class="flex items-center gap-2">
@@ -1036,6 +1175,175 @@ async function handleBatchEdit() {
             <span v-if="batchEditLoading" class="material-symbols-outlined text-[16px] animate-spin">refresh</span>
             {{ batchEditLoading ? $t('common.saving') : $t('qrcode.confirmEditBtn') }}
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 决策 3: 盘点对话框 ═══ -->
+    <div v-if="showStocktake" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50" @click.self="showStocktake = false">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-auto">
+        <h3 class="text-lg font-semibold mb-4">盘点 (Stocktake)</h3>
+
+        <div v-if="!stocktakeResult" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">仓库</label>
+            <select v-model="stocktakeWarehouseId" class="w-full px-3 py-2 border rounded-lg text-sm">
+              <option :value="1">主仓</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-1">扫码 / 输入二维码 ID（回车添加）</label>
+            <input @keyup.enter="addScannedId($event.target.value); $event.target.value = ''"
+              class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="例如 3" />
+          </div>
+
+          <div v-if="stocktakeScannedIds.length > 0">
+            <div class="text-sm font-medium mb-1">已扫 ({{ stocktakeScannedIds.length }}):</div>
+            <div class="flex flex-wrap gap-2">
+              <span v-for="id in stocktakeScannedIds" :key="id"
+                class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
+                {{ id }}
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <label class="flex items-center gap-2 text-sm">
+              <input type="checkbox" v-model="stocktakeBlindMode" />
+              盲盘模式（不显示差异）
+            </label>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-4">
+            <button @click="showStocktake = false" class="px-4 py-2 rounded-lg text-sm font-medium text-text-secondary hover:bg-gray-100">
+              取消
+            </button>
+            <button @click="runReconcile" :disabled="stocktakeLoading"
+              class="px-4 py-2 rounded-lg text-sm font-medium bg-gray-700 hover:bg-gray-800 text-white">
+              对账（重建 warehouse_stock）
+            </button>
+            <button @click="runStocktake" :disabled="stocktakeLoading"
+              class="px-4 py-2 rounded-lg text-sm font-medium bg-amber-500 hover:bg-amber-600 text-white">
+              {{ stocktakeLoading ? '盘点中...' : '开始盘点' }}
+            </button>
+          </div>
+        </div>
+
+        <div v-else class="space-y-4">
+          <div class="bg-gray-50 rounded-lg p-4">
+            <div class="text-sm font-medium mb-2">汇总</div>
+            <div class="grid grid-cols-2 gap-2 text-sm">
+              <div>系统库存: <strong>{{ stocktakeResult.summary.total_stock }}</strong></div>
+              <div>实际扫码: <strong>{{ stocktakeResult.summary.scanned }}</strong></div>
+              <div class="text-success">匹配: <strong>{{ stocktakeResult.summary.matched }}</strong></div>
+              <div class="text-danger">缺失: <strong>{{ stocktakeResult.summary.missing }}</strong></div>
+            </div>
+          </div>
+
+          <div v-if="stocktakeResult.matched.length > 0">
+            <div class="text-sm font-medium text-success mb-1">✓ 匹配 ({{ stocktakeResult.matched.length }})</div>
+            <div class="text-xs text-text-secondary">
+              <span v-for="q in stocktakeResult.matched" :key="q.id" class="inline-block mr-2">{{ q.code }}</span>
+            </div>
+          </div>
+
+          <div v-if="stocktakeResult.missing.length > 0">
+            <div class="text-sm font-medium text-danger mb-1">✗ 缺失 ({{ stocktakeResult.missing.length }})</div>
+            <div class="text-xs text-text-secondary">
+              <span v-for="q in stocktakeResult.missing" :key="q.id" class="inline-block mr-2">{{ q.code }}</span>
+            </div>
+          </div>
+
+          <div v-if="stocktakeResult.extra.length > 0">
+            <div class="text-sm font-medium text-warning mb-1">⚠ 多余 ({{ stocktakeResult.extra.length }})</div>
+            <div class="text-xs text-text-secondary">
+              <span v-for="(q, i) in stocktakeResult.extra" :key="i" class="inline-block mr-2">{{ q.note }}</span>
+            </div>
+          </div>
+
+          <div v-if="stocktakeResult.diff && stocktakeResult.diff.length > 0" class="bg-amber-50 rounded p-3">
+            <div class="text-sm font-medium text-amber-700 mb-1">差异 ({{ stocktakeResult.diff.length }})</div>
+            <table class="w-full text-xs">
+              <thead><tr class="text-text-secondary"><th>SKU</th><th>系统</th><th>实际</th><th>差异</th></tr></thead>
+              <tbody>
+                <tr v-for="(d, i) in stocktakeResult.diff" :key="i">
+                  <td>{{ d.product_id }}-{{ d.sku_id }}</td>
+                  <td>{{ d.system_qty }}</td>
+                  <td>{{ d.actual_qty }}</td>
+                  <td :class="d.delta > 0 ? 'text-success' : 'text-danger'">{{ d.delta > 0 ? '+' : '' }}{{ d.delta }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-4">
+            <button @click="stocktakeResult = null; stocktakeScannedIds = []" class="px-4 py-2 rounded-lg text-sm font-medium text-text-secondary hover:bg-gray-100">
+              重新盘点
+            </button>
+            <button @click="showStocktake = false" class="px-4 py-2 rounded-lg text-sm font-medium bg-primary text-white">
+              关闭
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 决策 5: 重新绑定对话框 ═══ -->
+    <div v-if="showRebind" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50" @click.self="showRebind = false">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+        <h3 class="text-lg font-semibold mb-4">重新绑定</h3>
+
+        <div v-if="!rebindResult" class="space-y-4">
+          <div class="bg-gray-50 rounded p-3 text-sm">
+            <div><strong>原二维码:</strong> {{ rebindQrcode?.code }}</div>
+            <div><strong>当前状态:</strong> {{ rebindQrcode?.status }}</div>
+            <div class="text-text-secondary text-xs mt-1">重新绑定后原二维码会变 disabled，并生成新码</div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-1">商品 ID</label>
+            <input v-model.number="rebindProductId" type="number" class="w-full px-3 py-2 border rounded-lg text-sm" />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-1">SKU ID (可选)</label>
+            <input v-model.number="rebindSkuId" type="number" class="w-full px-3 py-2 border rounded-lg text-sm" />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-1">仓库 ID</label>
+            <input v-model.number="rebindWarehouseId" type="number" class="w-full px-3 py-2 border rounded-lg text-sm" />
+          </div>
+
+          <div class="flex justify-end gap-2 pt-4">
+            <button @click="showRebind = false" class="px-4 py-2 rounded-lg text-sm font-medium text-text-secondary hover:bg-gray-100">
+              取消
+            </button>
+            <button @click="runRebind" :disabled="rebindLoading"
+              class="px-4 py-2 rounded-lg text-sm font-medium bg-purple-500 hover:bg-purple-600 text-white">
+              {{ rebindLoading ? '处理中...' : '确认重新绑定' }}
+            </button>
+          </div>
+        </div>
+
+        <div v-else class="space-y-3">
+          <div class="bg-red-50 rounded p-3 text-sm">
+            <div class="font-medium text-danger mb-1">原二维码 (已 disabled)</div>
+            <div class="font-mono text-xs">{{ rebindResult.old.code }}</div>
+          </div>
+          <div class="bg-green-50 rounded p-3 text-sm">
+            <div class="font-medium text-success mb-1">新二维码 (已 inStock)</div>
+            <div class="font-mono text-xs">{{ rebindResult.new.code }}</div>
+            <div class="text-xs text-text-secondary mt-1">
+              商品: {{ rebindResult.new.product_id }} / SKU: {{ rebindResult.new.sku_id || '-' }} / 仓库: {{ rebindResult.new.warehouse_id }}
+            </div>
+          </div>
+          <div class="flex justify-end pt-2">
+            <button @click="showRebind = false; rebindResult = null" class="px-4 py-2 rounded-lg text-sm font-medium bg-primary text-white">
+              完成
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -48,6 +48,7 @@ export const useUserStore = defineStore('user', () => {
       token.value = res.data.token
       localStorage.setItem('caimeite_user', JSON.stringify(userWithPerms))
       localStorage.setItem('caimeite_token', res.data.token)
+      localStorage.setItem('caimeite_permissions', JSON.stringify(res.data.permissions || []))
     }
     return res
   }

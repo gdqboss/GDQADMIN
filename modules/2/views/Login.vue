@@ -33,6 +33,7 @@ if (wxCode) {
     if (res.code === 0) {
       localStorage.setItem('caimeite_token', res.data.token)
       localStorage.setItem('caimeite_user', JSON.stringify(res.data.user))
+      localStorage.setItem('caimeite_permissions', JSON.stringify(res.data.permissions || []))
       userStore.token = res.data.token
       userStore.user = res.data.user
       // 清理URL参数后跳转
@@ -135,6 +136,7 @@ async function handleCustomerLogin() {
     if (res.code === 0) {
       localStorage.setItem('caimeite_token', res.data.token)
       localStorage.setItem('caimeite_user', JSON.stringify(res.data.user))
+      localStorage.setItem('caimeite_permissions', JSON.stringify(res.data.permissions || []))
       userStore.token = res.data.token
       userStore.user = res.data.user
       router.push('/')
@@ -159,6 +161,7 @@ function handleWxMpLogin() {
             if (ret.code === 0) {
               localStorage.setItem('caimeite_token', ret.data.token)
               localStorage.setItem('caimeite_user', JSON.stringify(ret.data.user))
+              localStorage.setItem('caimeite_permissions', JSON.stringify(ret.data.permissions || []))
               userStore.token = ret.data.token
               userStore.user = ret.data.user
               router.push('/')
@@ -198,6 +201,7 @@ function handleAppleLogin() {
         if (ret.code === 0) {
           localStorage.setItem('caimeite_token', ret.data.token)
           localStorage.setItem('caimeite_user', JSON.stringify(ret.data.user))
+          localStorage.setItem('caimeite_permissions', JSON.stringify(ret.data.permissions || []))
           userStore.token = ret.data.token
           userStore.user = ret.data.user
           router.push('/')
