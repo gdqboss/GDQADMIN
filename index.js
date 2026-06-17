@@ -34,17 +34,19 @@ import wecomAdminRoutes from './routes/wecom-admin.js'
 import supplierRoutes from './routes/suppliers.js'
 import dealerRoutes from './routes/dealers.js'
 import storeRoutes from './routes/stores.js'
-import mallRoutes from './routes/mall.js'
+import mallRoutes from './routes/mall.cjs'
 import userRoutes from './routes/users.js'
 import categoryRoutes from './routes/categories.js'
 import uploadRoutes from './routes/upload.js'
 import importRoutes from './routes/import.js'
 import imageRoutes from './routes/images.js'
 import h5Routes from './routes/h5.js'
+import wxmpRoutes from './routes/wxmp.js'
 import retailRoutes from './routes/retail.js'
 import aftersalesRoutes from './routes/aftersales.js'
 import scanRoutes from './routes/scan.js'
 import referralRoutes from './routes/referral.js'
+import eduRoutes from './routes/edu.js'
 import h5AdminRoutes from './routes/h5-admin.js'
 import transferRoutes from './routes/transfer.js'
 import identityRoutes from './routes/identity.js'
@@ -89,6 +91,11 @@ import yuyueRoutes from './routes/yuyue.js'
 import scoreShopRoutes from './routes/score_shop.js'
 import couponRoutes from './routes/coupon.js'
 import kefuRoutes from './routes/kefu.js'
+import walletRoutes from './routes/wallet.js'
+import inviteRoutes from './routes/invite.js'
+import memberLevelRoutes from './routes/member-level.js'
+import payRoutes from './routes/pay.js'
+import seckillRoutes from './routes/seckill.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -355,15 +362,19 @@ app.get('/health', async (req, res) => {
 
 // H5 public routes (no auth)
 app.use('/api/h5', h5Routes)
+app.use('/api/wxmp', wxmpRoutes)
 
 // Collage 拼团 (public - 商品浏览)
 app.use('/api/collage', collageRoutes)
+// 支付（回调公开，其他需认证）
+app.use('/api/pay', payRoutes)
 app.use('/api/restaurant', auth, apiLimiter, restaurantRoutes)
 app.use('/api/hotel', auth, apiLimiter, hotelRoutes)
 app.use('/api/logistics', auth, apiLimiter, logisticsRoutes)
 app.use('/api/article', auth, apiLimiter, articleRoutes)
 app.use('/api/yuyue', auth, apiLimiter, yuyueRoutes)
 app.use('/api/score-shop', auth, apiLimiter, scoreShopRoutes)
+app.use('/api/seckill', auth, apiLimiter, seckillRoutes)
 app.use('/api/coupon', auth, apiLimiter, couponRoutes)
 app.use('/api/kefu', auth, apiLimiter, kefuRoutes)
 
@@ -378,6 +389,7 @@ app.use('/api/bi', auth, apiLimiter, biRoutes)
 app.use('/api/excel-report', auth, apiLimiter, excelReportRoutes)
 app.use('/api/orders', auth, apiLimiter, ordersRoutes)
 app.use('/api/reports', auth, apiLimiter, reportsRoutes)
+app.use('/api/edu', auth, apiLimiter, eduRoutes)
 app.use('/api/qrcodes', auth, apiLimiter, qrcodeRoutes)
 app.use('/api/delivery', auth, apiLimiter, deliveryRoutes)
 app.use('/api/oa', cardRoutes)
@@ -461,8 +473,15 @@ app.use('/api/visit-logs', auth, apiLimiter, visitLogsRoutes)
 app.use('/api/share-logs', shareLogsRoutes) // Mixed auth (some public, some protected)
 app.use('/api/feedback', feedbackRoutes) // Mixed auth (some public, some protected)
 app.use('/api/transfer', auth, apiLimiter, transferRoutes)
-app.use('/api/returns', auth, apiLimiter, returnsRoutes)
+// returns.js disabled — inventory.js 内置 /returns 路由接管（L313/L340）
+// 原 returns.js 路由字段与 return_records 表结构不匹配，导致补货流程 500
+// // 北京 L399 原本: app.use('/api/returns', auth, apiLimiter, returnsRoutes)
+// 注释原因: returns.js 路由字段与 return_records 表结构不匹配，导致补货 500
+// inventory.js L406 app.use('/api', inventoryRoutes) 内的 /returns 路由接管
 app.use('/api/tasks', auth, apiLimiter, tasksRoutes)
+app.use('/api/wallet', auth, apiLimiter, walletRoutes)
+app.use('/api/invite', auth, apiLimiter, inviteRoutes)
+app.use('/api/member-level', auth, apiLimiter, memberLevelRoutes)
 app.use('/api/responsibilities', auth, apiLimiter, responsibilitiesRoutes)
 app.use('/api/rbac/permissions', auth, apiLimiter, rbacPermissionRoutes)
 app.use('/api/rbac/menus', auth, apiLimiter, rbacMenuRoutes)

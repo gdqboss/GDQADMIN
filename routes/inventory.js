@@ -19,7 +19,7 @@ router.get('/inbound', async (req, res, next) => {
     if (rows.length) {
       const ids = rows.map(r => r.id)
       const [allItems] = await pool.query(
-        `SELECT i.*, p.name as product_name, p.sku FROM inbound_items i
+        `SELECT i.*, p.name as product_name, p.sku, p.image_main FROM inbound_items i
          JOIN products p ON i.product_id = p.id WHERE i.record_id IN (?)`, [ids]
       )
       const itemsByRecord = {}
@@ -57,13 +57,14 @@ router.post('/inbound', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (r
           [recordNo, warehouse_id, supplier || '', totalQty, operator, 'completed']
         )
         for (const item of items) {
-          await conn.query('INSERT INTO inbound_items (record_id, product_id, quantity) VALUES (?,?,?)',
-            [result.insertId, item.product_id, item.quantity])
+          await conn.query('INSERT INTO inbound_items (record_id, product_id, sku_id, quantity) VALUES (?,?,?,?)',
+            [result.insertId, item.product_id, item.sku_id || null, item.quantity])
           await conn.query(
             `INSERT INTO warehouse_stock (warehouse_id, product_id, quantity) VALUES (?,?,?)
              ON DUPLICATE KEY UPDATE quantity = quantity + ?`,
             [warehouse_id, item.product_id, item.quantity, item.quantity])
-          await conn.query('UPDATE products SET stock = stock + ? WHERE id = ?', [item.quantity, item.product_id])
+          await conn.query(
+            'UPDATE products SET stock = COALESCE(stock, 0) + ? WHERE id = ?', [item.quantity, item.product_id])
         }
         await conn.commit()
         return res.json({ code: 0, data: { id: result.insertId, record_no: recordNo }, message: 'ok' })
@@ -90,7 +91,7 @@ router.get('/outbound', async (req, res, next) => {
     if (rows.length) {
       const ids = rows.map(r => r.id)
       const [allItems] = await pool.query(
-        `SELECT i.*, p.name as product_name, p.sku FROM outbound_items i
+        `SELECT i.*, p.name as product_name, p.sku, p.image_main FROM outbound_items i
          JOIN products p ON i.product_id = p.id WHERE i.record_id IN (?)`, [ids]
       )
       const itemsByRecord = {}
@@ -204,13 +205,13 @@ router.post('/outbound', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (
           // Handle batch mode with multiple qrcodes
           if (item.qrcodes && item.qrcodes.length > 0) {
             for (const qrcode_id of item.qrcodes) {
-              await conn.query('INSERT INTO outbound_items (record_id, product_id, quantity, qrcode_id) VALUES (?,?,?,?)',
-                [result.insertId, item.product_id, 1, qrcode_id])
+              await conn.query('INSERT INTO outbound_items (record_id, product_id, sku_id, quantity, qrcode_id) VALUES (?,?,?,?,?)',
+                [result.insertId, item.product_id, item.sku_id || null, 1, qrcode_id])
               await conn.query("UPDATE qrcodes SET status = 'shipped' WHERE id = ?", [qrcode_id])
             }
           } else {
-            await conn.query('INSERT INTO outbound_items (record_id, product_id, quantity, qrcode_id) VALUES (?,?,?,?)',
-              [result.insertId, item.product_id, item.quantity, item.qrcode_id || null])
+            await conn.query('INSERT INTO outbound_items (record_id, product_id, sku_id, quantity, qrcode_id) VALUES (?,?,?,?,?)',
+              [result.insertId, item.product_id, item.sku_id || null, item.quantity, item.qrcode_id || null])
             if (item.qrcode_id) {
               await conn.query("UPDATE qrcodes SET status = 'shipped' WHERE id = ?", [item.qrcode_id])
             }
@@ -222,7 +223,7 @@ router.post('/outbound', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (
             throw Object.assign(new Error(`商品ID ${item.product_id} 库存不足`), { status: 400 })
           }
           const [pResult] = await conn.query(
-            'UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?',
+            'UPDATE products SET stock = COALESCE(stock, 0) - ? WHERE id = ? AND COALESCE(stock, 0) >= ?',
             [item.quantity, item.product_id, item.quantity])
           if (pResult.affectedRows === 0) {
             throw Object.assign(new Error(`商品ID ${item.product_id} 总库存不足`), { status: 400 })
@@ -323,7 +324,7 @@ router.get('/returns', async (req, res, next) => {
     if (rows.length) {
       const ids = rows.map(r => r.id)
       const [allItems] = await pool.query(
-        `SELECT i.*, p.name as product_name, p.sku FROM return_items i
+        `SELECT i.*, p.name as product_name, p.sku, p.image_main FROM return_items i
          JOIN products p ON i.product_id = p.id WHERE i.record_id IN (?)`, [ids]
       )
       const itemsByRecord = {}
@@ -372,13 +373,14 @@ router.post('/returns', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (r
           [recordNo, warehouse_id, source || '', totalQty, operator, 'completed', reason || null]
         )
         for (const item of finalItems) {
-          await conn.query('INSERT INTO return_items (record_id, product_id, quantity, qrcode_id) VALUES (?,?,?,?)',
-            [result.insertId, item.product_id, item.quantity, item.qrcode_id || null])
+          await conn.query('INSERT INTO return_items (record_id, product_id, sku_id, quantity, qrcode_id) VALUES (?,?,?,?,?)',
+            [result.insertId, item.product_id, item.sku_id || null, item.quantity, item.qrcode_id || null])
           await conn.query(
             `INSERT INTO warehouse_stock (warehouse_id, product_id, quantity) VALUES (?,?,?)
              ON DUPLICATE KEY UPDATE quantity = quantity + ?`,
             [warehouse_id, item.product_id, item.quantity, item.quantity])
-          await conn.query('UPDATE products SET stock = stock + ? WHERE id = ?', [item.quantity, item.product_id])
+          await conn.query(
+            'UPDATE products SET stock = COALESCE(stock, 0) + ? WHERE id = ?', [item.quantity, item.product_id])
 
           // Update qrcode status if applicable
           if (item.qrcode_id) {
@@ -401,6 +403,126 @@ router.post('/return', async (req, res, next) => {
   // Reuse the same handler
   req.url = '/returns'
   return router.handle(req, res, next)
+})
+
+// ─── Edit Records ─────────────────────────────────────────────────────────────
+
+// Edit inbound record
+router.put('/inbound/:id', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (req, res, next) => {
+  const conn = await pool.getConnection()
+  try {
+    await conn.beginTransaction()
+    const recordId = req.params.id
+    const { warehouse_id, supplier, items } = req.body
+
+    const [[record]] = await conn.query('SELECT * FROM inbound_records WHERE id = ?', [recordId])
+    if (!record) {
+      await conn.rollback()
+      return res.status(404).json({ code: 404, message: '入库记录不存在' })
+    }
+
+    if (!warehouse_id || !items?.length) {
+      return res.status(400).json({ code: 400, message: '仓库和商品明细必填' })
+    }
+
+    // Rollback old stock
+    const [oldItems] = await conn.query('SELECT * FROM inbound_items WHERE record_id = ?', [recordId])
+    for (const item of oldItems) {
+      await conn.query(
+        'UPDATE warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_id = ?',
+        [item.quantity, record.warehouse_id, item.product_id])
+      await conn.query('UPDATE products SET stock = stock - ? WHERE id = ?', [item.quantity, item.product_id])
+    }
+
+    // Update record
+    const totalQty = items.reduce((s, i) => s + (i.quantity || 0), 0)
+    await conn.query(
+      'UPDATE inbound_records SET warehouse_id=?, supplier=?, total_qty=? WHERE id=?',
+      [warehouse_id, supplier || '', totalQty, recordId])
+
+    // Delete old items, insert new
+    await conn.query('DELETE FROM inbound_items WHERE record_id = ?', [recordId])
+    for (const item of items) {
+      await conn.query('INSERT INTO inbound_items (record_id, product_id, sku_id, quantity) VALUES (?,?,?,?)',
+        [recordId, item.product_id, item.sku_id || null, item.quantity])
+      // Apply new stock
+      await conn.query(
+        `INSERT INTO warehouse_stock (warehouse_id, product_id, quantity) VALUES (?,?,?)
+         ON DUPLICATE KEY UPDATE quantity = quantity + ?`,
+        [warehouse_id, item.product_id, item.quantity, item.quantity])
+      await conn.query('UPDATE products SET stock = stock + ? WHERE id = ?', [item.quantity, item.product_id])
+    }
+
+    await conn.commit()
+    res.json({ code: 0, data: { id: parseInt(recordId) }, message: '编辑成功' })
+  } catch (err) {
+    await conn.rollback()
+    next(err)
+  } finally {
+    conn.release()
+  }
+})
+
+// Edit outbound record
+router.put('/outbound/:id', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (req, res, next) => {
+  const conn = await pool.getConnection()
+  try {
+    await conn.beginTransaction()
+    const recordId = req.params.id
+    const { warehouse_id, customer, items } = req.body
+
+    const [[record]] = await conn.query('SELECT * FROM outbound_records WHERE id = ?', [recordId])
+    if (!record) {
+      await conn.rollback()
+      return res.status(404).json({ code: 404, message: '出库记录不存在' })
+    }
+
+    if (!warehouse_id || !items?.length) {
+      return res.status(400).json({ code: 400, message: '仓库和商品明细必填' })
+    }
+
+    // Rollback old stock
+    const [oldItems] = await conn.query('SELECT * FROM outbound_items WHERE record_id = ?', [recordId])
+    for (const item of oldItems) {
+      await conn.query(
+        `INSERT INTO warehouse_stock (warehouse_id, product_id, quantity) VALUES (?,?,?)
+         ON DUPLICATE KEY UPDATE quantity = quantity + ?`,
+        [record.warehouse_id, item.product_id, item.quantity, item.quantity])
+      await conn.query('UPDATE products SET stock = stock + ? WHERE id = ?', [item.quantity, item.product_id])
+      if (item.qrcode_id) {
+        await conn.query("UPDATE qrcodes SET status = 'bound' WHERE id = ?", [item.qrcode_id])
+      }
+    }
+
+    // Update record
+    const totalQty = items.reduce((s, i) => s + (i.quantity || 0), 0)
+    await conn.query(
+      'UPDATE outbound_records SET warehouse_id=?, customer=?, total_qty=? WHERE id=?',
+      [warehouse_id, customer || '', totalQty, recordId])
+
+    // Delete old items, insert new
+    await conn.query('DELETE FROM outbound_items WHERE record_id = ?', [recordId])
+    for (const item of items) {
+      await conn.query('INSERT INTO outbound_items (record_id, product_id, sku_id, quantity, qrcode_id) VALUES (?,?,?,?,?)',
+        [recordId, item.product_id, item.sku_id || null, item.quantity, item.qrcode_id || null])
+      // Apply new stock deduction
+      await conn.query(
+        'UPDATE warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_id = ?',
+        [item.quantity, warehouse_id, item.product_id])
+      await conn.query('UPDATE products SET stock = stock - ? WHERE id = ?', [item.quantity, item.product_id])
+      if (item.qrcode_id) {
+        await conn.query("UPDATE qrcodes SET status = 'used' WHERE id = ?", [item.qrcode_id])
+      }
+    }
+
+    await conn.commit()
+    res.json({ code: 0, data: { id: parseInt(recordId) }, message: '编辑成功' })
+  } catch (err) {
+    await conn.rollback()
+    next(err)
+  } finally {
+    conn.release()
+  }
 })
 
 // ─── Delete Records (Admin only) ────────────────────────────────────────────
@@ -485,6 +607,61 @@ router.delete('/outbound/:id', requireRole('admin'), async (req, res, next) => {
 
     await conn.commit()
     res.json({ code: 0, data: null, message: '删除成功' })
+  } catch (err) {
+    await conn.rollback()
+    next(err)
+  } finally {
+    conn.release()
+  }
+})
+
+// Edit return record
+router.put('/returns/:id', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (req, res, next) => {
+  const conn = await pool.getConnection()
+  try {
+    await conn.beginTransaction()
+    const recordId = req.params.id
+    const { warehouse_id, source, reason, remark, items } = req.body
+    const operator = req.user?.name || req.body.operator || ''
+
+    // Get old items for rollback
+    const [oldItems] = await conn.query('SELECT * FROM return_items WHERE record_id = ?', [recordId])
+
+    // Rollback old stock
+    for (const item of oldItems) {
+      await conn.query(
+        'UPDATE warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_id = ?',
+        [item.quantity, warehouse_id, item.product_id])
+      await conn.query('UPDATE products SET stock = stock - ? WHERE id = ?', [item.quantity, item.product_id])
+      if (item.qrcode_id) {
+        await conn.query("UPDATE qrcodes SET status = 'shipped' WHERE id = ?", [item.qrcode_id])
+      }
+    }
+
+    // Update record
+    const totalQty = items.reduce((s, i) => s + (i.quantity || 0), 0)
+    await conn.query(
+      'UPDATE return_records SET warehouse_id=?, source=?, reason=?, total_qty=? WHERE id=?',
+      [warehouse_id, source || '', reason || '', totalQty, recordId])
+
+    // Delete old items, insert new
+    await conn.query('DELETE FROM return_items WHERE record_id = ?', [recordId])
+    for (const item of items) {
+      await conn.query('INSERT INTO return_items (record_id, product_id, sku_id, quantity, qrcode_id) VALUES (?,?,?,?,?)',
+        [recordId, item.product_id, item.sku_id || null, item.quantity, item.qrcode_id || null])
+      // Apply stock return
+      await conn.query(
+        `INSERT INTO warehouse_stock (warehouse_id, product_id, quantity) VALUES (?,?,?)
+         ON DUPLICATE KEY UPDATE quantity = quantity + ?`,
+        [warehouse_id, item.product_id, item.quantity, item.quantity])
+      await conn.query('UPDATE products SET stock = stock + ? WHERE id = ?', [item.quantity, item.product_id])
+      if (item.qrcode_id) {
+        await conn.query("UPDATE qrcodes SET status = 'bound' WHERE id = ?", [item.qrcode_id])
+      }
+    }
+
+    await conn.commit()
+    res.json({ code: 0, data: { id: parseInt(recordId) }, message: '编辑成功' })
   } catch (err) {
     await conn.rollback()
     next(err)
