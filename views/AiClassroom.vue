@@ -572,6 +572,18 @@ onMounted(() => {
   padding: 24px;
 }
 
+@media (max-width: 768px) {
+  .ai-classroom {
+    padding: 8px;  /* 手机端减小 padding */
+  }
+  .page-title {
+    font-size: 18px;  /* 手机端标题缩小 */
+  }
+  .page-header {
+    margin-bottom: 12px;
+  }
+}
+
 .page-header {
   display: flex;
   justify-content: space-between;
@@ -745,6 +757,7 @@ onMounted(() => {
   align-items: flex-start;
   gap: 10px;
   max-width: 70%;
+  min-width: 0;  /* 允许 flex item 收缩 */
 }
 
 .message-avatar {
@@ -856,40 +869,56 @@ onMounted(() => {
 
 @media (max-width: 768px) {
   .chat-panel {
-    height: calc(100vh - 180px);
+    height: calc(100vh - 160px);
     min-height: 400px;
   }
 
   .chat-header {
-    padding: 10px 14px;
-  }
-
-  .user-info {
-    font-size: 13px;
-  }
-
-  .btn-clear {
-    padding: 5px 10px;
-    font-size: 12px;
-  }
-
-  .chat-messages {
-    padding: 12px 12px;
-    gap: 12px;
-  }
-
-  .message-bubble {
-    max-width: 85%;
+    padding: 8px 12px;
+    flex-wrap: wrap;
     gap: 8px;
   }
 
+  .user-info {
+    font-size: 12px;
+  }
+
+  .btn-clear {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .chat-messages {
+    padding: 8px 8px;
+    gap: 10px;
+  }
+
+  .message-bubble {
+    max-width: 92%;
+    gap: 6px;
+  }
+
   .message-avatar {
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
   }
 
   .message-avatar .material-symbols-outlined {
-    font-size: 15px;
+    font-size: 14px;
+  }
+
+  /* 输入栏手机端适配 */
+  .chat-input-bar {
+    padding: 8px;
+    gap: 6px;
+  }
+  .chat-input {
+    font-size: 14px;
+    padding: 8px 12px;
+  }
+  .btn-send {
+    width: 36px;
+    height: 36px;
   }
 
   .message-content {
@@ -911,15 +940,28 @@ onMounted(() => {
     gap: 8px;
   }
 
-  .chat-input {
-    height: 40px;
-    padding: 0 12px;
-    font-size: 14px;
+  .btn-clear {
+    padding: 5px 10px;
+    font-size: 12px;
   }
 
-  .btn-send {
-    width: 40px;
-    height: 40px;
+  /* 表格内容溢出处理 */
+  .message-content table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+  /* el-tabs 适配 */
+  :deep(.el-tabs__header) {
+    margin: 0 0 8px 0;
+  }
+  :deep(.el-tabs__nav-wrap.is-scrollable) {
+    padding: 0;
+  }
+  :deep(.el-tabs__item) {
+    padding: 0 12px !important;
+    font-size: 14px;
   }
 }
 
