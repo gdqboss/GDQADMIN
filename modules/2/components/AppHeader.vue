@@ -111,18 +111,26 @@ const breadcrumbs = computed(() => {
 })
 
 const languages = computed(() => systemSettings.languages || ['zh', 'en'])
+const showLangDropdown = ref(false)
+
+const langLabelMap = { zh: '中文', en: 'English', ja: '日本語', ko: '한국어', th: 'ภาษาไทย', vi: 'Tiếng Việt', id: 'Bahasa' }
+const langLabel = (l) => langLabelMap[l] || l.toUpperCase()
+const currentLangLabel = computed(() => langLabel(i18n.global.locale.value))
+
+async function switchLang(lang) {
+  showLangDropdown.value = false
+  if (lang === i18n.global.locale.value) return
+  localStorage.setItem('caimeite_locale', lang)
+  window.location.reload()
+}
 
 async function toggleLocale() {
   const langs = languages.value
   const cur = i18n.global.locale.value
   const idx = langs.indexOf(cur)
   const newLocale = idx >= 0 && idx < langs.length - 1 ? langs[idx + 1] : langs[0]
-  if (i18n.setLocaleMessage) {
-    await i18n.setLocaleMessage(newLocale)
-  } else {
-    i18n.global.locale.value = newLocale
-  }
   localStorage.setItem('caimeite_locale', newLocale)
+  window.location.reload()
 }
 
 const fetchUnreadCount = async () => {
@@ -231,8 +239,26 @@ onMounted(() => {
         <span class="material-symbols-outlined text-text-secondary text-[20px]">search</span>
         <input type="text" :placeholder="$t('common.search') + '...'" class="bg-transparent border-none focus:ring-0 focus:outline-none text-sm w-full text-text-primary placeholder-text-secondary ml-2" />
       </div>
-      <!-- Language toggle -->
-      <button @click="toggleLocale" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-text-primary hover:bg-gray-50 transition-colors">
+      <!-- Language toggle (langs < 3: cycle button; langs >= 3: dropdown) -->
+      <div class="relative" v-if="languages.length >= 3">
+        <button @click="showLangDropdown = !showLangDropdown" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-text-primary hover:bg-gray-50 transition-colors">
+          <span class="material-symbols-outlined text-[16px]">language</span>
+          {{ currentLangLabel }}
+          <span class="text-[10px]">▼</span>
+        </button>
+        <div v-if="showLangDropdown" class="absolute right-0 mt-1 w-28 bg-white rounded-lg shadow-lg border z-50 py-1">
+          <button
+            v-for="lang in languages"
+            :key="lang"
+            @click="switchLang(lang)"
+            class="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 transition-colors"
+            :class="lang === i18n.global.locale.value ? 'text-primary font-semibold' : 'text-text-primary'"
+          >
+            {{ langLabel(lang) }}
+          </button>
+        </div>
+      </div>
+      <button v-else @click="toggleLocale" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-text-primary hover:bg-gray-50 transition-colors">
         <span class="material-symbols-outlined text-[16px]">language</span>
         {{ languages.length > 1 ? languages.find(l => l !== i18n.global.locale.value)?.toUpperCase().slice(0,2) : 'EN' }}
       </button>

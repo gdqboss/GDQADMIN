@@ -244,15 +244,25 @@ const confirmSale = async () => {
 }
 
 // ─── Data Loading ───────────────────────────────────────────────────────────────
+// ─── 仓库情况组件状态 ───────────────────────────────────────────────────────────────
+const warehouseSummary = ref([])
+const wsLoading = ref(false)
+
 const loadDashboardData = async () => {
   try {
     error.value = null
     const respRes = await Promise.allSettled([
       api.get('/job-responsibilities/my'),
+      api.get('/reports/dashboard-top-warehouses?limit=5'),  // 仓库情况 Top5
     ])
 
-    if (respRes?.status === 'fulfilled' && respRes.value.code === 0) {
-      myResponsibilities.value = respRes.value.data || []
+    if (respRes?.[0]?.status === 'fulfilled' && respRes[0].value.code === 0) {
+      myResponsibilities.value = respRes[0].value.data || []
+    }
+    if (respRes?.[1]?.status === 'fulfilled' && respRes[1].value.code === 0) {
+      warehouseSummary.value = respRes[1].value.data || []
+    } else {
+      wsLoading.value = true
     }
   } catch (err) {
     console.error('Failed to load dashboard data:', err)
@@ -322,6 +332,73 @@ onUnmounted(() => { stopCameraScanner() })
             <span :class="['material-symbols-outlined text-2xl sm:text-3xl group-hover:scale-110 transition-transform', `text-${action.color}`]">{{ action.icon }}</span>
             <span class="text-xs sm:text-sm font-medium text-text-primary text-center">{{ action.name() }}</span>
           </button>
+        </div>
+      </div>
+
+      <!-- 仓库情况 Top 5 -->
+      <div v-if="warehouseSummary.length > 0 && userStore.canAccess('dashboard:warehouse_summary')" class="bg-white rounded-lg border border-gray-100 shadow-card p-4 sm:p-6 mb-6">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h4 class="font-bold text-text-primary flex items-center gap-2">
+              <span class="material-symbols-outlined text-primary">warehouse</span>
+              {{ t('dashboard.warehouseSummary') || '仓库情况' }}
+            </h4>
+            <p class="text-xs text-text-secondary mt-1">{{ t('dashboard.warehouseSummaryDesc') || '按库存数量排序，展示前 5 个仓库' }}</p>
+          </div>
+          <router-link
+            to="/reports?tab=stock"
+            class="text-xs text-primary hover:underline flex items-center gap-1"
+          >
+            {{ t('common.viewAll') || '查看全部' }}
+            <span class="material-symbols-outlined text-sm">arrow_forward</span>
+          </router-link>
+        </div>
+        <div class="space-y-2">
+          <div
+            v-for="(wh, idx) in warehouseSummary"
+            :key="wh.id"
+            @click="router.push(`/reports?tab=stock&warehouse=${wh.id}`)"
+            class="flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-primary hover:bg-primary/5 cursor-pointer transition-all"
+          >
+            <!-- 排名 -->
+            <div :class="['flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold',
+              idx === 0 ? 'bg-yellow-100 text-yellow-700' :
+              idx === 1 ? 'bg-gray-100 text-gray-700' :
+              idx === 2 ? 'bg-orange-100 text-orange-700' :
+              'bg-gray-50 text-gray-500']">
+              {{ idx + 1 }}
+            </div>
+            <!-- 仓库名 + 类型 -->
+            <div class="flex-shrink-0 w-40">
+              <p class="font-medium text-sm text-text-primary truncate">{{ wh.name }}</p>
+              <p class="text-xs text-text-secondary">{{ wh.type }} · {{ wh.manager || '未指定' }}</p>
+            </div>
+            <!-- 5 个指标 -->
+            <div class="flex-1 grid grid-cols-5 gap-2 text-center">
+              <div>
+                <p class="text-xs text-text-secondary">库存数</p>
+                <p class="text-sm font-bold text-text-primary">{{ Number(wh.total_qty).toLocaleString() }}</p>
+              </div>
+              <div>
+                <p class="text-xs text-text-secondary">价值(元)</p>
+                <p class="text-sm font-bold text-primary">{{ Number(wh.total_value).toLocaleString() }}</p>
+              </div>
+              <div>
+                <p class="text-xs text-text-secondary">商品种类</p>
+                <p class="text-sm font-bold text-text-primary">{{ wh.sku_count }}</p>
+              </div>
+              <div>
+                <p class="text-xs text-text-secondary">30天出库</p>
+                <p class="text-sm font-bold text-success">{{ wh.outbound_30d }}</p>
+              </div>
+              <div>
+                <p class="text-xs text-text-secondary">低库存</p>
+                <p :class="['text-sm font-bold', wh.low_stock_count > 0 ? 'text-danger' : 'text-text-primary']">
+                  {{ wh.low_stock_count }}
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -76,11 +76,16 @@ export const serverProfileApi = {
   list() { return api.get('/server-profiles') },
   get(id) { return api.get(`/server-profiles/${id}`) },
   getAvailableModules() { return api.get('/server-profiles/available-modules') },
+  getIndustryTemplates() { return api.get('/server-profiles/industry-templates') },
   create(data) { return api.post('/server-profiles', data) },
   update(id, data) { return api.put(`/server-profiles/${id}`, data) },
   remove(id) { return api.delete(`/server-profiles/${id}`) },
   sync(id) { return api.post(`/server-profiles/${id}/sync`) },
   execSync(id) { return api.post(`/server-profiles/${id}/exec-sync`) },
+  getModules(id) { return api.get(`/server-profiles/${id}/modules`) },
+  addModule(profileId, moduleKey) { return api.post(`/server-profiles/${profileId}/modules`, { module_key: moduleKey }) },
+  syncModules(profileId, modules) { return api.put(`/server-profiles/${profileId}/modules`, { modules }) },
+  removeModule(profileId, moduleKey) { return api.delete(`/server-profiles/${profileId}/modules/${moduleKey}`) },
 }
 
 // 菜单配置 API

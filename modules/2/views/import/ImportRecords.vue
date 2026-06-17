@@ -27,11 +27,24 @@
       </div>
     </div>
 
+    <!-- Multi-select Analysis Bar -->
+    <div class="multi-bar" v-if="records.length > 0">
+      <label class="checkbox-label">
+        <input type="checkbox" v-model="selectAll" @change="toggleSelectAll" />
+        {{ $t('importRecords.selectAll') || '全选' }}
+      </label>
+      <span class="selected-count">{{ selected.length }} {{ $t('importRecords.selected') || '已选' }}</span>
+      <button class="btn btn-analysis" :disabled="selected.length < 2" @click="multiAnalysis">
+        📊 {{ $t('importRecords.multiAnalysis') || '多选分析' }}
+      </button>
+    </div>
+
     <!-- Records Table -->
     <div class="report-section">
       <table class="data-table">
         <thead>
           <tr>
+            <th class="col-check"></th>
             <th>{{ $t('importRecords.fileName') }}</th>
             <th>{{ $t('importRecords.type') }}</th>
             <th>{{ $t('importRecords.uploadTime') }}</th>
@@ -42,7 +55,10 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="record in records" :key="record.id">
+          <tr v-for="record in records" :key="record.id" :class="{ 'row-selected': selected.includes(record.id) }">
+            <td class="col-check">
+              <input type="checkbox" :value="record.id" v-model="selected" />
+            </td>
             <td>{{ record.file_name }}</td>
             <td><span :class="['badge', record.file_type.toLowerCase()]">{{ record.file_type }}</span></td>
             <td>{{ formatDate(record.uploaded_at) }}</td>
@@ -57,7 +73,7 @@
             </td>
           </tr>
           <tr v-if="records.length === 0">
-            <td colspan="7" class="empty-cell">{{ $t('importRecords.noRecords') }}</td>
+            <td colspan="8" class="empty-cell">{{ $t('importRecords.noRecords') }}</td>
           </tr>
         </tbody>
       </table>
@@ -84,6 +100,8 @@ const stats = ref(null)
 const page = ref(1)
 const pageSize = 20
 const total = ref(0)
+const selected = ref([])
+const selectAll = ref(false)
 
 async function loadRecords(p = 1) {
   try {
@@ -99,7 +117,6 @@ async function loadRecords(p = 1) {
 }
 
 async function loadStats() {
-  // Aggregate stats from all records
   try {
     if (records.value.length > 0) {
       stats.value = {
@@ -112,6 +129,20 @@ async function loadStats() {
   } catch (e) {
     console.error('[ImportRecords] stats error:', e)
   }
+}
+
+function toggleSelectAll() {
+  if (selectAll.value) {
+    selected.value = records.value.map(r => r.id)
+  } else {
+    selected.value = []
+  }
+}
+
+function multiAnalysis() {
+  if (selected.value.length < 2) return
+  const ids = selected.value.join(',')
+  window.location.hash = `/import-detail-multi/${ids}`
 }
 
 function formatDate(dateStr) {
@@ -131,6 +162,7 @@ async function deleteRecord(record) {
     const res = await api.delete(`/import/records/${record.id}`)
     if (res.success) {
       records.value = records.value.filter(r => r.id !== record.id)
+      selected.value = selected.value.filter(id => id !== record.id)
     } else {
       alert(res.message || 'Delete failed')
     }
@@ -154,11 +186,21 @@ onMounted(() => {
 .stat-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); text-align: center; }
 .stat-value { font-size: 28px; font-weight: bold; color: #409eff; }
 .stat-label { font-size: 14px; color: #909399; margin-top: 4px; }
+
+.multi-bar { display: flex; align-items: center; gap: 16px; background: white; padding: 12px 20px; border-radius: 8px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.checkbox-label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; color: #606266; }
+.selected-count { font-size: 13px; color: #909399; }
+.btn-analysis { background: #67c23a; }
+.btn-analysis:hover { background: #85ce61; }
+.btn-analysis:disabled { background: #c0c4cc; cursor: not-allowed; }
+
 .report-section { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table th, .data-table td { padding: 12px 8px; text-align: left; border-bottom: 1px solid #ebeef5; font-size: 14px; }
 .data-table th { background: #fafafa; font-weight: 600; color: #606266; }
 .data-table tr:hover { background: #f5f7fa; }
+.row-selected { background: #ecf5ff; }
+.col-check { width: 40px; text-align: center; }
 .badge { padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
 .badge.sm { background: #e6f7ff; color: #1890ff; }
 .badge.appollos { background: #f6ffed; color: #52c41a; }

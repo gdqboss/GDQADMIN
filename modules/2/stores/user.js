@@ -36,12 +36,17 @@ export const useUserStore = defineStore('user', () => {
     return perms.includes(permKey)
   }
 
-  async function login(email, password) {
-    const res = await api.post('/auth/login', { email, password })
+  async function login(phone, password) {
+    const res = await api.post('/auth/login', { phone, password })
     if (res.code === 0) {
-      user.value = res.data.user
+      // 优先使用后端返回的 permissions 字段（解析后的权限数组）
+      const userWithPerms = {
+        ...res.data.user,
+        permissions: res.data.permissions ?? res.data.user?.permissions ?? null
+      }
+      user.value = userWithPerms
       token.value = res.data.token
-      localStorage.setItem('caimeite_user', JSON.stringify(res.data.user))
+      localStorage.setItem('caimeite_user', JSON.stringify(userWithPerms))
       localStorage.setItem('caimeite_token', res.data.token)
     }
     return res

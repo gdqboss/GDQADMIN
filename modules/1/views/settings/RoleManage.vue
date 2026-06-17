@@ -35,8 +35,40 @@ const categoryOrder = [
   'inventory', 'order', 'approval', 'attendance',
   'leave', 'shift', 'schedule', 'task',
   'qrcode', 'referral', 'wecom', 'ai-automation',
-  'workflow', 'workbench',
+  'workflow', 'workbench', 'navigation', 'quick-action', 'action',
 ]
+// 自定义分类名映射（避免 i18n key 连字符问题）
+const CATEGORY_LABELS = {
+  'system': '系统',
+  'product': '商品',
+  'warehouse': '仓库',
+  'stock': '库存',
+  'finance': '财务',
+  'retail': '零售',
+  'aftersale': '售后',
+  'ai': 'AI课堂',
+  'supply': '供应链',
+  'work_log': '工作日志',
+  'bi': 'BI分析',
+  'report': '报表',
+  'inventory': '出入库',
+  'order': '订单',
+  'approval': '审批',
+  'attendance': '考勤',
+  'leave': '请假',
+  'shift': '班次',
+  'schedule': '排班',
+  'task': '任务',
+  'qrcode': '二维码',
+  'referral': '推荐裂变',
+  'wecom': '企业微信',
+  'ai-automation': 'AI自动化',
+  'workflow': '工作流',
+  'workbench': '工作台',
+  'navigation': '导航组件',
+  'quick-action': '快捷操作',
+  'action': '功能操作',
+}
 
 const sortedCategories = computed(() => {
   return categoryOrder.filter(cat => permissionsByCategory.value[cat]?.length)
@@ -261,7 +293,7 @@ onMounted(async () => { await Promise.all([loadRoles(), loadAllPermissions()]) }
                       <div class="space-y-3 max-h-80 overflow-y-auto">
                         <div v-for="cat in sortedCategories" :key="cat">
                           <div class="text-xs font-medium text-gray-500 uppercase mb-1.5 tracking-wide">
-                            {{ $t('settings.category_' + cat) }}
+                            {{ CATEGORY_LABELS[cat] || $t('settings.category_' + cat.replace(/-/g, '_')) }}
                           </div>
                           <div class="flex flex-wrap gap-1.5">
                             <el-tag

@@ -1,0 +1,7 @@
+
+# Build outputs
+dist/
+.codegraph/
+
+# Test/diagnostic outputs
+dist-*/

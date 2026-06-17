@@ -1511,7 +1511,7 @@ async function deleteUser(user) {
         </div>
       </div>
 
-
+      <!-- ── Job Responsibilities ── -->
       <div v-if="activeTab === 'job-responsibilities'" class="p-6">
         <div class="flex justify-between items-center mb-4">
           <h3 class="font-bold text-text-primary">{{ $t('nav.jobResponsibilities') }}</h3>

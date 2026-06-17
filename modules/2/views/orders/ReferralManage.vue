@@ -45,16 +45,11 @@ async function delTable(row) {
   fetchTables()
 }
 
-// QR码下载（前端生成）
+// QR码下载（使用后端生成的二维码图片）
 function downloadQR(token) {
-  const url = `https://wecom.gdqshop.cn/api/referral/scan/${token}`
-  const win = window.open('', '_blank')
-  win.document.write(`<html><head><title>桌码 ${token}</title></head><body style="text-align:center;padding:50px">`)
-  win.document.write(`<h2>桌码: ${token}</h2>`)
-  win.document.write(`<p>链接: <a href="${url}">${url}</a></p>`)
-  win.document.write(`<p style="color:#888">请使用二维码生成工具生成二维码</p>`)
-  win.document.write(`</body></html>`)
-  win.document.close()
+  const qrUrl = `/api/referral/qr/${token}`
+  const win = window.open(qrUrl, '_blank')
+  if (!win) ElMessage.warning('请允许弹出窗口')
 }
 
 // ─── 奖励规则 ─────────────────────────────────────────────────────────────────
@@ -180,6 +175,16 @@ onMounted(() => {
       <el-table :data="tables" v-loading="tableLoading" stripe>
         <el-table-column prop="table_no" label="桌号" width="120" />
         <el-table-column prop="table_name" label="桌名" />
+        <el-table-column label="二维码" width="100" align="center">
+          <template #default="{ row }">
+            <img
+              :src="`/api/referral/qr/${row.qr_token}`"
+              :alt="row.table_no"
+              class="w-12 h-12 object-contain cursor-pointer hover:opacity-80"
+              @click="downloadQR(row.qr_token)"
+            />
+          </template>
+        </el-table-column>
         <el-table-column prop="qr_token" label="Token" min-width="200" show-overflow-tooltip />
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">

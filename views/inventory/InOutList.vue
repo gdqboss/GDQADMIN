@@ -95,7 +95,7 @@ const operatorName = computed(() => {
   }
 })
 
-const canDelete = computed(() => userStore.canAccess('inventory_delete'))
+const canDelete = computed(() => userStore.canAccess('inventory:delete'))
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatDate(str) {
@@ -141,14 +141,16 @@ function getSkusForItem(item) {
   return productSkus.value[item.product_id] || []
 }
 
+// 显示 SKU + 规格组合（颜色/尺寸 的值，用 / 分隔）
+// sku_key 是 "20-碳灰-A"（值组合）不是 JSON；规格字典在 sku.specs
 function formatSkuLabel(sku) {
-  if (!sku.sku_key) return sku.sku
-  try {
-    const key = JSON.parse(sku.sku_key)
-    return sku.sku + ' - ' + Object.values(key).join('/')
-  } catch {
-    return sku.sku
+  let specsDict = {}
+  if (sku.specs) {
+    try { specsDict = typeof sku.specs === 'string' ? JSON.parse(sku.specs) : sku.specs } catch {}
   }
+  const vals = Object.values(specsDict).filter(v => v !== '' && v !== null && v !== undefined)
+  if (!vals.length) return sku.sku
+  return sku.sku + ' - ' + vals.join('/')
 }
 
 // ─── Load data ────────────────────────────────────────────────────────────────
@@ -302,7 +304,8 @@ async function submitForm() {
     }
   } else {
     // Normal mode validation
-    const validItems = form.value.items.filter(i => i.product_id && Number(i.quantity) > 0)
+    // 入库允许 0 数量（占位先入库，事后补实际数量）
+    const validItems = form.value.items.filter(i => i.product_id && Number(i.quantity) >= 0)
     if (validItems.length === 0) {
       formError.value = t('inout.addAtLeastOneProduct')
       return
@@ -337,8 +340,8 @@ async function submitForm() {
         quantity: batchQuantity.value
       }
     } else {
-      // Normal mode
-      const validItems = form.value.items.filter(i => i.product_id && Number(i.quantity) > 0)
+      // Normal mode — 入库允许 0 数量（占位先入库，事后补实际数量）
+      const validItems = form.value.items.filter(i => i.product_id && Number(i.quantity) >= 0)
       payload = {
         warehouse_id: form.value.warehouse_id,
         [partyKey]: form.value.party,
@@ -603,7 +606,7 @@ async function handleDeleteRecord() {
                   {{ $t('inout.print') }}
                 </button>
                 <button
-                  v-if="userStore.canAccess('inventory_delete')"
+                  v-if="userStore.canAccess('inventory:delete')"
                   @click="deleteRecord(r)"
                   class="text-danger hover:text-red-700 text-xs font-medium"
                 >
@@ -989,6 +992,7 @@ async function handleDeleteRecord() {
                       <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.productCol') }}</th>
                       <th class="px-3 py-2 w-16"></th>
                       <th class="px-3 py-2 text-center text-xs font-medium text-text-secondary">{{ $t('inout.skuCol') }}</th>
+                      <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">规格</th>
                       <th class="px-3 py-2 text-center text-xs font-medium text-text-secondary">{{ $t('inout.qtyCol') }}</th>
                       <th v-if="detailRecord.items.some(i => i.qrcode_id)" class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.qrCodeCol') }}</th>
                     </tr>
@@ -1013,7 +1017,8 @@ async function handleDeleteRecord() {
                           <span class="material-symbols-outlined text-gray-300 text-sm">image</span>
                         </div>
                       </td>
-                      <td class="px-3 py-2 text-center font-mono text-xs">{{ item.sku || '—' }}</td>
+                      <td class="px-3 py-2 text-center font-mono text-xs">{{ item.sku || item.sku_code || '—' }}</td>
+                      <td class="px-3 py-2 text-text-secondary text-sm">{{ formatSkuLabel(item.sku_specs ? { specs: item.sku_specs } : item) || '—' }}</td>
                       <td class="px-3 py-2 text-center font-medium">{{ item.quantity }}</td>
                       <td v-if="detailRecord.items.some(i => i.qrcode_id)" class="px-3 py-2 font-mono text-xs">{{ item.qrcode_id || '—' }}</td>
                     </tr>
@@ -1024,7 +1029,7 @@ async function handleDeleteRecord() {
           </div>
           <div class="px-6 py-4 border-t flex justify-between gap-3">
             <button
-              v-if="userStore.canAccess('inventory_delete')"
+              v-if="userStore.canAccess('inventory:delete')"
               @click="handleDeleteRecord"
               class="flex items-center gap-2 px-4 py-2 border border-danger text-danger hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"
             >

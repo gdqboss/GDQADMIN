@@ -29,6 +29,26 @@ const pagination = ref({ inbound: {}, outbound: {}, return: {} })
 const showDetail = ref(false)
 const detailRecord = ref(null)
 
+// 规格组合显示：颜色/尺寸等组合值
+function formatSkuSpec(item) {
+  if (!item) return ''
+  // 优先用后端 JOIN 过来的 sku_specs (product_skus.specs JSON)
+  if (item.sku_specs) {
+    try {
+      const specs = typeof item.sku_specs === 'string' ? JSON.parse(item.sku_specs) : item.sku_specs
+      if (specs && typeof specs === 'object') {
+        const values = Object.values(specs).filter(v => v != null && v !== '')
+        if (values.length) return values.join('/')
+      }
+    } catch (_) { /* JSON parse 失败走兜底 */ }
+  }
+  // 兜底：有 sku_code 就显示
+  if (item.sku_code) return item.sku_code
+  // 最后兜底：用 item.sku
+  if (item.sku) return item.sku
+  return ''
+}
+
 // Print
 const printRecord = ref(null)
 
@@ -834,6 +854,7 @@ async function handleDeleteRecord() {
                     <tr>
                       <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.productCol') }}</th>
                       <th class="px-3 py-2 text-center text-xs font-medium text-text-secondary">{{ $t('inout.skuCol') }}</th>
+                      <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">规格</th>
                       <th class="px-3 py-2 text-center text-xs font-medium text-text-secondary">{{ $t('inout.qtyCol') }}</th>
                       <th v-if="detailRecord.items.some(i => i.qrcode_id)" class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.qrCodeCol') }}</th>
                     </tr>
@@ -845,7 +866,8 @@ async function handleDeleteRecord() {
                       class="border-t border-gray-100"
                     >
                       <td class="px-3 py-2">{{ item.product_name || item.name || '—' }}</td>
-                      <td class="px-3 py-2 text-center font-mono text-xs">{{ item.sku || '—' }}</td>
+                      <td class="px-3 py-2 text-center font-mono text-xs">{{ item.sku || item.sku_code || '—' }}</td>
+                      <td class="px-3 py-2 text-text-secondary text-sm">{{ formatSkuSpec(item) || '—' }}</td>
                       <td class="px-3 py-2 text-center font-medium">{{ item.quantity }}</td>
                       <td v-if="detailRecord.items.some(i => i.qrcode_id)" class="px-3 py-2 font-mono text-xs">{{ item.qrcode_id || '—' }}</td>
                     </tr>
