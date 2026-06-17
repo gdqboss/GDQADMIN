@@ -15,12 +15,15 @@ const showForm = ref(false)
 const submitting = ref(false)
 const formError = ref('')
 const formSuccess = ref('')
+const editingId = ref(null) // 编辑时的记录ID，null=新建
 
 const inboundRecords = ref([])
 const outboundRecords = ref([])
 const returnRecords = ref([])
 const warehouses = ref([])
 const products = ref([])
+const productSkus = ref({}) // { productId: [ {id, sku, sku_key, specs, stock}, ... ] }
+const productFilters = ref({}) // { rowIndex: filterString }
 
 // Pagination
 const pagination = ref({ inbound: {}, outbound: {}, return: {} })
@@ -37,7 +40,7 @@ const emptyForm = () => ({
   warehouse_id: '',
   party: '',   // supplier / customer / source depending on tab
   remark: '',
-  items: [{ product_id: '', quantity: 1, qrcode_id: '' }],
+  items: [{ product_id: '', sku_id: '', quantity: 1, qrcode_id: '' }],
 })
 const form = ref(emptyForm())
 
@@ -69,9 +72,10 @@ const partyLabel = computed(() => {
 })
 
 const modalTitle = computed(() => {
-  if (activeTab.value === 'inbound')  return t('inout.newInbound')
-  if (activeTab.value === 'outbound') return t('inout.newOutbound')
-  return t('inout.newReturn')
+  const isEdit = editingId.value !== null
+  if (activeTab.value === 'inbound')  return isEdit ? t('inout.editInbound')  : t('inout.newInbound')
+  if (activeTab.value === 'outbound') return isEdit ? t('inout.editOutbound') : t('inout.newOutbound')
+  return isEdit ? t('inout.editReturn') : t('inout.newReturn')
 })
 
 const statusMap = computed(() => ({
@@ -91,7 +95,7 @@ const operatorName = computed(() => {
   }
 })
 
-const canDelete = computed(() => userStore.canAccess('inventory_delete'))
+const canDelete = computed(() => userStore.canAccess('inventory:delete'))
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatDate(str) {
@@ -107,6 +111,44 @@ function needsQrcode(item) {
   if (activeTab.value !== 'outbound') return false
   const p = productById(item.product_id)
   return p?.require_qrcode === true || p?.require_qrcode === 1
+}
+
+function filterProduct(val, index) {
+  productFilters.value[index] = val || ''
+}
+
+function resetProductFilter(index) {
+  productFilters.value[index] = ''
+}
+
+function getFilteredProducts(index) {
+  const filter = (productFilters.value[index] || '').toLowerCase()
+  if (!filter) return products.value
+  return products.value.filter(p =>
+    (p.sku && p.sku.toLowerCase().includes(filter)) ||
+    (p.name && p.name.toLowerCase().includes(filter))
+  )
+}
+
+function onProductChange(item) {
+  item.sku_id = '' // reset SKU when product changes
+  if (item.product_id) {
+    loadSkus(item.product_id)
+  }
+}
+
+function getSkusForItem(item) {
+  return productSkus.value[item.product_id] || []
+}
+
+function formatSkuLabel(sku) {
+  if (!sku.sku_key) return sku.sku
+  try {
+    const key = JSON.parse(sku.sku_key)
+    return sku.sku + ' - ' + Object.values(key).join('/')
+  } catch {
+    return sku.sku
+  }
 }
 
 // ─── Load data ────────────────────────────────────────────────────────────────
@@ -140,12 +182,24 @@ async function loadWarehouses() {
 }
 
 async function loadProducts() {
-  try {
-    const res = await api.get('/products')
-    products.value = res?.data?.list ?? res?.list ?? res?.data ?? []
-  } catch (e) {
-    console.error('Failed to load products', e)
-  }
+    try {
+        const res = await api.get('/products/all')
+        products.value = res?.data ?? []
+    } catch (e) {
+        console.error('Failed to load products', e)
+    }
+}
+
+async function loadSkus(productId) {
+    if (!productId || productSkus.value[productId]) return
+    try {
+        const res = await api.get(`/products/${productId}/specs`)
+        if (res.code === 0) {
+            productSkus.value[productId] = res.data?.skus ?? []
+        }
+    } catch (e) {
+        console.error('Failed to load SKUs', e)
+    }
 }
 
 onMounted(async () => {
@@ -200,6 +254,7 @@ function toggleBatchMode() {
 
 // ─── Form actions ─────────────────────────────────────────────────────────────
 function openForm() {
+  editingId.value = null
   form.value = emptyForm()
   formError.value = ''
   formSuccess.value = ''
@@ -216,7 +271,7 @@ function closeForm() {
 }
 
 function addItem() {
-  form.value.items.push({ product_id: '', quantity: 1, qrcode_id: '' })
+  form.value.items.push({ product_id: '', sku_id: '', quantity: 1, qrcode_id: '' })
 }
 
 function removeItem(index) {
@@ -291,6 +346,7 @@ async function submitForm() {
         operator: operatorName.value,
         items: validItems.map(i => {
           const item = { product_id: i.product_id, quantity: Number(i.quantity) }
+          if (i.sku_id) item.sku_id = i.sku_id
           if (activeTab.value === 'outbound' && needsQrcode(i) && i.qrcode_id) {
             item.qrcode_id = i.qrcode_id
           }
@@ -299,8 +355,14 @@ async function submitForm() {
       }
     }
 
-    await api.post(endpoint, payload)
-    formSuccess.value = t('inout.submitSuccess')
+    const isEdit = editingId.value !== null
+    if (isEdit) {
+      await api.put(`${endpoint}/${editingId.value}`, payload)
+      formSuccess.value = t('inout.submitSuccess') || '编辑成功'
+    } else {
+      await api.post(endpoint, payload)
+      formSuccess.value = t('inout.submitSuccess') || '提交成功'
+    }
     await loadRecords()
     setTimeout(() => {
       closeForm()
@@ -356,6 +418,38 @@ function confirmPrint() {
   nextTick(() => {
     window.print()
   })
+}
+
+// ─── Edit Record ──────────────────────────────────────────────────────────────
+function editRecord(record) {
+  const partyKey = activeTab.value === 'inbound'
+    ? 'supplier'
+    : activeTab.value === 'outbound'
+      ? 'customer'
+      : 'source'
+  form.value = {
+    warehouse_id: record.warehouse_id,
+    party: record[partyKey] || '',
+    remark: record.remark || '',
+    items: (record.items || []).map(i => ({
+      product_id: i.product_id,
+      sku_id: i.sku_id || '',
+      quantity: i.quantity,
+      qrcode_id: i.qrcode_id || '',
+    })),
+  }
+  if (form.value.items.length === 0) {
+    form.value.items = [{ product_id: '', sku_id: '', quantity: 1, qrcode_id: '' }]
+  }
+  // Load SKUs for all products in the form
+  for (const item of form.value.items) {
+    if (item.product_id) loadSkus(item.product_id)
+  }
+  editingId.value = record.id
+  formError.value = ''
+  formSuccess.value = ''
+  batchMode.value = false
+  showForm.value = true
 }
 
 // ─── Delete Record ────────────────────────────────────────────────────────────
@@ -442,6 +536,7 @@ async function handleDeleteRecord() {
           <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
             <tr>
               <th class="px-4 py-3 font-medium">{{ $t('inout.recordNo') }}</th>
+              <th class="px-4 py-3 font-medium w-12"></th>
               <th class="px-4 py-3 font-medium">{{ $t('inout.date') }}</th>
               <th class="px-4 py-3 font-medium">{{ $t('inout.warehouse') }}</th>
               <th class="px-4 py-3 font-medium">{{ partyLabel }}</th>
@@ -454,7 +549,7 @@ async function handleDeleteRecord() {
           <tbody class="divide-y divide-gray-100">
             <!-- Empty state -->
             <tr v-if="currentRecords.length === 0">
-              <td colspan="8" class="px-4 py-12 text-center text-text-secondary text-sm">
+              <td colspan="9" class="px-4 py-12 text-center text-text-secondary text-sm">
                 <span class="material-symbols-outlined text-4xl block mb-2 text-gray-300">inbox</span>
                 {{ $t('common.noData') }}
               </td>
@@ -466,6 +561,17 @@ async function handleDeleteRecord() {
               class="hover:bg-gray-50 transition-colors"
             >
               <td class="px-4 py-3 font-mono text-xs text-primary font-medium whitespace-nowrap">{{ r.record_no }}</td>
+              <td class="px-4 py-3">
+                <img
+                  v-if="r.items && r.items[0] && r.items[0].image_main"
+                  :src="r.items[0].image_main"
+                  class="w-10 h-10 object-cover rounded border border-gray-200"
+                  @error="$event.target.style.display='none'"
+                />
+                <div v-else class="w-10 h-10 bg-gray-100 rounded border border-gray-200 flex items-center justify-center">
+                  <span class="material-symbols-outlined text-gray-300 text-sm">image</span>
+                </div>
+              </td>
               <td class="px-4 py-3 text-text-secondary whitespace-nowrap">{{ formatDate(r.created_at) }}</td>
               <td class="px-4 py-3 text-text-primary">{{ r.warehouse_name }}</td>
               <td class="px-4 py-3 text-text-primary">{{ r.supplier || r.customer || r.source || '—' }}</td>
@@ -485,13 +591,19 @@ async function handleDeleteRecord() {
                   {{ $t('common.detail') }}
                 </button>
                 <button
+                  @click="editRecord(r)"
+                  class="text-warning hover:text-yellow-600 text-xs font-medium mr-3"
+                >
+                  {{ $t('common.edit') }}
+                </button>
+                <button
                   @click="openPrintPreview(r)"
                   class="text-text-secondary hover:text-text-primary text-xs font-medium mr-3"
                 >
                   {{ $t('inout.print') }}
                 </button>
                 <button
-                  v-if="userStore.canAccess('inventory_delete')"
+                  v-if="userStore.canAccess('inventory:delete')"
                   @click="deleteRecord(r)"
                   class="text-danger hover:text-red-700 text-xs font-medium"
                 >
@@ -626,6 +738,7 @@ async function handleDeleteRecord() {
                     <thead class="bg-gray-100">
                       <tr>
                         <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.productCol') }}</th>
+                        <th class="px-3 py-2 w-12"></th>
                         <th class="px-3 py-2 text-center text-xs font-medium text-text-secondary">{{ $t('inout.qtyCol') }}</th>
                         <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.qrcodeCol') }}</th>
                       </tr>
@@ -639,6 +752,17 @@ async function handleDeleteRecord() {
                         <td class="px-3 py-2">
                           <div class="text-sm font-medium text-text-primary">{{ item.product_name }}</div>
                           <div class="text-xs text-text-secondary">{{ item.sku }}</div>
+                        </td>
+                        <td class="px-3 py-2">
+                          <img
+                            v-if="item.image_main"
+                            :src="item.image_main"
+                            class="w-8 h-8 object-cover rounded border border-gray-200"
+                            @error="$event.target.style.display='none'"
+                          />
+                          <div v-else class="w-8 h-8 bg-gray-100 rounded border border-gray-200 flex items-center justify-center">
+                            <span class="material-symbols-outlined text-gray-300 text-xs">image</span>
+                          </div>
                         </td>
                         <td class="px-3 py-2 text-center font-medium">{{ item.quantity }}</td>
                         <td class="px-3 py-2">
@@ -673,6 +797,7 @@ async function handleDeleteRecord() {
                   <thead class="bg-gray-50">
                     <tr>
                       <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.productCol') }}</th>
+                      <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.skuCol') }}</th>
                       <th class="px-3 py-2 text-center text-xs font-medium text-text-secondary w-24">{{ $t('inout.qtyCol') }}</th>
                       <th v-if="activeTab === 'outbound'" class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.qrCodeCol') }}</th>
                       <th class="px-3 py-2 text-center text-xs font-medium text-text-secondary w-10"></th>
@@ -686,15 +811,44 @@ async function handleDeleteRecord() {
                     >
                       <!-- Product select -->
                       <td class="px-3 py-2">
-                        <select
+                        <el-select
                           v-model="item.product_id"
-                          class="w-full border border-gray-200 rounded px-2 py-1 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+                          filterable
+                          clearable
+                          :placeholder="$t('inout.selectProduct')"
+                          class="w-full"
+                          size="small"
+                          :filter-method="(val) => filterProduct(val, index)"
+                          @visible-change="(open) => { if (!open) resetProductFilter(index) }"
+                          @change="onProductChange(item)"
                         >
-                          <option value="">{{ $t('inout.selectProduct') }}</option>
-                          <option v-for="p in products" :key="p.id" :value="p.id">
-                            {{ p.sku }} - {{ p.name }}
-                          </option>
-                        </select>
+                          <el-option
+                            v-for="p in getFilteredProducts(index)"
+                            :key="p.id"
+                            :label="p.sku + ' - ' + p.name"
+                            :value="p.id"
+                          />
+                        </el-select>
+                      </td>
+                      <!-- SKU select (shown only when product has SKUs) -->
+                      <td class="px-3 py-2">
+                        <template v-if="item.product_id && getSkusForItem(item).length > 0">
+                          <el-select
+                            v-model="item.sku_id"
+                            clearable
+                            :placeholder="$t('inout.selectSku')"
+                            class="w-full"
+                            size="small"
+                          >
+                            <el-option
+                              v-for="sku in getSkusForItem(item)"
+                              :key="sku.id"
+                              :label="formatSkuLabel(sku)"
+                              :value="sku.id"
+                            />
+                          </el-select>
+                        </template>
+                        <span v-else class="text-xs text-gray-300">—</span>
                       </td>
                       <!-- Quantity -->
                       <td class="px-3 py-2">
@@ -833,6 +987,7 @@ async function handleDeleteRecord() {
                   <thead class="bg-gray-50">
                     <tr>
                       <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.productCol') }}</th>
+                      <th class="px-3 py-2 w-16"></th>
                       <th class="px-3 py-2 text-center text-xs font-medium text-text-secondary">{{ $t('inout.skuCol') }}</th>
                       <th class="px-3 py-2 text-center text-xs font-medium text-text-secondary">{{ $t('inout.qtyCol') }}</th>
                       <th v-if="detailRecord.items.some(i => i.qrcode_id)" class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.qrCodeCol') }}</th>
@@ -844,7 +999,20 @@ async function handleDeleteRecord() {
                       :key="idx"
                       class="border-t border-gray-100"
                     >
-                      <td class="px-3 py-2">{{ item.product_name || item.name || '—' }}</td>
+                      <td class="px-3 py-2">
+                        <div class="font-medium text-sm">{{ item.product_name || item.name || '—' }}</div>
+                      </td>
+                      <td class="px-3 py-2">
+                        <img
+                          v-if="item.image_main"
+                          :src="item.image_main"
+                          class="w-10 h-10 object-cover rounded border border-gray-200"
+                          @error="$event.target.style.display='none'"
+                        />
+                        <div v-else class="w-10 h-10 bg-gray-100 rounded border border-gray-200 flex items-center justify-center">
+                          <span class="material-symbols-outlined text-gray-300 text-sm">image</span>
+                        </div>
+                      </td>
                       <td class="px-3 py-2 text-center font-mono text-xs">{{ item.sku || '—' }}</td>
                       <td class="px-3 py-2 text-center font-medium">{{ item.quantity }}</td>
                       <td v-if="detailRecord.items.some(i => i.qrcode_id)" class="px-3 py-2 font-mono text-xs">{{ item.qrcode_id || '—' }}</td>
@@ -856,7 +1024,7 @@ async function handleDeleteRecord() {
           </div>
           <div class="px-6 py-4 border-t flex justify-between gap-3">
             <button
-              v-if="userStore.canAccess('inventory_delete')"
+              v-if="userStore.canAccess('inventory:delete')"
               @click="handleDeleteRecord"
               class="flex items-center gap-2 px-4 py-2 border border-danger text-danger hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"
             >
