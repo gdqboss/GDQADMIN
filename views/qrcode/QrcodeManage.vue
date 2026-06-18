@@ -306,6 +306,88 @@ function fillBatchQuantity() {
   }
 }
 
+// ═══ AI 客服（售后对话）═══════════════════════════════════════
+const showAiChat = ref(false)
+const aiChatRecord = ref(null)
+const aiMessages = ref([])
+const aiInput = ref('')
+const aiSending = ref(false)
+const aiChatContainer = ref(null)
+
+function openAiChat(record) {
+  aiChatRecord.value = record
+  aiMessages.value = []
+  aiInput.value = ''
+  showAiChat.value = true
+  // 构造售后上下文消息
+  const ctx = `【当前售后工单】
+工单号: ${record.ticket_no || 'N/A'}
+二维码: ${record.code || record.qrcode || ''}
+商品: ${record.product_name || '未知'}
+客户: ${record.buyer || '未知'}
+问题描述: ${record.issue || '无'}
+当前状态: ${record.status || '未知'}
+处理人: ${record.handler || '未指派'}
+处理备注: ${record.handler_note || '无'}
+提交时间: ${record.created_at || '未知'}
+
+你是彩美特一物一码售后客服，请根据以上工单信息回答用户的问题。
+你可以查询数据库获取更多信息（商品详情、售后记录、维修记录等）。
+回答要专业、简洁，直接解决客户问题。`
+  aiMessages.value.push({
+    role: 'assistant',
+    content: `您好，我是售后AI助手。您正在处理工单 **${record.ticket_no || record.code || ''}**（${record.buyer || '客户'} - ${record.issue ? record.issue.substring(0, 30) : ''}）。请问有什么可以帮您？`
+  })
+}
+
+async function sendAiChat() {
+  const msg = aiInput.value.trim()
+  if (!msg || aiSending.value) return
+
+  aiMessages.value.push({ role: 'user', content: msg })
+  aiInput.value = ''
+  aiSending.value = true
+
+  try {
+    // 构造售后上下文信息
+    const record = aiChatRecord.value
+    const contextStr = `\n\n【当前售后工单】\n工单号: ${record.ticket_no || 'N/A'}\n二维码: ${record.code || record.qrcode || ''}\n商品: ${record.product_name || '未知'}\n客户: ${record.buyer || '未知'}\n问题描述: ${record.issue || '无'}\n当前状态: ${record.status || '未知'}\n处理人: ${record.handler || '未指派'}\n提交时间: ${record.created_at || '未知'}`
+
+    const res = await api.post('/ai-class/chat', {
+      message: msg,
+      session_id: localStorage.getItem('ai_classroom_session_id') || null,
+      context: contextStr
+    })
+    if (res.code === 0) {
+      const reply = res.data?.reply || '抱歉，AI 暂时无法响应。'
+      // 打字机效果
+      aiMessages.value.push({ role: 'assistant', content: '' })
+      const idx = aiMessages.value.length - 1
+      let c = 0
+      const timer = setInterval(() => {
+        if (c < reply.length) {
+          const chunk = Math.min(2, reply.length - c)
+          aiMessages.value[idx].content += reply.slice(c, c + chunk)
+          c += chunk
+        } else {
+          clearInterval(timer)
+          aiSending.value = false
+        }
+      }, 30)
+      return
+    }
+  } catch (e) {
+    console.error('[AI客服] 发送失败:', e)
+  }
+  aiSending.value = false
+}
+
+function closeAiChat() {
+  showAiChat.value = false
+  aiChatRecord.value = null
+  aiMessages.value = []
+}
+
 // 监听仓库选择，加载该仓库的商品
 watch(bindWarehouseId, async (newVal) => {
   bindProductId.value = ''
@@ -974,6 +1056,7 @@ async function handleBatchEdit() {
               <th class="px-4 py-3 font-medium">{{ $t('qrcode.handlerNote') }}</th>
               <th class="px-4 py-3 font-medium text-center">{{ $t('common.status') }}</th>
               <th class="px-4 py-3 font-medium">{{ $t('qrcode.submitTime') }}</th>
+              <th class="px-4 py-3 font-medium text-right">{{ $t('qrcode.actionCol') || '操作' }}</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
@@ -981,11 +1064,17 @@ async function handleBatchEdit() {
               <td class="px-4 py-3 font-mono text-xs text-primary font-medium">{{ r.code }}</td>
               <td class="px-4 py-3 text-text-primary">{{ r.product_name }}</td>
               <td class="px-4 py-3 text-text-primary">{{ r.buyer }}</td>
-              <td class="px-4 py-3 text-text-secondary text-xs max-w-[200px] truncate">{{ r.issue }}</td>
+              <td class="px-4 py-3 text-text-secondary text-xs max-w-[200px] truncate" :title="r.issue">{{ r.issue }}</td>
               <td class="px-4 py-3 text-text-primary">{{ r.handler }}</td>
               <td class="px-4 py-3 text-text-secondary text-xs max-w-[200px] truncate">{{ r.handler_note }}</td>
               <td class="px-4 py-3 text-center"><StatusTag :type="afterSaleStatusMap[r.status]?.type" :text="afterSaleStatusMap[r.status]?.text" /></td>
-              <td class="px-4 py-3 text-text-secondary text-xs">{{ r.created_at }}</td>
+              <td class="px-4 py-3 text-text-secondary text-xs">{{ r.created_at?.slice(0, 16) }}</td>
+              <td class="px-4 py-3 text-right">
+                <button @click="openAiChat(r)" class="flex items-center gap-1 px-2 py-1 text-xs rounded-lg border border-primary text-primary hover:bg-primary/5 transition-colors whitespace-nowrap">
+                  <span class="material-symbols-outlined text-[14px]">smart_toy</span>
+                  AI 客服
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -1284,6 +1373,65 @@ async function handleBatchEdit() {
           <button @click="handleConfirmAdjust" :disabled="adjustLoading" class="px-4 py-2 rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary-hover transition-colors disabled:opacity-50">
             {{ adjustLoading ? '处理中...' : '确认调整' }}
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI 售后客服弹窗 -->
+    <div v-if="showAiChat" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" @click.self="closeAiChat">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col">
+        <!-- header -->
+        <div class="flex items-center justify-between p-4 border-b border-gray-100 shrink-0">
+          <h3 class="font-bold text-text-primary text-lg flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary">smart_toy</span>
+            AI 售后客服
+          </h3>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-text-secondary bg-blue-50 rounded px-2 py-0.5 max-w-[200px] truncate">{{ aiChatRecord?.ticket_no || aiChatRecord?.code }}</span>
+            <button @click="closeAiChat" class="text-text-secondary hover:text-text-primary">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+        </div>
+        <!-- chat body -->
+        <div ref="aiChatContainer" class="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50/50" style="min-height: 300px; max-height: 400px;">
+          <div v-for="(m, i) in aiMessages" :key="i" :class="['flex', m.role === 'user' ? 'justify-end' : 'justify-start']">
+            <div :class="['max-w-[80%] rounded-xl px-4 py-2 text-sm', m.role === 'user' ? 'bg-primary text-white rounded-br-md' : 'bg-white border border-gray-100 shadow-sm rounded-bl-md']">
+              <div v-if="m.role === 'assistant'" class="text-sm text-text-primary whitespace-pre-wrap">{{ m.content }}</div>
+              <p v-else class="text-sm">{{ m.content }}</p>
+            </div>
+          </div>
+          <!-- 工单信息卡 -->
+          <div v-if="aiChatRecord && aiMessages.length === 1" class="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-700">
+            <p class="font-medium mb-1">📋 当前售后工单</p>
+            <div class="grid grid-cols-2 gap-x-3 gap-y-1">
+              <span>工单: {{ aiChatRecord.ticket_no || '—' }}</span>
+              <span>二维码: {{ aiChatRecord.code || aiChatRecord.qrcode }}</span>
+              <span>客户: {{ aiChatRecord.buyer || '未知' }}</span>
+              <span>商品: {{ aiChatRecord.product_name || '未知' }}</span>
+              <span>状态: <StatusTag :type="afterSaleStatusMap[aiChatRecord.status]?.type" :text="afterSaleStatusMap[aiChatRecord.status]?.text" /></span>
+              <span>处理人: {{ aiChatRecord.handler || '未指派' }}</span>
+            </div>
+            <p v-if="aiChatRecord.issue" class="mt-1 text-blue-600">问题: {{ aiChatRecord.issue.substring(0, 80) }}</p>
+          </div>
+        </div>
+        <!-- input -->
+        <div class="p-4 border-t border-gray-100 shrink-0">
+          <div class="flex gap-2">
+            <input
+              v-model="aiInput"
+              type="text"
+              :placeholder="'请输入关于工单的问题...'"
+              class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+              @keyup.enter="sendAiChat"
+            />
+            <button @click="sendAiChat" :disabled="aiSending || !aiInput.trim()"
+              class="flex items-center gap-1 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              <span v-if="aiSending" class="material-symbols-outlined text-[16px] animate-spin">refresh</span>
+              <span v-else class="material-symbols-outlined text-[16px]">send</span>
+              发送
+            </button>
+          </div>
         </div>
       </div>
     </div>
