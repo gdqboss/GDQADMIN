@@ -60,6 +60,8 @@ const routes = [
   },
   // 登录页独立于 MainLayout，不带侧边栏
   { path: '/login', name: 'Login', component: lazyLoad(() => import('../views/Login.vue')), meta: { public: true } },
+  // 扫码页公开路由（不登录也能查看产品信息）
+  { path: '/scan/:code', name: 'ScanPage', component: lazyLoad(() => import('../views/scan/ScanPage.vue')), meta: { public: true } },
   {
     path: '/',
     component: MainLayout,
