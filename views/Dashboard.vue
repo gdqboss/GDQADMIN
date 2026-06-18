@@ -14,6 +14,16 @@ const loading = ref(true)
 const error = ref(null)
 const myResponsibilities = ref([])
 
+// ─── Dashboard Stats ───────────────────────────────────────────────────────────
+const stats = ref({
+  todayInbound: 0,
+  todayOutbound: 0,
+  pendingApprovals: 0,
+  lowStockCount: 0,
+  todayOrders: 0,
+  pendingTasks: 0,
+})
+
 // ─── Scan Modal ─────────────────────────────────────────────────────────────────
 const showScanModal = ref(false)
 const scanMode = ref('manual')
@@ -249,10 +259,50 @@ const loadDashboardData = async () => {
     error.value = null
     const respRes = await Promise.allSettled([
       api.get('/job-responsibilities/my'),
+      api.get('/dashboard/stats'),
+      api.get('/inbound?page=1&limit=1'),
+      api.get('/outbound?page=1&limit=1'),
+      api.get('/approvals?page=1&limit=1'),
+      api.get('/tasks?page=1&limit=1'),
     ])
 
-    if (respRes?.status === 'fulfilled' && respRes.value.code === 0) {
-      myResponsibilities.value = respRes.value.data || []
+    if (respRes[0]?.status === 'fulfilled' && respRes[0].value.code === 0) {
+      myResponsibilities.value = respRes[0].value.data || []
+    }
+
+    // Try to parse dashboard stats
+    if (respRes[1]?.status === 'fulfilled' && respRes[1].value.code === 0) {
+      const data = respRes[1].value.data || {}
+      stats.value = {
+        todayInbound: data.todayInbound || data.totalInbound || 0,
+        todayOutbound: data.todayOutbound || data.totalOutbound || 0,
+        pendingApprovals: data.pendingApprovals || data.pendingApproval || 0,
+        lowStockCount: data.lowStockCount || data.lowStock || 0,
+        todayOrders: data.todayOrders || data.todayOrder || 0,
+        pendingTasks: data.pendingTasks || data.pendingTask || 0,
+      }
+    } else {
+      // Fallback: derive from individual API calls
+      try {
+        if (respRes[2]?.status === 'fulfilled') {
+          stats.value.todayInbound = respRes[2].value.data?.total || respRes[2].value.data?.list?.length || 0
+        }
+      } catch(e) {}
+      try {
+        if (respRes[3]?.status === 'fulfilled') {
+          stats.value.todayOutbound = respRes[3].value.data?.total || respRes[3].value.data?.list?.length || 0
+        }
+      } catch(e) {}
+      try {
+        if (respRes[4]?.status === 'fulfilled') {
+          stats.value.pendingApprovals = respRes[4].value.data?.total || 0
+        }
+      } catch(e) {}
+      try {
+        if (respRes[5]?.status === 'fulfilled') {
+          stats.value.pendingTasks = respRes[5].value.data?.total || 0
+        }
+      } catch(e) {}
     }
   } catch (err) {
     console.error('Failed to load dashboard data:', err)
@@ -317,11 +367,81 @@ onUnmounted(() => { stopCameraScanner() })
             v-for="action in visibleQuickActions"
             :key="action.permission"
             @click="handleQuickAction(action)"
-            class="flex flex-col items-center gap-2 p-3 sm:p-4 rounded-lg border border-gray-200 hover:border-primary hover:bg-primary/5 transition-all group"
+            class="flex flex-col items-center gap-2 p-3 sm:p-4 rounded-lg border border-gray-200 hover:border-primary hover:bg-primary/5 hover:shadow-md transition-all duration-200 group"
           >
             <span :class="['material-symbols-outlined text-2xl sm:text-3xl group-hover:scale-110 transition-transform', `text-${action.color}`]">{{ action.icon }}</span>
             <span class="text-xs sm:text-sm font-medium text-text-primary text-center">{{ action.name() }}</span>
           </button>
+        </div>
+      </div>
+
+      <!-- 数据概览卡片 -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
+              <span class="material-symbols-outlined text-blue-500">inventory_2</span>
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-text-primary">{{ stats.todayInbound }}</p>
+              <p class="text-xs text-text-secondary">{{ $t('dashboard.todayInbound') }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center">
+              <span class="material-symbols-outlined text-green-500">outbox</span>
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-text-primary">{{ stats.todayOutbound }}</p>
+              <p class="text-xs text-text-secondary">{{ $t('dashboard.todayOutbound') }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center">
+              <span class="material-symbols-outlined text-orange-500">pending_actions</span>
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-text-primary">{{ stats.pendingApprovals }}</p>
+              <p class="text-xs text-text-secondary">{{ $t('dashboard.pendingApprovals') }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
+              <span class="material-symbols-outlined text-red-500">warning</span>
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-text-primary">{{ stats.lowStockCount }}</p>
+              <p class="text-xs text-text-secondary">{{ $t('dashboard.lowStockCount') }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center">
+              <span class="material-symbols-outlined text-purple-500">shopping_cart</span>
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-text-primary">{{ stats.todayOrders }}</p>
+              <p class="text-xs text-text-secondary">{{ $t('dashboard.todayOrders') }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-cyan-50 flex items-center justify-center">
+              <span class="material-symbols-outlined text-cyan-500">task_alt</span>
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-text-primary">{{ stats.pendingTasks }}</p>
+              <p class="text-xs text-text-secondary">{{ $t('dashboard.pendingTasks') }}</p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -405,13 +525,13 @@ onUnmounted(() => { stopCameraScanner() })
           <div v-if="scanMode === 'manual'">
             <label class="block text-sm font-medium text-text-primary mb-2">输入二维码编号</label>
             <div class="flex gap-2">
-              <input type="text" v-model="manualQrCode" placeholder="请输入二维码编号"
-                class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+              <el-input v-model="manualQrCode" placeholder="请输入二维码编号"
+                class="flex-1" clearable
                 @keyup.enter="handleManualInput(manualQrCode)" />
-              <button @click="handleManualInput(manualQrCode)"
-                class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors">
+              <el-button type="primary" @click="handleManualInput(manualQrCode)">
+                <span class="material-symbols-outlined text-lg">search</span>
                 查询
-              </button>
+              </el-button>
             </div>
           </div>
 
@@ -476,8 +596,7 @@ onUnmounted(() => { stopCameraScanner() })
           <!-- 售价 -->
           <div v-if="saleType === 'sale'">
             <label class="block text-sm font-medium text-text-primary mb-1">售价 <span class="text-danger">*</span></label>
-            <input type="number" v-model="salePrice" placeholder="0" :min="scannedProduct.purchase_price || 0"
-              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+            <el-input-number v-model="salePrice" :min="0" :precision="2" class="w-full" controls-position="right" />
             <p v-if="scannedProduct.purchase_price" class="text-xs text-text-secondary mt-1">
               成本价: ¥{{ scannedProduct.purchase_price }}，建议售价: ¥{{ scannedProduct.sale_price }}
             </p>
@@ -500,11 +619,10 @@ onUnmounted(() => { stopCameraScanner() })
           <!-- 审批人 -->
           <div v-if="saleType === 'gift' && canGift">
             <label class="block text-sm font-medium text-text-primary mb-1">审批人 <span class="text-danger">*</span></label>
-            <select v-model="selectedApprover"
-              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
-              <option value="" disabled>{{ giftCheckLoading ? '加载中...' : '请选择审批人' }}</option>
-              <option v-for="a in approverList" :key="a.id" :value="a.id">{{ a.name }} ({{ a.role }})</option>
-            </select>
+            <el-select v-model="selectedApprover" placeholder="请选择审批人" filterable clearable
+              class="w-full">
+              <el-option v-for="a in approverList" :key="a.id" :label="a.name + ' (' + a.role + ')'" :value="a.id" />
+            </el-select>
           </div>
 
           <!-- 客户姓名 -->
@@ -513,8 +631,7 @@ onUnmounted(() => { stopCameraScanner() })
               <span v-if="saleType === 'gift'" class="text-danger">*</span>
               <span v-else class="text-text-secondary text-xs font-normal">选填</span>
             </label>
-            <input type="text" v-model="buyerName" placeholder="客户姓名"
-              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+            <el-input v-model="buyerName" placeholder="客户姓名" clearable />
           </div>
 
           <!-- 客户电话 -->
@@ -523,8 +640,7 @@ onUnmounted(() => { stopCameraScanner() })
               <span v-if="saleType === 'gift'" class="text-danger">*</span>
               <span v-else class="text-text-secondary text-xs font-normal">选填</span>
             </label>
-            <input type="tel" v-model="buyerPhone" placeholder="客户电话"
-              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+            <el-input v-model="buyerPhone" placeholder="客户电话" clearable />
           </div>
 
           <!-- 备注 -->
@@ -551,24 +667,22 @@ onUnmounted(() => { stopCameraScanner() })
 
         <!-- 操作按钮 -->
         <div v-if="!saleSuccess" class="flex gap-3 pt-1">
-          <button v-if="scannedQrcode" @click="openScanModal"
-            class="flex-1 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-text-primary hover:bg-gray-50">
+          <el-button v-if="scannedQrcode" @click="openScanModal" plain>
             重新扫描
-          </button>
-          <button @click="closeScanModal"
-            class="flex-1 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-text-primary hover:bg-gray-50">
+          </el-button>
+          <el-button @click="closeScanModal" plain>
             取消
-          </button>
-          <button v-if="scannedProduct && saleType === 'sale'" @click="confirmSale"
-            :disabled="saleLoading || !salePrice || salePrice <= 0"
-            class="flex-1 py-2.5 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed">
-            {{ saleLoading ? '处理中...' : '确认销售' }}
-          </button>
-          <button v-if="scannedProduct && saleType === 'gift'" @click="confirmSale"
-            :disabled="saleLoading || !canGift || !selectedApprover"
-            class="flex-1 py-2.5 bg-orange-500 text-white rounded-lg text-sm font-bold hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed">
-            {{ saleLoading ? '处理中...' : '确认赠送' }}
-          </button>
+          </el-button>
+          <el-button v-if="scannedProduct && saleType === 'sale'" @click="confirmSale"
+            type="primary" :loading="saleLoading" :disabled="!salePrice || salePrice <= 0">
+            <span class="material-symbols-outlined text-lg">sell</span>
+            确认销售
+          </el-button>
+          <el-button v-if="scannedProduct && saleType === 'gift'" @click="confirmSale"
+            type="warning" :loading="saleLoading" :disabled="!canGift || !selectedApprover">
+            <span class="material-symbols-outlined text-lg">card_giftcard</span>
+            确认赠送
+          </el-button>
         </div>
       </div>
     </div>
