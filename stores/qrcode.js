@@ -51,11 +51,12 @@ export const useQrcodeStore = defineStore('qrcode', () => {
   }
 
   async function bindProduct(qrcodeId, productId, skuId = null, options = {}) {
-    // options: { mode: 'single'|'batch', batch_quantity: number }
+    // options: { mode: 'single'|'batch', batch_quantity: number, warehouse_id: number }
     const payload = { product_id: productId }
     if (skuId) payload.sku_id = skuId
     if (options.mode) payload.mode = options.mode
     if (options.batch_quantity) payload.batch_quantity = options.batch_quantity
+    if (options.warehouse_id) payload.warehouse_id = options.warehouse_id
     const res = await api.put(`/qrcodes/${qrcodeId}/bind`, payload)
     if (res.code === 0) await fetchQrcodes()
     return res
