@@ -20,6 +20,25 @@ const warehouses = ref([])
 const bindWarehouseId = ref('')
 const warehouseProducts = ref([])
 
+// 商品下拉去重（按 product_id，保留第一条、带图片）
+const productsForSelect = computed(() => {
+  const seen = new Set()
+  return warehouseProducts.value.filter(p => {
+    const key = p.product_id
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+})
+
+// 当前选中商品在仓库中的 SKU 列表
+const availableSkus = computed(() => {
+  if (!bindProductId.value) return []
+  return warehouseProducts.value.filter(p =>
+    p.product_id === Number(bindProductId.value) && p.sku_id
+  )
+})
+
 // ─── Pagination ─────────────────────────────────────────────────────────────────
 const qrPage = ref(1)
 const qrPageSize = 50
@@ -283,25 +302,26 @@ watch(bindWarehouseId, async (newVal) => {
   }
 })
 
-// 监听商品选择，加载该商品的 SKU
-watch(bindProductId, async (newVal) => {
+// 监听商品选择，展示该商品的 SKU（从 warehouseProducts 取）
+watch(bindProductId, (newVal) => {
   bindSkuId.value = ''
   selectedProductSkus.value = []
 
   if (!newVal) return
 
-  // 从仓库商品列表中找 SKU 信息
-  const found = warehouseProducts.value.filter(p => p.product_id === newVal && p.sku_id)
-  if (found.length > 0) {
-    // 有 SKU 的商品，从 specs API 加载详细规格
-    try {
-      const res = await api.get(`/products/${newVal}/specs`)
-      if (res.code === 0 && res.data?.skus?.length) {
-        selectedProductSkus.value = res.data.skus
-      }
-    } catch (e) {
-      console.error('加载SKU失败', e)
-    }
+  // 直接从 warehouseProducts 找到该商品的 SKU 行
+  const skus = warehouseProducts.value.filter(p =>
+    p.product_id === newVal && p.sku_id
+  )
+  if (skus.length > 0) {
+    // warehouseProducts 已有 sku_id + specs，传给 selectedProductSkus
+    selectedProductSkus.value = skus.map(p => ({
+      id: p.sku_id,
+      sku: p.sku_value || p.sku || '',
+      specs: p.specs || '{}',
+      product_id: p.product_id,
+      quantity: p.quantity
+    }))
   }
 })
 
@@ -1115,7 +1135,7 @@ async function handleBatchEdit() {
             class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
             :disabled="!bindWarehouseId">
             <option value="">{{ bindWarehouseId ? $t('qrcode.selectProductPlaceholder') : ($t('qrcode.selectWarehouseFirst') || '请先选择仓库') }}</option>
-            <option v-for="p in warehouseProducts" :key="p.product_id" :value="p.product_id">{{ p.name }} ({{ p.sku }}) - 库存:{{ p.quantity }}</option>
+            <option v-for="p in productsForSelect" :key="p.product_id" :value="p.product_id">{{ p.name }} ({{ p.sku }}) - 库存:{{ p.quantity }}</option>
           </select>
         </div>
         <!-- SKU 选择（仅当商品有多规格时显示，多规格必选具体 SKU） -->
