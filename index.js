@@ -58,6 +58,7 @@ import ordersRoutes from './routes/orders.js'
 import reportsRoutes from './routes/reports.js'
 import bossChatRoutes from './routes/boss-chat.js'
 import aiClassRoutes from './routes/ai-class.js'
+import adminSchemaRoutes from './routes/admin-schema.js'
 import aiConfigRoutes from './routes/ai-config.js'
 import kbRoutes from './routes/kb.js'
 import jobResponsibilitiesRoutes from './routes/job-responsibilities.js'
@@ -78,6 +79,7 @@ import escalationRoutes from './routes/escalation.js'
 import biRoutes from './routes/bi.js'
 import excelReportRoutes from './routes/excelReport.js'
 import rbacPermissionRoutes from './routes/rbac/permissions.js'
+import orderAggregatorRoutes from './routes/order-aggregator.js'
 import rbacMenuRoutes from './routes/rbac/menus.js'
 import rbacRoleRoutes from './routes/rbac/roles.js'
 import rbacUserRoleRoutes from './routes/rbac/userRoles.js'
@@ -187,6 +189,7 @@ app.use('/api/openclaw', openclawRoutes)
 app.use('/api/boss', auth, bossChatRoutes)
 app.use('/api/ai-config', auth, aiConfigRoutes)
 app.use('/api/ai-class', auth, aiClassRoutes)
+app.use('/api/admin/schema', auth, adminSchemaRoutes)
 app.use('/api/kb', auth, kbRoutes)
 app.use('/api/scan', scanRoutes)
 
@@ -469,6 +472,7 @@ app.use('/api/customer-level', auth, apiLimiter, customerLevelRoutes)
 app.use('/api/inventory-alert', auth, apiLimiter, inventoryAlertRoutes)
 app.use('/api/escalation', auth, apiLimiter, escalationRoutes)
 app.use('/api/log-interactions', auth, apiLimiter, logInteractionsRoutes)
+app.use('/api/order-aggregator', apiLimiter, orderAggregatorRoutes)
 app.use('/api/visit-logs', auth, apiLimiter, visitLogsRoutes)
 app.use('/api/share-logs', shareLogsRoutes) // Mixed auth (some public, some protected)
 app.use('/api/feedback', feedbackRoutes) // Mixed auth (some public, some protected)
