@@ -12,6 +12,18 @@ export const useUserStore = defineStore('user', () => {
   }
   const user = ref(savedUser)
 
+  // 如果 caimeite_user 没有 permissions 但 caimeite_permissions 有值，则补充
+  if (savedUser && !savedUser.permissions) {
+    try {
+      const savedPerms = JSON.parse(localStorage.getItem('caimeite_permissions') || 'null')
+      if (savedPerms && Array.isArray(savedPerms)) {
+        savedUser.permissions = savedPerms
+        user.value = savedUser
+        localStorage.setItem('caimeite_user', JSON.stringify(savedUser))
+      }
+    } catch { /* ignore */ }
+  }
+
   // Get token and validate it's not 'null' or 'undefined' string
   let savedToken = localStorage.getItem('caimeite_token') || ''
   if (savedToken === 'null' || savedToken === 'undefined') {
@@ -64,8 +76,14 @@ export const useUserStore = defineStore('user', () => {
     try {
       const res = await api.get('/auth/me')
       if (res.code === 0) {
-        user.value = res.data
-        localStorage.setItem('caimeite_user', JSON.stringify(res.data))
+        // fetchMe 返回的 user 没有 permissions 字段，需要从 localStorage 补充
+        const savedPerms = JSON.parse(localStorage.getItem('caimeite_permissions') || 'null')
+        const userData = {
+          ...res.data,
+          permissions: savedPerms ?? res.data.permissions ?? null
+        }
+        user.value = userData
+        localStorage.setItem('caimeite_user', JSON.stringify(userData))
       }
     } catch { /* token invalid, will redirect */ }
   }
