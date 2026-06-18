@@ -1,13 +1,22 @@
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../../components/PageHeader.vue'
 import StatusTag from '../../components/StatusTag.vue'
 import api from '../../services/api.js'
 import { useUserStore } from '../../stores/user.js'
+import {
+  formatDate,
+  formatDateTime,
+  changeTypeBadge,
+  changeTypeLabel,
+  formatSkuLabel,
+} from './helpers.js'
 
 const { t } = useI18n()
 const userStore = useUserStore()
+const route = useRoute()
 
 // ─── State ───────────────────────────────────────────────────────────────────
 const activeTab = ref('inbound')
@@ -15,11 +24,36 @@ const showForm = ref(false)
 const submitting = ref(false)
 const formError = ref('')
 const formSuccess = ref('')
+const formConflicts = ref([]) // 新模型：冲突的 SKU（已存在的库存关系）
 const editingId = ref(null) // 编辑时的记录ID，null=新建
 
 const inboundRecords = ref([])
 const outboundRecords = ref([])
 const returnRecords = ref([])
+
+// ─── 操作记录 Tab 数据 ───
+const movementsRecords = ref([])
+const movementsTotal = ref(0)
+const movementsPage = ref(1)
+const movementsLimit = ref(20)
+const movementsFilter = ref({
+  warehouse_id: '', change_type: '', operator: '',
+  start_date: '', end_date: '', keyword: '',
+})
+
+// ─── 手动调整（补单/冲正/盘点） ───
+const showAdjustForm = ref(false)
+const adjustSubmitting = ref(false)
+const adjustError = ref('')
+const adjustForm = ref({
+  warehouse_id: '',
+  product_id: '',
+  sku_id: '',
+  current_qty: 0, // 当前数量（加载时自动填）
+  new_qty: 0,     // 目标数量
+  reason: '',     // 调整原因（必填）
+})
+
 const warehouses = ref([])
 const products = ref([])
 const productSkus = ref({}) // { productId: [ {id, sku, sku_key, specs, stock}, ... ] }
@@ -53,15 +87,23 @@ const batchLoading = ref(false)
 const batchError = ref('')
 
 // ─── Computed ─────────────────────────────────────────────────────────────────
-const tabs = computed(() => [
-  { key: 'inbound',  label: t('inout.inbound'),  icon: 'input',  count: inboundRecords.value.length },
-  { key: 'outbound', label: t('inout.outbound'), icon: 'output', count: outboundRecords.value.length },
-  { key: 'return',   label: t('inout.returns'),  icon: 'undo',   count: returnRecords.value.length },
-])
+const tabs = computed(() => {
+  const all = [
+    { key: 'inbound',  label: t('inout.inbound'),  icon: 'input',    count: inboundRecords.value.length },
+    { key: 'outbound', label: t('inout.outbound'), icon: 'output',   count: outboundRecords.value.length },
+    { key: 'return',   label: t('inout.returns'),  icon: 'undo',     count: returnRecords.value.length },
+  ]
+  // 操作记录 Tab 独立权限：stock_movements:read
+  if (userStore.canAccess?.('stock_movements:read')) {
+    all.push({ key: 'movements', label: t('inout.movements') || '操作记录', icon: 'history', count: movementsTotal.value })
+  }
+  return all
+})
 
 const currentRecords = computed(() => {
   if (activeTab.value === 'inbound')  return inboundRecords.value
   if (activeTab.value === 'outbound') return outboundRecords.value
+  if (activeTab.value === 'movements') return []  // 操作记录走专属表格
   return returnRecords.value
 })
 
@@ -97,62 +139,6 @@ const operatorName = computed(() => {
 
 const canDelete = computed(() => userStore.canAccess('inventory:delete'))
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function formatDate(str) {
-  if (!str) return ''
-  return String(str).slice(0, 16)
-}
-
-function productById(id) {
-  return products.value.find(p => String(p.id) === String(id)) || null
-}
-
-function needsQrcode(item) {
-  if (activeTab.value !== 'outbound') return false
-  const p = productById(item.product_id)
-  return p?.require_qrcode === true || p?.require_qrcode === 1
-}
-
-function filterProduct(val, index) {
-  productFilters.value[index] = val || ''
-}
-
-function resetProductFilter(index) {
-  productFilters.value[index] = ''
-}
-
-function getFilteredProducts(index) {
-  const filter = (productFilters.value[index] || '').toLowerCase()
-  if (!filter) return products.value
-  return products.value.filter(p =>
-    (p.sku && p.sku.toLowerCase().includes(filter)) ||
-    (p.name && p.name.toLowerCase().includes(filter))
-  )
-}
-
-function onProductChange(item) {
-  item.sku_id = '' // reset SKU when product changes
-  if (item.product_id) {
-    loadSkus(item.product_id)
-  }
-}
-
-function getSkusForItem(item) {
-  return productSkus.value[item.product_id] || []
-}
-
-// 显示 SKU + 规格组合（颜色/尺寸 的值，用 / 分隔）
-// sku_key 是 "20-碳灰-A"（值组合）不是 JSON；规格字典在 sku.specs
-function formatSkuLabel(sku) {
-  let specsDict = {}
-  if (sku.specs) {
-    try { specsDict = typeof sku.specs === 'string' ? JSON.parse(sku.specs) : sku.specs } catch {}
-  }
-  const vals = Object.values(specsDict).filter(v => v !== '' && v !== null && v !== undefined)
-  if (!vals.length) return sku.sku
-  return sku.sku + ' - ' + vals.join('/')
-}
-
 // ─── Load data ────────────────────────────────────────────────────────────────
 async function loadRecords() {
   const [ibRes, obRes, retRes] = await Promise.allSettled([
@@ -171,6 +157,132 @@ async function loadRecords() {
   if (retRes.status === 'fulfilled') {
     const r = retRes.value
     returnRecords.value = r?.data?.list ?? r?.list ?? []
+  }
+}
+
+async function loadMovements() {
+  try {
+    const params = {
+      page: movementsPage.value,
+      limit: movementsLimit.value,
+    }
+    if (movementsFilter.value.warehouse_id) params.warehouse_id = movementsFilter.value.warehouse_id
+    if (movementsFilter.value.change_type)  params.change_type  = movementsFilter.value.change_type
+    if (movementsFilter.value.operator)     params.operator     = movementsFilter.value.operator
+    if (movementsFilter.value.start_date)   params.start_date   = movementsFilter.value.start_date
+    if (movementsFilter.value.end_date)     params.end_date     = movementsFilter.value.end_date
+    if (movementsFilter.value.keyword)      params.keyword      = movementsFilter.value.keyword
+    const res = await api.get('/stock-movements', { params })
+    movementsRecords.value = res?.data?.list ?? []
+    movementsTotal.value = res?.data?.total ?? 0
+  } catch (e) {
+    console.error('loadMovements failed:', e)
+    movementsRecords.value = []
+    movementsTotal.value = 0
+  }
+}
+
+function applyMovementsFilter() {
+  movementsPage.value = 1
+  loadMovements()
+}
+
+function resetMovementsFilter() {
+  movementsFilter.value = { warehouse_id: '', change_type: '', operator: '', start_date: '', end_date: '', keyword: '' }
+  applyMovementsFilter()
+}
+
+// ─── 手动调整：弹窗逻辑 ───
+function openAdjustForm() {
+  adjustForm.value = {
+    warehouse_id: warehouses.value[0]?.id ?? '',
+    product_id: '',
+    sku_id: '',
+    current_qty: 0,
+    new_qty: 0,
+    reason: '',
+  }
+  adjustError.value = ''
+  showAdjustForm.value = true
+}
+
+function closeAdjustForm() {
+  showAdjustForm.value = false
+  adjustError.value = ''
+}
+
+// 当切换商品/SKU时，自动加载当前库存
+async function loadCurrentQty() {
+  const { warehouse_id, product_id, sku_id } = adjustForm.value
+  if (!warehouse_id || !product_id) {
+    adjustForm.value.current_qty = 0
+    return
+  }
+  try {
+    // 用 stock 接口查当前数量（已有接口）
+    const res = await api.get('/inventory/stock', {
+      params: {
+        warehouse_id,
+        product_id,
+        sku_id: sku_id || undefined,
+      },
+    })
+    // 后端可能返回 list 或单条，兼容两种
+    const list = res?.data?.list || res?.data || []
+    const item = Array.isArray(list) ? list[0] : list
+    adjustForm.value.current_qty = item?.quantity ?? 0
+    // 同步显示给 new_qty（让用户看到差异）
+    adjustForm.value.new_qty = adjustForm.value.current_qty
+  } catch (e) {
+    console.warn('loadCurrentQty failed:', e)
+    adjustForm.value.current_qty = 0
+  }
+}
+
+async function submitAdjust() {
+  adjustError.value = ''
+  const { warehouse_id, product_id, new_qty, reason } = adjustForm.value
+  if (!warehouse_id || !product_id) {
+    adjustError.value = '请选择仓库和商品'
+    return
+  }
+  if (new_qty == null || Number(new_qty) < 0) {
+    adjustError.value = '新数量必须是非负整数'
+    return
+  }
+  if (!reason || !reason.trim()) {
+    adjustError.value = '请填写调整原因（必填，可追溯）'
+    return
+  }
+  if (Number(new_qty) === adjustForm.value.current_qty) {
+    adjustError.value = '新数量与当前数量一致，无需调整'
+    return
+  }
+
+  adjustSubmitting.value = true
+  try {
+    const res = await api.post('/stock-movements/adjust', {
+      warehouse_id,
+      product_id,
+      sku_id: adjustForm.value.sku_id || undefined,
+      new_qty: Number(new_qty),
+      reason: reason.trim(),
+    })
+    if (res?.code === 0) {
+      formSuccess.value = `调整成功：${res.data.before_qty} → ${res.data.after_qty}（${res.data.delta > 0 ? '+' : ''}${res.data.delta}）`
+      setTimeout(() => { formSuccess.value = '' }, 3000)
+      closeAdjustForm()
+      // 刷新流水列表
+      await loadMovements()
+      // 刷新入/出库 tab 的数量（因为可能影响计数）
+      await loadRecords()
+    } else {
+      adjustError.value = res?.message || '调整失败'
+    }
+  } catch (e) {
+    adjustError.value = e?.response?.data?.message || e?.message || '请求失败'
+  } finally {
+    adjustSubmitting.value = false
   }
 }
 
@@ -205,7 +317,34 @@ async function loadSkus(productId) {
 }
 
 onMounted(async () => {
-  await Promise.all([loadRecords(), loadWarehouses(), loadProducts()])
+  await Promise.all([loadRecords(), loadWarehouses(), loadProducts(), loadMovements()])
+  // 切到 movements tab 时自动刷新流水
+  watch(activeTab, (val) => {
+    if (val === 'movements') loadMovements()
+  })
+  // 补仓预警预填：?type=inbound&prefill=...
+  if (route.query.type === 'inbound') activeTab.value = 'inbound'
+  if (route.query.prefill) {
+    try {
+      const data = JSON.parse(decodeURIComponent(route.query.prefill))
+      activeTab.value = 'inbound'
+      showForm.value = true
+      editingId.value = null
+      form.value = {
+        warehouse_id: data.warehouse_id || '',
+        party: '',
+        remark: data.note || '',
+        items: (data.items || []).map(it => ({
+          product_id: it.product_id,
+          sku_id: '',
+          quantity: it.quantity || 1,
+          qrcode_id: ''
+        }))
+      }
+    } catch (e) {
+      console.error('prefill parse error', e)
+    }
+  }
 })
 
 // ─── Batch mode functions ─────────────────────────────────────────────────────
@@ -285,6 +424,7 @@ function removeItem(index) {
 async function submitForm() {
   formError.value = ''
   formSuccess.value = ''
+  formConflicts.value = []
 
   // Basic validation
   if (!form.value.warehouse_id) {
@@ -363,8 +503,20 @@ async function submitForm() {
       await api.put(`${endpoint}/${editingId.value}`, payload)
       formSuccess.value = t('inout.submitSuccess') || '编辑成功'
     } else {
-      await api.post(endpoint, payload)
-      formSuccess.value = t('inout.submitSuccess') || '提交成功'
+      try {
+        await api.post(endpoint, payload)
+        formSuccess.value = t('inout.submitSuccess') || '提交成功'
+      } catch (e) {
+        // ✅ 新模型：409 冲突（SKU 在此仓库已存在）→ 引导用户去库存管理调整
+        if (e?.code === 409 || e?.response?.data?.code === 409) {
+          const errData = e?.data || e?.response?.data || e
+          formConflicts.value = errData.data?.conflicts || []
+          formError.value = errData.message || '有 SKU 已存在，请用「库存管理 → 调整数量」'
+          submitting.value = false
+          return
+        }
+        throw e
+      }
     }
     await loadRecords()
     setTimeout(() => {
@@ -530,6 +682,104 @@ async function handleDeleteRecord() {
             <span class="material-symbols-outlined text-[18px]">add</span>
             {{ modalTitle }}
           </button>
+        </div>
+      </div>
+
+      <!-- 操作记录 Tab 内容（独立模板） -->
+      <div v-if="activeTab === 'movements'" class="p-4">
+        <!-- 筛选区 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 mb-4">
+          <select v-model="movementsFilter.warehouse_id" class="border border-gray-200 rounded-lg px-3 py-2 text-sm">
+            <option value="">全部门店</option>
+            <option v-for="w in warehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
+          </select>
+          <select v-model="movementsFilter.change_type" class="border border-gray-200 rounded-lg px-3 py-2 text-sm">
+            <option value="">全部类型</option>
+            <option value="inbound">入库</option>
+            <option value="adjust">调整</option>
+            <option value="outbound">出库</option>
+            <option value="return">退货</option>
+            <option value="transferIn">调入</option>
+            <option value="transferOut">调出</option>
+            <option value="delete">删除</option>
+          </select>
+          <input v-model="movementsFilter.operator" type="text" placeholder="操作人" class="border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          <input v-model="movementsFilter.start_date" type="date" class="border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          <input v-model="movementsFilter.end_date"   type="date" class="border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          <input v-model="movementsFilter.keyword"    type="text" placeholder="商品编号/名称/SKU" class="border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+        <div class="flex gap-2 mb-4">
+          <button @click="applyMovementsFilter" class="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium">查询</button>
+          <button @click="resetMovementsFilter" class="border border-gray-200 hover:bg-gray-50 text-text-secondary px-4 py-2 rounded-lg text-sm">重置</button>
+          <!-- 手动调整按钮（需 stock_movements:write 权限） -->
+          <button v-if="userStore.canAccess?.('stock_movements:write')"
+            @click="openAdjustForm"
+            class="ml-auto border border-orange-300 bg-orange-50 hover:bg-orange-100 text-orange-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-1">
+            <span class="material-symbols-outlined text-base">tune</span>
+            手动调整库存
+          </button>
+          <span v-else class="ml-auto text-sm text-text-secondary self-center">共 {{ movementsTotal }} 条</span>
+          <span v-if="userStore.canAccess?.('stock_movements:write')" class="text-sm text-text-secondary self-center">共 {{ movementsTotal }} 条</span>
+        </div>
+
+        <!-- 流水表格 -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
+              <tr>
+                <th class="px-4 py-3 font-medium w-44">操作时间</th>
+                <th class="px-4 py-3 font-medium w-28">类型</th>
+                <th class="px-4 py-3 font-medium w-28">门店</th>
+                <th class="px-4 py-3 font-medium">商品</th>
+                <th class="px-4 py-3 font-medium w-24">SKU</th>
+                <th class="px-4 py-3 font-medium w-28 text-right">数量变化</th>
+                <th class="px-4 py-3 font-medium w-32 text-right">变更前→后</th>
+                <th class="px-4 py-3 font-medium w-24">操作人</th>
+                <th class="px-4 py-3 font-medium">备注</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-if="movementsRecords.length === 0">
+                <td colspan="9" class="px-4 py-12 text-center text-text-secondary text-sm">
+                  <span class="material-symbols-outlined text-4xl block mb-2 text-gray-300">history</span>
+                  暂无操作记录
+                </td>
+              </tr>
+              <tr v-for="m in movementsRecords" :key="m.id" class="hover:bg-gray-50 transition-colors">
+                <td class="px-4 py-3 text-text-secondary">{{ formatDateTime(m.created_at) }}</td>
+                <td class="px-4 py-3">
+                  <span :class="changeTypeBadge(m.change_type)" class="px-2 py-0.5 rounded text-xs font-medium">
+                    {{ changeTypeLabel(m.change_type) }}
+                  </span>
+                </td>
+                <td class="px-4 py-3 text-text-secondary">{{ m.warehouse_name || '-' }}</td>
+                <td class="px-4 py-3">
+                  <div class="font-medium text-text-primary">{{ m.product_name || '-' }}</div>
+                  <div class="text-xs text-text-secondary">{{ m.product_code || '' }}</div>
+                </td>
+                <td class="px-4 py-3 text-text-secondary">{{ m.sku_key || '-' }}</td>
+                <td class="px-4 py-3 text-right font-medium" :class="(m.delta ?? 0) > 0 ? 'text-green-600' : 'text-red-600'">
+                  {{ (m.delta ?? 0) > 0 ? '+' : '' }}{{ m.delta }}
+                </td>
+                <td class="px-4 py-3 text-right text-text-secondary">
+                  {{ m.before_qty }} → <span class="text-text-primary font-medium">{{ m.after_qty }}</span>
+                </td>
+                <td class="px-4 py-3 text-text-secondary">{{ m.operator || '-' }}</td>
+                <td class="px-4 py-3 text-text-secondary">{{ m.remark || '-' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 分页 -->
+        <div v-if="movementsTotal > movementsLimit" class="flex items-center justify-end gap-2 mt-4">
+          <button @click="movementsPage = Math.max(1, movementsPage - 1); loadMovements()"
+            :disabled="movementsPage === 1"
+            class="border border-gray-200 rounded-lg px-3 py-1.5 text-sm disabled:opacity-50">上一页</button>
+          <span class="text-sm text-text-secondary">第 {{ movementsPage }} / {{ Math.ceil(movementsTotal / movementsLimit) }} 页</span>
+          <button @click="movementsPage = Math.min(Math.ceil(movementsTotal / movementsLimit), movementsPage + 1); loadMovements()"
+            :disabled="movementsPage >= Math.ceil(movementsTotal / movementsLimit)"
+            class="border border-gray-200 rounded-lg px-3 py-1.5 text-sm disabled:opacity-50">下一页</button>
         </div>
       </div>
 
@@ -924,6 +1174,127 @@ async function handleDeleteRecord() {
               class="px-4 py-2 bg-primary hover:bg-primary-hover disabled:opacity-60 text-white rounded-lg text-sm font-medium transition-colors"
             >
               {{ submitting ? $t('common.submitting') : $t('common.submit') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ─── 手动调整库存 Modal（补单/冲正/盘点） ───────────────────── -->
+    <Teleport to="body">
+      <div v-if="showAdjustForm" class="fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-black/30" @click="closeAdjustForm"></div>
+        <div class="relative bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+          <!-- Header -->
+          <div class="flex items-center justify-between px-6 py-4 border-b">
+            <h3 class="text-lg font-bold text-text-primary flex items-center gap-2">
+              <span class="material-symbols-outlined text-orange-600">tune</span>
+              手动调整库存
+            </h3>
+            <button @click="closeAdjustForm" class="text-text-secondary hover:text-text-primary">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+
+          <!-- Body -->
+          <div class="overflow-y-auto flex-1 p-6 space-y-4">
+            <!-- 提示 -->
+            <div class="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-800">
+              <strong>⚠ 调整须知：</strong>此操作会直接修改库存数量并写入操作流水。<br>
+              <strong>原因必填</strong>，用于事后追溯（盘点/纠错/补单）。
+            </div>
+
+            <!-- 仓库 -->
+            <div>
+              <label class="block text-sm font-medium text-text-primary mb-1">
+                仓库 <span class="text-danger">*</span>
+              </label>
+              <select v-model="adjustForm.warehouse_id"
+                @change="loadCurrentQty"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+                <option value="">请选择仓库</option>
+                <option v-for="wh in warehouses" :key="wh.id" :value="wh.id">{{ wh.name }}</option>
+              </select>
+            </div>
+
+            <!-- 商品 -->
+            <div>
+              <label class="block text-sm font-medium text-text-primary mb-1">
+                商品 <span class="text-danger">*</span>
+              </label>
+              <select v-model="adjustForm.product_id"
+                @change="adjustForm.sku_id = ''; loadCurrentQty()"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+                <option value="">请选择商品</option>
+                <option v-for="p in products" :key="p.id" :value="p.id">
+                  {{ p.sku }} - {{ p.name }}
+                </option>
+              </select>
+            </div>
+
+            <!-- SKU（如果有） -->
+            <div v-if="adjustForm.product_id && productSkus[adjustForm.product_id]?.length">
+              <label class="block text-sm font-medium text-text-primary mb-1">SKU</label>
+              <select v-model="adjustForm.sku_id"
+                @change="loadCurrentQty"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+                <option value="">全部 SKU</option>
+                <option v-for="s in productSkus[adjustForm.product_id]" :key="s.id" :value="s.id">
+                  {{ s.sku_key || ('#' + s.id) }}
+                </option>
+              </select>
+            </div>
+
+            <!-- 当前数量（只读） -->
+            <div>
+              <label class="block text-sm font-medium text-text-primary mb-1">当前库存</label>
+              <input :value="adjustForm.current_qty" type="number" readonly
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-text-secondary font-mono" />
+            </div>
+
+            <!-- 新数量 -->
+            <div>
+              <label class="block text-sm font-medium text-text-primary mb-1">
+                调整后数量 <span class="text-danger">*</span>
+              </label>
+              <input v-model.number="adjustForm.new_qty" type="number" min="0" step="1"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none font-mono" />
+              <!-- 差异预览 -->
+              <div v-if="adjustForm.new_qty != null && adjustForm.current_qty != null" class="mt-2 text-sm">
+                <span class="text-text-secondary">差异：</span>
+                <span :class="(adjustForm.new_qty - adjustForm.current_qty) > 0 ? 'text-green-600 font-medium' : ((adjustForm.new_qty - adjustForm.current_qty) < 0 ? 'text-red-600 font-medium' : 'text-text-secondary')">
+                  {{ adjustForm.current_qty }} →
+                  <span class="text-text-primary font-bold">{{ adjustForm.new_qty }}</span>
+                  （{{ (adjustForm.new_qty - adjustForm.current_qty) > 0 ? '+' : '' }}{{ adjustForm.new_qty - adjustForm.current_qty }}）
+                </span>
+              </div>
+            </div>
+
+            <!-- 原因 -->
+            <div>
+              <label class="block text-sm font-medium text-text-primary mb-1">
+                调整原因 <span class="text-danger">*</span>
+              </label>
+              <textarea v-model="adjustForm.reason" rows="3"
+                placeholder="例如：盘点发现多3件 / 系统数据有误纠正 / 补单"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none resize-none"></textarea>
+            </div>
+
+            <!-- 错误提示 -->
+            <div v-if="adjustError" class="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+              {{ adjustError }}
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="flex items-center justify-end gap-3 px-6 py-4 border-t bg-gray-50">
+            <button @click="closeAdjustForm"
+              class="border border-gray-200 hover:bg-gray-100 text-text-secondary px-4 py-2 rounded-lg text-sm">
+              取消
+            </button>
+            <button @click="submitAdjust" :disabled="adjustSubmitting"
+              class="bg-orange-600 hover:bg-orange-700 disabled:bg-orange-300 text-white px-4 py-2 rounded-lg text-sm font-medium">
+              {{ adjustSubmitting ? '提交中...' : '确认调整' }}
             </button>
           </div>
         </div>
