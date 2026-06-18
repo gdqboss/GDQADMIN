@@ -284,14 +284,19 @@ const selectedProductSkus = ref([])
 const detailQrcodeId = ref(null)
 const previewImage = ref(null)
 
-// 当前选中 SKU 在仓库中的库存数（用于批码一键填满）
+// 当前选中商品在选定仓库的库存数（所有SKU合计，用于批码一键填满）
 const bindSkuStock = computed(() => {
-  if (!bindSkuId.value || !bindWarehouseId.value) return 0
-  const found = warehouseProducts.value.find(p =>
-    p.product_id === Number(bindProductId.value) &&
-    p.sku_id === Number(bindSkuId.value)
+  if (!bindWarehouseId.value || !bindProductId.value) return 0
+  const items = warehouseProducts.value.filter(p =>
+    p.product_id === Number(bindProductId.value)
   )
-  return found?.quantity || 0
+  if (items.length === 0) return 0
+  // 有选具体 SKU 时取该 SKU 的库存，否则取该商品所有行的合计
+  if (bindSkuId.value) {
+    const found = items.find(p => p.sku_id === Number(bindSkuId.value))
+    return found?.quantity || 0
+  }
+  return items.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0)
 })
 
 // 点击库存数自动填入
@@ -1168,10 +1173,10 @@ async function handleBatchEdit() {
           </select>
         </div>
         <!-- 批码数量输入 -->
-        <div v-if="bindMode === 'batch' && bindSkuId" class="mb-4">
+        <div v-if="bindMode === 'batch'" class="mb-4">
           <label class="block text-sm font-medium text-text-primary mb-1">
             {{ $t('qrcode.batchQuantity') || '批码数量' }} <span class="text-red-500">*</span>
-            <span class="text-text-secondary text-xs font-normal ml-2">
+            <span v-if="bindSkuStock > 0" class="text-text-secondary text-xs font-normal ml-2">
               / <button type="button" @click="fillBatchQuantity" class="text-primary hover:underline focus:outline-none">
                 {{ bindSkuStock }} 库存数
               </button>
@@ -1181,11 +1186,11 @@ async function handleBatchEdit() {
             v-model.number="bindBatchQuantity"
             type="number"
             min="1"
-            :max="bindSkuStock"
+            :max="bindSkuStock > 0 ? bindSkuStock : undefined"
             class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
             :placeholder="$t('qrcode.batchQuantityPlaceholder') || '例如 50'"
           />
-          <p class="text-xs text-text-secondary mt-1">这批货实际有多少件，后续扫码销售时扣减。点击「库存数」自动填入</p>
+          <p class="text-xs text-text-secondary mt-1">这批货实际有多少件，后续扫码销售时扣减。{{ bindSkuStock > 0 ? '点击「库存数」自动填入' : '' }}</p>
         </div>
         <div class="flex justify-end gap-3">
           <button @click="showBind = false" class="px-4 py-2 rounded-lg text-sm font-medium text-text-secondary hover:bg-gray-100 transition-colors">{{ $t('common.cancel') }}</button>
