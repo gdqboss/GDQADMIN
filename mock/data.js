@@ -1,17 +1,17 @@
 // ===== 商品数据 =====
 export const products = [
-  { id: 1, sku: 'SKU-001', name: '无线静音鼠标', category: '电子配件', spec: '2.4G/蓝牙双模', unit: '个', supplier: '深圳科创电子', purchasePrice: 25.00, salePrice: 59.90, stock: 5, safeStock: 50, image: '', status: 'low' },
-  { id: 2, sku: 'SKU-002', name: 'Type-C 扩展坞', category: '电子配件', spec: '7合1 HDMI+USB3.0', unit: '个', supplier: '东莞联达科技', purchasePrice: 45.00, salePrice: 129.00, stock: 230, safeStock: 30, image: '', status: 'normal' },
-  { id: 3, sku: 'SKU-003', name: '蓝牙耳机', category: '电子配件', spec: 'TWS 5.3 降噪', unit: '个', supplier: '深圳科创电子', purchasePrice: 38.00, salePrice: 99.00, stock: 180, safeStock: 40, image: '', status: 'normal' },
-  { id: 4, sku: 'SKU-004', name: '硅胶手机壳', category: '手机配件', spec: 'iPhone 15 Pro Max 透明', unit: '个', supplier: '义乌百汇日用', purchasePrice: 3.50, salePrice: 19.90, stock: 1500, safeStock: 200, image: '', status: 'normal' },
-  { id: 5, sku: 'SKU-005', name: '钢化膜', category: '手机配件', spec: 'iPhone 15 全系列 高清', unit: '片', supplier: '义乌百汇日用', purchasePrice: 1.20, salePrice: 9.90, stock: 3200, safeStock: 500, image: '', status: 'normal' },
-  { id: 6, sku: 'SKU-006', name: 'USB-C 数据线', category: '电子配件', spec: '1.5m 100W 快充', unit: '条', supplier: '东莞联达科技', purchasePrice: 5.00, salePrice: 24.90, stock: 12, safeStock: 100, image: '', status: 'low' },
-  { id: 7, sku: 'SKU-007', name: '桌面收纳盒', category: '家居用品', spec: '三层 ABS材质 白色', unit: '个', supplier: '义乌百汇日用', purchasePrice: 12.00, salePrice: 39.90, stock: 420, safeStock: 50, image: '', status: 'normal' },
-  { id: 8, sku: 'SKU-008', name: 'LED 台灯', category: '家居用品', spec: '三色调光 折叠式', unit: '个', supplier: '中山光明照明', purchasePrice: 28.00, salePrice: 79.90, stock: 85, safeStock: 30, image: '', status: 'normal' },
-  { id: 9, sku: 'SKU-009', name: '便携风扇', category: '家居用品', spec: 'USB充电 三档风力', unit: '个', supplier: '中山光明照明', purchasePrice: 15.00, salePrice: 49.90, stock: 8, safeStock: 60, image: '', status: 'low' },
-  { id: 10, sku: 'SKU-010', name: '笔记本支架', category: '电子配件', spec: '铝合金 可调节', unit: '个', supplier: '深圳科创电子', purchasePrice: 35.00, salePrice: 89.90, stock: 145, safeStock: 25, image: '', status: 'normal' },
-  { id: 11, sku: 'SKU-011', name: '手机支架', category: '手机配件', spec: '车载磁吸式', unit: '个', supplier: '义乌百汇日用', purchasePrice: 8.00, salePrice: 29.90, stock: 2, safeStock: 80, image: '', status: 'low' },
-  { id: 12, sku: 'SKU-012', name: '无线充电器', category: '电子配件', spec: '15W 快充 兼容Qi', unit: '个', supplier: '深圳科创电子', purchasePrice: 22.00, salePrice: 69.90, stock: 95, safeStock: 30, image: '', status: 'normal' },
+  { id: 1, sku: 'SKU-001', name: '无线静音鼠标', category: '电子配件', spec: '2.4G/蓝牙双模', unit: '个', supplier: '深圳科创电子', purchasePrice: 25.00, salePrice: 59.90, stock: 5, alertStock: 50, image: '', status: 'low' },
+  { id: 2, sku: 'SKU-002', name: 'Type-C 扩展坞', category: '电子配件', spec: '7合1 HDMI+USB3.0', unit: '个', supplier: '东莞联达科技', purchasePrice: 45.00, salePrice: 129.00, stock: 230, alertStock: 30, image: '', status: 'normal' },
+  { id: 3, sku: 'SKU-003', name: '蓝牙耳机', category: '电子配件', spec: 'TWS 5.3 降噪', unit: '个', supplier: '深圳科创电子', purchasePrice: 38.00, salePrice: 99.00, stock: 180, alertStock: 40, image: '', status: 'normal' },
+  { id: 4, sku: 'SKU-004', name: '硅胶手机壳', category: '手机配件', spec: 'iPhone 15 Pro Max 透明', unit: '个', supplier: '义乌百汇日用', purchasePrice: 3.50, salePrice: 19.90, stock: 1500, alertStock: 200, image: '', status: 'normal' },
+  { id: 5, sku: 'SKU-005', name: '钢化膜', category: '手机配件', spec: 'iPhone 15 全系列 高清', unit: '片', supplier: '义乌百汇日用', purchasePrice: 1.20, salePrice: 9.90, stock: 3200, alertStock: 500, image: '', status: 'normal' },
+  { id: 6, sku: 'SKU-006', name: 'USB-C 数据线', category: '电子配件', spec: '1.5m 100W 快充', unit: '条', supplier: '东莞联达科技', purchasePrice: 5.00, salePrice: 24.90, stock: 12, alertStock: 100, image: '', status: 'low' },
+  { id: 7, sku: 'SKU-007', name: '桌面收纳盒', category: '家居用品', spec: '三层 ABS材质 白色', unit: '个', supplier: '义乌百汇日用', purchasePrice: 12.00, salePrice: 39.90, stock: 420, alertStock: 50, image: '', status: 'normal' },
+  { id: 8, sku: 'SKU-008', name: 'LED 台灯', category: '家居用品', spec: '三色调光 折叠式', unit: '个', supplier: '中山光明照明', purchasePrice: 28.00, salePrice: 79.90, stock: 85, alertStock: 30, image: '', status: 'normal' },
+  { id: 9, sku: 'SKU-009', name: '便携风扇', category: '家居用品', spec: 'USB充电 三档风力', unit: '个', supplier: '中山光明照明', purchasePrice: 15.00, salePrice: 49.90, stock: 8, alertStock: 60, image: '', status: 'low' },
+  { id: 10, sku: 'SKU-010', name: '笔记本支架', category: '电子配件', spec: '铝合金 可调节', unit: '个', supplier: '深圳科创电子', purchasePrice: 35.00, salePrice: 89.90, stock: 145, alertStock: 25, image: '', status: 'normal' },
+  { id: 11, sku: 'SKU-011', name: '手机支架', category: '手机配件', spec: '车载磁吸式', unit: '个', supplier: '义乌百汇日用', purchasePrice: 8.00, salePrice: 29.90, stock: 2, alertStock: 80, image: '', status: 'low' },
+  { id: 12, sku: 'SKU-012', name: '无线充电器', category: '电子配件', spec: '15W 快充 兼容Qi', unit: '个', supplier: '深圳科创电子', purchasePrice: 22.00, salePrice: 69.90, stock: 95, alertStock: 30, image: '', status: 'normal' },
 ]
 
 export const categories = ['电子配件', '手机配件', '家居用品', '办公用品', '服装', '食品']
@@ -26,26 +26,26 @@ export const warehouses = [
 
 export const warehouseStockDetail = {
   1: [
-    { sku: 'SKU-001', name: '无线静音鼠标', stock: 3, safeStock: 50, location: 'A-01-03', lastUpdated: '2026-02-20' },
-    { sku: 'SKU-002', name: 'Type-C 扩展坞', stock: 150, safeStock: 30, location: 'A-02-01', lastUpdated: '2026-02-19' },
-    { sku: 'SKU-003', name: '蓝牙耳机', stock: 120, safeStock: 40, location: 'A-03-02', lastUpdated: '2026-02-20' },
-    { sku: 'SKU-010', name: '笔记本支架', stock: 100, safeStock: 25, location: 'B-01-01', lastUpdated: '2026-02-18' },
-    { sku: 'SKU-012', name: '无线充电器', stock: 65, safeStock: 30, location: 'B-02-03', lastUpdated: '2026-02-20' },
+    { sku: 'SKU-001', name: '无线静音鼠标', stock: 3, alertStock: 50, location: 'A-01-03', lastUpdated: '2026-02-20' },
+    { sku: 'SKU-002', name: 'Type-C 扩展坞', stock: 150, alertStock: 30, location: 'A-02-01', lastUpdated: '2026-02-19' },
+    { sku: 'SKU-003', name: '蓝牙耳机', stock: 120, alertStock: 40, location: 'A-03-02', lastUpdated: '2026-02-20' },
+    { sku: 'SKU-010', name: '笔记本支架', stock: 100, alertStock: 25, location: 'B-01-01', lastUpdated: '2026-02-18' },
+    { sku: 'SKU-012', name: '无线充电器', stock: 65, alertStock: 30, location: 'B-02-03', lastUpdated: '2026-02-20' },
   ],
   2: [
-    { sku: 'SKU-004', name: '硅胶手机壳', stock: 1200, safeStock: 200, location: 'C-01-01', lastUpdated: '2026-02-20' },
-    { sku: 'SKU-005', name: '钢化膜', stock: 2800, safeStock: 500, location: 'C-02-01', lastUpdated: '2026-02-19' },
-    { sku: 'SKU-007', name: '桌面收纳盒', stock: 300, safeStock: 50, location: 'D-01-02', lastUpdated: '2026-02-20' },
-    { sku: 'SKU-011', name: '手机支架', stock: 2, safeStock: 80, location: 'D-03-01', lastUpdated: '2026-02-18' },
+    { sku: 'SKU-004', name: '硅胶手机壳', stock: 1200, alertStock: 200, location: 'C-01-01', lastUpdated: '2026-02-20' },
+    { sku: 'SKU-005', name: '钢化膜', stock: 2800, alertStock: 500, location: 'C-02-01', lastUpdated: '2026-02-19' },
+    { sku: 'SKU-007', name: '桌面收纳盒', stock: 300, alertStock: 50, location: 'D-01-02', lastUpdated: '2026-02-20' },
+    { sku: 'SKU-011', name: '手机支架', stock: 2, alertStock: 80, location: 'D-03-01', lastUpdated: '2026-02-18' },
   ],
   3: [
-    { sku: 'SKU-002', name: 'Type-C 扩展坞', stock: 80, safeStock: 20, location: 'E-01-01', lastUpdated: '2026-02-17' },
-    { sku: 'SKU-003', name: '蓝牙耳机', stock: 60, safeStock: 20, location: 'E-02-01', lastUpdated: '2026-02-16' },
-    { sku: 'SKU-008', name: 'LED 台灯', stock: 45, safeStock: 15, location: 'F-01-01', lastUpdated: '2026-02-18' },
+    { sku: 'SKU-002', name: 'Type-C 扩展坞', stock: 80, alertStock: 20, location: 'E-01-01', lastUpdated: '2026-02-17' },
+    { sku: 'SKU-003', name: '蓝牙耳机', stock: 60, alertStock: 20, location: 'E-02-01', lastUpdated: '2026-02-16' },
+    { sku: 'SKU-008', name: 'LED 台灯', stock: 45, alertStock: 15, location: 'F-01-01', lastUpdated: '2026-02-18' },
   ],
   4: [
-    { sku: 'SKU-006', name: 'USB-C 数据线', stock: 10, safeStock: 50, location: 'G-01-01', lastUpdated: '2026-02-20' },
-    { sku: 'SKU-009', name: '便携风扇', stock: 5, safeStock: 30, location: 'G-02-01', lastUpdated: '2026-02-19' },
+    { sku: 'SKU-006', name: 'USB-C 数据线', stock: 10, alertStock: 50, location: 'G-01-01', lastUpdated: '2026-02-20' },
+    { sku: 'SKU-009', name: '便携风扇', stock: 5, alertStock: 30, location: 'G-02-01', lastUpdated: '2026-02-19' },
   ],
 }
 
@@ -82,18 +82,18 @@ export const approvals = [
 
 // ===== 库存预警 =====
 export const stockAlerts = [
-  { id: 1, sku: 'SKU-001', name: '无线静音鼠标', warehouse: '深圳总仓', currentStock: 5, safeStock: 50, suggestQty: 200, level: 'critical', createdAt: '2026-02-20 08:30', handled: false },
-  { id: 2, sku: 'SKU-011', name: '手机支架', warehouse: '义乌分仓', currentStock: 2, safeStock: 80, suggestQty: 300, level: 'critical', createdAt: '2026-02-20 08:30', handled: false },
-  { id: 3, sku: 'SKU-006', name: 'USB-C 数据线', warehouse: '保税仓', currentStock: 10, safeStock: 50, suggestQty: 500, level: 'critical', createdAt: '2026-02-20 08:30', handled: false },
-  { id: 4, sku: 'SKU-009', name: '便携风扇', warehouse: '保税仓', currentStock: 5, safeStock: 30, suggestQty: 100, level: 'critical', createdAt: '2026-02-20 09:00', handled: false },
-  { id: 5, sku: 'SKU-006', name: 'USB-C 数据线', warehouse: '深圳总仓', currentStock: 12, safeStock: 100, suggestQty: 500, level: 'warning', createdAt: '2026-02-19 14:20', handled: false },
-  { id: 6, sku: 'SKU-009', name: '便携风扇', warehouse: '深圳总仓', currentStock: 8, safeStock: 60, suggestQty: 200, level: 'warning', createdAt: '2026-02-19 14:20', handled: false },
-  { id: 7, sku: 'SKU-001', name: '无线静音鼠标', warehouse: '义乌分仓', currentStock: 15, safeStock: 50, suggestQty: 150, level: 'warning', createdAt: '2026-02-19 08:30', handled: true },
-  { id: 8, sku: 'SKU-005', name: '钢化膜', warehouse: '海外仓 (USA)', currentStock: 100, safeStock: 200, suggestQty: 500, level: 'warning', createdAt: '2026-02-18 10:15', handled: true },
-  { id: 9, sku: 'SKU-004', name: '硅胶手机壳', warehouse: '海外仓 (USA)', currentStock: 80, safeStock: 150, suggestQty: 300, level: 'warning', createdAt: '2026-02-18 10:15', handled: true },
-  { id: 10, sku: 'SKU-002', name: 'Type-C 扩展坞', warehouse: '海外仓 (USA)', currentStock: 25, safeStock: 40, suggestQty: 80, level: 'warning', createdAt: '2026-02-17 16:00', handled: true },
-  { id: 11, sku: 'SKU-008', name: 'LED 台灯', warehouse: '深圳总仓', currentStock: 18, safeStock: 30, suggestQty: 100, level: 'warning', createdAt: '2026-02-16 09:30', handled: true },
-  { id: 12, sku: 'SKU-003', name: '蓝牙耳机', warehouse: '海外仓 (USA)', currentStock: 10, safeStock: 30, suggestQty: 60, level: 'warning', createdAt: '2026-02-15 11:00', handled: true },
+  { id: 1, sku: 'SKU-001', name: '无线静音鼠标', warehouse: '深圳总仓', currentStock: 5, alertStock: 50, suggestQty: 200, level: 'critical', createdAt: '2026-02-20 08:30', handled: false },
+  { id: 2, sku: 'SKU-011', name: '手机支架', warehouse: '义乌分仓', currentStock: 2, alertStock: 80, suggestQty: 300, level: 'critical', createdAt: '2026-02-20 08:30', handled: false },
+  { id: 3, sku: 'SKU-006', name: 'USB-C 数据线', warehouse: '保税仓', currentStock: 10, alertStock: 50, suggestQty: 500, level: 'critical', createdAt: '2026-02-20 08:30', handled: false },
+  { id: 4, sku: 'SKU-009', name: '便携风扇', warehouse: '保税仓', currentStock: 5, alertStock: 30, suggestQty: 100, level: 'critical', createdAt: '2026-02-20 09:00', handled: false },
+  { id: 5, sku: 'SKU-006', name: 'USB-C 数据线', warehouse: '深圳总仓', currentStock: 12, alertStock: 100, suggestQty: 500, level: 'warning', createdAt: '2026-02-19 14:20', handled: false },
+  { id: 6, sku: 'SKU-009', name: '便携风扇', warehouse: '深圳总仓', currentStock: 8, alertStock: 60, suggestQty: 200, level: 'warning', createdAt: '2026-02-19 14:20', handled: false },
+  { id: 7, sku: 'SKU-001', name: '无线静音鼠标', warehouse: '义乌分仓', currentStock: 15, alertStock: 50, suggestQty: 150, level: 'warning', createdAt: '2026-02-19 08:30', handled: true },
+  { id: 8, sku: 'SKU-005', name: '钢化膜', warehouse: '海外仓 (USA)', currentStock: 100, alertStock: 200, suggestQty: 500, level: 'warning', createdAt: '2026-02-18 10:15', handled: true },
+  { id: 9, sku: 'SKU-004', name: '硅胶手机壳', warehouse: '海外仓 (USA)', currentStock: 80, alertStock: 150, suggestQty: 300, level: 'warning', createdAt: '2026-02-18 10:15', handled: true },
+  { id: 10, sku: 'SKU-002', name: 'Type-C 扩展坞', warehouse: '海外仓 (USA)', currentStock: 25, alertStock: 40, suggestQty: 80, level: 'warning', createdAt: '2026-02-17 16:00', handled: true },
+  { id: 11, sku: 'SKU-008', name: 'LED 台灯', warehouse: '深圳总仓', currentStock: 18, alertStock: 30, suggestQty: 100, level: 'warning', createdAt: '2026-02-16 09:30', handled: true },
+  { id: 12, sku: 'SKU-003', name: '蓝牙耳机', warehouse: '海外仓 (USA)', currentStock: 10, alertStock: 30, suggestQty: 60, level: 'warning', createdAt: '2026-02-15 11:00', handled: true },
 ]
 
 // ===== AI 自动化 =====

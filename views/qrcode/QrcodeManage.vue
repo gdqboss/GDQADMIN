@@ -251,6 +251,8 @@ const showBind = ref(false)
 const bindTarget = ref(null)
 const bindProductId = ref('')
 const bindSkuId = ref('')
+const bindMode = ref('single')  // 'single' | 'batch'
+const bindBatchQuantity = ref(1)
 const selectedProductSkus = ref([])
 const detailQrcodeId = ref(null)
 const previewImage = ref(null)
@@ -279,17 +281,115 @@ function downloadQr(qr) {
   a.click()
 }
 
+// ═══ 扫码销售弹窗 ═══
+const showSell = ref(false)
+const sellTarget = ref(null)
+const sellQuantity = ref(1)
+const sellBuyer = ref('')
+const sellSalesPerson = ref('')
+const sellLoading = ref(false)
+
+function openSellDialog(qr) {
+  sellTarget.value = qr
+  // 批码默认 1，单码固定 1
+  sellQuantity.value = 1
+  sellBuyer.value = ''
+  sellSalesPerson.value = userStore.user?.name || ''
+  showSell.value = true
+}
+
+async function handleConfirmSell() {
+  if (!sellTarget.value) return
+  const qty = parseInt(sellQuantity.value)
+  if (!qty || qty < 1) {
+    alert('销售数量必须 >= 1')
+    return
+  }
+  // 批码校验
+  if (sellTarget.value.batch_mode === 'batch' && qty > (sellTarget.value.remaining_qty || 0)) {
+    alert(`批码剩余 ${sellTarget.value.remaining_qty}，不够 ${qty}`)
+    return
+  }
+  sellLoading.value = true
+  const res = await store.sell(sellTarget.value.id, {
+    quantity: qty,
+    buyer: sellBuyer.value || null,
+    sales_person: sellSalesPerson.value || null
+  })
+  sellLoading.value = false
+  if (res.code === 0) {
+    showSell.value = false
+  } else {
+    alert('销售失败：' + (res.message || '未知错误'))
+  }
+}
+
+// ═══ 批码调整弹窗 ═══
+const showAdjust = ref(false)
+const adjustTarget = ref(null)
+const adjustDelta = ref(0)
+const adjustReason = ref('')
+const adjustLoading = ref(false)
+
+function openAdjustDialog(qr) {
+  adjustTarget.value = qr
+  adjustDelta.value = 0
+  adjustReason.value = ''
+  showAdjust.value = true
+}
+
+async function handleConfirmAdjust() {
+  if (!adjustTarget.value) return
+  const d = parseInt(adjustDelta.value)
+  if (!d) {
+    alert('调整数量不能为 0')
+    return
+  }
+  adjustLoading.value = true
+  const res = await store.adjustBatch(adjustTarget.value.id, d, adjustReason.value)
+  adjustLoading.value = false
+  if (res.code === 0) {
+    showAdjust.value = false
+  } else {
+    alert('调整失败：' + (res.message || '未知错误'))
+  }
+}
+
 function openBind(qr) {
   bindTarget.value = qr
   bindProductId.value = ''
   bindSkuId.value = ''
+  bindMode.value = 'single'
+  bindBatchQuantity.value = 1
   selectedProductSkus.value = []
   showBind.value = true
 }
 
 function handleBind() {
   if (!bindProductId.value || !bindTarget.value) return
-  store.bindProduct(bindTarget.value.id, Number(bindProductId.value), bindSkuId.value ? Number(bindSkuId.value) : null)
+  // 多规格商品必须选具体 SKU（和入库一样）
+  if (selectedProductSkus.value.length > 0 && !bindSkuId.value) {
+    alert(t('qrcode.selectSkuRequired') || '请选择具体 SKU 规格')
+    return
+  }
+  // 批码模式必须有 SKU
+  if (bindMode.value === 'batch') {
+    if (!bindSkuId.value) {
+      alert(t('qrcode.selectSkuRequired') || '请选择具体 SKU 规格')
+      return
+    }
+    const qty = parseInt(bindBatchQuantity.value)
+    if (!qty || qty < 1) {
+      alert(t('qrcode.batchQuantityMin') || '批码数量必须 >= 1')
+      return
+    }
+  }
+  store.bindProduct(
+    bindTarget.value.id,
+    Number(bindProductId.value),
+    bindSkuId.value ? Number(bindSkuId.value) : null,
+    { mode: bindMode.value, batch_quantity: parseInt(bindBatchQuantity.value) }
+  )
   showBind.value = false
 }
 
@@ -653,6 +753,8 @@ async function handleBatchEdit() {
                 <th class="px-4 py-3 font-medium">{{ $t('qrcode.warehouse') }}</th>
                 <th class="px-4 py-3 font-medium text-center">{{ $t('qrcode.scanCount') }}</th>
                 <th class="px-4 py-3 font-medium text-center">{{ $t('common.status') }}</th>
+                <th class="px-4 py-3 font-medium text-center">{{ $t('qrcode.batchMode') || '模式' }}</th>
+                <th class="px-4 py-3 font-medium text-center">{{ $t('qrcode.remaining') || '剩余' }}</th>
                 <th class="px-4 py-3 font-medium">{{ $t('common.createdAt') }}</th>
                 <th class="px-4 py-3 font-medium text-right">{{ $t('common.action') }}</th>
               </tr>
@@ -687,6 +789,24 @@ async function handleBatchEdit() {
                 <td class="px-4 py-3 text-text-secondary text-xs">{{ qr.warehouse || '-' }}</td>
                 <td class="px-4 py-3 text-center font-medium">{{ qr.scan_count }}</td>
                 <td class="px-4 py-3 text-center"><StatusTag :type="store.qrcodeStatusMap[qr.status]?.type" :text="store.qrcodeStatusMap[qr.status]?.label" /></td>
+                <td class="px-4 py-3 text-center text-xs">
+                  <span v-if="qr.batch_mode === 'batch'" class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-medium">
+                    <span class="material-symbols-outlined text-[12px]">inventory_2</span>
+                    批 {{ qr.batch_quantity }}
+                  </span>
+                  <span v-else class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">
+                    <span class="material-symbols-outlined text-[12px]">looks_one</span>
+                    单
+                  </span>
+                </td>
+                <td class="px-4 py-3 text-center text-xs">
+                  <span v-if="qr.batch_mode === 'batch'">
+                    <span :class="(qr.remaining_qty || 0) === 0 ? 'text-red-500 font-medium' : (qr.remaining_qty || 0) <= 5 ? 'text-orange-500 font-medium' : 'text-text-primary'">
+                      {{ qr.remaining_qty ?? '-' }} / {{ qr.batch_quantity }}
+                    </span>
+                  </span>
+                  <span v-else class="text-text-secondary">-</span>
+                </td>
                 <td class="px-4 py-3 text-text-secondary text-xs">{{ qr.created_at }}</td>
                 <td class="px-4 py-3 text-right">
                   <div class="flex items-center justify-end gap-2">
@@ -694,7 +814,16 @@ async function handleBatchEdit() {
                     <button v-if="qr.status === 'bindProduct'" @click="store.updateStatus(qr.id, 'inStock')" class="text-primary hover:text-primary-hover text-xs font-medium">{{ $t('qrcode.confirmInStock') }}</button>
                     <button v-if="qr.status === 'inStock'" @click="store.updateStatus(qr.id, 'outStock')" class="text-warning hover:text-warning text-xs font-medium">{{ $t('qrcode.confirmOutStock') }}</button>
                     <button v-if="qr.status === 'outStock'" @click="store.updateStatus(qr.id, 'shipped')" class="text-warning hover:text-warning text-xs font-medium">{{ $t('qrcode.confirmShipped') }}</button>
-                    <button v-if="qr.status === 'shipped'" @click="store.updateStatus(qr.id, 'sold')" class="text-success hover:text-success text-xs font-medium">{{ $t('qrcode.confirmSale') }}</button>
+                    <!-- 批码扫码销售：单码可以走原 shipped→sold，批码走 sell 接口扣减 -->
+                    <button v-if="['inStock', 'shipped', 'bindProduct'].includes(qr.status)" @click="openSellDialog(qr)" class="text-success hover:text-success text-xs font-medium">
+                      <span class="material-symbols-outlined text-[14px] align-middle">shopping_cart_checkout</span>
+                      {{ $t('qrcode.scanSell') || '扫码销售' }}
+                    </button>
+                    <!-- 批码：调整个数 -->
+                    <button v-if="qr.batch_mode === 'batch' && ['inStock', 'shipped', 'sold', 'sold_out'].includes(qr.status)" @click="openAdjustDialog(qr)" class="text-primary hover:text-primary-hover text-xs font-medium">
+                      <span class="material-symbols-outlined text-[14px] align-middle">tune</span>
+                      {{ $t('qrcode.adjustBatch') || '调整个数' }}
+                    </button>
                     <button v-if="qr.status === 'returned'" @click="store.updateStatus(qr.id, 'inStock')" class="text-primary hover:text-primary-hover text-xs font-medium">{{ $t('qrcode.returnToInStock') }}</button>
                     <!-- Undo / revert buttons -->
                     <button v-if="qr.status === 'bindProduct'" @click="store.updateStatus(qr.id, 'unused')" class="text-text-secondary hover:text-text-primary text-xs" :title="$t('qrcode.revertToUnused')">
@@ -910,6 +1039,36 @@ async function handleBatchEdit() {
           <p class="text-xs text-text-secondary">{{ $t('qrcode.codeNumber') }}</p>
           <p class="font-mono text-sm text-primary font-medium">{{ bindTarget?.code }}</p>
         </div>
+
+        <!-- 绑定模式：单个 / 一批 -->
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-text-primary mb-2">{{ $t('qrcode.bindMode') || '绑定模式' }}</label>
+          <div class="flex gap-2">
+            <button
+              type="button"
+              @click="bindMode = 'single'"
+              :class="['flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors border',
+                bindMode === 'single' ? 'bg-primary text-white border-primary' : 'bg-white text-text-secondary border-gray-200 hover:border-primary']"
+            >
+              <span class="material-symbols-outlined text-base align-middle">looks_one</span>
+              {{ $t('qrcode.bindSingle') || '绑单个' }}
+            </button>
+            <button
+              type="button"
+              @click="bindMode = 'batch'"
+              :class="['flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors border',
+                bindMode === 'batch' ? 'bg-primary text-white border-primary' : 'bg-white text-text-secondary border-gray-200 hover:border-primary']"
+            >
+              <span class="material-symbols-outlined text-base align-middle">inventory_2</span>
+              {{ $t('qrcode.bindBatch') || '绑一批' }}
+            </button>
+          </div>
+          <p class="text-xs text-text-secondary mt-1">
+            <span v-if="bindMode === 'single'">1 个二维码对应 1 件实物</span>
+            <span v-else>1 个二维码代表该 SKU 的一批货，可单件多次销售</span>
+          </p>
+        </div>
+
         <div class="mb-4">
           <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('qrcode.productSku') }}</label>
           <select v-model="bindProductId" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
@@ -917,19 +1076,124 @@ async function handleBatchEdit() {
             <option v-for="p in products" :key="p.id" :value="p.id">{{ p.name }} ({{ p.sku }})</option>
           </select>
         </div>
-        <!-- SKU 选择（仅当商品有多规格时显示） -->
+        <!-- SKU 选择（仅当商品有多规格时显示，多规格必选具体 SKU） -->
         <div v-if="selectedProductSkus.length > 0" class="mb-4">
-          <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('qrcode.selectSpec') }}</label>
+          <label class="block text-sm font-medium text-text-primary mb-1">
+            {{ $t('qrcode.selectSpec') }} <span class="text-red-500">*</span>
+          </label>
           <select v-model="bindSkuId" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
-            <option value="">{{ $t('qrcode.noSpecBinding') }}</option>
+            <option value="" disabled>{{ $t('qrcode.selectSpecPlaceholder') }}</option>
             <option v-for="sku in selectedProductSkus" :key="sku.id" :value="sku.id">
               {{ formatSkuLabel(sku) }}
             </option>
           </select>
         </div>
+        <!-- 批码数量输入 -->
+        <div v-if="bindMode === 'batch' && bindSkuId" class="mb-4">
+          <label class="block text-sm font-medium text-text-primary mb-1">
+            {{ $t('qrcode.batchQuantity') || '批码数量' }} <span class="text-red-500">*</span>
+          </label>
+          <input
+            v-model.number="bindBatchQuantity"
+            type="number"
+            min="1"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+            :placeholder="$t('qrcode.batchQuantityPlaceholder') || '例如 50'"
+          />
+          <p class="text-xs text-text-secondary mt-1">这批货实际有多少件，后续扫码销售时扣减</p>
+        </div>
         <div class="flex justify-end gap-3">
           <button @click="showBind = false" class="px-4 py-2 rounded-lg text-sm font-medium text-text-secondary hover:bg-gray-100 transition-colors">{{ $t('common.cancel') }}</button>
           <button @click="handleBind" :disabled="!bindProductId" :class="['px-4 py-2 rounded-lg text-sm font-medium transition-colors', bindProductId ? 'bg-primary hover:bg-primary-hover text-white' : 'bg-gray-100 text-text-secondary cursor-not-allowed']">{{ $t('qrcode.confirmBind') }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sell Dialog -->
+    <div v-if="showSell" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50" @click.self="showSell = false">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <h3 class="font-bold text-text-primary text-lg mb-4 flex items-center gap-2">
+          <span class="material-symbols-outlined text-success">shopping_cart_checkout</span>
+          {{ $t('qrcode.scanSell') || '扫码销售' }}
+        </h3>
+        <div class="mb-3 p-3 bg-gray-50 rounded-lg space-y-1">
+          <p class="text-xs text-text-secondary">{{ $t('qrcode.codeNumber') }}: <span class="font-mono text-primary">{{ sellTarget?.code }}</span></p>
+          <p v-if="sellTarget?.product_name" class="text-xs text-text-secondary">{{ $t('qrcode.productSku') }}: <span class="text-text-primary">{{ sellTarget?.product_name }}</span></p>
+          <p v-if="sellTarget?.batch_mode === 'batch'" class="text-xs text-text-secondary">
+            剩余可售: <span class="text-primary font-medium">{{ sellTarget?.remaining_qty }} / {{ sellTarget?.batch_quantity }}</span>
+          </p>
+        </div>
+        <!-- 批码可调数量，单码固定 1 -->
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-text-primary mb-1">销售数量 <span class="text-red-500">*</span></label>
+          <input
+            v-model.number="sellQuantity"
+            type="number"
+            min="1"
+            :max="sellTarget?.batch_mode === 'batch' ? sellTarget?.remaining_qty : 1"
+            :disabled="sellTarget?.batch_mode === 'single'"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none disabled:bg-gray-50 disabled:text-text-secondary"
+          />
+        </div>
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-text-primary mb-1">购买人</label>
+          <input v-model="sellBuyer" type="text" placeholder="选填"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+        </div>
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-text-primary mb-1">销售员</label>
+          <input v-model="sellSalesPerson" type="text"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+        </div>
+        <div class="flex justify-end gap-3">
+          <button @click="showSell = false" class="px-4 py-2 rounded-lg text-sm font-medium text-text-secondary hover:bg-gray-100 transition-colors">{{ $t('common.cancel') }}</button>
+          <button @click="handleConfirmSell" :disabled="sellLoading" class="px-4 py-2 rounded-lg text-sm font-medium bg-success text-white hover:bg-success-hover transition-colors disabled:opacity-50">
+            {{ sellLoading ? '处理中...' : '确认销售' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Adjust Batch Dialog -->
+    <div v-if="showAdjust" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50" @click.self="showAdjust = false">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <h3 class="font-bold text-text-primary text-lg mb-4 flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary">tune</span>
+          {{ $t('qrcode.adjustBatch') || '调整个数' }}
+        </h3>
+        <div class="mb-3 p-3 bg-gray-50 rounded-lg space-y-1">
+          <p class="text-xs text-text-secondary">{{ $t('qrcode.codeNumber') }}: <span class="font-mono text-primary">{{ adjustTarget?.code }}</span></p>
+          <p class="text-xs text-text-secondary">
+            当前剩余: <span class="text-text-primary font-medium">{{ adjustTarget?.remaining_qty }} / {{ adjustTarget?.batch_quantity }}</span>
+          </p>
+          <p class="text-xs text-text-secondary">当前状态: <span class="text-text-primary font-medium">{{ adjustTarget?.status }}</span></p>
+        </div>
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-text-primary mb-1">
+            调整数量 <span class="text-red-500">*</span>
+            <span class="text-xs text-text-secondary ml-2">(正数=增加, 负数=减少)</span>
+          </label>
+          <input
+            v-model.number="adjustDelta"
+            type="number"
+            :min="-(adjustTarget?.remaining_qty || 0)"
+            :max="(adjustTarget?.batch_quantity || 0) - (adjustTarget?.remaining_qty || 0)"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+          />
+          <p class="text-xs text-text-secondary mt-1">
+            调整后剩余: <span class="text-primary font-medium">{{ (adjustTarget?.remaining_qty || 0) + (parseInt(adjustDelta) || 0) }}</span>
+          </p>
+        </div>
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-text-primary mb-1">调整原因</label>
+          <input v-model="adjustReason" type="text" placeholder="例如：退货回库 / 实物盘点差异"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+        </div>
+        <div class="flex justify-end gap-3">
+          <button @click="showAdjust = false" class="px-4 py-2 rounded-lg text-sm font-medium text-text-secondary hover:bg-gray-100 transition-colors">{{ $t('common.cancel') }}</button>
+          <button @click="handleConfirmAdjust" :disabled="adjustLoading" class="px-4 py-2 rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary-hover transition-colors disabled:opacity-50">
+            {{ adjustLoading ? '处理中...' : '确认调整' }}
+          </button>
         </div>
       </div>
     </div>

@@ -312,8 +312,47 @@ async function loadSkus(productId) {
             productSkus.value[productId] = res.data?.skus ?? []
         }
     } catch (e) {
-        console.error('Failed to load SKUs', e)
+        console.warn('loadSkus failed', productId, e)
     }
+}
+
+// 给"每个 item"取它对应的 SKU 列表（按 product_id 缓存）
+function getSkusForItem(item) {
+    if (!item?.product_id) return []
+    return productSkus.value[item.product_id] || []
+}
+
+// 商品下拉的搜索过滤（按 row index 区分）
+function getFilteredProducts(index) {
+    const filter = (productFilters.value[index] || '').toLowerCase()
+    if (!filter) return products.value
+    return products.value.filter(p =>
+        (p.sku && p.sku.toLowerCase().includes(filter)) ||
+        (p.name && p.name.toLowerCase().includes(filter))
+    )
+}
+
+function productById(id) {
+    return products.value.find(p => String(p.id) === String(id)) || null
+}
+
+function needsQrcode(item) {
+    if (activeTab.value !== 'outbound') return false
+    const p = productById(item.product_id)
+    return p?.require_qrcode === true || p?.require_qrcode === 1
+}
+
+function filterProduct(val, index) {
+    productFilters.value[index] = val || ''
+}
+
+function resetProductFilter(index) {
+    productFilters.value[index] = ''
+}
+
+function onProductChange(item) {
+    item.sku_id = '' // reset SKU when product changes
+    if (item.product_id) loadSkus(item.product_id)
 }
 
 onMounted(async () => {
@@ -345,7 +384,12 @@ onMounted(async () => {
       console.error('prefill parse error', e)
     }
   }
+  // 入库成功后如果是从预警跳过来的，自动标记 handled
+  prefilledAlertId.value = route.query.alert_id ? Number(route.query.alert_id) : null
 })
+
+// ─── 预警关联：从库存预警页跳过来预填时记录 alert_id，入库成功后自动 PUT 标记 handled ──
+const prefilledAlertId = ref(null)
 
 // ─── Batch mode functions ─────────────────────────────────────────────────────
 async function previewBatch() {
@@ -519,6 +563,16 @@ async function submitForm() {
       }
     }
     await loadRecords()
+    // 入库成功后，如果是从预警页跳转过来的，自动标记预警 handled
+    if (prefilledAlertId.value && !isEdit) {
+      try {
+        await api.put('/stock-alerts/' + prefilledAlertId.value)
+        formSuccess.value += ' · 预警 #' + prefilledAlertId.value + ' 已标记处理'
+        prefilledAlertId.value = null
+      } catch (e) {
+        console.warn('标记预警 handled 失败（不影响入库）', e)
+      }
+    }
     setTimeout(() => {
       closeForm()
     }, 800)

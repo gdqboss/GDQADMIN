@@ -96,6 +96,20 @@ function getStatusColor(status) {
   }
   return colors[status] || 'bg-gray-100 text-gray-800'
 }
+
+async function deleteReturn(ret) {
+  if (!confirm(`确定要删除退货记录 ${ret.record_no} 吗？此操作不可恢复！`)) return
+  try {
+    const res = await api.delete(`/returns/${ret.id}`)
+    if (res.code === 0) {
+      await fetchReturns()
+    } else {
+      alert(res.message || '删除失败')
+    }
+  } catch (err) {
+    alert(err.response?.data?.message || err.message || '删除失败')
+  }
+}
 </script>
 
 <template>
@@ -144,6 +158,7 @@ function getStatusColor(status) {
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{{ t('returns.returnType') }}</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{{ t('returns.status') }}</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{{ t('returns.createdAt') }}</th>
+            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">{{ t('common.actions') }}</th>
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
@@ -160,6 +175,12 @@ function getStatusColor(status) {
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
               {{ new Date(ret.created_at).toLocaleString() }}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-right text-sm">
+              <button @click="deleteReturn(ret)"
+                      class="text-red-600 hover:text-red-800 font-medium">
+                {{ t('common.delete') }}
+              </button>
             </td>
           </tr>
         </tbody>

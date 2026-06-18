@@ -188,6 +188,7 @@ const menuGroups = computed(() => [
       { key: 'product:write', label: t('nav.products'), to: '/products' },
       { key: 'inventory:inout', label: t('nav.inout'), to: '/in-out' },
       { key: 'warehouse:write', label: t('nav.warehouses'), to: '/warehouses' },
+      { key: 'qrcode:write', label: t('nav.qrcode'), to: '/qrcode' },
       { key: 'stock:read', label: t('nav.alerts'), to: '/alerts', badge: alertCount.value },
       { key: 'transfer:read', label: t('nav.transfer'), to: '/transfer' },
       { key: 'inventory:return', label: t('nav.returnRecords'), to: '/inventory/returns' },
@@ -236,7 +237,6 @@ const menuGroups = computed(() => [
       { key: 'bi:report', label: t('nav.reportManage'), to: '/excel-report-manage' },
       { key: 'bi:excel', label: t('nav.storeSales'), to: '/store-sales' },
       { key: 'bi:excel', label: t('nav.importRecords'), to: '/import-records' },
-      { key: 'qrcode:write', label: t('nav.qrcode'), to: '/qrcode' },
       { key: 'referral:read', label: t('nav.referral'), to: '/referral' },
       { key: 'report:read', label: t('nav.reports'), to: '/reports' },
     ]

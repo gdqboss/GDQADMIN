@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../../components/PageHeader.vue'
 import StatCard from '../../components/StatCard.vue'
@@ -7,9 +8,12 @@ import StatusTag from '../../components/StatusTag.vue'
 import api from '../../services/api.js'
 
 const { t } = useI18n()
+const router = useRouter()
 
 const alerts = ref([])
 const filterLevel = ref('all')
+const showReplenishDialog = ref(false)
+const selectedAlert = ref(null)
 
 onMounted(async () => {
   const res = await api.get('/stock-alerts')
@@ -39,9 +43,55 @@ const filterTabs = computed(() => [
 ])
 
 async function markHandled(id) {
+  if (!confirm('确认此预警已处理？')) return
   await api.put('/stock-alerts/' + id)
   const res = await api.get('/stock-alerts')
   alerts.value = res.data
+}
+
+function openReplenish(alert) {
+  selectedAlert.value = alert
+  showReplenishDialog.value = true
+}
+
+function closeReplenish() {
+  showReplenishDialog.value = false
+  selectedAlert.value = null
+}
+
+// 方式 A：从其他门店调货到本仓库
+async function replenByTransfer() {
+  const a = selectedAlert.value
+  if (!a) return
+  // 预填数据：通过 router query 让 TransferCreate 接收
+  const payload = encodeURIComponent(JSON.stringify({
+    to_warehouse_id: a.warehouse_id,
+    items: [{ product_id: a.product_id, quantity: a.suggest_qty }],
+    note: `补仓预警 #${a.id}（${a.product_name} 建议补 ${a.suggest_qty}）`
+  }))
+  closeReplenish()
+  router.push(`/transfer/create?prefill=${payload}`)
+}
+
+// 方式 B：直接入库（自己仓库直接进货）
+async function replenByInbound() {
+  const a = selectedAlert.value
+  if (!a) return
+  const payload = encodeURIComponent(JSON.stringify({
+    warehouse_id: a.warehouse_id,
+    items: [{ product_id: a.product_id, quantity: a.suggest_qty }],
+    note: `补仓预警 #${a.id}（${a.product_name} 建议补 ${a.suggest_qty}）`
+  }))
+  closeReplenish()
+  // 注意：路由 path 是 'in-out'（中横线），且没有 /create 子路由
+  // 预填由 InOutList.vue onMounted 里的 route.query.prefill 消费
+  router.push(`/in-out?prefill=${payload}&type=inbound`)
+}
+
+// 方式 C：仅标记已处理
+async function replenishOnly() {
+  closeReplenish()
+  await markHandled(selectedAlert.value.id)
 }
 </script>
 
@@ -86,7 +136,7 @@ async function markHandled(id) {
               <th class="px-4 py-3 font-medium">{{ $t('common.productName') }}</th>
               <th class="px-4 py-3 font-medium">{{ $t('inout.warehouse') }}</th>
               <th class="px-4 py-3 font-medium text-center">{{ $t('warehouse.currentStock') }}</th>
-              <th class="px-4 py-3 font-medium text-center">{{ $t('alert.safeStockLine') }}</th>
+              <th class="px-4 py-3 font-medium text-center">{{ $t('alert.alertStockLine') }}</th>
               <th class="px-4 py-3 font-medium text-center">{{ $t('alert.suggestReplenish') }}</th>
               <th class="px-4 py-3 font-medium text-center">{{ $t('alert.level') }}</th>
               <th class="px-4 py-3 font-medium">{{ $t('alert.alertTime') }}</th>
@@ -100,7 +150,7 @@ async function markHandled(id) {
               <td class="px-4 py-3 font-medium text-text-primary">{{ alert.product_name }}</td>
               <td class="px-4 py-3 text-text-secondary">{{ alert.warehouse_name }}</td>
               <td class="px-4 py-3 text-center font-bold text-danger">{{ alert.current_stock }}</td>
-              <td class="px-4 py-3 text-center text-text-secondary">{{ alert.safe_stock }}</td>
+              <td class="px-4 py-3 text-center text-text-secondary">{{ alert.alert_stock }}</td>
               <td class="px-4 py-3 text-center text-primary font-medium">{{ alert.suggest_qty }}</td>
               <td class="px-4 py-3 text-center">
                 <StatusTag :type="alert.level === 'critical' ? 'danger' : 'warning'" :text="alert.level === 'critical' ? $t('alert.critical') : $t('alert.general')" />
@@ -109,8 +159,9 @@ async function markHandled(id) {
               <td class="px-4 py-3 text-center">
                 <StatusTag :type="alert.handled ? 'success' : 'info'" :text="alert.handled ? $t('alert.handled') : $t('alert.unhandled')" />
               </td>
-              <td class="px-4 py-3 text-right">
-                <button v-if="!alert.handled" @click="markHandled(alert.id)" class="text-primary hover:text-primary-hover text-xs font-medium">{{ $t('alert.replenish') }}</button>
+              <td class="px-4 py-3 text-right space-x-2">
+                <button v-if="!alert.handled" @click="openReplenish(alert)" class="text-primary hover:text-primary-hover text-xs font-medium">{{ $t('alert.replenish') }}</button>
+                <button v-if="!alert.handled" @click="markHandled(alert.id)" class="text-text-secondary hover:text-text-primary text-xs">标记已处理</button>
                 <span v-else class="text-text-secondary text-xs">-</span>
               </td>
             </tr>
@@ -119,6 +170,43 @@ async function markHandled(id) {
       </div>
       <div class="px-4 py-3 border-t border-gray-100 text-sm text-text-secondary">
         {{ filteredAlerts.length }} {{ $t('common.records') }}
+      </div>
+    </div>
+
+    <!-- 补仓方式选择弹窗 -->
+    <div v-if="showReplenishDialog && selectedAlert" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click.self="closeReplenish">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+        <h3 class="text-lg font-bold text-text-primary mb-2">📦 补仓方案</h3>
+        <p class="text-sm text-text-secondary mb-4">
+          <strong>{{ selectedAlert.product_name }}</strong>（{{ selectedAlert.warehouse_name }}）<br>
+          当前库存 <span class="text-danger font-bold">{{ selectedAlert.current_stock }}</span>，
+          安全线 <span class="text-warning font-bold">{{ selectedAlert.alert_stock }}</span>，
+          建议补 <span class="text-primary font-bold">{{ selectedAlert.suggest_qty }}</span>
+        </p>
+        <div class="space-y-3">
+          <button @click="replenByTransfer" class="w-full flex items-center gap-3 p-4 border-2 border-primary rounded-lg hover:bg-primary/5 transition-colors text-left">
+            <span class="material-symbols-outlined text-primary text-3xl">local_shipping</span>
+            <div class="flex-1">
+              <div class="font-medium text-text-primary">从其他门店调货</div>
+              <div class="text-xs text-text-secondary mt-1">跳转调货创建页面，预填商品和数量</div>
+            </div>
+          </button>
+          <button @click="replenByInbound" class="w-full flex items-center gap-3 p-4 border-2 border-success rounded-lg hover:bg-success/5 transition-colors text-left">
+            <span class="material-symbols-outlined text-success text-3xl">inventory_2</span>
+            <div class="flex-1">
+              <div class="font-medium text-text-primary">直接入库</div>
+              <div class="text-xs text-text-secondary mt-1">跳转入库页面，从供货商采购</div>
+            </div>
+          </button>
+          <button @click="replenishOnly" class="w-full flex items-center gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-left">
+            <span class="material-symbols-outlined text-text-secondary text-3xl">check_circle</span>
+            <div class="flex-1">
+              <div class="font-medium text-text-secondary">仅标记已处理</div>
+              <div class="text-xs text-text-secondary mt-1">不进行实际补货操作</div>
+            </div>
+          </button>
+        </div>
+        <button @click="closeReplenish" class="mt-4 w-full px-4 py-2 text-sm text-text-secondary hover:text-text-primary">取消</button>
       </div>
     </div>
   </div>

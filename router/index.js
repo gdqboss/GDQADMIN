@@ -72,6 +72,8 @@ const routes = [
 
       // 库存
       { path: 'in-out', name: 'InOut', component: lazyLoad(() => import('../views/inventory/InOutList.vue')), meta: { title: '出入库管理', parent: '库存管理', permission: 'inventory:inout' } },
+      { path: 'stock', name: 'StockManage', component: lazyLoad(() => import('../views/inventory/StockManage.vue')), meta: { title: '库存管理', parent: '库存管理', permission: 'stock:read' } },
+      { path: 'stocktake', name: 'Stocktake', component: lazyLoad(() => import('../views/inventory/Stocktake.vue')), meta: { title: '库存盘点', parent: '库存管理', permission: 'stocktake:run' } },
       { path: 'warehouses', name: 'Warehouses', component: lazyLoad(() => import('../views/warehouse/WarehouseList.vue')), meta: { title: '仓库列表', parent: '仓库管理', permission: 'warehouse:write' } },
       { path: 'warehouses/:id', name: 'WarehouseDetail', component: lazyLoad(() => import('../views/warehouse/WarehouseDetail.vue')), meta: { title: '仓库详情', parent: '仓库管理', permission: 'warehouse:read' } },
       { path: 'alerts', name: 'StockAlerts', component: lazyLoad(() => import('../views/alerts/StockAlerts.vue')), meta: { title: '库存预警', parent: '库存管理', permission: 'stock:read' } },
