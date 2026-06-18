@@ -949,13 +949,22 @@ async function handleDeleteRecord() {
                 <label class="block text-sm font-medium text-text-primary mb-1">
                   {{ $t('inout.warehouse') }} <span class="text-danger">*</span>
                 </label>
-                <select
+                <el-select
                   v-model="form.warehouse_id"
-                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+                  :placeholder="$t('inout.selectWarehouse')"
+                  filterable
+                  clearable
+                  class="w-full"
+                  :empty-values="[null, undefined, '']"
+                  value-key="id"
                 >
-                  <option value="">{{ $t('inout.selectWarehouse') }}</option>
-                  <option v-for="wh in warehouses" :key="wh.id" :value="wh.id">{{ wh.name }}</option>
-                </select>
+                  <el-option
+                    v-for="wh in warehouses"
+                    :key="wh.id"
+                    :label="wh.name"
+                    :value="wh.id"
+                  />
+                </el-select>
               </div>
               <div>
                 <label class="block text-sm font-medium text-text-primary mb-1">{{ partyLabel }}</label>
@@ -989,8 +998,28 @@ async function handleDeleteRecord() {
                   class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
                 />
                 <span class="text-sm font-medium text-text-primary">{{ $t('inout.batchOutboundMode') }}</span>
+                <el-tooltip
+                  placement="right"
+                  :show-after="100"
+                  popper-class="batch-mode-tip"
+                >
+                  <template #content>
+                    <div class="text-left leading-relaxed">
+                      <div class="font-semibold mb-1">{{ $t('inout.batchOutboundTooltipTitle') }}</div>
+                      <ol class="text-xs space-y-1 pl-4 list-decimal">
+                        <li>{{ $t('inout.batchOutboundStep1') }}</li>
+                        <li>{{ $t('inout.batchOutboundStep2') }}</li>
+                        <li>{{ $t('inout.batchOutboundStep3') }}</li>
+                        <li>{{ $t('inout.batchOutboundStep4') }}</li>
+                      </ol>
+                      <div class="text-xs text-yellow-200 mt-2">
+                        {{ $t('inout.batchOutboundWarning') }}
+                      </div>
+                    </div>
+                  </template>
+                  <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-200 text-blue-700 text-xs font-bold cursor-help hover:bg-blue-300">?</span>
+                </el-tooltip>
               </label>
-              <span class="text-xs text-text-secondary">{{ $t('inout.batchOutboundHint') }}</span>
             </div>
 
             <!-- Batch Mode Fields -->
