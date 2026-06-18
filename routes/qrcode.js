@@ -883,9 +883,12 @@ router.get('/warehouse-products/:warehouseId', async (req, res, next) => {
     const { warehouseId } = req.params
     const [rows] = await pool.query(
       `SELECT DISTINCT ws.product_id, ws.sku_id, ws.quantity,
-        p.name, p.sku, p.unit, p.category, p.image_main
+        p.name, p.sku, p.unit, p.category, p.image_main,
+        ps.specs,
+        COALESCE(ps.sku, '') as sku_value
       FROM warehouse_stock ws
       JOIN products p ON ws.product_id = p.id
+      LEFT JOIN product_skus ps ON ws.sku_id = ps.id
       WHERE ws.warehouse_id = ?
       ORDER BY p.name ASC`,
       [warehouseId]
