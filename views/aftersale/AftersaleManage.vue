@@ -189,6 +189,23 @@ function removeChannelQr(channel) {
   channelQrcodes.value[channel] = ''
 }
 
+// ─── Delete ──────────────────────────────────────────────────────────────────
+async function handleDelete(record) {
+  if (!confirm(`确认删除工单 ${record.ticket_no || '#' + record.id}？\n此操作不可恢复，关联的聊天记录也会被清空。`)) return
+  try {
+    const res = await api.delete(`/aftersales/${record.id}`)
+    if (res.code === 0) {
+      await fetchRecords()
+      await fetchStats()
+    } else {
+      alert('删除失败：' + (res.message || '未知错误'))
+    }
+  } catch (e) {
+    console.error('删除售后记录失败:', e)
+    alert('删除失败，请重试')
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatTime(dt) {
   if (!dt) return '-'
@@ -337,7 +354,10 @@ const priorityConfig = {
               <td class="px-4 py-3 text-text-secondary text-sm">{{ r.assigned_to_name || $t('aftersale.unassigned') }}</td>
               <td class="px-4 py-3 text-xs text-text-secondary whitespace-nowrap">{{ formatTime(r.responded_at) }}</td>
               <td class="px-4 py-3 text-right">
-                <button @click="openDetail(r)" class="text-primary hover:text-primary-hover text-xs font-medium">{{ $t('aftersale.handle') }}</button>
+                <div class="flex items-center justify-end gap-2">
+                  <button @click="openDetail(r)" class="text-primary hover:text-primary-hover text-xs font-medium">{{ $t('aftersale.handle') }}</button>
+                  <button @click="handleDelete(r)" class="text-danger hover:text-danger/80 text-xs font-medium">{{ $t('common.delete') }}</button>
+                </div>
               </td>
             </tr>
           </tbody>
