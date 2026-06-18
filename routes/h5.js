@@ -42,18 +42,15 @@ const router = Router()
 
 const JWT_SECRET = process.env.JWT_SECRET
 
-// POST /api/h5/register - Role-based registration with SMS verification
+// POST /api/h5/register - 手机号+验证码注册（暂不验证真实短信，验证码直接返回给前端）
 router.post('/register', async (req, res, next) => {
   try {
-    const { name, phone, password, code, invite_code, role = 'customer' } = req.body
-    if (!phone || !password || !code) {
-      return res.status(400).json({ code: 400, message: '手机号、密码和验证码必填' })
+    const { name, phone, code, invite_code, role = 'customer' } = req.body
+    if (!phone || !code) {
+      return res.status(400).json({ code: 400, message: '手机号和验证码必填' })
     }
     if (!/^1[3-9]\d{9}$/.test(phone)) {
       return res.status(400).json({ code: 400, message: '手机号格式不正确' })
-    }
-    if (password.length < 6) {
-      return res.status(400).json({ code: 400, message: '密码至少6位' })
     }
 
     // 验证短信验证码
@@ -116,12 +113,31 @@ router.post('/register', async (req, res, next) => {
       if (recentScan?.referrer_h5_user_id) parent_id = recentScan.referrer_h5_user_id
     }
 
-    const hash = await bcrypt.hash(password, 10)
+    // 生成随机密码（暂不启用密码登录，但数据库需要填）
+    const randomPwd = Math.random().toString(36).slice(2, 10)
+    const hash = await bcrypt.hash(randomPwd, 10)
     const [result] = await pool.query(
       'INSERT INTO h5_users (name, phone, password, parent_id, role) VALUES (?,?,?,?,?)',
       [name || phone, phone, hash, parent_id, role]
     )
-    res.json({ code: 0, data: { id: result.insertId }, message: '注册成功' })
+
+    // 注册成功后自动生成登录 token 返回
+    const token = jwt.sign(
+      { id: result.insertId, phone, name: name || phone, role },
+      JWT_SECRET,
+      { expiresIn: '365d' }
+    )
+    res.json({
+      code: 0,
+      data: {
+        token,
+        id: result.insertId,
+        name: name || phone,
+        phone,
+        role
+      },
+      message: '注册成功'
+    })
   } catch (err) { next(err) }
 })
 
@@ -152,13 +168,8 @@ router.post('/send-sms', async (req, res, next) => {
       [phone, code, expiresAt, ip]
     )
 
-    // 发送短信
-    const sent = await sendSmsCode(phone, code)
-    if (!sent) {
-      return res.status(500).json({ code: 500, message: '短信发送失败，请稍后重试' })
-    }
-
-    res.json({ code: 0, data: null, message: '验证码已发送' })
+    // 发送短信（暂不依赖真实短信，验证码直接返回给前端）
+    res.json({ code: 0, data: { code }, message: '验证码已发送' })
   } catch (err) { next(err) }
 })
 
@@ -190,8 +201,35 @@ router.post('/login-sms', async (req, res, next) => {
     const [[user]] = await pool.query('SELECT * FROM h5_users WHERE phone = ?', [phone])
 
     if (!user) {
-      // 用户不存在，返回错误，要求先注册
-      return res.status(404).json({ code: 404, message: '该手机号未注册，请先注册' })
+      // 用户不存在 → 自动注册
+      const randomPwd = Math.random().toString(36).slice(2, 10)
+      const hash = await bcrypt.hash(randomPwd, 10)
+      const [result] = await pool.query(
+        'INSERT INTO h5_users (name, phone, password, role) VALUES (?,?,?,?)',
+        [phone, phone, hash, 'customer']
+      )
+
+      // 标记验证码为已使用
+      await pool.query('UPDATE sms_codes SET used = 1 WHERE id = ?', [smsCode.id])
+
+      // 生成 token
+      const token = jwt.sign(
+        { id: result.insertId, phone, name: phone, role: 'customer' },
+        JWT_SECRET,
+        { expiresIn: '365d' }
+      )
+
+      return res.json({
+        code: 0,
+        data: {
+          token,
+          id: result.insertId,
+          name: phone,
+          phone,
+          role: 'customer'
+        },
+        message: '注册成功'
+      })
     }
 
     if (user.status === 'disabled') {
