@@ -114,7 +114,7 @@ router.post('/batch', async (req, res, next) => {
         throw err
       }
       const filePath = path.join(dir, `${code}.png`)
-      const scanUrl = `${process.env.SCAN_BASE_URL || 'https://claw.gdqshop.cn'}/scan/${code}`
+      const scanUrl = `${process.env.SCAN_BASE_URL || 'https://wecom.gdqshop.cn'}/#/scan/${code}`
       await QRCode.toFile(filePath, scanUrl, { width: 300, margin: 2 })
       codes.push({ code, image_url: `/uploads/qrcodes/${code}.png` })
     }
@@ -882,13 +882,15 @@ router.get('/warehouse-products/:warehouseId', async (req, res, next) => {
   try {
     const { warehouseId } = req.params
     const [rows] = await pool.query(
-      `SELECT DISTINCT ws.product_id, ws.sku_id, ws.quantity,
+      `SELECT DISTINCT ws.product_id, 
+        COALESCE(ws.sku_id, ps.id) as sku_id,
+        ws.quantity,
         p.name, p.sku, p.unit, p.category, p.image_main,
-        ps.specs,
+        COALESCE(ps.specs, '{}') as specs,
         COALESCE(ps.sku, '') as sku_value
       FROM warehouse_stock ws
       JOIN products p ON ws.product_id = p.id
-      LEFT JOIN product_skus ps ON ws.sku_id = ps.id
+      LEFT JOIN product_skus ps ON ws.product_id = ps.product_id
       WHERE ws.warehouse_id = ?
       ORDER BY p.name ASC`,
       [warehouseId]

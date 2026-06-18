@@ -336,8 +336,9 @@ app.post('/api/wecom/callback', express.text({ type: 'text/xml' }), async (req, 
 app.get('/api/scan/:code', async (req, res, next) => {
   try {
     const [[qr]] = await pool.query(
-      `SELECT q.code, q.status, q.warranty_end, q.after_sale_contact, q.scan_count,
-        p.name as product_name, p.sku, p.spec, p.category, p.image_main, p.external_links
+      `SELECT q.id, q.code, q.status, q.warranty_end, q.after_sale_contact, q.scan_count,
+        p.name as product_name, p.sku, p.spec, p.category, p.image_main, p.external_links,
+        q.group_qr_url, q.group_qr_type
        FROM qrcodes q
        LEFT JOIN products p ON q.product_id = p.id
        WHERE q.code = ?`,
