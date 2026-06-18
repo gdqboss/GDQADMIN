@@ -66,6 +66,21 @@ function viewDetail(id) {
   router.push(`/transfer/${id}`)
 }
 
+function editTransfer(id) {
+  router.push(`/transfer/create?id=${id}`)
+}
+
+async function deleteTransfer(transfer) {
+  if (!confirm(`确定删除调货单 ${transfer.record_no}？`)) return
+  const res = await api.delete(`/transfer/${transfer.id}`)
+  if (res.code === 0) {
+    alert(t('common.deleted') || '删除成功')
+    fetchTransfers()
+  } else {
+    alert(res.message || '删除失败')
+  }
+}
+
 function createTransfer() {
   router.push('/transfer/create')
 }
@@ -141,9 +156,17 @@ function createTransfer() {
               {{ new Date(transfer.created_at).toLocaleString() }}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm">
-              <button @click="viewDetail(transfer.id)" class="text-primary hover:text-primary-dark">
+              <button @click="viewDetail(transfer.id)" class="text-primary hover:text-primary-dark mr-3">
                 {{ t('common.view') }}
               </button>
+              <template v-if="transfer.status === 'pending'">
+                <button @click="editTransfer(transfer.id)" class="text-blue-600 hover:text-blue-800 mr-3">
+                  {{ t('common.edit') || '编辑' }}
+                </button>
+                <button @click="deleteTransfer(transfer)" class="text-red-600 hover:text-red-800">
+                  {{ t('common.delete') || '删除' }}
+                </button>
+              </template>
             </td>
           </tr>
         </tbody>
