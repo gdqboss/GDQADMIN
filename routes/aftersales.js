@@ -127,6 +127,21 @@ router.put('/:id', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// DELETE /api/aftersales/:id — 删除售后记录
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const [[record]] = await pool.query('SELECT id FROM after_sale_records WHERE id = ?', [req.params.id])
+    if (!record) return res.status(404).json({ code: 404, message: '记录不存在' })
+
+    // 先删除关联的聊天消息（外键约束）
+    await pool.query('DELETE FROM aftersale_messages WHERE aftersale_id = ?', [req.params.id])
+    // 再删除售后记录本身
+    await pool.query('DELETE FROM after_sale_records WHERE id = ?', [req.params.id])
+
+    res.json({ code: 0, message: '删除成功' })
+  } catch (err) { next(err) }
+})
+
 // ─── Chat APIs ──────────────────────────────────────────────────────────────
 
 // GET /api/aftersales/:id/messages — 获取工单聊天记录
