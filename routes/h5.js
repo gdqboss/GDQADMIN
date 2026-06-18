@@ -42,33 +42,18 @@ const router = Router()
 
 const JWT_SECRET = process.env.JWT_SECRET
 
-// POST /api/h5/register - 手机号+验证码注册（暂不验证真实短信，验证码直接返回给前端）
+// POST /api/h5/register - 手机号+密码注册
 router.post('/register', async (req, res, next) => {
   try {
-    const { name, phone, code, invite_code, role = 'customer' } = req.body
-    if (!phone || !code) {
-      return res.status(400).json({ code: 400, message: '手机号和验证码必填' })
+    const { name, phone, password, invite_code, role = 'customer' } = req.body
+    if (!phone || !password) {
+      return res.status(400).json({ code: 400, message: '手机号和密码必填' })
     }
     if (!/^1[3-9]\d{9}$/.test(phone)) {
       return res.status(400).json({ code: 400, message: '手机号格式不正确' })
     }
-
-    // 验证短信验证码
-    const [[smsCode]] = await pool.query(
-      'SELECT id, code, used FROM sms_codes WHERE phone = ? AND expires_at > NOW() ORDER BY created_at DESC LIMIT 1',
-      [phone]
-    )
-
-    if (!smsCode) {
-      return res.status(400).json({ code: 400, message: '验证码不存在或已过期' })
-    }
-
-    if (smsCode.used) {
-      return res.status(400).json({ code: 400, message: '验证码已使用' })
-    }
-
-    if (smsCode.code !== code) {
-      return res.status(400).json({ code: 400, message: '验证码错误' })
+    if (password.length < 6) {
+      return res.status(400).json({ code: 400, message: '密码至少6位' })
     }
 
     // 检查手机号是否已注册
@@ -82,9 +67,6 @@ router.post('/register', async (req, res, next) => {
     if (!roleExists) {
       return res.status(400).json({ code: 400, message: '角色不存在' })
     }
-
-    // 标记验证码为已使用
-    await pool.query('UPDATE sms_codes SET used = 1 WHERE id = ?', [smsCode.id])
 
     let parent_id = null
 
@@ -113,9 +95,8 @@ router.post('/register', async (req, res, next) => {
       if (recentScan?.referrer_h5_user_id) parent_id = recentScan.referrer_h5_user_id
     }
 
-    // 生成随机密码（暂不启用密码登录，但数据库需要填）
-    const randomPwd = Math.random().toString(36).slice(2, 10)
-    const hash = await bcrypt.hash(randomPwd, 10)
+    // 用用户输入的密码加密存储
+    const hash = await bcrypt.hash(password, 10)
     const [result] = await pool.query(
       'INSERT INTO h5_users (name, phone, password, parent_id, role) VALUES (?,?,?,?,?)',
       [name || phone, phone, hash, parent_id, role]
@@ -201,35 +182,8 @@ router.post('/login-sms', async (req, res, next) => {
     const [[user]] = await pool.query('SELECT * FROM h5_users WHERE phone = ?', [phone])
 
     if (!user) {
-      // 用户不存在 → 自动注册
-      const randomPwd = Math.random().toString(36).slice(2, 10)
-      const hash = await bcrypt.hash(randomPwd, 10)
-      const [result] = await pool.query(
-        'INSERT INTO h5_users (name, phone, password, role) VALUES (?,?,?,?)',
-        [phone, phone, hash, 'customer']
-      )
-
-      // 标记验证码为已使用
-      await pool.query('UPDATE sms_codes SET used = 1 WHERE id = ?', [smsCode.id])
-
-      // 生成 token
-      const token = jwt.sign(
-        { id: result.insertId, phone, name: phone, role: 'customer' },
-        JWT_SECRET,
-        { expiresIn: '365d' }
-      )
-
-      return res.json({
-        code: 0,
-        data: {
-          token,
-          id: result.insertId,
-          name: phone,
-          phone,
-          role: 'customer'
-        },
-        message: '注册成功'
-      })
+      // 用户不存在，请先去注册
+      return res.status(404).json({ code: 404, message: '该手机号未注册，请先去注册' })
     }
 
     if (user.status === 'disabled') {
