@@ -1163,6 +1163,8 @@ export default {
     productCol: '商品',
     qtyCol: '数量',
     qrcodeCol: '二维码',
+    alertStockCol: '库存预警值',
+    alertStockHint: '0=不预警（占位可后续调整）',
     itemDetails: '商品明细',
     addProduct: '添加商品',
     selectProduct: '选择商品',

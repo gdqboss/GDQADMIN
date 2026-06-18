@@ -1114,6 +1114,8 @@ export default {
     productCol: 'Product',
     qtyCol: 'Quantity',
     qrcodeCol: 'QR Code',
+    alertStockCol: 'Alert Threshold',
+    alertStockHint: '0=no alert (placeholder, adjustable later)',
     itemDetails: 'Item Details',
     addProduct: 'Add Product',
     selectProduct: 'Select product',

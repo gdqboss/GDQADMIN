@@ -74,7 +74,7 @@ const emptyForm = () => ({
   warehouse_id: '',
   party: '',   // supplier / customer / source depending on tab
   remark: '',
-  items: [{ product_id: '', sku_id: '', quantity: 1, qrcode_id: '' }],
+  items: [{ product_id: '', sku_id: '', quantity: 1, qrcode_id: '', alert_stock: 0 }],
 })
 const form = ref(emptyForm())
 
@@ -377,7 +377,8 @@ onMounted(async () => {
           product_id: it.product_id,
           sku_id: '',
           quantity: it.quantity || 1,
-          qrcode_id: ''
+          qrcode_id: '',
+          alert_stock: it.alert_stock ?? 0
         }))
       }
     } catch (e) {
@@ -456,7 +457,7 @@ function closeForm() {
 }
 
 function addItem() {
-  form.value.items.push({ product_id: '', sku_id: '', quantity: 1, qrcode_id: '' })
+  form.value.items.push({ product_id: '', sku_id: '', quantity: 1, qrcode_id: '', alert_stock: 0 })
 }
 
 function removeItem(index) {
@@ -534,6 +535,10 @@ async function submitForm() {
         items: validItems.map(i => {
           const item = { product_id: i.product_id, quantity: Number(i.quantity) }
           if (i.sku_id) item.sku_id = i.sku_id
+          // 入库时同步传 alert_stock（>0 才传，0=不预警表示不修改）
+          if (activeTab.value === 'inbound' && Number(i.alert_stock) > 0) {
+            item.alert_stock = Number(i.alert_stock)
+          }
           if (activeTab.value === 'outbound' && needsQrcode(i) && i.qrcode_id) {
             item.qrcode_id = i.qrcode_id
           }
@@ -1106,6 +1111,10 @@ async function handleDeleteRecord() {
                       <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.productCol') }}</th>
                       <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.skuCol') }}</th>
                       <th class="px-3 py-2 text-center text-xs font-medium text-text-secondary w-24">{{ $t('inout.qtyCol') }}</th>
+                      <th v-if="activeTab === 'inbound'" class="px-3 py-2 text-center text-xs font-medium text-text-secondary w-32">
+                        {{ $t('inout.alertStockCol') }}
+                        <span class="text-text-secondary font-normal">({{ $t('inout.alertStockHint') }})</span>
+                      </th>
                       <th v-if="activeTab === 'outbound'" class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.qrCodeCol') }}</th>
                       <th class="px-3 py-2 text-center text-xs font-medium text-text-secondary w-10"></th>
                     </tr>
@@ -1163,6 +1172,17 @@ async function handleDeleteRecord() {
                           v-model.number="item.quantity"
                           type="number"
                           min="1"
+                          class="w-full border border-gray-200 rounded px-2 py-1 text-sm text-center focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+                        />
+                      </td>
+                      <!-- Alert Stock (inbound only) -->
+                      <td v-if="activeTab === 'inbound'" class="px-3 py-2">
+                        <input
+                          v-model.number="item.alert_stock"
+                          type="number"
+                          min="0"
+                          placeholder="0"
+                          :title="$t('inout.alertStockHint')"
                           class="w-full border border-gray-200 rounded px-2 py-1 text-sm text-center focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
                         />
                       </td>

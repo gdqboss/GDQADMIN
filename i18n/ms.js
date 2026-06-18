@@ -1034,6 +1034,8 @@ export default {
         productCol: 'Produk',
         qtyCol: 'Kuantiti',
         qrcodeCol: 'Kod QR',
+        alertStockCol: 'Ambang Amaran',
+        alertStockHint: '0=tidak amaran (boleh laras kemudian)',
         itemDetails: 'Item Details',
         addProduct: 'Tambah Produk',
         selectProduct: 'Select Product',

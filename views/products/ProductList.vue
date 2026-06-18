@@ -212,8 +212,6 @@ const emptyForm = () => ({
   supplier: '',
   purchase_price: '',
   sale_price: '',
-  stock: 0,
-  alert_stock: 0,
   require_qrcode: false,
   status: 'active',
   image_main: '',
@@ -459,8 +457,6 @@ async function openEdit(p) {
     supplier: p.supplier || '',
     purchase_price: p.purchase_price || '',
     sale_price: p.sale_price || '',
-    stock: p.stock ?? 0,
-    alert_stock: p.alert_stock ?? 0,
     require_qrcode: !!p.require_qrcode,
     status: p.status || 'active',
     image_main: p.image_main || '',
@@ -1278,20 +1274,6 @@ async function deleteCategory(cat) {
                 <div>
                   <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('product.salePriceLabel') }}</label>
                   <input v-model="form.sale_price" type="number" min="0" step="0.01" placeholder="0.00" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
-                </div>
-              </div>
-
-              <div class="grid grid-cols-2 gap-4">
-                <div>
-                  <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('product.stock') }}</label>
-                  <input v-model="form.stock" type="number" min="0" step="1" placeholder="0" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-text-primary mb-1">
-                    {{ $t('product.alertStock') }}
-                    <span class="text-xs text-text-secondary ml-1">（{{ $t('product.alertStockHint') }}）</span>
-                  </label>
-                  <input v-model="form.alert_stock" type="number" min="0" step="1" :placeholder="$t('product.alertStockHint')" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
                 </div>
               </div>
 
