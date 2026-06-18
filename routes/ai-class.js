@@ -371,7 +371,7 @@ router.get('/conversations', auth, async (req, res, next) => {
 // POST /api/ai-class/chat - 发送消息（支持RAG知识检索 + Function Calling）
 router.post('/chat', auth, async (req, res, next) => {
   try {
-    const { message, session_id, stream } = req.body
+    const { message, session_id, stream, context } = req.body
     const userId = req.user.id
 
     if (!message || message.trim() === '') {
@@ -494,11 +494,27 @@ router.post('/chat', auth, async (req, res, next) => {
     const botName = botNameSetting?.value || '小智'
 
     // 5. 获取用户权限（用于AI智能过滤）
+    // permissions 可能是 JSON 数组字符串，也可能是逗号分隔，或单字符串如 "admin"
     const [[userRow]] = await pool.query(
-      'SELECT name, permissions FROM users WHERE id = ?',
+      'SELECT name, role, permissions FROM users WHERE id = ?',
       [userId]
     )
-    const userPermissions = userRow?.permissions ? JSON.parse(userRow.permissions) : []
+    let userPermissions = []
+    if (userRow?.permissions) {
+      const permStr = String(userRow.permissions).trim()
+      // 先试 JSON.parse（JSON 数组）
+      if (permStr.startsWith('[') || permStr.startsWith('{')) {
+        try { userPermissions = JSON.parse(permStr) } catch (e) {}
+      }
+      // 字符串 'admin' 或 'admin,xxx' 走 role short-cut
+      if (userPermissions.length === 0 && userRow.role === 'admin') {
+        userPermissions = ['admin']
+      } else if (permStr.includes(',')) {
+        userPermissions = permStr.split(',').map(s => s.trim()).filter(Boolean)
+      } else if (permStr && !permStr.startsWith('[')) {
+        userPermissions = [permStr]
+      }
+    }
 
     // 4.5 加载默认系统知识库（system/business/table/glossary 4 类）
     // 这些知识不进 LIKE 检索，直接拼到 System Prompt，让 AI 立即了解彩美特整套系统
@@ -555,7 +571,7 @@ router.post('/chat', auth, async (req, res, next) => {
 - 像人写的报告，禁止一坨文字 / 流水账 / 原始 JSON
 - 禁止输出内部思考过程（"我需要/让我/首先/其次"）
 - 不知道就说"我不确定，建议联系管理员或查 X 模块"
-${permNote}${userIdentityContext}${systemKnowledgeContext}${memoryContext}${ragContext}${realtimeContext}`
+${permNote}${userIdentityContext}${systemKnowledgeContext}${memoryContext}${ragContext}${realtimeContext}${context || ''}`
 
     // 6. 构建消息数组（真正的多轮上下文）
     const messages = [
@@ -846,7 +862,7 @@ ${permNote}${userIdentityContext}${systemKnowledgeContext}${memoryContext}${ragC
           try {
             switch (fnName) {
               case 'get_products': {
-                let query = 'SELECT id, name, category, sale_price, purchase_price, unit, stock, safe_stock, status FROM products WHERE 1=1'
+                let query = 'SELECT id, name, category, sale_price, purchase_price, unit, stock, alert_stock, status FROM products WHERE 1=1'
                 const params = []
                 if (fnArgs.keyword) {
                   query += ' AND (name LIKE ? OR sku LIKE ? OR spec LIKE ?)'
@@ -986,15 +1002,15 @@ ${permNote}${userIdentityContext}${systemKnowledgeContext}${memoryContext}${ragC
                   functionResult = JSON.stringify({ error: '您没有权限访问库存数据' })
                   break
                 }
-                // 查找库存低于安全库存的产品（warehouse_stock 汇总 vs products.safe_stock）
+                // 查找库存低于安全库存的产品（warehouse_stock 汇总 vs products.alert_stock）
                 const [rows] = await pool.query(
-                  `SELECT p.id, p.name, p.category, p.safe_stock,
+                  `SELECT p.id, p.name, p.category, p.alert_stock,
                           COALESCE(SUM(ws.quantity), 0) as quantity
                    FROM products p
                    LEFT JOIN warehouse_stock ws ON ws.product_id = p.id
                    WHERE p.status = 'active' OR p.status IS NULL
-                   GROUP BY p.id, p.name, p.category, p.safe_stock
-                   HAVING quantity < COALESCE(p.safe_stock, 10)
+                   GROUP BY p.id, p.name, p.category, p.alert_stock
+                   HAVING quantity < COALESCE(p.alert_stock, 10)
                    ORDER BY quantity ASC LIMIT 20`,
                   []
                 )
