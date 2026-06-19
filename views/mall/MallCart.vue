@@ -1,58 +1,91 @@
 <template>
-  <div class="pb-20">
-    <div class="flex items-center justify-between p-4 border-b bg-white sticky top-0 z-10">
-      <h1 class="font-bold text-base">购物车</h1>
-      <button v-if="items.length" @click="clearCart" class="text-sm text-gray-500">清空</button>
+  <div class="pb-4">
+    <!-- 顶栏 -->
+    <div class="flex items-center justify-between mb-4">
+      <h1 class="font-bold text-base text-gray-800 flex items-center gap-2">
+        <span class="material-symbols-outlined text-xl text-primary" style="font-variation-settings: 'FILL' 1">shopping_cart</span>
+        购物车
+      </h1>
+      <button v-if="items.length" @click="clearCart" class="text-xs text-gray-400 hover:text-red-500 transition-colors flex items-center gap-1">
+        <span class="material-symbols-outlined text-base">delete_sweep</span>
+        清空
+      </button>
     </div>
 
-    <div v-if="loading" class="text-center py-20 text-gray-400">
-      <span class="material-symbols-outlined text-5xl animate-spin">progress_activity</span>
-      <p class="mt-2">加载中...</p>
+    <!-- 加载中 -->
+    <div v-if="loading" class="text-center py-16 text-gray-400">
+      <div class="flex justify-center gap-1">
+        <span class="w-2 h-2 bg-primary rounded-full animate-bounce" style="animation-delay:0ms"></span>
+        <span class="w-2 h-2 bg-primary rounded-full animate-bounce" style="animation-delay:150ms"></span>
+        <span class="w-2 h-2 bg-primary rounded-full animate-bounce" style="animation-delay:300ms"></span>
+      </div>
     </div>
 
-    <div v-else-if="!items.length" class="text-center py-20">
-      <span class="material-symbols-outlined text-5xl text-gray-300">shopping_cart</span>
-      <p class="mt-3 text-gray-400">购物车是空的</p>
-      <button @click="$router.push('/mall')" class="mt-4 px-6 py-2 bg-blue-600 text-white rounded-full text-sm">
+    <!-- 空状态 -->
+    <div v-else-if="!items.length" class="flex flex-col items-center py-20 text-gray-300">
+      <span class="material-symbols-outlined text-6xl mb-4" style="font-variation-settings: 'FILL' 1">shopping_cart</span>
+      <p class="text-sm text-gray-400 mb-6">购物车是空的</p>
+      <button @click="$router.push('/mall')" class="px-8 py-2.5 bg-primary text-white rounded-full text-sm font-medium shadow-sm shadow-primary/20 hover:shadow-md transition-all active:scale-95">
         去逛逛
       </button>
     </div>
 
-    <div v-else>
+    <!-- 购物车列表 -->
+    <div v-else class="space-y-3">
       <div v-for="item in items" :key="item.id"
-        class="flex gap-3 p-4 bg-white border-b border-gray-100">
-        <div class="w-20 h-20 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
-          <img v-if="item.image_main || item.pic" :src="'/' + (item.image_main || item.pic)" class="w-full h-full object-cover" @error="e => e.target.style.display='none'" />
-          <div v-else class="flex items-center justify-center h-full text-gray-300">
-            <span class="material-symbols-outlined text-2xl">image</span>
+        class="flex gap-3 p-3 bg-white rounded-2xl shadow-sm">
+        <div class="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-gray-100"
+          @click="$router.push(`/mall/product/${item.product_id || item.id}`)">
+          <img v-if="item.image_main || item.pic || item.image_url"
+            :src="item.image_main ? '/' + item.image_main : (item.pic ? '/' + item.pic : item.image_url)"
+            class="w-full h-full object-cover"
+            @error="e => { e.target.style.display = 'none' }" />
+          <div v-else class="flex items-center justify-center h-full">
+            <span class="material-symbols-outlined text-3xl text-gray-300">image</span>
           </div>
         </div>
-        <div class="flex-1 flex flex-col justify-between">
-          <p class="text-sm line-clamp-2 leading-tight">{{ item.name }}</p>
-          <div class="flex items-end justify-between mt-1">
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-medium text-gray-800 line-clamp-2 leading-tight cursor-pointer"
+            @click="$router.push(`/mall/product/${item.product_id || item.id}`)">
+            {{ item.name || item.product_name }}
+          </p>
+          <p class="text-xs text-gray-400 mt-1">{{ item.sku_name || '' }}</p>
+          <div class="flex items-center justify-between mt-2">
             <p class="text-red-500 font-bold text-sm">¥{{ item.sale_price || item.price || '--' }}</p>
-            <div class="flex items-center gap-2">
-              <button @click="changeQty(item, -1)" class="w-7 h-7 rounded border border-gray-200 flex items-center justify-center text-gray-500">−</button>
-              <span class="text-sm w-6 text-center">{{ item.quantity || item.qty }}</span>
-              <button @click="changeQty(item, 1)" class="w-7 h-7 rounded border border-gray-200 flex items-center justify-center text-gray-500">+</button>
+            <div class="flex items-center gap-2 bg-gray-100 rounded-full px-1">
+              <button @click="changeQty(item, -1)"
+                class="w-7 h-7 rounded-full flex items-center justify-center text-gray-500 hover:bg-white hover:shadow-sm transition-all active:scale-90">
+                <span class="material-symbols-outlined text-base">remove</span>
+              </button>
+              <span class="w-7 text-center text-sm font-medium text-gray-700">{{ item.quantity || item.qty || 0 }}</span>
+              <button @click="changeQty(item, 1)"
+                class="w-7 h-7 rounded-full flex items-center justify-center text-gray-500 hover:bg-white hover:shadow-sm transition-all active:scale-90">
+                <span class="material-symbols-outlined text-base">add</span>
+              </button>
             </div>
           </div>
         </div>
-        <button @click="removeItem(item.id)" class="text-gray-300 self-start mt-1">
+        <button @click="removeItem(item.id)" class="text-gray-300 self-start mt-1 hover:text-red-400 transition-colors">
           <span class="material-symbols-outlined text-lg">close</span>
         </button>
       </div>
+    </div>
 
-      <!-- Footer summary -->
-      <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4 flex items-center justify-between">
+    <!-- 结算栏 -->
+    <div v-if="items.length" class="fixed bottom-16 left-0 right-0 bg-white/95 backdrop-blur-sm border-t border-gray-100 z-30 px-4 py-3 shadow-[0_-2px_12px_rgba(0,0,0,0.06)] mall-safe-bottom">
+      <div class="flex items-center justify-between mb-2">
         <div>
-          <p class="text-sm text-gray-500">共 {{ totalCount }} 件</p>
-          <p class="text-red-500 font-bold">¥{{ totalPrice }}</p>
+          <p class="text-xs text-gray-400">共 {{ totalCount }} 件</p>
         </div>
-        <button @click="goCheckout" class="px-6 py-2 bg-blue-600 text-white rounded-full text-sm">
-          去结算
-        </button>
+        <div class="text-right">
+          <p class="text-[11px] text-gray-400">合计</p>
+          <p class="text-xl text-red-500 font-bold">¥{{ totalPrice }}</p>
+        </div>
       </div>
+      <button @click="goCheckout"
+        class="w-full py-3 bg-gradient-to-r from-primary to-blue-500 text-white rounded-2xl font-medium text-sm shadow-sm shadow-primary/20 hover:shadow-md transition-all active:scale-[0.98]">
+        去结算
+      </button>
     </div>
   </div>
 </template>
@@ -79,7 +112,6 @@ async function loadCart() {
     const data = await res.json()
     items.value = Array.isArray(data) ? data : (data.list || [])
   } catch (e) {
-    console.error('加载购物车失败', e)
     items.value = []
   } finally {
     loading.value = false
@@ -146,3 +178,9 @@ onUnmounted(() => {
   window.removeEventListener('mall_login_success', onCartUpdate)
 })
 </script>
+
+<style scoped>
+.mall-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+</style>

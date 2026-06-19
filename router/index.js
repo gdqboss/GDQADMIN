@@ -21,6 +21,7 @@ const routes = [
       { path: 'address/edit', name: 'H5AddressEdit', component: lazyLoad(() => import('../views/h5/H5AddressEdit.vue')), meta: { public: true } },
       { path: 'login', name: 'MallLogin', component: lazyLoad(() => import('../views/mall/MallLogin.vue')), meta: { public: true } },
       { path: 'register', name: 'MallRegister', component: lazyLoad(() => import('../views/mall/MallRegister.vue')), meta: { public: true } },
+      { path: 'profile', name: 'MallProfile', component: lazyLoad(() => import('../views/h5/H5Profile.vue')), meta: { public: true } },
       { path: 'score-shop', name: 'ScoreShopHome', component: lazyLoad(() => import('../views/store/ScoreShopHome.vue')), meta: { public: true } },
       { path: 'score-product/:id', name: 'ScoreProductDetail', component: lazyLoad(() => import('../views/store/ScoreProductDetail.vue')), meta: { public: true } },
       { path: 'coupons', name: 'CouponList', component: lazyLoad(() => import('../views/store/CouponList.vue')), meta: { public: true } },

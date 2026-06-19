@@ -11,17 +11,17 @@
 
     <div v-else-if="!userId" class="text-center py-20">
       <p class="text-gray-500">请先登录</p>
-      <button @click="$router.push('/mall/login')" class="mt-3 px-6 py-2 bg-blue-600 text-white rounded-full text-sm">去登录</button>
+      <button @click="$router.push('/mall/login')" class="mt-3 px-6 py-2 bg-primary text-white rounded-full text-sm">去登录</button>
     </div>
 
     <div v-else-if="!orders.length" class="text-center py-20">
       <span class="material-symbols-outlined text-5xl text-gray-300">receipt_long</span>
       <p class="mt-3 text-gray-400">暂无订单</p>
-      <button @click="$router.push('/mall')" class="mt-4 px-6 py-2 bg-blue-600 text-white rounded-full text-sm">去购物</button>
+      <button @click="$router.push('/mall')" class="mt-4 px-6 py-2 bg-primary text-white rounded-full text-sm">去购物</button>
     </div>
 
     <div v-else>
-      <div v-for="order in orders" :key="order.id" class="bg-white mt-2 p-4">
+      <div v-for="order in orders" :key="order.id" class="bg-white rounded-2xl mt-2 p-4 shadow-sm">
         <div class="flex justify-between items-center mb-3">
           <span class="text-xs text-gray-500">{{ formatDate(order.created_at) }}</span>
           <span :class="statusClass(order.status)" class="text-xs px-2 py-1 rounded-full">{{ statusText(order.status) }}</span>
@@ -39,7 +39,7 @@
             <p v-if="order.items.length > 3" class="text-xs text-gray-400">+{{ order.items.length - 3 }}件</p>
           </div>
         </div>
-        <div class="flex justify-between items-center mt-3 pt-3 border-t">
+        <div class="flex justify-between items-center mt-3 pt-3 border-t border-gray-100">
           <p class="text-sm">共{{ order.items ? order.items.length : 0 }}件</p>
           <p class="font-bold text-red-500">¥{{ order.pay_amount || order.total_amount }}</p>
         </div>
