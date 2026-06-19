@@ -139,9 +139,24 @@ async function submitAfterSale() {
       formData.append('images', file)
     }
 
-    const res = await fetch('/api/h5/after-sale', {
+    const headers = {}
+    let endpoint = '/api/h5/after-sale'
+    if (h5Token) {
+      headers['Authorization'] = `Bearer ${h5Token}`
+    } else {
+      // 匿名售后：加 device_id
+      let did = localStorage.getItem('anonymous_device_id')
+      if (!did) {
+        did = 'anon_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8)
+        localStorage.setItem('anonymous_device_id', did)
+      }
+      headers['X-Device-Id'] = did
+      endpoint = '/api/h5/after-sale/anonymous'
+    }
+
+    const res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${h5Token}` },
+      headers,
       body: formData
     })
     const json = await res.json()
@@ -290,25 +305,12 @@ function statusColor(status) {
           </p>
         </div>
 
-        <!-- After sale contact (only for logged-in users) -->
+        <!-- After sale contact -->
         <div v-if="data.after_sale_contact" class="bg-white rounded-xl shadow-sm p-4">
           <h3 class="font-medium text-text-primary text-sm mb-2 flex items-center gap-2">
             <span class="text-base">📞</span> {{ $t('qrcode.afterSaleContact') }}
           </h3>
-          <!-- Show contact only if logged in -->
-          <div v-if="h5User">
-            <p class="text-sm text-text-primary">{{ data.after_sale_contact }}</p>
-          </div>
-          <!-- Prompt to login if not logged in -->
-          <div v-else class="space-y-2">
-            <p class="text-xs text-text-secondary">{{ $t('scan.loginRequired') }}</p>
-            <button
-              @click="goLogin"
-              class="w-full py-2 rounded-lg text-sm font-medium bg-primary hover:bg-primary-hover text-white transition-colors"
-            >
-              {{ $t('scan.loginToView') }}
-            </button>
-          </div>
+          <p class="text-sm text-text-primary">{{ data.after_sale_contact }}</p>
         </div>
 
         <!-- Repair history -->
@@ -360,24 +362,13 @@ function statusColor(status) {
             <h3 class="font-medium text-text-primary text-sm flex items-center gap-2">
               <span class="text-base">🎫</span> {{ $t('scan.applyAfterSale') }}
             </h3>
-            <button v-if="h5User" @click="showAfterSale = !showAfterSale" class="text-xs text-primary">
+            <button @click="showAfterSale = !showAfterSale" class="text-xs text-primary">
               {{ showAfterSale ? $t('common.collapse') : $t('common.expand') }}
             </button>
           </div>
 
-          <!-- Not logged in: prompt to login -->
-          <div v-if="!h5User" class="mt-3">
-            <p class="text-xs text-text-secondary mb-3">{{ $t('scan.loginRequired') }}</p>
-            <button
-              @click="goLogin"
-              class="w-full py-2.5 rounded-lg text-sm font-medium bg-primary hover:bg-primary-hover text-white transition-colors"
-            >
-              {{ $t('scan.loginToApply') }}
-            </button>
-          </div>
-
-          <!-- Logged in: show after-sale form -->
-          <div v-else-if="showAfterSale" class="mt-3 space-y-3">
+          <!-- After-sale form (always accessible) -->
+          <div v-if="showAfterSale" class="mt-3 space-y-3">
             <div>
               <label class="text-xs text-text-secondary mb-1 block">{{ $t('scan.nameOrContact') }}</label>
               <input

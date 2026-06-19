@@ -13,6 +13,19 @@ const props = defineProps({
   h5User: { type: Object, default: null },
 })
 
+// 匿名设备 ID（用于免登录客服）
+const deviceId = ref('')
+onMounted(() => {
+  let did = localStorage.getItem('anonymous_device_id')
+  if (!did) {
+    did = 'anon_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8)
+    localStorage.setItem('anonymous_device_id', did)
+  }
+  deviceId.value = did
+})
+
+const isAnonymous = computed(() => !props.h5Token)
+
 const isOpen = ref(false)
 const messages = ref([])
 const input = ref('')
@@ -34,15 +47,15 @@ function scrollToBottom() {
 watch(() => messages.value.length, scrollToBottom)
 
 async function openChat() {
-  if (!props.h5User) {
-    router.push(`/h5/login?redirect=/scan/${route.params.code}`)
-    return
-  }
   isOpen.value = true
   if (!aftersaleId.value) {
     await initChat()
   }
   startPolling()
+}
+
+function isAuthenticated() {
+  return !!props.h5Token
 }
 
 function closeChat() {
@@ -54,9 +67,15 @@ async function initChat() {
   loading.value = true
   error.value = ''
   try {
-    const res = await fetch(`/api/h5/chat/${props.qrcodeId}`, {
-      headers: { 'Authorization': `Bearer ${props.h5Token}` }
-    })
+    let endpoint
+    let headers = {}
+    if (isAuthenticated()) {
+      endpoint = `/api/h5/chat/${props.qrcodeId}`
+      headers = { 'Authorization': `Bearer ${props.h5Token}` }
+    } else {
+      endpoint = `/api/h5/chat/${props.qrcodeId}/anonymous?device_id=${encodeURIComponent(deviceId.value)}`
+    }
+    const res = await fetch(endpoint, { headers })
     const json = await res.json()
     if (json.code === 0) {
       aftersaleId.value = json.data.aftersaleId
@@ -77,9 +96,15 @@ async function initChat() {
 async function pollMessages() {
   if (!aftersaleId.value || !isOpen.value) return
   try {
-    const res = await fetch(`/api/h5/chat/${aftersaleId.value}/messages?since=${encodeURIComponent(lastTimestamp.value)}`, {
-      headers: { 'Authorization': `Bearer ${props.h5Token}` }
-    })
+    let endpoint
+    let headers = {}
+    if (isAuthenticated()) {
+      endpoint = `/api/h5/chat/${aftersaleId.value}/messages?since=${encodeURIComponent(lastTimestamp.value)}`
+      headers = { 'Authorization': `Bearer ${props.h5Token}` }
+    } else {
+      endpoint = `/api/h5/chat/${props.qrcodeId}/anonymous/messages?since=${encodeURIComponent(lastTimestamp.value)}&device_id=${encodeURIComponent(deviceId.value)}`
+    }
+    const res = await fetch(endpoint, { headers })
     const json = await res.json()
     if (json.code === 0 && json.data.length > 0) {
       messages.value.push(...json.data)
@@ -106,15 +131,24 @@ async function handleSend() {
   sending.value = true
 
   // 乐观更新
-  const tempMsg = { id: Date.now(), sender_type: 'customer', sender_name: props.h5User?.name, content: text, created_at: new Date().toISOString() }
+  const senderName = isAuthenticated() ? (props.h5User?.name || props.h5User?.phone) : '访客'
+  const tempMsg = { id: Date.now(), sender_type: 'customer', sender_name: senderName, content: text, created_at: new Date().toISOString() }
   messages.value.push(tempMsg)
 
   try {
-    const res = await fetch(`/api/h5/chat/${aftersaleId.value}/messages`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${props.h5Token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: text })
-    })
+    let endpoint
+    let headers = { 'Content-Type': 'application/json' }
+    let body
+    if (isAuthenticated()) {
+      endpoint = `/api/h5/chat/${aftersaleId.value}/messages`
+      headers['Authorization'] = `Bearer ${props.h5Token}`
+      body = JSON.stringify({ content: text })
+    } else {
+      endpoint = `/api/h5/chat/${props.qrcodeId}/anonymous/messages`
+      headers['X-Device-Id'] = deviceId.value
+      body = JSON.stringify({ content: text, device_id: deviceId.value })
+    }
+    const res = await fetch(endpoint, { method: 'POST', headers, body })
     const json = await res.json()
     if (json.code === 0) {
       lastTimestamp.value = tempMsg.created_at
