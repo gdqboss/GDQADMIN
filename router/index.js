@@ -7,6 +7,7 @@ const lazyLoad = (loader) => () => loader()
 const routes = [
   {
     path: '/mall',
+    alias: '/mall/',
     component: lazyLoad(() => import('../views/mall/MallLayout.vue')),
     meta: { public: true },
     children: [
