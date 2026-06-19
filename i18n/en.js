@@ -3610,6 +3610,7 @@ export default {
     networkError: 'Network error, please retry',
     connecting: 'Connecting...',
     sendFailed: 'Send failed',
+    awaitingReply: 'Please wait, customer service is looking up your question',
     onlineConsult: 'Online Consult',
     fab: 'Help',
   },

@@ -3721,6 +3721,7 @@ export default {
     networkError: '网络错误，请重试',
     connecting: '连接中...',
     sendFailed: '发送失败',
+    awaitingReply: '请稍候，客服正在查资料回答您的问题',
     onlineConsult: '在线咨询',
     fab: '客服',
   },

@@ -58,7 +58,8 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks: (id) => {
-            if (id.includes('i18n/') || id.includes('/zh.js') || id.includes('/en.js') || id.includes('/ms.js')) {
+            // 手动分包：i18n 翻译文件 + 扫码页 + 客服组件打包在一起，方便浏览器缓存校验
+            if (id.includes('i18n/') || id.includes('/zh.js') || id.includes('/en.js') || id.includes('/ms.js') || id.includes('ScanPage')) {
               return 'i18n'
             }
           }

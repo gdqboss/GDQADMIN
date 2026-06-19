@@ -3508,6 +3508,7 @@ export default {
         networkError: 'Network error, please retry',
         connecting: 'Connecting...',
         sendFailed: 'Send failed',
+        awaitingReply: 'Sila tunggu, perkhidmatan pelanggan sedang mencari jawapan anda',
         onlineConsult: 'Online Consult',
         fab: 'Bantuan',
   },

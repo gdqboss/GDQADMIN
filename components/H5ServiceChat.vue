@@ -1,5 +1,5 @@
 <script setup>
-import { ref, nextTick, watch, onUnmounted } from 'vue'
+import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
@@ -32,6 +32,7 @@ const input = ref('')
 const sending = ref(false)
 const loading = ref(false)
 const error = ref('')
+const awaitingReply = ref(false) // 是否在等待客服回复
 const aftersaleId = ref(null)
 const lastTimestamp = ref('1970-01-01')
 const messagesContainer = ref(null)
@@ -109,6 +110,11 @@ async function pollMessages() {
     if (json.code === 0 && json.data.length > 0) {
       messages.value.push(...json.data)
       lastTimestamp.value = json.data[json.data.length - 1].created_at
+      // 如果拿到客服回复，取消"等待中"提示
+      const hasStaffReply = json.data.some(m => m.sender_type === 'staff')
+      if (hasStaffReply) {
+        awaitingReply.value = false
+      }
     }
   } catch { /* silent */ }
 }
@@ -152,6 +158,7 @@ async function handleSend() {
     const json = await res.json()
     if (json.code === 0) {
       lastTimestamp.value = tempMsg.created_at
+      awaitingReply.value = true  // 等待客服回复
     } else {
       error.value = json.message || t('serviceChat.sendFailed')
     }
@@ -223,6 +230,21 @@ async function handleSend() {
               <p class="text-[10px] text-text-secondary mt-0.5" :class="msg.sender_type === 'customer' ? 'text-right' : ''">
                 {{ msg.created_at?.slice(11, 16) }}
               </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 等待客服回复 -->
+        <div v-if="awaitingReply" class="flex justify-start">
+          <div class="max-w-[80%]">
+            <p class="text-[10px] text-text-secondary mb-0.5">{{ $t('serviceChat.title') }}</p>
+            <div class="px-3 py-2 text-sm leading-relaxed bg-gray-100 text-text-primary rounded-2xl rounded-bl-sm">
+              <span>{{ $t('serviceChat.awaitingReply') }}</span>
+              <span class="inline-flex ml-1">
+                <span class="animate-bounce [animation-delay:0ms]">.</span>
+                <span class="animate-bounce [animation-delay:150ms]">.</span>
+                <span class="animate-bounce [animation-delay:300ms]">.</span>
+              </span>
             </div>
           </div>
         </div>
