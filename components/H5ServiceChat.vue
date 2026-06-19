@@ -103,7 +103,8 @@ async function pollMessages() {
       endpoint = `/api/h5/chat/${aftersaleId.value}/messages?since=${encodeURIComponent(lastTimestamp.value)}`
       headers = { 'Authorization': `Bearer ${props.h5Token}` }
     } else {
-      endpoint = `/api/h5/chat/${props.qrcodeId}/anonymous/messages?since=${encodeURIComponent(lastTimestamp.value)}&device_id=${encodeURIComponent(deviceId.value)}`
+      endpoint = `/api/h5/chat/${props.qrcodeId}/anonymous/messages?since=${encodeURIComponent(lastTimestamp.value)}`
+      headers = { 'X-Device-Id': deviceId.value }
     }
     const res = await fetch(endpoint, { headers })
     const json = await res.json()

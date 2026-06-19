@@ -21,6 +21,7 @@ const activeTab = ref('chat')
 const messages = ref([])
 const inputMessage = ref('')
 const sending = ref(false)
+const awaitingReply = ref(false) // 等待 AI 回复中提示
 const chatContainer = ref(null)
 const conversationLoaded = ref(false)
 const streamingIndex = ref(null) // index of message being typed
@@ -87,9 +88,11 @@ const sendMessage = async () => {
   scrollToBottom()
 
   sending.value = true
+  awaitingReply.value = true
   try {
     const res = await api.post('/ai-class/chat', { message: msg, session_id: sessionId.value })
     if (res.code === 0) {
+      awaitingReply.value = false
       const reply = res.data?.reply || ''
       // Push empty message first for typewriter effect
       messages.value.push({ role: 'assistant', content: '' })
@@ -118,6 +121,7 @@ const sendMessage = async () => {
     ElMessage.error(e.message || $t('aiClassroom.sendFailed'))
     messages.value.push({ role: 'assistant', content: '抱歉，发生了错误。' })
   } finally {
+    awaitingReply.value = false
     if (streamingIndex.value === null) {
       sending.value = false
     }
@@ -385,6 +389,18 @@ onMounted(() => {
                 <div class="message-bubble">
                   <span class="message-avatar"><span class="material-symbols-outlined">smart_toy</span></span>
                   <div class="message-content"><span class="typing-indicator"><span></span><span></span><span></span></span></div>
+                </div>
+              </div>
+              <!-- 等待 AI 回复 -->
+              <div v-if="awaitingReply && streamingIndex === null" class="message-row assistant">
+                <div class="message-bubble awaiting-reply">
+                  <span class="message-avatar"><span class="material-symbols-outlined">smart_toy</span></span>
+                  <div class="message-content">
+                    <span>{{ $t('aiClassroom.awaitingReply') }}</span>
+                    <span class="bounce-dots">
+                      <span>.</span><span>.</span><span>.</span>
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1344,5 +1360,38 @@ onMounted(() => {
   border: none;
   border-top: 1px solid #e0e0e0;
   margin: 10px 0;
+}
+
+/* ── 等待 AI 回复 ── */
+.message-bubble.awaiting-reply .message-content {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 13px;
+  color: #888;
+}
+
+.bounce-dots {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 1px;
+}
+
+.bounce-dots span {
+  display: inline-block;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  color: #888;
+  animation: bounceDot 1.4s infinite ease-in-out;
+}
+
+.bounce-dots span:nth-child(1) { animation-delay: 0ms; }
+.bounce-dots span:nth-child(2) { animation-delay: 150ms; }
+.bounce-dots span:nth-child(3) { animation-delay: 300ms; }
+
+@keyframes bounceDot {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
 }
 </style>
