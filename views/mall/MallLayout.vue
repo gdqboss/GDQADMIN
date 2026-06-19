@@ -4,11 +4,11 @@
     <header class="bg-white shadow-sm sticky top-0 z-50">
       <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <span class="material-symbols-outlined text-2xl text-blue-600">shopping_bag</span>
+          <span class="material-symbols-outlined text-2xl text-primary">shopping_bag</span>
           <span class="font-bold text-lg">{{ shopName }}</span>
         </div>
         <div class="flex items-center gap-3">
-          <router-link v-if="!userId" to="/mall/login" class="text-blue-600 text-sm font-medium">登录</router-link>
+          <router-link v-if="!userId" to="/mall/login" class="text-primary text-sm font-medium">登录</router-link>
           <span v-else class="text-sm text-gray-600">
             <span class="material-symbols-outlined text-lg align-middle">person</span>
             {{ userName }}
@@ -29,11 +29,11 @@
     <!-- 底部Tab -->
     <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 safe-area-bottom">
       <div class="flex justify-around py-2">
-        <router-link to="/mall" class="flex flex-col items-center py-1 px-4" :class="isActive('/mall') ? 'text-blue-600' : 'text-gray-400'">
+        <router-link to="/mall" class="flex flex-col items-center py-1 px-4" :class="isActive('/mall') ? 'text-primary' : 'text-gray-400'">
           <span class="material-symbols-outlined text-2xl">home</span>
           <span class="text-xs mt-0.5">首页</span>
         </router-link>
-        <router-link to="/mall/category/0" class="flex flex-col items-center py-1 px-4" :class="isActive('/mall/category') ? 'text-blue-600' : 'text-gray-400'">
+        <router-link to="/mall/category/0" class="flex flex-col items-center py-1 px-4" :class="isActive('/mall/category') ? 'text-primary' : 'text-gray-400'">
           <span class="material-symbols-outlined text-2xl">category</span>
           <span class="text-xs mt-0.5">分类</span>
         </router-link>
@@ -45,6 +45,10 @@
         <router-link to="/mall/orders" class="flex flex-col items-center py-1 px-4" :class="isActive('/mall/orders') ? 'text-blue-600' : 'text-gray-400'">
           <span class="material-symbols-outlined text-2xl">receipt_long</span>
           <span class="text-xs mt-0.5">订单</span>
+        </router-link>
+        <router-link to="/mall/profile" class="flex flex-col items-center py-1 px-4" :class="isActive('/mall/profile') ? 'text-primary' : 'text-gray-400'">
+          <span class="material-symbols-outlined text-2xl">person</span>
+          <span class="text-xs mt-0.5">我的</span>
         </router-link>
       </div>
     </nav>

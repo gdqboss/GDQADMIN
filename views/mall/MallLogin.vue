@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-gray-50 flex flex-col justify-center px-6">
     <div class="text-center mb-8">
-      <span class="material-symbols-outlined text-5xl text-blue-600">person</span>
+      <span class="material-symbols-outlined text-5xl text-primary">person</span>
       <h1 class="font-bold text-xl mt-3">{{ shopName }}</h1>
     </div>
 
@@ -20,12 +20,12 @@
       <div v-if="error" class="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-xl">{{ error }}</div>
 
       <button @click="login" :disabled="loading"
-        class="w-full py-3 bg-blue-600 text-white rounded-xl font-medium text-base disabled:opacity-50">
+        class="w-full py-3 bg-primary text-white rounded-xl font-medium text-base disabled:opacity-50">
         {{ loading ? '登录中...' : '登录' }}
       </button>
 
       <p class="text-center text-sm text-gray-400 mt-4">
-        还没有账号？<router-link to="/mall/register" class="text-blue-600">立即注册</router-link>
+        还没有账号？<router-link to="/mall/register" class="text-primary">立即注册</router-link>
       </p>
     </div>
 

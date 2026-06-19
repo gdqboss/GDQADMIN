@@ -19,7 +19,7 @@
         </div>
         <div class="flex-1 text-sm">{{ m.label }}</div>
         <div v-if="selectedPay===m.value" class="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
-          <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+          <span class="material-symbols-outlined text-xs text-white">check</span>
         </div>
       </div>
     </div>

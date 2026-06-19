@@ -1,21 +1,19 @@
 <template>
   <div class="min-h-screen bg-slate-50 pb-24">
     <div class="sticky top-0 bg-white z-20 px-4 py-3 border-b flex items-center">
-      <button @click="$router.back()" class="mr-3">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-      </button>
+      <button @click="$router.back()" class="flex-shrink-0"><span class="material-symbols-outlined text-2xl text-slate-600">arrow_back</span></button>
       <h2 class="text-lg font-semibold">{{ $t('h5.confirmOrder') }}</h2>
     </div>
 
     <!-- 收货地址 -->
     <div @click="showAddressPicker = true" class="mx-4 mt-3 bg-white rounded-xl p-4 flex items-center gap-3">
-      <svg class="w-5 h-5 text-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      <span class="material-symbols-outlined text-xl text-primary flex-shrink-0" style="font-variation-settings: 'FILL' 1">location_on</span>
       <div v-if="address" class="flex-1">
         <div class="text-sm font-medium">{{ address.consignee }} {{ address.phone }}</div>
         <div class="text-xs text-slate-500 mt-1">{{ address.province }} {{ address.city }} {{ address.district }} {{ address.detail }}</div>
       </div>
       <div v-else class="flex-1 text-sm text-slate-400">请选择收货地址</div>
-      <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+      <span class="material-symbols-outlined text-base text-slate-400">chevron_right</span>
     </div>
 
     <!-- 商品列表 -->
@@ -52,7 +50,7 @@
       <div class="flex items-center gap-2">
         <span v-if="selectedCoupon" class="text-xs text-red-500">-¥{{ selectedCoupon.discount }}</span>
         <span v-else class="text-xs text-slate-400">暂无可用</span>
-        <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        <span class="material-symbols-outlined text-base text-slate-400">chevron_right</span>
       </div>
     </div>
 

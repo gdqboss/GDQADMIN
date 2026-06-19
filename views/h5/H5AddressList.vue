@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-slate-50 pb-20">
     <div class="sticky top-0 bg-white z-20 px-4 py-3 border-b flex items-center justify-between">
-      <div class="flex items-center"><button @click="$router.back()" class="mr-3"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg></button><h2 class="text-lg font-semibold">收货地址</h2></div>
+      <div class="flex items-center"><button @click="$router.back()" class="flex-shrink-0"><span class="material-symbols-outlined text-2xl text-slate-600">arrow_back</span></button><h2 class="text-lg font-semibold">收货地址</h2></div>
       <button @click="$router.push('/h5/address/edit')" class="text-primary text-sm">+ 新增</button>
     </div>
     <div class="px-4 pt-3 space-y-3">
