@@ -365,8 +365,8 @@ function statusColor(status) {
           <p class="text-success font-medium text-sm">✅ {{ $t('scan.afterSaleSubmitted') }}</p>
         </div>
 
-        <!-- Apply after sale -->
-        <div v-if="!submitted" class="bg-white rounded-xl shadow-sm p-4">
+        <!-- Apply after sale (buyers only) -->
+        <div v-if="isBuyer && !submitted" class="bg-white rounded-xl shadow-sm p-4">
           <div class="flex items-center justify-between">
             <h3 class="font-medium text-text-primary text-sm flex items-center gap-2">
               <span class="text-base">🎫</span> {{ $t('scan.applyAfterSale') }}
