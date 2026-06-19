@@ -306,36 +306,44 @@ async function loadProducts() {
 }
 
 // 出库专用：加载当前仓库已入库的商品（warehouse_stock.quantity > 0）
+// 使用 /warehouses/:id 接口获取该仓库的库存商品
 async function loadStockedProducts(warehouseId) {
     if (!warehouseId) {
         stockedProducts.value = []
         return
     }
     try {
-        const res = await api.get('/stock', {
-            params: { warehouse_id: warehouseId, page: 1, size: 1000 }
-        })
-        // 只保留 quantity > 0 的记录；同商品多 SKU 按 (product_id, sku_id) 去重
+        const res = await api.get(`/warehouses/${warehouseId}`)
+        // warehouse 详情接口返回 data.stockList
+        const stockList = res?.data?.data?.stockList ?? res?.data?.stockList ?? []
+        // 只保留 quantity > 0 的记录；同商品按 (product_id) 聚合，取最大库存
         const map = new Map()
-        for (const row of (res?.data?.list ?? [])) {
+        for (const row of stockList) {
             if (Number(row.quantity) <= 0) continue
-            const key = row.sku_id ? `${row.product_id}__${row.sku_id}` : String(row.product_id)
-            if (!map.has(key)) {
-                map.set(key, {
+            // warehouse_stock 可能同一商品多条记录（不同批次），合并库存
+            const pid = String(row.product_id)
+            if (map.has(pid)) {
+                map.get(pid).stock += Number(row.quantity)
+            } else {
+                map.set(pid, {
                     id: row.product_id,
-                    sku: row.product_sku,
-                    name: row.product_name,
-                    image_main: row.image_main,
-                    sku_id: row.sku_id,
-                    sku_code: row.sku_code,
-                    sku_key: row.sku_key,
-                    specs: row.specs,
+                    sku: row.sku || '',
+                    name: row.product_name || '',
+                    image_main: row.image_main || '',
+                    sku_id: row.sku_id || null,
+                    sku_code: row.sku_code || row.sku || '',
+                    sku_key: row.sku_key || '',
+                    specs: row.specs || '',
                     stock: Number(row.quantity),
                     require_qrcode: false,
                 })
             }
         }
         stockedProducts.value = Array.from(map.values())
+        // 如果没有库存商品，操作记录留个提示
+        if (stockedProducts.value.length === 0) {
+            console.log('该仓库暂无库存商品')
+        }
     } catch (e) {
         console.error('Failed to load stocked products', e)
         stockedProducts.value = []
@@ -549,6 +557,31 @@ function closeForm() {
 
 function addItem() {
   form.value.items.push({ product_id: '', sku_id: '', quantity: 1, qrcode_id: '', alert_stock: 0 })
+}
+
+// 出库：点击库存清单某行→添加到明细
+function selectStockedItem(sp) {
+  // 检查是否已添加
+  const existing = form.value.items.find(i =>
+    Number(i.product_id) === Number(sp.id) &&
+    (sp.sku_id ? Number(i.sku_id) === Number(sp.sku_id) : !i.sku_id)
+  )
+  if (existing) {
+    existing.quantity = Math.min((existing.quantity || 1) + 1, sp.stock)
+    return
+  }
+  // 新增一条
+  form.value.items.push({
+    product_id: sp.id,
+    sku_id: sp.sku_id || '',
+    quantity: 1,
+    qrcode_id: '',
+    alert_stock: 0,
+  })
+  // 加载规格（如果有 SKU）
+  if (sp.sku_id) {
+    loadSkus(Number(sp.id))
+  }
 }
 
 function removeItem(index) {
@@ -1214,6 +1247,70 @@ async function handleDeleteRecord() {
 
             <!-- Items (Normal Mode) -->
             <div v-if="!(activeTab === 'outbound' && batchMode)">
+              <!-- 出库：选仓库后展示库存清单 -->
+              <div v-if="activeTab === 'outbound' && stockedProducts.length > 0">
+                <label class="text-sm font-medium text-text-primary mb-2 block">{{ $t('inout.warehouseStock') || '该仓库库存清单' }} ({{ stockedProducts.length }})</label>
+                <div class="border border-gray-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto mb-4">
+                  <table class="w-full text-sm">
+                    <thead class="bg-gray-100 sticky top-0">
+                      <tr>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.productCol') }}</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.skuCol') }}</th>
+                        <th class="px-3 py-2 text-center text-xs font-medium text-text-secondary w-16">{{ $t('inout.qtyCol') }}</th>
+                        <th class="px-3 py-2 text-center text-xs font-medium text-text-secondary w-16">{{ $t('common.action') }}</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                      <tr
+                        v-for="sp in stockedProducts"
+                        :key="sp.id + '-' + (sp.sku_id || '')"
+                        class="hover:bg-blue-50 transition-colors"
+                      >
+                        <td class="px-3 py-1.5">
+                          <div class="flex items-center gap-2">
+                            <img
+                              v-if="sp.image_main"
+                              :src="sp.image_main"
+                              class="w-8 h-8 object-cover rounded border border-gray-200"
+                              @error="$event.target.style.display='none'"
+                            />
+                            <div v-else class="w-8 h-8 bg-gray-100 rounded border border-gray-200 flex items-center justify-center">
+                              <span class="material-symbols-outlined text-gray-300 text-xs">image</span>
+                            </div>
+                            <div>
+                              <div class="text-xs font-medium text-text-primary leading-tight">{{ sp.name }}</div>
+                              <div v-if="sp.sku_code" class="text-[10px] text-text-secondary font-mono">{{ sp.sku_code }}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td class="px-3 py-1.5">
+                          <span v-if="sp.specs" class="text-xs text-text-secondary">{{ sp.specs }}</span>
+                          <span v-else class="text-xs text-gray-300">—</span>
+                        </td>
+                        <td class="px-3 py-1.5 text-center">
+                          <span class="text-sm font-semibold" :class="sp.stock > 0 ? 'text-success' : 'text-danger'">{{ sp.stock || 0 }}</span>
+                        </td>
+                        <td class="px-3 py-1.5 text-center">
+                          <button
+                            v-if="sp.stock > 0"
+                            @click="selectStockedItem(sp)"
+                            class="inline-flex items-center gap-1 px-2 py-1 bg-primary hover:bg-primary-hover text-white rounded text-xs font-medium transition-colors"
+                          >
+                            <span class="material-symbols-outlined text-[12px]">add</span>
+                            选择
+                          </button>
+                          <span v-else class="text-xs text-gray-300">缺货</span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div v-if="activeTab === 'outbound' && form.warehouse_id && stockedProducts.length === 0" class="bg-yellow-50 text-yellow-700 text-sm px-4 py-3 rounded-lg border border-yellow-100 mb-4">
+                <span class="material-symbols-outlined text-[16px] align-middle mr-1">info</span>
+                该仓库暂无库存商品
+              </div>
+
               <div class="flex items-center justify-between mb-2">
                 <label class="text-sm font-medium text-text-primary">{{ $t('inout.itemDetails') }} <span class="text-danger">*</span></label>
                 <button
