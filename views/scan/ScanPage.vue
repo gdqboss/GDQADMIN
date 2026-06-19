@@ -25,6 +25,12 @@ const submitting = ref(false)
 const submitted = ref(false)
 const afterSaleError = ref('')
 
+// Repair form (for repairer role)
+const repairForm = ref({ issue: '', solution: '' })
+const repairSubmitting = ref(false)
+const repairError = ref('')
+const repairSuccess = ref(false)
+
 // Buyer after-sale records
 const myAftersaleRecords = ref([])
 const isBuyer = ref(false)
@@ -34,6 +40,7 @@ let h5Token = localStorage.getItem('h5_token')
 let h5User = JSON.parse(localStorage.getItem('h5_user') || 'null')
 
 // 如果是内部管理员登录，也兼容（使用 caimeite_token 检查登录态）
+let isAdmin = false
 if (!h5Token && localStorage.getItem('caimeite_token')) {
   h5Token = localStorage.getItem('caimeite_token')
   const cUser = JSON.parse(localStorage.getItem('caimeite_user') || 'null')
@@ -41,6 +48,30 @@ if (!h5Token && localStorage.getItem('caimeite_token')) {
     h5User = { id: cUser.id, name: cUser.name, phone: cUser.phone || cUser.email, role: cUser.role }
   }
 }
+// 判断用户身份类型（根据 role 和 permissions）
+let userIdentity = 'guest' // guest | buyer | customer_service | repairer | admin
+
+// 先调 my-aftersale 获取 isBuyer
+// 之后根据 role 和 permissions 决定
+function determineIdentity(role, permissions) {
+  if (role === 'admin' || role === 'manager' || role === 'operator' || role === 'warehouse') {
+    return 'admin'
+  }
+  if (role === 'customer_service') {
+    return 'customer_service'
+  }
+  if (role === 'repairer') {
+    return 'repairer'
+  }
+  // 检查 permissions 数组（后台用户可能有自定义权限）
+  if (permissions && Array.isArray(permissions)) {
+    if (permissions.includes('scan:repair')) return 'repairer'
+    if (permissions.includes('scan:aftersale')) return 'customer_service'
+  }
+  return 'guest'
+}
+
+// 在 onMounted 里等 isBuyer 确定后再设 userIdentity
 
 onMounted(async () => {
   try {
@@ -66,6 +97,18 @@ onMounted(async () => {
           }
         } catch (e) {
           console.error('Failed to fetch after-sale records:', e)
+        }
+        
+        // 确定用户身份（后台权限优先级高于购买者身份）
+        const cUser = JSON.parse(localStorage.getItem('caimeite_user') || '{}')
+        const userPerms = cUser.permissions || []
+        if (h5User?.role) {
+          const identity = determineIdentity(h5User.role, userPerms)
+          if (identity !== 'guest') userIdentity = identity
+        }
+        // 如果 isBuyer 且不是后台角色
+        if (isBuyer.value && userIdentity === 'guest') {
+          userIdentity = 'buyer'
         }
       }
     } else error.value = t('scan.notFound')
@@ -183,6 +226,42 @@ async function submitAfterSale() {
   } catch {
     afterSaleError.value = t('scan.networkError')
   } finally { submitting.value = false }
+}
+
+async function submitRepairRecord() {
+  if (!repairForm.value.issue || !repairForm.value.solution) return
+  repairError.value = ''
+  repairSuccess.value = false
+  repairSubmitting.value = true
+  try {
+    const headers = { 'Authorization': `Bearer ${h5Token}`, 'Content-Type': 'application/json' }
+    const res = await fetch('/api/h5/after-sale/repair', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        qrcode_id: data.value.id,
+        issue: repairForm.value.issue,
+        solution: repairForm.value.solution,
+      })
+    })
+    const json = await res.json()
+    if (json.code === 0) {
+      repairSuccess.value = true
+      repairForm.value = { issue: '', solution: '' }
+      // Refresh repair records
+      if (data.value) {
+        const refreshRes = await fetch(`/api/scan/${route.params.code}`)
+        const refreshJson = await refreshRes.json()
+        if (refreshJson.code === 0) {
+          data.value = refreshJson.data
+        }
+      }
+    } else {
+      repairError.value = json.message || t('scan.submitFailed')
+    }
+  } catch {
+    repairError.value = t('scan.networkError')
+  } finally { repairSubmitting.value = false }
 }
 
 function goLogin() {
@@ -314,16 +393,16 @@ function statusColor(status) {
           </p>
         </div>
 
-        <!-- After sale contact -->
-        <div v-if="data.after_sale_contact" class="bg-white rounded-xl shadow-sm p-4">
+        <!-- After sale contact (buyers & staff & admin only) -->
+        <div v-if="['buyer','customer_service','repairer','admin'].includes(userIdentity) && data.after_sale_contact" class="bg-white rounded-xl shadow-sm p-4">
           <h3 class="font-medium text-text-primary text-sm mb-2 flex items-center gap-2">
             <span class="text-base">📞</span> {{ $t('qrcode.afterSaleContact') }}
           </h3>
           <p class="text-sm text-text-primary">{{ data.after_sale_contact }}</p>
         </div>
 
-        <!-- Repair history -->
-        <div v-if="data.repairRecords?.length > 0" class="bg-white rounded-xl shadow-sm p-4">
+        <!-- Repair history (buyers & staff & admin only) -->
+        <div v-if="['buyer','customer_service','repairer','admin'].includes(userIdentity) && data.repairRecords?.length > 0" class="bg-white rounded-xl shadow-sm p-4">
           <h3 class="font-medium text-text-primary text-sm mb-3 flex items-center gap-2">
             <span class="text-base">🔧</span> {{ $t('qrcode.repairRecords') }}
           </h3>
@@ -334,6 +413,78 @@ function statusColor(status) {
             </div>
             <p v-if="r.issue" class="text-xs text-text-secondary">{{ $t('scan.fault') }}: {{ r.issue }}</p>
             <p v-if="r.solution" class="text-xs text-text-secondary">{{ $t('scan.solution') }}: {{ r.solution }}</p>
+          </div>
+        </div>
+
+        <!-- Repairer-only: add new repair record -->
+        <div v-if="userIdentity === 'repairer'" class="bg-white rounded-xl shadow-sm p-4">
+          <h3 class="font-medium text-text-primary text-sm mb-3 flex items-center gap-2">
+            <span class="text-base">🔧</span> {{ $t('scan.addRepairRecord') }}
+          </h3>
+          <div class="space-y-3">
+            <div>
+              <label class="text-xs text-text-secondary mb-1 block">{{ $t('scan.fault') }}</label>
+              <input
+                v-model="repairForm.issue"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                :placeholder="$t('scan.issuePlaceholder')"
+              />
+            </div>
+            <div>
+              <label class="text-xs text-text-secondary mb-1 block">{{ $t('scan.solution') }}</label>
+              <textarea
+                v-model="repairForm.solution"
+                rows="3"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:outline-none resize-none"
+                :placeholder="$t('scan.solutionPlaceholder')"
+              ></textarea>
+            </div>
+            <button
+              @click="submitRepairRecord"
+              :disabled="repairSubmitting || !repairForm.issue || !repairForm.solution"
+              :class="['w-full py-2.5 rounded-lg text-sm font-medium transition-colors', (repairForm.issue && repairForm.solution) ? 'bg-primary hover:bg-primary-hover text-white' : 'bg-gray-100 text-text-secondary cursor-not-allowed']"
+            >
+              {{ repairSubmitting ? $t('common.submitting') : $t('scan.submitRepair') }}
+            </button>
+            <p v-if="repairError" class="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{{ repairError }}</p>
+            <p v-if="repairSuccess" class="text-xs text-green-600 bg-green-50 rounded-lg px-3 py-2">✅ {{ $t('scan.repairSubmitted') }}</p>
+          </div>
+        </div>
+
+        <!-- Admin-only: supply chain info -->
+        <div v-if="userIdentity === 'admin'" class="bg-white rounded-xl shadow-sm p-4">
+          <h3 class="font-medium text-text-primary text-sm mb-3 flex items-center gap-2">
+            <span class="text-base">📦</span> {{ $t('scan.supplyInfo') }}
+          </h3>
+          <div class="grid grid-cols-2 gap-3 text-xs">
+            <div v-if="data.supplier_name">
+              <p class="text-text-secondary">{{ $t('scan.supplier') }}</p>
+              <p class="font-medium">{{ data.supplier_name }}</p>
+            </div>
+            <div v-if="data.dealer_name">
+              <p class="text-text-secondary">{{ $t('scan.dealer') }}</p>
+              <p class="font-medium">{{ data.dealer_name }}</p>
+            </div>
+            <div v-if="data.store_name">
+              <p class="text-text-secondary">{{ $t('scan.store') }}</p>
+              <p class="font-medium">{{ data.store_name }}</p>
+            </div>
+            <div v-if="data.buyer">
+              <p class="text-text-secondary">{{ $t('scan.buyer') }}</p>
+              <p class="font-medium">{{ data.buyer }}</p>
+            </div>
+            <div v-if="data.buy_date">
+              <p class="text-text-secondary">{{ $t('scan.buyDate') }}</p>
+              <p class="font-medium">{{ data.buy_date.slice(0, 10) }}</p>
+            </div>
+            <div v-if="data.sales_person">
+              <p class="text-text-secondary">{{ $t('scan.salesPerson') }}</p>
+              <p class="font-medium">{{ data.sales_person }}</p>
+            </div>
+            <div v-if="data.status">
+              <p class="text-text-secondary">{{ $t('scan.qrStatus') }}</p>
+              <p class="font-medium">{{ statusLabel(data.status) }}</p>
+            </div>
           </div>
         </div>
 
