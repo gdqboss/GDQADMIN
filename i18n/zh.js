@@ -135,6 +135,7 @@ export default {
     context: '上下文',
     summary: '摘要',
     memoryType: '记忆类型',
+    awaitingReply: '请稍候，客服正在查资料回答您的问题',
   },
   nav: {
     dashboard: '工作台',

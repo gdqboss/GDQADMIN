@@ -29,9 +29,18 @@ const afterSaleError = ref('')
 const myAftersaleRecords = ref([])
 const isBuyer = ref(false)
 
-// H5 user (logged-in consumer)
-const h5User = JSON.parse(localStorage.getItem('h5_user') || 'null')
-const h5Token = localStorage.getItem('h5_token')
+// H5 user (logged-in consumer) or internal admin
+let h5Token = localStorage.getItem('h5_token')
+let h5User = JSON.parse(localStorage.getItem('h5_user') || 'null')
+
+// 如果是内部管理员登录，也兼容（使用 caimeite_token 检查登录态）
+if (!h5Token && localStorage.getItem('caimeite_token')) {
+  h5Token = localStorage.getItem('caimeite_token')
+  const cUser = JSON.parse(localStorage.getItem('caimeite_user') || 'null')
+  if (cUser && !h5User) {
+    h5User = { id: cUser.id, name: cUser.name, phone: cUser.phone || cUser.email, role: cUser.role }
+  }
+}
 
 onMounted(async () => {
   try {

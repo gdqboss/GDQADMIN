@@ -1808,6 +1808,7 @@ export default {
         context: 'Context',
         summary: 'Summary',
         memoryType: 'Memory Type',
+        awaitingReply: 'Sila tunggu, perkhidmatan pelanggan sedang mencari jawapan anda',
   },
   wecom: {
         title: 'Customer Service',

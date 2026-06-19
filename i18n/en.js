@@ -1905,6 +1905,7 @@ export default {
     context: 'Context',
     summary: 'Summary',
     memoryType: 'Memory Type',
+    awaitingReply: 'Please wait, customer service is looking up your question',
   },
   wecom: {
     title: 'WeCom',
