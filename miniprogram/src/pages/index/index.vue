@@ -56,8 +56,14 @@ const stats = ref({
   customers: '0'
 })
 
+const tabBarPages = ['/pages/index/index', '/pages/dashboard/index', '/pages/member/index']
+
 function goToPage(url) {
-  uni.switchTab({ url })
+  if (tabBarPages.includes(url)) {
+    uni.switchTab({ url })
+  } else {
+    uni.navigateTo({ url })
+  }
 }
 
 onMounted(() => {
