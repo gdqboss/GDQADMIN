@@ -212,7 +212,6 @@ const emptyForm = () => ({
   supplier: '',
   purchase_price: '',
   sale_price: '',
-  require_qrcode: false,
   status: 'active',
   image_main: '',
   images: [],
@@ -457,7 +456,6 @@ async function openEdit(p) {
     supplier: p.supplier || '',
     purchase_price: p.purchase_price || '',
     sale_price: p.sale_price || '',
-    require_qrcode: !!p.require_qrcode,
     status: p.status || 'active',
     image_main: p.image_main || '',
     images: p.images ? (Array.isArray(p.images) ? [...p.images] : JSON.parse(p.images || '[]')) : [],
@@ -503,6 +501,48 @@ async function openEdit(p) {
 function closeDrawer() {
   showDrawer.value = false
   editingId.value = null
+}
+
+// ─── 网站图库选择器 ─────────────────────────────────────────────────────────────
+const showLibrary = ref(false)
+const libraryTarget = ref('main') // 'main' | 'gallery'
+const libraryImages = ref([])
+const libraryPage = ref(1)
+const libraryLoading = ref(false)
+const libraryTotal = ref(0)
+
+async function loadLibraryImages() {
+  libraryLoading.value = true
+  try {
+    const res = await api.get('/upload/images', {
+      params: { page: libraryPage.value, limit: 30 }
+    })
+    if (res.code === 0) {
+      libraryImages.value = res.data.list || []
+      libraryTotal.value = res.data.total || 0
+    }
+  } catch (e) {
+    console.error('加载图库失败', e)
+  } finally {
+    libraryLoading.value = false
+  }
+}
+
+function showLibraryPicker(target) {
+  libraryTarget.value = target
+  libraryPage.value = 1
+  libraryImages.value = []
+  showLibrary.value = true
+  loadLibraryImages()
+}
+
+function selectLibraryImage(img) {
+  if (libraryTarget.value === 'main') {
+    form.value.image_main = img.url
+  } else if (libraryTarget.value === 'gallery') {
+    form.value.images.push(img.url)
+  }
+  showLibrary.value = false
 }
 
 // ─── Save ──────────────────────────────────────────────────────────────────────
@@ -594,6 +634,29 @@ async function handleDelete(id) {
   } catch (err) {
     const errorMsg = err.response?.data?.message || err.message || t('product.deleteFailed')
     alert(errorMsg)
+  }
+}
+
+// ─── 上架 / 下架 ───────────────────────────────────────────────────────────
+async function handlePublish(product) {
+  try {
+    const res = await api.put(`/products/${product.id}/publish`)
+    alert(res.message || t('product.publishSuccess'))
+    await fetchProducts()
+  } catch (err) {
+    const msg = err.response?.data?.message || err.message || t('product.publishFailed')
+    alert(msg)
+  }
+}
+
+async function handleUnpublish(product) {
+  try {
+    const res = await api.put(`/products/${product.id}/unpublish`)
+    alert(res.message || t('product.unpublishSuccess'))
+    await fetchProducts()
+  } catch (err) {
+    const msg = err.response?.data?.message || err.message || t('product.publishFailed')
+    alert(msg)
   }
 }
 
@@ -1152,11 +1215,24 @@ async function deleteCategory(cat) {
               </td>
               <td class="px-4 py-3 text-right text-text-primary">¥{{ Number(p.sale_price || 0).toFixed(2) }}</td>
               <td class="px-4 py-3 text-center">
-                <StatusTag :type="p.status === 'discontinued' ? 'danger' : 'success'" :text="p.status === 'discontinued' ? $t('product.discontinued') : $t('product.active')" />
+                <template v-if="p.publish_status === 'published'">
+                  <StatusTag type="success" :text="$t('product.published')" />
+                </template>
+                <template v-else-if="p.publish_status === 'unpublished'">
+                  <StatusTag type="warning" :text="$t('product.unpublished')" />
+                </template>
+                <template v-else>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500">{{ $t('product.draft') }}</span>
+                </template>
               </td>
               <td class="px-4 py-3 text-right">
                 <button v-if="canWrite" @click="openEdit(p)" class="text-primary hover:text-primary-hover text-xs font-medium mr-3">{{ $t('common.edit') }}</button>
                 <button v-if="canWrite" @click="openMaterialEdit(p)" class="text-primary hover:text-primary-hover text-xs font-medium mr-3">{{ $t('product.materialEdit') }}</button>
+                <template v-if="p.publish_status === 'draft' || p.publish_status === 'unpublished'">
+                  <button v-if="canWrite && (p.total_stock > 0)" @click="handlePublish(p)" class="text-success hover:text-green-600 text-xs font-medium mr-3">{{ $t('product.publish') }}</button>
+                  <span v-else-if="canWrite" class="text-gray-400 text-xs mr-3 cursor-not-allowed" :title="$t('product.noStockForPublish')">{{ $t('product.publish') }}</span>
+                </template>
+                <button v-else-if="canWrite && p.publish_status === 'published'" @click="handleUnpublish(p)" class="text-warning hover:text-orange-600 text-xs font-medium mr-3">{{ $t('product.unpublish') }}</button>
                 <button v-if="canDelete" @click="handleDelete(p.id)" class="text-danger hover:text-red-700 text-xs font-medium">{{ $t('common.delete') }}</button>
               </td>
             </tr>
@@ -1275,17 +1351,6 @@ async function deleteCategory(cat) {
                   <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('product.salePriceLabel') }}</label>
                   <input v-model="form.sale_price" type="number" min="0" step="0.01" placeholder="0.00" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
                 </div>
-              </div>
-
-              <div class="flex items-center gap-3 py-1">
-                <label class="flex items-center gap-2 cursor-pointer select-none">
-                  <div class="relative">
-                    <input type="checkbox" v-model="form.require_qrcode" class="sr-only" />
-                    <div :class="['w-10 h-5 rounded-full transition-colors', form.require_qrcode ? 'bg-primary' : 'bg-gray-200']"></div>
-                    <div :class="['absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform', form.require_qrcode ? 'translate-x-5' : 'translate-x-0']"></div>
-                  </div>
-                  <span class="text-sm text-text-primary">{{ $t('product.requireQrcode') }}</span>
-                </label>
               </div>
 
               <!-- Group QR URL for after-sale service group -->
@@ -1462,11 +1527,18 @@ async function deleteCategory(cat) {
                     <span v-else class="material-symbols-outlined text-gray-400 text-[32px]">image</span>
                   </div>
                   <div class="flex-1">
-                    <label class="cursor-pointer inline-flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-text-primary hover:bg-gray-50 transition-colors">
-                      <span class="material-symbols-outlined text-[18px]">upload</span>
-                      {{ imageMainUploading ? $t('product.uploading') : $t('product.selectImage') }}
-                      <input type="file" accept="image/*" class="hidden" @change="onMainImageChange" :disabled="imageMainUploading" />
-                    </label>
+                    <div class="flex gap-2 flex-wrap">
+                      <label class="cursor-pointer inline-flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-text-primary hover:bg-gray-50 transition-colors">
+                        <span class="material-symbols-outlined text-[18px]">upload</span>
+                        {{ imageMainUploading ? $t('product.uploading') : $t('product.selectImage') }}
+                        <input type="file" accept="image/*" class="hidden" @change="onMainImageChange" :disabled="imageMainUploading" />
+                      </label>
+                      <button @click="showLibraryPicker('main')" type="button"
+                        class="inline-flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-text-primary hover:bg-gray-50 transition-colors">
+                        <span class="material-symbols-outlined text-[18px]">photo_library</span>
+                        从网站图库选择
+                      </button>
+                    </div>
                     <p class="text-xs text-text-secondary mt-2">{{ $t('product.imageFormatHint') }}</p>
                     <button v-if="form.image_main" @click="form.image_main = ''" class="mt-2 text-xs text-danger hover:text-red-700">{{ $t('product.removeMainImage') }}</button>
                   </div>
@@ -1488,6 +1560,11 @@ async function deleteCategory(cat) {
                     <span class="text-xs mt-1">{{ galleryUploading ? $t('product.galleryUploadingText') : $t('product.galleryAddText') }}</span>
                     <input type="file" accept="image/*" multiple class="hidden" @change="onGalleryChange" :disabled="galleryUploading" />
                   </label>
+                  <button @click="showLibraryPicker('gallery')" type="button"
+                    class="w-20 h-20 border-2 border-dashed border-gray-300 hover:border-primary rounded-lg flex flex-col items-center justify-center text-text-secondary hover:text-primary transition-colors">
+                    <span class="material-symbols-outlined text-[20px]">photo_library</span>
+                    <span class="text-xs mt-1">网站图库</span>
+                  </button>
                 </div>
                 <p class="text-xs text-text-secondary">{{ $t('product.galleryHint') }}</p>
               </div>
@@ -1954,6 +2031,32 @@ async function deleteCategory(cat) {
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+      </div>
+      <!-- 网站图库选择器弹窗 -->
+      <div v-if="showLibrary" class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40" @click.self="showLibrary = false">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col">
+          <div class="flex items-center justify-between px-6 py-4 border-b shrink-0">
+            <h3 class="text-lg font-bold">从网站图库选择</h3>
+            <button @click="showLibrary = false" class="text-text-secondary hover:text-text-primary">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          <div class="flex-1 overflow-y-auto p-6">
+            <div v-if="libraryLoading" class="text-center py-8 text-text-secondary">加载中...</div>
+            <div v-else-if="libraryImages.length === 0" class="text-center py-8 text-text-secondary">图库暂无图片，请先上传</div>
+            <div v-else class="grid grid-cols-4 sm:grid-cols-5 gap-3">
+              <div v-for="img in libraryImages" :key="img.id" @click="selectLibraryImage(img)"
+                class="aspect-square rounded-lg overflow-hidden border border-gray-200 cursor-pointer hover:border-primary hover:shadow-md transition-all group relative">
+                <img :src="img.url" class="w-full h-full object-cover" />
+                <div class="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors"></div>
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center justify-between px-6 py-3 border-t shrink-0">
+            <span class="text-xs text-text-secondary">共 {{ libraryTotal }} 张图片</span>
+            <button @click="showLibrary = false" class="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">取消</button>
           </div>
         </div>
       </div>

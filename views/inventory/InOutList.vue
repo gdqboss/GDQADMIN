@@ -56,6 +56,7 @@ const adjustForm = ref({
 
 const warehouses = ref([])
 const products = ref([])
+const stockedProducts = ref([]) // outbound 用：当前仓库已入库商品
 const productSkus = ref({}) // { productId: [ {id, sku, sku_key, specs, stock}, ... ] }
 const productFilters = ref({}) // { rowIndex: filterString }
 
@@ -304,6 +305,43 @@ async function loadProducts() {
     }
 }
 
+// 出库专用：加载当前仓库已入库的商品（warehouse_stock.quantity > 0）
+async function loadStockedProducts(warehouseId) {
+    if (!warehouseId) {
+        stockedProducts.value = []
+        return
+    }
+    try {
+        const res = await api.get('/stock', {
+            params: { warehouse_id: warehouseId, page: 1, size: 1000 }
+        })
+        // 只保留 quantity > 0 的记录；同商品多 SKU 按 (product_id, sku_id) 去重
+        const map = new Map()
+        for (const row of (res?.data?.list ?? [])) {
+            if (Number(row.quantity) <= 0) continue
+            const key = row.sku_id ? `${row.product_id}__${row.sku_id}` : String(row.product_id)
+            if (!map.has(key)) {
+                map.set(key, {
+                    id: row.product_id,
+                    sku: row.product_sku,
+                    name: row.product_name,
+                    image_main: row.image_main,
+                    sku_id: row.sku_id,
+                    sku_code: row.sku_code,
+                    sku_key: row.sku_key,
+                    specs: row.specs,
+                    stock: Number(row.quantity),
+                    require_qrcode: false,
+                })
+            }
+        }
+        stockedProducts.value = Array.from(map.values())
+    } catch (e) {
+        console.error('Failed to load stocked products', e)
+        stockedProducts.value = []
+    }
+}
+
 async function loadSkus(productId) {
     if (!productId || productSkus.value[productId]) return
     try {
@@ -319,27 +357,74 @@ async function loadSkus(productId) {
 // 给"每个 item"取它对应的 SKU 列表（按 product_id 缓存）
 function getSkusForItem(item) {
     if (!item?.product_id) return []
+    // 出库时：只显示该仓库有库存的 SKU
+    if (activeTab.value === 'outbound') {
+        return stockedProducts.value
+            .filter(p => Number(p.id) === Number(item.product_id) && p.sku_id)
+            .map(p => ({ id: p.sku_id, sku: p.sku_code, sku_key: p.sku_key, specs: p.specs, stock: p.stock }))
+    }
     return productSkus.value[item.product_id] || []
 }
 
 // 商品下拉的搜索过滤（按 row index 区分）
+// outbound 只用 stockedProducts（已入库），inbound 用全部 products
 function getFilteredProducts(index) {
     const filter = (productFilters.value[index] || '').toLowerCase()
-    if (!filter) return products.value
-    return products.value.filter(p =>
+    const source = activeTab.value === 'outbound' ? stockedProducts.value : products.value
+    if (!filter) return source
+    return source.filter(p =>
         (p.sku && p.sku.toLowerCase().includes(filter)) ||
         (p.name && p.name.toLowerCase().includes(filter))
     )
 }
 
 function productById(id) {
+    if (!id) return null
+    if (activeTab.value === 'outbound') {
+        return stockedProducts.value.find(p => String(p.id) === String(id))
+            || products.value.find(p => String(p.id) === String(id))
+            || null
+    }
     return products.value.find(p => String(p.id) === String(id)) || null
 }
 
 function needsQrcode(item) {
-    if (activeTab.value !== 'outbound') return false
-    const p = productById(item.product_id)
-    return p?.require_qrcode === true || p?.require_qrcode === 1
+    return false
+}
+
+// 出库时：获取该商品在该仓库的最大可出库数量（库存量）
+function getItemMaxQty(item) {
+    if (activeTab.value !== 'outbound') return 999999
+    if (!item?.product_id) return 1
+    const stocked = stockedProducts.value
+    // 如果选了 SKU，按 sku_id 匹配；否则按 product_id
+    if (item.sku_id) {
+        const match = stocked.find(p =>
+            Number(p.id) === Number(item.product_id) && Number(p.sku_id) === Number(item.sku_id)
+        )
+        return match?.stock ?? 1
+    }
+    // 没选 SKU：累加该商品所有 SKU 的库存，取最大值
+    const withSku = stocked.filter(p => Number(p.id) === Number(item.product_id))
+    if (withSku.length > 0) {
+        const total = withSku.reduce((s, p) => s + (p.stock || 0), 0)
+        return Math.max(total, 1)
+    }
+    // 无 SKU 商品
+    const match = stocked.find(p => Number(p.id) === Number(item.product_id) && !p.sku_id)
+    return match?.stock ?? 999999
+}
+
+// 仓库下拉变化时：出库 tab 重新加载已入库商品并清空已有商品选择
+function onWarehouseChange(val) {
+    if (activeTab.value !== 'outbound') return
+    // 清空已选商品（仓库变了，之前选的商品可能不在新仓库）
+    form.value.items = [{ product_id: '', sku_id: '', quantity: 1, qrcode_id: '', alert_stock: 0 }]
+    if (val) {
+        loadStockedProducts(val)
+    } else {
+        stockedProducts.value = []
+    }
 }
 
 function filterProduct(val, index) {
@@ -450,6 +535,12 @@ function openForm() {
   batchPreview.value = null
   batchError.value = ''
   showForm.value = true
+  // 出库弹窗打开时，若已选仓库则加载该仓库已入库商品
+  if (activeTab.value === 'outbound' && form.value.warehouse_id) {
+    loadStockedProducts(form.value.warehouse_id)
+  } else if (activeTab.value === 'outbound') {
+    stockedProducts.value = []
+  }
 }
 
 function closeForm() {
@@ -957,6 +1048,7 @@ async function handleDeleteRecord() {
                   class="w-full"
                   :empty-values="[null, undefined, '']"
                   value-key="id"
+                  @change="onWarehouseChange"
                 >
                   <el-option
                     v-for="wh in warehouses"
@@ -1197,12 +1289,18 @@ async function handleDeleteRecord() {
                       </td>
                       <!-- Quantity -->
                       <td class="px-3 py-2">
-                        <input
-                          v-model.number="item.quantity"
-                          type="number"
-                          min="1"
-                          class="w-full border border-gray-200 rounded px-2 py-1 text-sm text-center focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
-                        />
+                        <div class="flex items-center gap-1">
+                          <input
+                            v-model.number="item.quantity"
+                            type="number"
+                            min="1"
+                            :max="getItemMaxQty(item)"
+                            class="w-16 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+                          />
+                          <span v-if="activeTab === 'outbound'" class="text-xs text-text-secondary whitespace-nowrap">
+                            / {{ getItemMaxQty(item) }}
+                          </span>
+                        </div>
                       </td>
                       <!-- Alert Stock (inbound only) -->
                       <td v-if="activeTab === 'inbound'" class="px-3 py-2">

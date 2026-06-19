@@ -80,7 +80,7 @@ onMounted(async () => {
       api.get('/warehouses'),
       api.get('/suppliers'),
     ])
-    if (usersRes.code === 0) users.value = usersRes.data
+    if (usersRes.code === 0) users.value = (usersRes.data || []).filter(u => !u.is_service_customer)
     if (whRes.code === 0) warehouses.value = whRes.data.list || whRes.data
     if (supRes.code === 0) suppliers.value = supRes.data.list || supRes.data
 
@@ -261,7 +261,7 @@ async function saveUser() {
     if (res.code === 0) {
       showUserModal.value = false
       const usersRes = await api.get('/users')
-      if (usersRes.code === 0) users.value = usersRes.data
+      if (usersRes.code === 0) users.value = (usersRes.data || []).filter(u => !u.is_service_customer)
     } else {
       userError.value = res.message || t('settings.operationFailed')
     }
@@ -292,7 +292,7 @@ async function approveUser(user) {
       alert(t('settings.approveSuccess'))
       await loadPendingUsers()
       const usersRes = await api.get('/users')
-      if (usersRes.code === 0) users.value = usersRes.data
+      if (usersRes.code === 0) users.value = (usersRes.data || []).filter(u => !u.is_service_customer)
     } else {
       alert(res.message || t('settings.approveFailed'))
     }
@@ -1060,7 +1060,7 @@ async function deleteUser(user) {
     const res = await api.delete(`/users/${user.id}`)
     if (res.code === 0) {
       const usersRes = await api.get('/users')
-      if (usersRes.code === 0) users.value = usersRes.data
+      if (usersRes.code === 0) users.value = (usersRes.data || []).filter(u => !u.is_service_customer)
     } else {
       alert(res.message || t('settings.deleteFailed'))
     }
