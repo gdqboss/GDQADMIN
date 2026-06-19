@@ -40,20 +40,42 @@ import { h5Auth } from '../middleware/h5Auth.js'
 
 const router = Router()
 
+// CRITICAL: JWT_SECRET must be set in environment
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required')
+}
 const JWT_SECRET = process.env.JWT_SECRET
 
-// POST /api/h5/register - 手机号+密码注册
+// POST /api/h5/register - Role-based registration with SMS verification
 router.post('/register', async (req, res, next) => {
   try {
-    const { name, phone, password, invite_code, role = 'customer' } = req.body
-    if (!phone || !password) {
-      return res.status(400).json({ code: 400, message: '手机号和密码必填' })
+    const { name, phone, password, code, invite_code, role = 'customer' } = req.body
+    if (!phone || !password || !code) {
+      return res.status(400).json({ code: 400, message: '手机号、密码和验证码必填' })
     }
     if (!/^1[3-9]\d{9}$/.test(phone)) {
       return res.status(400).json({ code: 400, message: '手机号格式不正确' })
     }
     if (password.length < 6) {
       return res.status(400).json({ code: 400, message: '密码至少6位' })
+    }
+
+    // 验证短信验证码
+    const [[smsCode]] = await pool.query(
+      'SELECT id, code, used FROM sms_codes WHERE phone = ? AND expires_at > NOW() ORDER BY created_at DESC LIMIT 1',
+      [phone]
+    )
+
+    if (!smsCode) {
+      return res.status(400).json({ code: 400, message: '验证码不存在或已过期' })
+    }
+
+    if (smsCode.used) {
+      return res.status(400).json({ code: 400, message: '验证码已使用' })
+    }
+
+    if (smsCode.code !== code) {
+      return res.status(400).json({ code: 400, message: '验证码错误' })
     }
 
     // 检查手机号是否已注册
@@ -67,6 +89,9 @@ router.post('/register', async (req, res, next) => {
     if (!roleExists) {
       return res.status(400).json({ code: 400, message: '角色不存在' })
     }
+
+    // 标记验证码为已使用
+    await pool.query('UPDATE sms_codes SET used = 1 WHERE id = ?', [smsCode.id])
 
     let parent_id = null
 
@@ -95,30 +120,12 @@ router.post('/register', async (req, res, next) => {
       if (recentScan?.referrer_h5_user_id) parent_id = recentScan.referrer_h5_user_id
     }
 
-    // 用用户输入的密码加密存储
     const hash = await bcrypt.hash(password, 10)
     const [result] = await pool.query(
       'INSERT INTO h5_users (name, phone, password, parent_id, role) VALUES (?,?,?,?,?)',
       [name || phone, phone, hash, parent_id, role]
     )
-
-    // 注册成功后自动生成登录 token 返回
-    const token = jwt.sign(
-      { id: result.insertId, phone, name: name || phone, role },
-      JWT_SECRET,
-      { expiresIn: '365d' }
-    )
-    res.json({
-      code: 0,
-      data: {
-        token,
-        id: result.insertId,
-        name: name || phone,
-        phone,
-        role
-      },
-      message: '注册成功'
-    })
+    res.json({ code: 0, data: { id: result.insertId }, message: '注册成功' })
   } catch (err) { next(err) }
 })
 
@@ -149,8 +156,13 @@ router.post('/send-sms', async (req, res, next) => {
       [phone, code, expiresAt, ip]
     )
 
-    // 发送短信（暂不依赖真实短信，验证码直接返回给前端）
-    res.json({ code: 0, data: { code }, message: '验证码已发送' })
+    // 发送短信
+    const sent = await sendSmsCode(phone, code)
+    if (!sent) {
+      return res.status(500).json({ code: 500, message: '短信发送失败，请稍后重试' })
+    }
+
+    res.json({ code: 0, data: null, message: '验证码已发送' })
   } catch (err) { next(err) }
 })
 
@@ -182,8 +194,8 @@ router.post('/login-sms', async (req, res, next) => {
     const [[user]] = await pool.query('SELECT * FROM h5_users WHERE phone = ?', [phone])
 
     if (!user) {
-      // 用户不存在，请先去注册
-      return res.status(404).json({ code: 404, message: '该手机号未注册，请先去注册' })
+      // 用户不存在，返回错误，要求先注册
+      return res.status(404).json({ code: 404, message: '该手机号未注册，请先注册' })
     }
 
     if (user.status === 'disabled') {
@@ -406,6 +418,27 @@ router.get('/roles', async (req, res, next) => {
   try {
     const [roles] = await pool.query('SELECT * FROM h5_roles ORDER BY id')
     res.json({ code: 0, data: roles, message: 'ok' })
+  } catch (err) { next(err) }
+})
+
+// POST /api/h5/after-sale/repair - 维修员登记维修记录（需要后台权限）
+router.post('/after-sale/repair', h5Auth, async (req, res, next) => {
+  try {
+    const { qrcode_id, issue, solution } = req.body
+    if (!qrcode_id) return res.status(400).json({ code: 400, message: '二维码ID必填' })
+    if (!issue) return res.status(400).json({ code: 400, message: '故障描述必填' })
+
+    // 检查二维码是否存在
+    const [[qr]] = await pool.query('SELECT id, code FROM qrcodes WHERE id = ?', [qrcode_id])
+    if (!qr) return res.status(404).json({ code: 404, message: '二维码不存在' })
+
+    // 登记维修记录
+    await pool.query(
+      'INSERT INTO repair_records (qrcode_id, repair_person, issue, solution, repaired_at) VALUES (?, ?, ?, ?, NOW())',
+      [qrcode_id, req.h5user.name || req.h5user.phone, issue, solution || '']
+    )
+
+    res.json({ code: 0, data: null, message: '维修记录已提交' })
   } catch (err) { next(err) }
 })
 
