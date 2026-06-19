@@ -144,7 +144,7 @@ function handleImgError(e) {
 async function load(append = false) {
   loading.value = true
   try {
-    const res = await fetch(`/api/store-mall/products?page=${page.value}&size=10`)
+    const res = await fetch(`/api/mall/products?page=${page.value}&size=10`)
     const data = await res.json()
     if (append) products.value.push(...data.list)
     else products.value = data.list

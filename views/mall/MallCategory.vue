@@ -114,7 +114,7 @@ function flattenCats(cats, result = []) {
 async function loadProducts(append = false) {
   loading.value = true
   try {
-    const url = `/api/store-mall/products?category_id=${selectedId.value || 0}&page=${page.value}&size=10`
+    const url = `/api/mall/products?category_id=${selectedId.value || 0}&page=${page.value}&size=10`
     const res = await fetch(url)
     const data = await res.json()
     if (append) products.value.push(...data.list)
