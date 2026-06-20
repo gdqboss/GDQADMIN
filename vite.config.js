@@ -58,9 +58,13 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks: (id) => {
-            // 手动分包：i18n 翻译文件 + 扫码页 + 客服组件打包在一起，方便浏览器缓存校验
-            if (id.includes('i18n/') || id.includes('/zh.js') || id.includes('/en.js') || id.includes('/ms.js') || id.includes('ScanPage')) {
+            // 手动分包：i18n 翻译文件打包在一起
+            if (id.includes('i18n/') || id.includes('/zh.js') || id.includes('/en.js') || id.includes('/ms.js')) {
               return 'i18n'
+            }
+            // 扫码页独立 chunk（公开路由，不依赖后台 layout，独立加载更快）
+            if (id.includes('ScanPage') || id.includes('views/scan/')) {
+              return 'scan'
             }
           }
         }

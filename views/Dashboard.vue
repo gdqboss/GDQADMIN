@@ -39,6 +39,46 @@ const saleNote = ref('')
 const saleLoading = ref(false)
 const saleError = ref('')
 const saleSuccess = ref('')
+
+// ─── Receipt (收款) ─────────────────────────────────────────────────────────────────
+const showReceipt = ref(false)       // 是否显示收款表单
+const receiptAmount = ref(0)         // 收款金额
+const receiptMethod = ref('cash')    // 收款方式: cash/bank/alipay/wechat/other
+const receiptNote = ref('')          // 收款备注
+const receiptLoading = ref(false)
+const receiptSuccess = ref(false)
+const receiptError = ref('')
+const lastSaleRecordId = ref(null)   // 刚完成的销售记录ID
+const lastSalePrice = ref(0)         // 刚完成的销售价格
+
+async function handleReceipt() {
+  if (!receiptAmount.value || receiptAmount.value <= 0) {
+    receiptError.value = '请输入有效金额'
+    return
+  }
+  receiptLoading.value = true
+  receiptError.value = ''
+  try {
+    const res = await api.post('/finance-simple/receipts', {
+      receipt_date: new Date().toISOString().slice(0, 10),
+      customer_phone: buyerPhone.value || '未知',
+      customer_name: buyerName.value || '扫码销售',
+      amount: receiptAmount.value,
+      payment_method: receiptMethod.value,
+      note: receiptNote.value || `扫码销售收款 - 记录ID:${lastSaleRecordId.value}`
+    })
+    if (res.code === 0) {
+      receiptSuccess.value = true
+    } else {
+      receiptError.value = res.message || '收款失败'
+    }
+  } catch (e) {
+    receiptError.value = e.message || '收款失败'
+  } finally {
+    receiptLoading.value = false
+  }
+}
+
 let html5QrScanner = null
 
 // ─── Gift ──────────────────────────────────────────────────────────────────────
@@ -91,6 +131,15 @@ const openScanModal = () => {
 
 const closeScanModal = () => {
   showScanModal.value = false
+  // 重置收款状态
+  showReceipt.value = false
+  receiptAmount.value = 0
+  receiptMethod.value = 'cash'
+  receiptNote.value = ''
+  receiptSuccess.value = false
+  receiptError.value = ''
+  lastSaleRecordId.value = null
+  lastSalePrice.value = 0
   stopCameraScanner()
 }
 
@@ -241,8 +290,14 @@ const confirmSale = async () => {
       approver_id: saleType.value === 'gift' ? selectedApprover.value : undefined,
     })
     if (res.code === 0) {
-      saleSuccess.value = saleType.value === 'sale' ? '销售记录已保存' : '赠送申请已提交'
-      setTimeout(closeScanModal, 1500)
+      saleSuccess.value = saleType.value === 'sale' ? '销售完成' : '赠送申请已提交'
+      lastSaleRecordId.value = res.data?.id || null  // 保存记录ID用于收款
+      lastSalePrice.value = salePrice.value
+      // 销售模式：显示收款选项
+      if (saleType.value === 'sale') {
+        receiptAmount.value = salePrice.value  // 默认使用售价
+        showReceipt.value = true
+      }
     } else {
       saleError.value = res.message || '操作失败'
     }
@@ -657,6 +712,51 @@ onUnmounted(() => { stopCameraScanner() })
         <div v-if="saleSuccess" class="text-sm text-success bg-green-50 py-2 px-3 rounded-lg flex items-center gap-2">
           <span class="material-symbols-outlined text-lg">check_circle</span>
           {{ saleSuccess }}
+        </div>
+
+        <!-- 收款区域（销售成功后可选） -->
+        <div v-if="showReceipt && saleType === 'sale'" class="border-t border-gray-100 pt-4 space-y-3">
+          <h4 class="text-sm font-bold text-text-primary flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary">payments</span>
+            收款（可选）
+          </h4>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-text-secondary mb-1">收款金额</label>
+              <el-input-number v-model="receiptAmount" :min="0" :precision="2" class="w-full" controls-position="right" />
+            </div>
+            <div>
+              <label class="block text-xs text-text-secondary mb-1">支付方式</label>
+              <el-select v-model="receiptMethod" class="w-full">
+                <el-option label="现金" value="cash" />
+                <el-option label="银行转账" value="bank" />
+                <el-option label="支付宝" value="alipay" />
+                <el-option label="微信" value="wechat" />
+                <el-option label="其他" value="other" />
+              </el-select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-text-secondary mb-1">备注 <span class="text-text-secondary text-xs font-normal">选填</span></label>
+            <el-input v-model="receiptNote" placeholder="收款备注" clearable />
+          </div>
+          <div v-if="receiptSuccess" class="text-xs text-success bg-green-50 py-2 px-3 rounded-lg flex items-center gap-2">
+            <span class="material-symbols-outlined text-sm">check_circle</span>
+            收款已登记
+          </div>
+          <div v-if="receiptError" class="text-xs text-danger bg-red-50 py-2 px-3 rounded-lg flex items-center gap-2">
+            <span class="material-symbols-outlined text-sm">error</span>
+            {{ receiptError }}
+          </div>
+          <div class="flex gap-2">
+            <el-button v-if="!receiptSuccess" @click="handleReceipt" type="success" :loading="receiptLoading" :disabled="!receiptAmount || receiptAmount <= 0">
+              <span class="material-symbols-outlined text-lg">payments</span>
+              确认收款
+            </el-button>
+            <el-button @click="closeScanModal" plain>
+              {{ receiptSuccess ? '完成' : '跳过收款' }}
+            </el-button>
+          </div>
         </div>
 
         <!-- 错误提示 -->
