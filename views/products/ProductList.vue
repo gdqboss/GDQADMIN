@@ -9,8 +9,9 @@ import { useUserStore } from '../../stores/user.js'
 
 const { t, locale } = useI18n()
 const userStore = useUserStore()
-const canWrite = computed(() => userStore.canAccess('products_write'))
-const canDelete = computed(() => userStore.canAccess('products_delete'))
+// 权限 key 必须用冒号（与 rbac_permissions.name 一致）
+const canWrite = computed(() => userStore.canAccess('products:write'))
+const canDelete = computed(() => userStore.canAccess('products:delete'))
 
 const searchQuery = ref('')
 const selectedCategoryId = ref('')
