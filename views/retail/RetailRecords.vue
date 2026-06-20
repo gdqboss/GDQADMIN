@@ -11,7 +11,7 @@ import api from '../../services/api.js'
 const { t } = useI18n()
 const userStore = useUserStore()
 
-const canDelete = computed(() => userStore.canAccess('retail_delete'))
+const canDelete = computed(() => userStore.canAccess('retail:write'))
 
 const isGift = (r) => r.type === 'gift'
 
@@ -267,13 +267,13 @@ async function handleDelete(record) {
                     {{ $t('retail.revoke') }}
                   </button>
                   <button
-                    v-if="userStore.canAccess('retail_delete')"
+                    v-if="userStore.canAccess('retail:write')"
                     @click="handleDelete(r)"
                     class="text-xs px-2 py-1 text-danger hover:text-red-700 font-medium"
                   >
                     {{ $t('common.delete') }}
                   </button>
-                  <span v-if="r.type === 'gift' && !userStore.canAccess('retail_delete')" class="text-xs text-text-secondary">-</span>
+                  <span v-if="r.type === 'gift' && !userStore.canAccess('retail:write')" class="text-xs text-text-secondary">-</span>
                 </div>
               </td>
             </tr>

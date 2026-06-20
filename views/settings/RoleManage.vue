@@ -42,6 +42,10 @@ const PRESET_TEMPLATES = [
       'stocktake:run', 'stocktake:report',
       'qrcode:read', 'qrcode:write', 'qrcode:delete', 'qrcode:scan',
       'products:read', 'products:write',  // ⚠ DB 是 products:write 不是 product:write
+      // 快捷操作（工作台首页）
+      'quick-action-attendance', 'quick-action-worklog', 'quick-action-task',
+      'quick-action-scan', 'quick-action-responsibility', 'quick-action-profile',
+      'quick-action-qrcode',
     ],
   },
   {
@@ -57,6 +61,9 @@ const PRESET_TEMPLATES = [
       'aftersale:read', 'aftersale:write', 'scan:aftersale', 'scan:repair',
       'store:read', 'dealer:read',
       'task:read',
+      // 快捷操作（工作台首页）
+      'quick-action-attendance', 'quick-action-worklog', 'quick-action-task',
+      'quick-action-scan', 'quick-action-responsibility', 'quick-action-profile',
     ],
   },
   {
@@ -91,6 +98,10 @@ const PRESET_TEMPLATES = [
       'aftersale:read', 'aftersale:write',
       'approval:read',
       'qrcode:read',
+      // 快捷操作（工作台首页）
+      'quick-action-attendance', 'quick-action-worklog', 'quick-action-task',
+      'quick-action-scan', 'quick-action-responsibility', 'quick-action-expense',
+      'quick-action-profile', 'quick-action-qrcode',
     ],
   },
   {
@@ -118,6 +129,9 @@ const PRESET_TEMPLATES = [
       'work_log:read', 'work_log:write',
       'task:read',
       'leave:read', 'leave:write',
+      // 快捷操作（工作台首页）
+      'quick-action-attendance', 'quick-action-worklog', 'quick-action-task',
+      'quick-action-responsibility', 'quick-action-expense', 'quick-action-profile',
     ],
   },
 ]

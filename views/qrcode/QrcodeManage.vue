@@ -14,6 +14,7 @@ const { t } = useI18n()
 const store = useQrcodeStore()
 const userStore = useUserStore()
 const canDelete = computed(() => userStore.canAccess('qrcode:delete'))
+const canWrite = computed(() => userStore.canAccess('qrcode:write'))
 const canSelect = computed(() => true)
 const products = ref([])
 const warehouses = ref([])
@@ -883,13 +884,13 @@ async function handleBatchEdit() {
           </button>
 
           <!-- 决策 5: 重新绑定 -->
-          <button v-if="selectedIds.length === 1" @click="openRebind"
+          <button v-if="canWrite && selectedIds.length === 1" @click="openRebind"
             class="flex items-center gap-2 bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
             <span class="material-symbols-outlined text-[18px]">restart_alt</span>
             {{ $t('qrcode.rebind') }}
           </button>
 
-          <button @click="showGenerate = true" class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+          <button v-if="canWrite" @click="showGenerate = true" class="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
             <span class="material-symbols-outlined text-[18px]">add</span>
             {{ $t('qrcode.batchGenerate') }}
           </button>

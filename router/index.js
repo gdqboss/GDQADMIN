@@ -75,7 +75,7 @@ const routes = [
       { path: 'products', name: 'Products', component: lazyLoad(() => import('../views/products/ProductList.vue')), meta: { title: '商品管理', parent: '库存管理', permission: 'product:write' } },
 
       // 库存
-      { path: 'in-out', name: 'InOut', component: lazyLoad(() => import('../views/inventory/InOutList.vue')), meta: { title: '出入库管理', parent: '库存管理', permission: 'inventory:inout' } },
+      { path: 'in-out', name: 'InOut', component: lazyLoad(() => import('../views/inventory/InOutList.vue')), meta: { title: '出入库管理', parent: '库存管理', permission: 'inventory:write' } },
       { path: 'stock', name: 'StockManage', component: lazyLoad(() => import('../views/inventory/StockManage.vue')), meta: { title: '库存管理', parent: '库存管理', permission: 'stock:read' } },
       { path: 'stocktake', name: 'Stocktake', component: lazyLoad(() => import('../views/inventory/Stocktake.vue')), meta: { title: '库存盘点', parent: '库存管理', permission: 'stocktake:run' } },
       { path: 'warehouses', name: 'Warehouses', component: lazyLoad(() => import('../views/warehouse/WarehouseList.vue')), meta: { title: '仓库列表', parent: '仓库管理', permission: 'warehouse:write' } },
@@ -113,9 +113,9 @@ const routes = [
       // ── 预约 ────────────────────────────────────────────────
       { path: 'yuyue', name: 'YuyueList', component: lazyLoad(() => import('../views/yuyue/YuyueList.vue')), meta: { title: '预约管理', permission: 'yuyue:read' } },
       { path: 'yuyue/:id', name: 'YuyueDetail', component: lazyLoad(() => import('../views/yuyue/YuyueDetail.vue')), meta: { title: '预约详情', permission: 'yuyue:read' } },
-      { path: 'articles', name: 'ArticleList', component: lazyLoad(() => import('../views/articles/ArticleList.vue')), meta: { title: '文章管理', parent: '商城', permission: 'articles_read' } },
-      { path: 'articles/new', name: 'ArticleNew', component: lazyLoad(() => import('../views/articles/ArticleDetail.vue')), meta: { title: '新增文章', parent: '商城', permission: 'articles_write' } },
-      { path: 'articles/:id', name: 'ArticleDetail', component: lazyLoad(() => import('../views/articles/ArticleDetail.vue')), meta: { title: '文章详情', parent: '商城', permission: 'articles_read' } },
+      { path: 'articles', name: 'ArticleList', component: lazyLoad(() => import('../views/articles/ArticleList.vue')), meta: { title: '文章管理', parent: '商城', permission: 'articles:read' } },
+      { path: 'articles/new', name: 'ArticleNew', component: lazyLoad(() => import('../views/articles/ArticleDetail.vue')), meta: { title: '新增文章', parent: '商城', permission: 'articles:write' } },
+      { path: 'articles/:id', name: 'ArticleDetail', component: lazyLoad(() => import('../views/articles/ArticleDetail.vue')), meta: { title: '文章详情', parent: '商城', permission: 'articles:read' } },
 
       // ── 积分商城 / 优惠券 ─────────────────────────────────────
       { path: 'score-products', name: 'ScoreProductManage', component: lazyLoad(() => import('../views/mall/ScoreProductManage.vue')), meta: { title: '积分商品管理', parent: '商城', permission: 'product:write' } },
@@ -148,7 +148,7 @@ const routes = [
 
       // ── OA 办公 ──────────────────────────────────────────────
       { path: 'oa', name: 'OaCenter', component: lazyLoad(() => import('../views/oa/OaCenter.vue')), meta: { title: 'OA 办公', permission: 'oa:read' } },
-      { path: 'oa/attendance', name: 'AttendanceManage', component: lazyLoad(() => import('../views/oa/AttendanceManage.vue')), meta: { title: '考勤管理', permission: 'attendance:manage' } },
+      { path: 'oa/attendance', name: 'AttendanceManage', component: lazyLoad(() => import('../views/oa/AttendanceManage.vue')), meta: { title: '考勤管理', permission: 'attendance:view' } },
       { path: 'oa/my-responsibility', name: 'MyResponsibility', component: lazyLoad(() => import('../views/oa/MyResponsibility.vue')), meta: { title: '我的权责', permission: 'oa:read' } },
       { path: 'oa/approvals', name: 'OaApprovalManage', component: lazyLoad(() => import('../views/oa/ApprovalManage.vue')), meta: { title: '审批管理', permission: 'approval:write' } },
       { path: 'oa/approvals/create', name: 'ApprovalCreate', component: lazyLoad(() => import('../views/oa/ApprovalCreate.vue')), meta: { title: '发起审批', permission: 'approval:write' } },
@@ -156,7 +156,7 @@ const routes = [
       { path: 'oa/shifts', name: 'ShiftManage', component: lazyLoad(() => import('../views/oa/ShiftManage.vue')), meta: { title: '班次管理', permission: 'shift:write' } },
       { path: 'oa/schedule', name: 'ScheduleCalendar', component: lazyLoad(() => import('../views/oa/ScheduleCalendar.vue')), meta: { title: '排班日历', permission: 'schedule:write' } },
       { path: 'oa/attendance-summary', name: 'AttendanceSummary', component: lazyLoad(() => import('../views/oa/AttendanceSummary.vue')), meta: { title: '考勤统计', permission: 'attendance:view' } },
-      { path: 'oa/attendance-rules', name: 'AttendanceRuleManage', component: lazyLoad(() => import('../views/oa/AttendanceRuleManage.vue')), meta: { title: '出勤管理', permission: 'attendance:manage' } },
+      { path: 'oa/attendance-rules', name: 'AttendanceRuleManage', component: lazyLoad(() => import('../views/oa/AttendanceRuleManage.vue')), meta: { title: '出勤管理', permission: 'attendance:view' } },
       { path: 'oa/leave', name: 'LeaveManage', component: lazyLoad(() => import('../views/oa/LeaveManage.vue')), meta: { title: '请假管理', permission: 'leave:write' } },
       { path: 'oa/workflow', name: 'WorkflowDesigner', component: lazyLoad(() => import('../views/oa/WorkflowDesigner.vue')), meta: { title: '工作流管理', permission: 'workflow:write' } },
 
@@ -171,7 +171,7 @@ const routes = [
       { path: 'logs/feedback', name: 'LogsFeedbackManage', component: lazyLoad(() => import('../views/logs/FeedbackManage.vue')), meta: { title: '投诉建议', parent: '日志系统', permission: 'work_log:read' } },
 
       // ── 二维码/报表 ───────────────────────────────────────────
-      { path: 'qrcode', name: 'QrcodeManage', component: lazyLoad(() => import('../views/qrcode/QrcodeManage.vue')), meta: { title: '一物一码', permission: 'qrcode:write' } },
+      { path: 'qrcode', name: 'QrcodeManage', component: lazyLoad(() => import('../views/qrcode/QrcodeManage.vue')), meta: { title: '一物一码', permission: 'qrcode:read' } },
       { path: 'reports', name: 'Reports', component: lazyLoad(() => import('../views/reports/ReportCenter.vue')), meta: { title: '报表中心', permission: 'report:read' } },
 
       // ── 个人信息 ────────────────────────────────────────────
@@ -265,12 +265,19 @@ router.beforeEach((to, from, next) => {
     return next('/')
   }
 
-  // 权限检查
+  // 权限检查 — 无权限时给用户友好提示（按波哥"出现就能操作"原则）
   if (to.meta.permission) {
     if (userStore.canAccess(to.meta.permission)) {
       return next()
     } else {
-      return next('/')  // 无权限跳转首页
+      // 用 ElMessage 提示权限不足，而不是静默跳回首页
+      import('element-plus').then(({ ElMessage }) => {
+        ElMessage.warning({
+          message: `无权访问「${to.meta.title || to.path}」，请联系管理员开通权限`,
+          duration: 3000,
+        })
+      })
+      return next(false)  // 中止跳转，留在原页面
     }
   }
 
