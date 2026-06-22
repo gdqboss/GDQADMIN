@@ -220,8 +220,8 @@ async function loadCurrentQty() {
     return
   }
   try {
-    // 用 stock 接口查当前数量（已有接口）
-    const res = await api.get('/inventory/stock', {
+    // 用 stock 接口查当前数量（已有接口，路径是 /api/stock，不是 /api/inventory/stock）
+    const res = await api.get('/stock', {
       params: {
         warehouse_id,
         product_id,

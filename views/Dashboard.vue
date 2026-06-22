@@ -89,15 +89,16 @@ const rejectedCount = ref(0)
 const giftCheckLoading = ref(false)
 
 // ─── Quick Actions ───────────────────────────────────────────────────────────────────
+// 按钮 permission 必须 = 路由 meta.permission（"出现即可用，无权限不出现"原则）
 const quickActions = [
-  { name: () => t('dashboard.quickAttendance'), icon: 'schedule', color: 'success', route: '/oa/attendance',   permission: 'quick-action-attendance' },
-  { name: () => t('dashboard.quickWorkLog'), icon: 'description', color: 'primary', route: '/logs/work-logs', permission: 'quick-action-worklog' },
-  { name: () => t('dashboard.quickMyTasks'), icon: 'task_alt', color: 'info', route: '/tasks',              permission: 'quick-action-task' },
+  { name: () => t('dashboard.quickAttendance'), icon: 'schedule', color: 'success', route: '/oa/attendance',   permission: 'attendance:view' },
+  { name: () => t('dashboard.quickWorkLog'), icon: 'description', color: 'primary', route: '/logs/work-logs', permission: 'work_log:read' },
+  { name: () => t('dashboard.quickMyTasks'), icon: 'task_alt', color: 'info', route: '/tasks',              permission: 'task:read' },
   { name: () => t('dashboard.quickScanSale'), icon: 'qr_code_scanner', color: 'warning', action: 'scan',     permission: 'quick-action-scan' },
-  { name: () => t('dashboard.quickMyDuties'), icon: 'assignment', color: 'blue', route: '/oa/my-responsibility', permission: 'quick-action-responsibility' },
-  { name: () => t('dashboard.quickExpense'), icon: 'receipt_long', color: 'danger', route: '/oa/approvals/create?type=expense', permission: 'quick-action-expense' },
+  { name: () => t('dashboard.quickMyDuties'), icon: 'assignment', color: 'blue', route: '/oa/my-responsibility', permission: 'oa:read' },
+  { name: () => t('dashboard.quickExpense'), icon: 'receipt_long', color: 'danger', route: '/oa/approvals/create?type=expense', permission: 'approval:write' },
   { name: () => t('dashboard.quickProfile'), icon: 'person', color: 'purple', route: '/profile',            permission: 'quick-action-profile' },
-  { name: () => t('dashboard.quickQrcode'), icon: 'qr_code', color: 'teal', route: '/qrcode',           permission: 'quick-action-qrcode' },
+  { name: () => t('dashboard.quickQrcode'), icon: 'qr_code', color: 'teal', route: '/qrcode',           permission: 'qrcode:read' },
 ]
 
 // 按权限过滤显示的快捷操作
