@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import i18n from '../i18n/index.js'
+import { setLocale } from '../i18n/index.js'
 import { useUserStore } from '../stores/user'
 import { systemSettings } from '../stores/system'
 import api from '../services/api'
@@ -21,7 +21,7 @@ if (oldUser) {
 
 const router = useRouter()
 const userStore = useUserStore()
-const { t } = useI18n()
+const { t, locale: i18nLocale, messages: i18nMessages } = useI18n()
 
 // ─── 页面加载时：检测微信授权回调code ───
 const urlParams = new URLSearchParams(window.location.search)
@@ -365,9 +365,10 @@ const showLangDropdown = ref(false)
 
 async function switchLocale(lang) {
   showLangDropdown.value = false
-  if (lang === i18n.global.locale.value) return
-  localStorage.setItem('caimeite_locale', lang)
-  window.location.reload()
+  if (lang === i18nLocale.value) return
+  // 用 i18n 的 setLocale（动态 import 包 + 切 locale + 存 localStorage）
+  // 无需 reload — Vue 响应式会自动重渲染
+  await setLocale(lang)
 }
 
 function langLabel(l) {
@@ -391,8 +392,8 @@ function langLabel(l) {
           <div class="absolute top-4 right-4 relative">
             <button @click="showLangDropdown = !showLangDropdown" class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-700 hover:border-primary transition-all">
               <span class="material-symbols-outlined text-[16px] sm:text-[18px]">language</span>
-              <span class="hidden sm:inline">{{ langLabel(i18n.global.locale.value) }}</span>
-              <span class="sm:hidden">{{ langLabel(i18n.global.locale.value) }}</span>
+              <span class="hidden sm:inline">{{ langLabel(i18nLocale) }}</span>
+              <span class="sm:hidden">{{ langLabel(i18nLocale) }}</span>
               <span v-if="localeCycle.length > 2" class="material-symbols-outlined text-[14px]">expand_more</span>
             </button>
             <div v-if="showLangDropdown" class="absolute right-0 mt-1 w-28 bg-white rounded-lg shadow-lg border z-50 py-1" @click.stop>
@@ -401,7 +402,7 @@ function langLabel(l) {
                 :key="lang"
                 @click="switchLocale(lang)"
                 class="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 transition-colors"
-                :class="lang === i18n.global.locale.value ? 'text-primary font-semibold' : 'text-text-primary'"
+                :class="lang === i18nLocale ? 'text-primary font-semibold' : 'text-text-primary'"
               >
                 {{ langLabel(lang) }}
               </button>

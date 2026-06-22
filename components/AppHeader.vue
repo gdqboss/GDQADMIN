@@ -2,14 +2,14 @@
 import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import i18n from '../i18n/index.js'
+import { setLocale } from '../i18n/index.js'
+const { t, locale: i18nLocale, messages: i18nMessages } = useI18n()
 import api from '../services/api.js'
 import { systemSettings } from '../stores/system.js'
 
-const emit = defineEmits(['toggle-sidebar'])
 const route = useRoute()
 const router = useRouter()
-const { t } = useI18n()
+const emit = defineEmits(['toggle-sidebar'])
 
 const unreadCount = ref(0)
 const giftApprovalCount = ref(0)
@@ -115,22 +115,22 @@ const showLangDropdown = ref(false)
 
 const langLabelMap = { zh: '中文', en: 'English', ja: '日本語', ko: '한국어', th: 'ภาษาไทย', vi: 'Tiếng Việt', id: 'Bahasa' }
 const langLabel = (l) => langLabelMap[l] || l.toUpperCase()
-const currentLangLabel = computed(() => langLabel(i18n.global.locale.value))
+const currentLangLabel = computed(() => langLabel(i18nLocale.value))
 
 async function switchLang(lang) {
   showLangDropdown.value = false
-  if (lang === i18n.global.locale.value) return
-  localStorage.setItem('caimeite_locale', lang)
-  window.location.reload()
+  if (lang === i18nLocale.value) return
+  // 用 i18n 的 setLocale（动态 import 包 + 切 locale + 存 localStorage）
+  // 无需 reload — Vue 响应式会自动重渲染
+  await setLocale(lang)
 }
 
 async function toggleLocale() {
   const langs = languages.value
-  const cur = i18n.global.locale.value
+  const cur = i18nLocale.value
   const idx = langs.indexOf(cur)
   const newLocale = idx >= 0 && idx < langs.length - 1 ? langs[idx + 1] : langs[0]
-  localStorage.setItem('caimeite_locale', newLocale)
-  window.location.reload()
+  await setLocale(newLocale)
 }
 
 const fetchUnreadCount = async () => {
@@ -197,9 +197,9 @@ const formatDate = (dateStr) => {
   const hours = Math.floor(diff / 3600000)
   const days = Math.floor(diff / 86400000)
 
-  if (minutes < 60) return i18n.global.locale.value === 'zh' ? `${minutes}分钟前` : `${minutes}m ago`
-  if (hours < 24) return i18n.global.locale.value === 'zh' ? `${hours}小时前` : `${hours}h ago`
-  return i18n.global.locale.value === 'zh' ? `${days}天前` : `${days}d ago`
+  if (minutes < 60) return i18nLocale.value === 'zh' ? `${minutes}分钟前` : `${minutes}m ago`
+  if (hours < 24) return i18nLocale.value === 'zh' ? `${hours}小时前` : `${hours}h ago`
+  return i18nLocale.value === 'zh' ? `${days}天前` : `${days}d ago`
 }
 
 onMounted(() => {
@@ -252,7 +252,7 @@ onMounted(() => {
             :key="lang"
             @click="switchLang(lang)"
             class="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 transition-colors"
-            :class="lang === i18n.global.locale.value ? 'text-primary font-semibold' : 'text-text-primary'"
+            :class="lang === i18nLocale ? 'text-primary font-semibold' : 'text-text-primary'"
           >
             {{ langLabel(lang) }}
           </button>
@@ -260,7 +260,7 @@ onMounted(() => {
       </div>
       <button v-else @click="toggleLocale" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-text-primary hover:bg-gray-50 transition-colors">
         <span class="material-symbols-outlined text-[16px]">language</span>
-        {{ languages.length > 1 ? languages.find(l => l !== i18n.global.locale.value)?.toUpperCase().slice(0,2) : 'EN' }}
+        {{ languages.length > 1 ? languages.find(l => l !== i18nLocale)?.toUpperCase().slice(0,2) : 'EN' }}
       </button>
       <!-- Notifications / Reminders -->
       <div class="relative">
