@@ -1,7 +1,5 @@
 import { createI18n } from 'vue-i18n'
 import zh from './zh.js'
-import en from './en.js'
-import ms from './ms.js'
 
 // 默认只用 zh（主语言），en/ms 按需加载减少首屏体积
 let savedLocale = 'zh'
@@ -12,45 +10,57 @@ try {
   }
 } catch (e) {}
 
-// 已加载的语言包缓存
-const loadedLocales = { zh, en, ms }
+// 已加载的语言包缓存（按需填充）
+const loadedLocales = { zh }
+
+// 异步加载语言包的工厂
+async function loadLocaleAsync(locale) {
+  if (loadedLocales[locale]) return loadedLocales[locale]
+  // 后台 fetch（不阻塞当前渲染）
+  const mod = await import(/* @vite-ignore */ `./${locale}.js`)
+  loadedLocales[locale] = mod.default
+  return mod.default
+}
 
 const i18n = createI18n({
   legacy: false,
   locale: savedLocale,
   fallbackLocale: 'zh',
-  messages: { zh },   // 先只注册 zh
+  messages: { zh },   // 首屏只注册 zh
   globalInjection: true,
   missingWarn: false,
   fallbackWarn: false,
   missing: () => '',
 })
 
-// 语言切换（同步，因为 en 已预加载）
-i18n.setLocaleMessage = (locale) => {
-  if (!loadedLocales[locale]) return
-  if (!i18n.global.messages.value[locale]) {
+// 语言切换（异步，en/ms 按需 import）
+export async function setLocale(locale) {
+  if (locale === i18n.global.locale.value) return
+  if (locale !== 'zh' && !loadedLocales[locale]) {
+    await loadLocaleAsync(locale)
+  }
+  if (loadedLocales[locale]) {
     i18n.global.messages.value[locale] = loadedLocales[locale]
   }
   i18n.global.locale.value = locale
+  try { localStorage.setItem('caimeite_locale', locale) } catch (e) {}
 }
 
-// 立即预加载 en（后台异步，不阻塞渲染）
-import('./en.js').then(mod => {
-  loadedLocales.en = mod.default
-  // 如果当前 locale 是 en，注入到 i18n
-  if (i18n.global.locale.value === 'en') {
-    i18n.global.messages.value.en = mod.default
-  }
-}).catch(() => {})
+// 如果保存的 locale 不是 zh，异步加载并切换
+if (savedLocale !== 'zh') {
+  loadLocaleAsync(savedLocale).then((messages) => {
+    i18n.global.messages.value[savedLocale] = messages
+  }).catch(() => {})
+}
 
-// 立即预加载 ms（后台异步，不阻塞渲染）
-import('./ms.js').then(mod => {
-  loadedLocales.ms = mod.default
-  // 如果当前 locale 是 ms，注入到 i18n
-  if (i18n.global.locale.value === 'ms') {
-    i18n.global.messages.value.ms = mod.default
+// 保留旧的同步入口（兼容现有调用方，但走 zh 单包路径）
+i18n.setLocaleMessage = (locale) => {
+  if (locale === 'zh' || loadedLocales[locale]) {
+    if (loadedLocales[locale]) {
+      i18n.global.messages.value[locale] = loadedLocales[locale]
+    }
+    i18n.global.locale.value = locale
   }
-}).catch(() => {})
+}
 
 export default i18n

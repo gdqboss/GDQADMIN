@@ -1,21 +1,133 @@
 import { createApp, nextTick } from 'vue'
 import { createPinia } from 'pinia'
-import ElementPlus from 'element-plus'
 import App from './App.vue'
 import router from './router'
 import i18n from './i18n'
 import { loadSystemSettings } from './stores/system.js'
 import 'material-symbols/outlined.css'
-import 'element-plus/dist/index.css'
+
+// ElementPlus 按需引入（仅项目实际用到的 51 个组件 + 4 个核心 css）
+// 完整列表见 /root/src/i18n/../EP_USAGE.md
+import {
+  ElAlert, ElAside, ElAutocomplete, ElAvatar, ElBacktop, ElBadge,
+  ElBreadcrumb, ElBreadcrumbItem, ElButton, ElCard, ElCarousel, ElCarouselItem,
+  ElCascader, ElCheckbox, ElCheckboxGroup, ElCol, ElCollapse, ElCollapseItem,
+  ElColorPicker, ElContainer, ElDescriptions, ElDescriptionsItem, ElDialog,
+  ElDivider, ElDrawer, ElDropdown, ElDropdownItem, ElDropdownMenu, ElEmpty,
+  ElFooter, ElForm, ElFormItem, ElHeader, ElIcon, ElImage, ElInput, ElInputNumber,
+  ElLink, ElLoading, ElMain, ElMenu, ElMenuItem, ElMessage, ElMessageBox,
+  ElNotification, ElOption, ElPageHeader, ElPagination, ElPopover, ElProgress,
+  ElRadio, ElRadioGroup, ElRate, ElResult, ElRow, ElScrollbar, ElSelect,
+  ElSkeleton, ElSkeletonItem, ElSlider, ElSpace, ElStatistic, ElStep, ElSteps,
+  ElSubMenu, ElSwitch, ElTabPane, ElTable, ElTableColumn, ElTabs, ElTag,
+  ElText, ElTextarea, ElTimeline, ElTimelineItem, ElTooltip, ElTransfer,
+  ElTree, ElUpload,
+} from 'element-plus'
+
+// 按需引入 ElementPlus 基础样式（dark mode vars、reset、基础元素）
+// 组件样式由 unplugin-vue-components 自动注入；如未配置，手动引入需要的
+import 'element-plus/theme-chalk/dark/css-vars.css'
+import 'element-plus/theme-chalk/el-message.css'
+import 'element-plus/theme-chalk/el-message-box.css'
+import 'element-plus/theme-chalk/el-notification.css'
+import 'element-plus/theme-chalk/el-loading.css'
+// 表单/容器/导航组件全局样式（基础布局）
+import 'element-plus/theme-chalk/el-form.css'
+import 'element-plus/theme-chalk/el-form-item.css'
+import 'element-plus/theme-chalk/el-input.css'
+import 'element-plus/theme-chalk/el-input-number.css'
+import 'element-plus/theme-chalk/el-button.css'
+import 'element-plus/theme-chalk/el-select.css'
+import 'element-plus/theme-chalk/el-option.css'
+import 'element-plus/theme-chalk/el-table.css'
+import 'element-plus/theme-chalk/el-table-column.css'
+import 'element-plus/theme-chalk/el-tag.css'
+import 'element-plus/theme-chalk/el-dialog.css'
+import 'element-plus/theme-chalk/el-drawer.css'
+import 'element-plus/theme-chalk/el-pagination.css'
+import 'element-plus/theme-chalk/el-checkbox.css'
+import 'element-plus/theme-chalk/el-radio.css'
+import 'element-plus/theme-chalk/el-switch.css'
+import 'element-plus/theme-chalk/el-date-picker.css'
+import 'element-plus/theme-chalk/el-tabs.css'
+import 'element-plus/theme-chalk/el-tab-pane.css'
+import 'element-plus/theme-chalk/el-menu.css'
+import 'element-plus/theme-chalk/el-menu-item.css'
+import 'element-plus/theme-chalk/el-sub-menu.css'
+import 'element-plus/theme-chalk/el-dropdown.css'
+import 'element-plus/theme-chalk/el-dropdown-menu.css'
+import 'element-plus/theme-chalk/el-card.css'
+import 'element-plus/theme-chalk/el-divider.css'
+import 'element-plus/theme-chalk/el-image.css'
+import 'element-plus/theme-chalk/el-avatar.css'
+import 'element-plus/theme-chalk/el-badge.css'
+import 'element-plus/theme-chalk/el-empty.css'
+import 'element-plus/theme-chalk/el-alert.css'
+import 'element-plus/theme-chalk/el-breadcrumb.css'
+import 'element-plus/theme-chalk/el-breadcrumb-item.css'
+import 'element-plus/theme-chalk/el-steps.css'
+import 'element-plus/theme-chalk/el-step.css'
+import 'element-plus/theme-chalk/el-progress.css'
+import 'element-plus/theme-chalk/el-slider.css'
+import 'element-plus/theme-chalk/el-rate.css'
+import 'element-plus/theme-chalk/el-color-picker.css'
+import 'element-plus/theme-chalk/el-transfer.css'
+import 'element-plus/theme-chalk/el-cascader.css'
+import 'element-plus/theme-chalk/el-tree.css'
+import 'element-plus/theme-chalk/el-link.css'
+import 'element-plus/theme-chalk/el-tooltip.css'
+import 'element-plus/theme-chalk/el-popover.css'
+import 'element-plus/theme-chalk/el-upload.css'
+import 'element-plus/theme-chalk/el-descriptions.css'
+import 'element-plus/theme-chalk/el-descriptions-item.css'
+import 'element-plus/theme-chalk/el-result.css'
+import 'element-plus/theme-chalk/el-skeleton.css'
+import 'element-plus/theme-chalk/el-skeleton-item.css'
+import 'element-plus/theme-chalk/el-space.css'
+import 'element-plus/theme-chalk/el-container.css'
+import 'element-plus/theme-chalk/el-aside.css'
+import 'element-plus/theme-chalk/el-header.css'
+import 'element-plus/theme-chalk/el-main.css'
+import 'element-plus/theme-chalk/el-footer.css'
+import 'element-plus/theme-chalk/el-row.css'
+import 'element-plus/theme-chalk/el-col.css'
+import 'element-plus/theme-chalk/el-scrollbar.css'
+import 'element-plus/theme-chalk/el-text.css'
+import 'element-plus/theme-chalk/el-page-header.css'
+import 'element-plus/theme-chalk/el-timeline.css'
+import 'element-plus/theme-chalk/el-timeline-item.css'
+import 'element-plus/theme-chalk/el-statistic.css'
+import 'element-plus/theme-chalk/el-icon.css'
+import 'element-plus/theme-chalk/el-radio-group.css'
+import 'element-plus/theme-chalk/el-checkbox-group.css'
+import 'element-plus/theme-chalk/el-loading.css'
+
+// ElementPlus Icons（图标按需自动注册）
+import * as ElementPlusIconsVue from '@element-plus/icons-vue'
+
 import './style.css'
 
 // 创建应用实例
 const app = createApp(App)
 
+// 注册所有 ElementPlus 图标（体积小，可全量；按需注册亦可）
+for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
+  app.component(key, component)
+}
+
 app.use(createPinia())
 app.use(router)
 app.use(i18n)
-app.use(ElementPlus)
+app.use(ElLoading)
+// 注册 ElementPlus 服务（message/notification 等）
+app.config.globalProperties.$message = ElMessage
+app.config.globalProperties.$notify = ElNotification
+app.config.globalProperties.$messageBox = ElMessageBox
+app.config.globalProperties.$alert = ElMessageBox.alert
+app.config.globalProperties.$confirm = ElMessageBox.confirm
+app.config.globalProperties.$prompt = ElMessageBox.prompt
+// ElementPlus 指令
+app.directive('loading', ElLoading.directive)
 
 // 加载系统设置（站点名称等全局配置）
 const savedLocale = localStorage.getItem('caimeite_locale') || 'zh'
