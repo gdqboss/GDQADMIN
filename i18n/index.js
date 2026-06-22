@@ -1,66 +1,43 @@
 import { createI18n } from 'vue-i18n'
 import zh from './zh.js'
+import en from './en.js'
+import ms from './ms.js'
 
+// 启动语言：从 localStorage 读，三选一
 let savedLocale = 'zh'
 try {
   const stored = localStorage.getItem('caimeite_locale')
-  if (stored && (stored === 'zh' || stored === 'en' || stored === 'ms')) {
+  if (stored && ['zh', 'en', 'ms'].includes(stored)) {
     savedLocale = stored
   }
 } catch (e) {}
 
-// 已加载的语言包缓存
-const loadedLocales = { zh }
+// 三个语言包全部 static import，gzip 后约 150K，不做异步加载
+// ponytail: 删 setLocale async，删 dynamic import，删 import.meta.glob
+// 三种语言打包进同一 chunk，避免 Vite hash 命名导致运行时找不到文件
+const messages = { zh, en, ms }
 
-async function loadLocaleAsync(locale) {
-  if (loadedLocales[locale]) return loadedLocales[locale]
-  const mod = await import(/* @vite-ignore */ `./${locale}.js`)
-  loadedLocales[locale] = mod.default
-  return mod.default
-}
-
-// 创建 i18n 实例（首屏只用 zh，en/ms 异步）
 export const i18n = createI18n({
   legacy: false,
-  locale: 'zh',
+  locale: savedLocale,
   fallbackLocale: 'zh',
-  messages: { zh },
+  messages,
   globalInjection: true,
   missingWarn: false,
   fallbackWarn: false,
   missing: () => '',
 })
 
-// 首屏后立即异步切到 savedLocale
-if (savedLocale !== 'zh') {
-  loadLocaleAsync(savedLocale).then((messages) => {
-    i18n.global.messages.value[savedLocale] = messages
-    i18n.global.locale.value = savedLocale
-  }).catch((err) => {
-    console.warn('[i18n] 加载语言包失败:', savedLocale, err)
-  })
-}
-
-// 语言切换（供组件直接 import 调用）—— 必须传 i18n 实例，因为 setLocale
-// 内部用 i18n.global 修改；外部组件也用同一个实例就能保持响应式同步
-export async function setLocale(locale, i18nInstance) {
-  const inst = i18nInstance || i18n
-  if (locale === inst.global.locale.value && inst.global.messages.value[locale]) {
-    return
-  }
-  if (locale !== 'zh' && !loadedLocales[locale]) {
-    await loadLocaleAsync(locale)
-  }
-  if (loadedLocales[locale]) {
-    inst.global.messages.value[locale] = loadedLocales[locale]
-  }
-  inst.global.locale.value = locale
+// 切语言：直接改 locale + 写 localStorage，调用方自己 reload 或刷新
+// ponytail: 不引新依赖、不写异步、不抽函数；用 3 行实现
+export function setLocale(locale) {
+  if (!['zh', 'en', 'ms'].includes(locale)) return
+  i18n.global.locale.value = locale
   try { localStorage.setItem('caimeite_locale', locale) } catch (e) {}
 }
 
 export default i18n
 
-// 暴露到 window 上方便调试
 if (typeof window !== 'undefined') {
   window.__i18n = i18n
 }
