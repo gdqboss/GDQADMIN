@@ -21,6 +21,8 @@ export const ROLES = Object.freeze({
   FINANCE:    'finance',      // 财务
   CUSTOMER_SERVICE: 'customer_service', // 客服
   REPAIRER:   'repairer',     // 维修员
+  REVIEWER:   'reviewer',     // 审核员（线上订单）
+  DISPATCHER: 'dispatcher',   // 制单员（送货单）
 })
 
 // ─── 综合判断 ─────────────────────────────────────────────────────────────────
@@ -61,6 +63,14 @@ export const PERMS = Object.freeze({
   // 财务
   FINANCE_VIEW:        'finance:view',
   FINANCE_MANAGE:      'finance:manage',
+
+  // 线上订单系统
+  ORDER_CREATE:        'order:create',         // 员工创建订单
+  ORDER_READ_OWN:      'order:read_own',       // 查看自己订单
+  ORDER_READ_ALL:      'order:read_all',       // 查看全部订单
+  ORDER_REVIEW:        'order:review',         // 审核订单
+  ORDER_DISPATCH:      'order:dispatch',       // 制作送货单
+  ORDER_EXPORT:        'order:export',         // 导出订单
 
   // 系统设置
   SETTINGS_MANAGE:     'settings:manage',
