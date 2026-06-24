@@ -69,37 +69,11 @@ router.post('/inbound', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (r
       return res.status(400).json({ code: 400, message: '仓库和商品明细必填' })
     }
 
-    // ✅ 新模型：同一 SKU 在同一仓库只能存在一次
-    // 入库前检查：任何 (warehouse_id, product_id, sku_id) 已存在 → 拒绝整个请求
-    const conflicts = []
-    for (const it of items) {
-      const [[existing]] = await conn.query(
-        `SELECT ws.id, ws.quantity, p.name AS product_name, ps.sku AS sku_code
-         FROM warehouse_stock ws
-         JOIN products p ON ws.product_id = p.id
-         LEFT JOIN product_skus ps ON ws.sku_id = ps.id
-         WHERE ws.warehouse_id=? AND ws.product_id=? AND ${it.sku_id ? 'ws.sku_id=?' : 'ws.sku_id IS NULL'}`,
-        it.sku_id ? [warehouse_id, it.product_id, it.sku_id] : [warehouse_id, it.product_id]
-      )
-      if (existing) {
-        conflicts.push({
-          product_id: it.product_id,
-          sku_id: it.sku_id,
-          product_name: existing.product_name,
-          sku_code: existing.sku_code,
-          current_qty: existing.quantity,
-          stock_id: existing.id
-        })
-      }
-    }
-    if (conflicts.length) {
-      await conn.rollback()
-      return res.status(409).json({
-        code: 409,
-        message: `${conflicts.length} 个 SKU 在此仓库已存在，请用「库存管理 → 调整数量」功能`,
-        data: { conflicts }
-      })
-    }
+    // ✅ 累加模式：同一 SKU 在同一仓库入库会自动累加库存
+    // 不再拒绝"SKU 已存在"的请求（波哥 2026-06-24 反馈：补货是正常业务）
+    // - 同 SKU×仓库 已存在 → quantity = old + new（补货）
+    // - 不存在 → 直接 INSERT（首次入库）
+    // 仍记录冲突信息供前端提示（"此商品已存在，本次入库会累加到现有库存 X"）
 
     const totalQty = items.reduce((s, i) => s + (i.quantity || 0), 0)
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
@@ -121,10 +95,13 @@ router.post('/inbound', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (r
           const needQrcode = prod?.require_qrcode === 1
 
           // 入库明细记录（qrcode_count 标识生成了几个二维码）
+          // alert_stock 记录这次入库设置的预警值（再编辑时能恢复，NULL=未设）
           const [itemRes] = await conn.query(
-            'INSERT INTO inbound_items (record_id, product_id, sku_id, qrcode_count, quantity) VALUES (?,?,?,?,?)',
+            'INSERT INTO inbound_items (record_id, product_id, sku_id, qrcode_count, quantity, alert_stock) VALUES (?,?,?,?,?,?)',
             [result.insertId, item.product_id, item.sku_id || null,
-             needQrcode ? item.quantity : 0, item.quantity])
+             needQrcode ? item.quantity : 0, item.quantity,
+             (item.alert_stock !== undefined && item.alert_stock !== null && item.alert_stock !== '')
+               ? Number(item.alert_stock) : null])
           const inboundItemId = itemRes.insertId
 
           // ✅ 入库时同步更新 products.alert_stock（前端可定档预警值）
@@ -149,29 +126,67 @@ router.post('/inbound', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (r
             })
           }
 
-          // ✅ 新模型：直接 INSERT（前面已校验不冲突，不存在此 SKU×仓库）
-          // 取出新插入的 ID 用于写流水
+          // ✅ 累加模式：warehouse_stock UPSERT
+          // - 首次入库 → INSERT 新记录
+          // - 补货/同 SKU 再次入库 → UPDATE quantity = old + new
+          // （前端不再需要走"库存管理 → 调整"流程）
           let newStockId
+          let beforeQty = 0
           if (item.sku_id) {
-            const [insertRes] = await conn.query(
-              `INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,?,?)`,
-              [warehouse_id, item.product_id, item.sku_id, item.quantity])
-            newStockId = insertRes.insertId
+            // 先查现状
+            const [[existing]] = await conn.query(
+              `SELECT id, quantity FROM warehouse_stock
+               WHERE warehouse_id=? AND product_id=? AND sku_id=?`,
+              [warehouse_id, item.product_id, item.sku_id]
+            )
+            if (existing) {
+              beforeQty = existing.quantity
+              await conn.query(
+                'UPDATE warehouse_stock SET quantity = quantity + ? WHERE id = ?',
+                [item.quantity, existing.id]
+              )
+              newStockId = existing.id
+            } else {
+              const [insertRes] = await conn.query(
+                `INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,?,?)`,
+                [warehouse_id, item.product_id, item.sku_id, item.quantity])
+              newStockId = insertRes.insertId
+            }
           } else {
-            const [insertRes] = await conn.query(
-              `INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,NULL,?)`,
-              [warehouse_id, item.product_id, item.quantity])
-            newStockId = insertRes.insertId
+            // sku_id=NULL 的情况：先查
+            const [[existing]] = await conn.query(
+              `SELECT id, quantity FROM warehouse_stock
+               WHERE warehouse_id=? AND product_id=? AND sku_id IS NULL`,
+              [warehouse_id, item.product_id]
+            )
+            if (existing) {
+              beforeQty = existing.quantity
+              await conn.query(
+                'UPDATE warehouse_stock SET quantity = quantity + ? WHERE id = ?',
+                [item.quantity, existing.id]
+              )
+              newStockId = existing.id
+            } else {
+              const [insertRes] = await conn.query(
+                `INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,NULL,?)`,
+                [warehouse_id, item.product_id, item.quantity])
+              newStockId = insertRes.insertId
+            }
           }
 
-          // 写流水：入库 +N (before=0, after=item.quantity)
-          await conn.query(
-            `INSERT INTO stock_movements
-             (warehouse_id, product_id, sku_id, change_type, delta, before_qty, after_qty, operator, ref_type, ref_id, remark)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-            [warehouse_id, item.product_id, item.sku_id || null, 'inbound',
-             item.quantity, 0, item.quantity, operator,
-             'inbound_records', result.insertId, supplier ? `供应商：${supplier}` : null])
+          // 写流水：入库 +N (before=已有, after=已有+本次)
+          // 先查 stock_movements 表是否存在（北京没这表）
+          const [[smInfo]] = await conn.query(
+            "SELECT COUNT(*) as has_sm FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'stock_movements'")
+          if (smInfo.has_sm > 0) {
+            await conn.query(
+              `INSERT INTO stock_movements
+               (warehouse_id, product_id, sku_id, change_type, delta, before_qty, after_qty, operator, ref_type, ref_id, remark)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+              [warehouse_id, item.product_id, item.sku_id || null, 'inbound',
+               item.quantity, beforeQty, beforeQty + item.quantity, operator,
+               'inbound_records', result.insertId, supplier ? `供应商：${supplier}` : null])
+          }
 
           await conn.query(
             'UPDATE products SET stock = COALESCE(stock, 0) + ? WHERE id = ?',
@@ -608,14 +623,21 @@ router.put('/inbound/:id', requirePermission(PERMISSIONS.INVENTORY_WRITE), async
     // Delete old items, insert new
     await conn.query('DELETE FROM inbound_items WHERE record_id = ?', [recordId])
     for (const item of items) {
-      await conn.query('INSERT INTO inbound_items (record_id, product_id, sku_id, quantity) VALUES (?,?,?,?)',
-        [recordId, item.product_id, item.sku_id || null, item.quantity])
+      await conn.query(
+        'INSERT INTO inbound_items (record_id, product_id, sku_id, quantity, alert_stock) VALUES (?,?,?,?,?)',
+        [recordId, item.product_id, item.sku_id || null, item.quantity,
+         (item.alert_stock !== undefined && item.alert_stock !== null && item.alert_stock !== '')
+           ? Number(item.alert_stock) : null])
       // Apply new stock
       await conn.query(
         `INSERT INTO warehouse_stock (warehouse_id, product_id, quantity) VALUES (?,?,?)
          ON DUPLICATE KEY UPDATE quantity = quantity + ?`,
         [warehouse_id, item.product_id, item.quantity, item.quantity])
       await conn.query('UPDATE products SET stock = stock + ? WHERE id = ?', [item.quantity, item.product_id])
+      // ✅ 编辑入库时也同步更新 alert_stock（按需覆盖）
+      if (item.alert_stock !== undefined && item.alert_stock !== null && item.alert_stock !== '') {
+        await conn.query('UPDATE products SET alert_stock = ? WHERE id = ?', [Number(item.alert_stock), item.product_id])
+      }
     }
 
     await conn.commit()
@@ -668,7 +690,8 @@ router.put('/outbound/:id', requirePermission(PERMISSIONS.INVENTORY_WRITE), asyn
     // Delete old items, insert new
     await conn.query('DELETE FROM outbound_items WHERE record_id = ?', [recordId])
     for (const item of items) {
-      await conn.query('INSERT INTO outbound_items (record_id, product_id, sku_id, quantity, qrcode_id) VALUES (?,?,?,?,?)',
+      await conn.query(
+        'INSERT INTO outbound_items (record_id, product_id, sku_id, quantity, qrcode_id) VALUES (?,?,?,?,?)',
         [recordId, item.product_id, item.sku_id || null, item.quantity, item.qrcode_id || null])
       // Apply new stock deduction
       await conn.query(
@@ -676,7 +699,7 @@ router.put('/outbound/:id', requirePermission(PERMISSIONS.INVENTORY_WRITE), asyn
         [item.quantity, warehouse_id, item.product_id])
       await conn.query('UPDATE products SET stock = stock - ? WHERE id = ?', [item.quantity, item.product_id])
       if (item.qrcode_id) {
-        await conn.query("UPDATE qrcodes SET status = 'used' WHERE id = ?", [item.qrcode_id])
+        await conn.query("UPDATE qrcodes SET status = 'used' WHERE id = ?", item.qrcode_id)
       }
     }
 
