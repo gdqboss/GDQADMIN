@@ -1036,8 +1036,6 @@ export default {
     supplierLabel: '供货商',
     purchasePriceLabel: '进货价',
     salePriceLabel: '售价',
-    alertStockLabel: '库存预警值',
-    alertStockHint: '0=不预警；>0 触发低库存提醒',
     stock: '库存',
     requireQrcode: '需要一物一码',
     groupQrUrl: '售后服务群二维码',

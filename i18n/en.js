@@ -971,8 +971,6 @@ export default {
     supplierLabel: 'Supplier',
     purchasePriceLabel: 'Purchase Price',
     salePriceLabel: 'Sale Price',
-    alertStockLabel: 'Alert Stock',
-    alertStockHint: '0=disabled; >0 triggers low-stock alert',
     stock: 'Stock',
     requireQrcode: 'Require QR Code Tracking',
     groupQrUrl: 'Service Group QR Code',

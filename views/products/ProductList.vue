@@ -457,7 +457,6 @@ async function openEdit(p) {
     supplier: p.supplier || '',
     purchase_price: p.purchase_price || '',
     sale_price: p.sale_price || '',
-    alert_stock: p.alert_stock || 0,   // 库存预警值（0=不预警；>0 触发低库存提醒）
     status: p.status || 'active',
     image_main: p.image_main || '',
     images: p.images ? (Array.isArray(p.images) ? [...p.images] : JSON.parse(p.images || '[]')) : [],
@@ -1353,15 +1352,6 @@ async function deleteCategory(cat) {
                   <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('product.salePriceLabel') }}</label>
                   <input v-model="form.sale_price" type="number" min="0" step="0.01" placeholder="0.00" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
                 </div>
-              </div>
-
-              <!-- 库存预警值：0 = 不预警；>0 触发低库存提醒 -->
-              <div>
-                <label class="block text-sm font-medium text-text-primary mb-1">
-                  {{ $t('product.alertStockLabel') }}
-                  <span class="text-text-secondary text-xs ml-1">({{ $t('product.alertStockHint') }})</span>
-                </label>
-                <input v-model.number="form.alert_stock" type="number" min="0" step="1" placeholder="0" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
               </div>
 
               <!-- Group QR URL for after-sale service group -->

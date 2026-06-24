@@ -659,8 +659,9 @@ async function submitForm() {
         items: validItems.map(i => {
           const item = { product_id: i.product_id, quantity: Number(i.quantity) }
           if (i.sku_id) item.sku_id = i.sku_id
-          // 入库时同步传 alert_stock（>0 才传，0=不预警表示不修改）
-          if (activeTab.value === 'inbound' && Number(i.alert_stock) > 0) {
+          // 入库时同步传 alert_stock（任何值都传，0=关闭预警）
+          // 业务规则（波哥 2026-06-24 确认）：填什么就存什么，不"智能过滤"
+          if (activeTab.value === 'inbound' && i.alert_stock !== undefined && i.alert_stock !== null && i.alert_stock !== '') {
             item.alert_stock = Number(i.alert_stock)
           }
           if (activeTab.value === 'outbound' && needsQrcode(i) && i.qrcode_id) {
