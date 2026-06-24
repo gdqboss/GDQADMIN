@@ -775,10 +775,11 @@ function editRecord(record) {
       sku_id: i.sku_id || '',
       quantity: i.quantity,
       qrcode_id: i.qrcode_id || '',
+      alert_stock: i.alert_stock ?? 0,   // 再编辑时恢复入库时设的预警值
     })),
   }
   if (form.value.items.length === 0) {
-    form.value.items = [{ product_id: '', sku_id: '', quantity: 1, qrcode_id: '' }]
+    form.value.items = [{ product_id: '', sku_id: '', quantity: 1, qrcode_id: '', alert_stock: 0 }]
   }
   // Load SKUs for all products in the form
   for (const item of form.value.items) {
