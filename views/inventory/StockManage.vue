@@ -24,6 +24,13 @@ const adjustRemark = ref('')
 const adjustError = ref('')
 const adjusting = ref(false)
 
+// 预警值弹窗
+const showAlert = ref(false)
+const alertStock = ref(null)
+const alertValue = ref(0)
+const alertError = ref('')
+const alertSaving = ref(false)
+
 // 流水弹窗
 const showMovements = ref(false)
 const currentMovements = ref([])
@@ -96,6 +103,35 @@ async function submitAdjust() {
     adjustError.value = e?.message || e?.msg || '调整失败'
   } finally {
     adjusting.value = false
+  }
+}
+
+// ─── 预警值编辑 ──────────────────────────────────────────────
+function openAlertStock(stock) {
+  alertStock.value = { ...stock }
+  alertValue.value = stock.alert_stock || 0
+  alertError.value = ''
+  showAlert.value = true
+}
+
+async function submitAlert() {
+  if (alertValue.value === null || alertValue.value === undefined || alertValue.value === '' || Number(alertValue.value) < 0) {
+    alertError.value = '预警值必须 ≥ 0（0 表示不预警）'
+    return
+  }
+  alertSaving.value = true
+  alertError.value = ''
+  try {
+    await api.put(`/products/${alertStock.value.product_id}`, {
+      alert_stock: Number(alertValue.value)
+    })
+    showMessage(`已设置「${alertStock.value.product_name}」预警值为 ${alertValue.value}`)
+    showAlert.value = false
+    await loadStock()
+  } catch (e) {
+    alertError.value = e?.message || e?.msg || '保存失败'
+  } finally {
+    alertSaving.value = false
   }
 }
 
@@ -220,15 +256,17 @@ onMounted(async () => {
             <th class="px-4 py-3 text-left">SKU</th>
             <th class="px-4 py-3 text-left">规格</th>
             <th class="px-4 py-3 text-right">数量</th>
+            <th class="px-4 py-3 text-right">预警值</th>
+            <th class="px-4 py-3 text-center">状态</th>
             <th class="px-4 py-3 text-center">操作</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="6" class="px-4 py-8 text-center text-text-secondary">加载中...</td>
+            <td colspan="8" class="px-4 py-8 text-center text-text-secondary">加载中...</td>
           </tr>
           <tr v-else-if="stockList.length === 0">
-            <td colspan="6" class="px-4 py-8 text-center text-text-secondary">暂无库存数据</td>
+            <td colspan="8" class="px-4 py-8 text-center text-text-secondary">暂无库存数据</td>
           </tr>
           <tr v-for="stock in stockList" :key="stock.id" class="border-t border-gray-100 hover:bg-gray-50">
             <td class="px-4 py-3">{{ stock.warehouse_name || '—' }}</td>
@@ -241,8 +279,19 @@ onMounted(async () => {
             <td class="px-4 py-3 font-mono text-xs">{{ stock.sku_code || '—' }}</td>
             <td class="px-4 py-3 text-xs text-text-secondary">{{ formatSkuLabel(stock) }}</td>
             <td class="px-4 py-3 text-right font-semibold text-base">{{ stock.quantity }}</td>
+            <td class="px-4 py-3 text-right text-sm">
+              <span v-if="!stock.alert_stock || stock.alert_stock === 0" class="text-text-secondary">—</span>
+              <span v-else class="font-mono">{{ stock.alert_stock }}</span>
+            </td>
+            <td class="px-4 py-3 text-center">
+              <span v-if="stock.alert_status === 'critical'" class="inline-block px-2 py-0.5 rounded text-xs bg-red-100 text-red-700 font-semibold">🔴 紧急</span>
+              <span v-else-if="stock.alert_status === 'low'" class="inline-block px-2 py-0.5 rounded text-xs bg-orange-100 text-orange-700 font-semibold">🟡 低位</span>
+              <span v-else-if="stock.alert_status === 'ok'" class="inline-block px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">🟢 正常</span>
+              <span v-else class="text-text-secondary text-xs">未设</span>
+            </td>
             <td class="px-4 py-3 text-center">
               <button @click="openAdjust(stock)" class="text-primary hover:underline text-xs mr-3">调整</button>
+              <button @click="openAlertStock(stock)" class="text-orange-600 hover:underline text-xs mr-3">预警</button>
               <button @click="openMovements(stock)" class="text-blue-600 hover:underline text-xs mr-3">流水</button>
               <button @click="deleteStock(stock)" class="text-red-600 hover:underline text-xs">删除</button>
             </td>
@@ -293,6 +342,33 @@ onMounted(async () => {
           <button @click="submitAdjust" :disabled="adjusting"
                   class="px-4 py-2 text-sm bg-primary text-white rounded hover:bg-primary-dark disabled:opacity-50">
             {{ adjusting ? '调整中...' : '确认调整' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 预警值编辑弹窗 -->
+    <div v-if="showAlert" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+        <h3 class="text-lg font-semibold mb-4">⚠️ 设置预警值</h3>
+        <div v-if="alertStock" class="space-y-3 mb-4 text-sm">
+          <div><span class="text-text-secondary">商品：</span>{{ alertStock.product_name }}</div>
+          <div><span class="text-text-secondary">SKU：</span>{{ alertStock.sku_code || '—' }}</div>
+          <div><span class="text-text-secondary">当前库存：</span><span class="font-semibold text-lg">{{ alertStock.quantity }}</span></div>
+        </div>
+        <div class="mb-3">
+          <label class="text-sm text-text-secondary">预警值（库存 < 该值触发预警）</label>
+          <input v-model.number="alertValue" type="number" min="0"
+                 class="w-full mt-1 border border-gray-200 rounded px-3 py-2 text-base"
+                 placeholder="如 5（设 0 表示不预警）" />
+          <p class="text-xs text-text-secondary mt-1">当库存 ≤ 预警值×0.5 时显示「🔴 紧急」；≤ 预警值时显示「🟡 低位」</p>
+        </div>
+        <div v-if="alertError" class="mb-3 px-3 py-2 bg-red-50 text-red-700 text-sm rounded">{{ alertError }}</div>
+        <div class="flex gap-2 justify-end">
+          <button @click="showAlert = false" class="px-4 py-2 text-sm text-text-secondary hover:bg-gray-100 rounded">取消</button>
+          <button @click="submitAlert" :disabled="alertSaving"
+                  class="px-4 py-2 text-sm bg-primary text-white rounded hover:bg-primary-dark disabled:opacity-50">
+            {{ alertSaving ? '保存中...' : '保存' }}
           </button>
         </div>
       </div>
