@@ -1249,6 +1249,21 @@ async function handleBatchEdit() {
             <option value="">{{ bindWarehouseId ? $t('qrcode.selectProductPlaceholder') : ($t('qrcode.selectWarehouseFirst') || '请先选择仓库') }}</option>
             <option v-for="p in productsForSelect" :key="p.product_id" :value="p.product_id">{{ p.name }} ({{ p.sku }}) - 库存:{{ p.quantity }}</option>
           </select>
+          <!-- 仓库空提示 -->
+          <div v-if="bindWarehouseId && productsForSelect.length === 0"
+               class="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+            <div class="flex items-start gap-2">
+              <span class="material-symbols-outlined text-[18px] text-amber-600">info</span>
+              <div class="flex-1">
+                <div class="font-medium mb-1">该仓库暂无库存</div>
+                <div class="text-amber-700">请先到 <strong>出入库管理 → 入库</strong> 添加商品库存，然后再来生成二维码。</div>
+                <router-link to="/in-out" class="inline-flex items-center gap-1 mt-2 text-primary hover:text-primary-hover font-medium">
+                  <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+                  跳转入库页面
+                </router-link>
+              </div>
+            </div>
+          </div>
         </div>
         <!-- SKU 选择（仅当商品有多规格时显示，多规格必选具体 SKU） -->
         <div v-if="selectedProductSkus.length > 0" class="mb-4">
