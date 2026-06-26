@@ -400,6 +400,13 @@ function needsQrcode(item) {
     return false
 }
 
+// 入库时显示商品当前的 alert_stock（提示用户"不填=继承此值"）
+function getProductAlertStock(item) {
+  if (!item?.product_id) return 0
+  const p = products.value.find(p => p.id === item.product_id)
+  return p?.alert_stock || 0
+}
+
 // 出库时：获取该商品在该仓库的最大可出库数量（库存量）
 function getItemMaxQty(item) {
     if (activeTab.value !== 'outbound') return 999999
@@ -460,6 +467,35 @@ onMounted(async () => {
     try {
       const data = JSON.parse(decodeURIComponent(route.query.prefill))
       activeTab.value = 'inbound'
+      // 波哥 2026-07-26：库存预警补货跳过来时，先查是否已有入库记录
+      // 如果有，直接跳转编辑（不再走"新建入库→409"的二段式）
+      const firstItem = (data.items || [])[0]
+      if (firstItem && data.warehouse_id && firstItem.product_id) {
+        try {
+          const dupRes = await api.get('/inbound/check-duplicate', {
+            params: {
+              warehouse_id: data.warehouse_id,
+              product_id: firstItem.product_id,
+              sku_id: firstItem.sku_id || ''
+            }
+          })
+          // dupRes.data = { exists, record_id, record_no, ... }
+          const dup = dupRes?.data?.data || dupRes?.data || {}
+          if (dup.exists && dup.record_id) {
+            // 已有记录 → 直接 fetch + 跳到编辑
+            const r = await api.get(`/inbound/${dup.record_id}`)
+            const record = r?.data?.data || r?.data
+            if (record && record.id) {
+              formError.value = ''
+              editRecord(record)
+              formSuccess.value = `该商品在此仓库已有入库记录（单号 ${dup.record_no || dup.record_id}），直接打开编辑页补货`
+              return
+            }
+          }
+        } catch (dupErr) {
+          console.warn('prefill duplicate check failed, fall through to create form', dupErr)
+        }
+      }
       showForm.value = true
       editingId.value = null
       form.value = {
@@ -681,9 +717,48 @@ async function submitForm() {
         await api.post(endpoint, payload)
         formSuccess.value = t('inout.submitSuccess') || '提交成功'
       } catch (e) {
-        // ✅ 新模型：409 冲突（SKU 在此仓库已存在）→ 引导用户去库存管理调整
-        if (e?.code === 409 || e?.response?.data?.code === 409) {
-          const errData = e?.data || e?.response?.data || e
+        // ✅ 新模型：409 冲突（商品×仓库×SKU 三元组已存在）→ 直接跳转原记录编辑（不弹窗，更人性化）
+        // 注意：api.js interceptor L68: Promise.reject(err.response?.data || err)
+// 所以 e 本身就是后端 response body: {code, message, data}
+// 不需要再 e.response.data
+const errData = e
+const code = errData?.code
+        if (code === 409 && activeTab.value === 'inbound') {
+          const conflictData = errData.data || {}
+          const recordId = conflictData.record_id
+          if (recordId) {
+            // 找到原记录 → 直接跳转编辑（不弹窗）
+            const existing = inboundRecords.value.find(r => Number(r.id) === Number(recordId))
+            if (existing) {
+              closeForm()
+              editRecord(existing)
+              formSuccess.value = `已自动跳转到原记录 (单号 ${conflictData.record_no || recordId}) 进行编辑补货`
+              submitting.value = false
+              return
+            }
+            // 列表里找不到（可能被过滤/分页）→ 直接 fetch 单条记录再跳转
+            try {
+              const resp = await api.get(`/inbound/${recordId}`)
+              const record = resp?.data?.data || resp?.data
+              if (record && record.id) {
+                closeForm()
+                editRecord(record)
+                formSuccess.value = `已自动跳转到原记录 (单号 ${conflictData.record_no || recordId}) 进行编辑补货`
+                submitting.value = false
+                return
+              }
+            } catch (fetchErr) {
+              console.warn('fetch 原入库单失败', fetchErr)
+            }
+            // 兜底：刷新列表让用户自己找
+            await loadRecords()
+            formError.value = `商品 "${conflictData.product_name || ''}" 在该仓库已有入库记录 (单号 ${conflictData.record_no || recordId})，请在列表中编辑该条记录补货`
+            submitting.value = false
+            return
+          }
+        }
+        // 旧模型兼容（按 conflicts 数组，无 record_id 的旧响应）
+        if (code === 409) {
           formConflicts.value = errData.data?.conflicts || []
           formError.value = errData.message || '有 SKU 已存在，请用「库存管理 → 调整数量」'
           submitting.value = false
@@ -1411,6 +1486,9 @@ async function handleDeleteRecord() {
                           :title="$t('inout.alertStockHint')"
                           class="w-full border border-gray-200 rounded px-2 py-1 text-sm text-center focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
                         />
+                        <div v-if="getProductAlertStock(item)" class="text-[10px] text-text-secondary mt-0.5 leading-tight">
+                          {{ $t('inout.currentAlert') }}: {{ getProductAlertStock(item) }}
+                        </div>
                       </td>
                       <!-- QR code (outbound only, for require_qrcode products) -->
                       <td v-if="activeTab === 'outbound'" class="px-3 py-2">
