@@ -190,6 +190,7 @@ const menuGroups = computed(() => [
       { key: 'warehouse:write', label: t('nav.warehouses'), to: '/warehouses' },
       { key: 'qrcode:write', label: t('nav.qrcode'), to: '/qrcode' },
       { key: 'stock:read', label: t('nav.alerts'), to: '/alerts', badge: alertCount.value },
+      { key: 'order:create', label: t('order.createTitle') || '新建订货单', to: '/orders/create' },
       { key: 'transfer:read', label: t('nav.transfer'), to: '/transfer' },
       { key: 'inventory:return', label: t('nav.returnRecords'), to: '/inventory/returns' },
     ]
@@ -212,7 +213,6 @@ const menuGroups = computed(() => [
     to: null,
     children: [
       { key: 'order:read', label: t('nav.orders'), to: '/orders' },
-      { key: 'order:create', label: t('order.createTitle') || '新建订货单', to: '/orders/create' },
       { key: 'qrcode:write', label: t('nav.scanSale'), to: '/qrcode' },
       { key: 'aftersale:write', label: t('nav.aftersale'), to: '/aftersale' },
     ]
