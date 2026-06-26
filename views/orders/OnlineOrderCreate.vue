@@ -106,12 +106,12 @@ async function loadSuppliers() {
 async function loadProducts() {
   loading.value = true
   try {
-    // 拿所有有库存的商品 + 它们的 SKU
+    // 拿所有上架商品（LEFT JOIN，无库存也返回） + 它们的 SKU
     const r = await api.get('/warehouses/available-products')
     if (r.code === 0) {
       products.value = r.data || []
     } else {
-      // 兜底：直接用 /api/products + warehouse_stock 计算
+      // 兜底（理论上不会走）
       const [pRes, wRes] = await Promise.all([
         api.get('/products?page=1&size=100'),
         api.get('/warehouse-stock?page=1&size=100')
@@ -120,17 +120,10 @@ async function loadProducts() {
       for (const w of (wRes.data?.list || [])) {
         stockMap[w.product_id] = (stockMap[w.product_id] || 0) + Number(w.quantity)
       }
-      const list = (pRes.data?.list || []).filter(p => (stockMap[p.id] || 0) > 0)
-      // 加载每个商品的 SKU
-      for (const p of list) {
-        try {
-          const sRes = await api.get('/products/' + p.id + '/specs')
-          p.skus = sRes.data?.skus || []
-        } catch {
-          p.skus = []
-        }
+      const list = (pRes.data?.list || []).map(p => {
         p.total_stock = stockMap[p.id] || 0
-      }
+        return p
+      })
       products.value = list
     }
   } catch (e) {
@@ -139,6 +132,39 @@ async function loadProducts() {
     loading.value = false
   }
 }
+
+// ─── 搜索/筛选 ─────────────────────────────────────────────────────
+const searchKeyword = ref('')
+const selectedCategory = ref('')
+const categories = computed(() => {
+  const set = new Set()
+  for (const p of products.value) {
+    if (p.category) set.add(p.category)
+  }
+  return Array.from(set).sort()
+})
+const filteredProducts = computed(() => {
+  const kw = searchKeyword.value.trim().toLowerCase()
+  return products.value.filter(p => {
+    if (selectedCategory.value && p.category !== selectedCategory.value) return false
+    if (kw) {
+      const name = (p.name || '').toLowerCase()
+      const sku = (p.sku || '').toLowerCase()
+      if (!name.includes(kw) && !sku.includes(kw)) return false
+    }
+    return true
+  })
+})
+// 统计：多少商品被选中（任意 SKU quantity > 0）
+const selectedProductCount = computed(() => {
+  let n = 0
+  for (const p of filteredProducts.value) {
+    const has = (p.skus || []).some(s => (quantities.value[p.id + '-' + s.id] || 0) > 0)
+      || (!p.skus || p.skus.length === 0) && (quantities.value[p.id + '-none'] || 0) > 0
+    if (has) n++
+  }
+  return n
+})
 
 onMounted(async () => {
   await Promise.all([loadStores(), loadSuppliers(), loadProducts()])
@@ -277,16 +303,50 @@ function skuLabel(sku) {
 
     <!-- 订货表格 -->
     <div class="bg-white rounded-lg border border-gray-100 shadow-card overflow-hidden">
-      <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
-        <div class="flex items-center gap-3">
-          <span class="material-symbols-outlined text-primary">inventory_2</span>
-          <h3 class="font-medium text-text-primary">{{ t('order.orderTable') }}</h3>
-          <span class="text-xs text-text-secondary">{{ t('order.totalProducts') }}: <strong class="text-primary">{{ products.length }}</strong></span>
+      <div class="px-5 py-3 border-b border-gray-100 bg-gray-50">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-primary">inventory_2</span>
+            <h3 class="font-medium text-text-primary">{{ t('order.orderTable') }}</h3>
+            <span class="text-xs text-text-secondary">
+              {{ t('order.totalProducts') }}:
+              <strong class="text-primary">{{ filteredProducts.length }}</strong> / {{ products.length }}
+            </span>
+            <span v-if="selectedProductCount > 0" class="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
+              {{ t('order.selectedCount', { n: selectedProductCount }) }}
+            </span>
+          </div>
+          <button @click="clearAll" class="text-xs text-text-secondary hover:text-red-600 flex items-center gap-1">
+            <span class="material-symbols-outlined text-[16px]">delete_sweep</span>
+            {{ t('order.clearAll') }}
+          </button>
         </div>
-        <button @click="clearAll" class="text-xs text-text-secondary hover:text-red-600 flex items-center gap-1">
-          <span class="material-symbols-outlined text-[16px]">delete_sweep</span>
-          {{ t('order.clearAll') }}
-        </button>
+        <!-- 搜索 + 分类筛选 -->
+        <div class="flex items-center gap-3">
+          <div class="flex-1 relative">
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[18px]">search</span>
+            <input
+              v-model="searchKeyword"
+              type="text"
+              :placeholder="t('order.searchPlaceholder')"
+              class="w-full pl-10 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:border-primary focus:outline-none bg-white"
+            />
+          </div>
+          <select
+            v-model="selectedCategory"
+            class="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:border-primary focus:outline-none bg-white min-w-[140px]"
+          >
+            <option value="">{{ t('order.allCategories') }}</option>
+            <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
+          </select>
+          <button
+            v-if="searchKeyword || selectedCategory"
+            @click="searchKeyword=''; selectedCategory=''"
+            class="text-xs text-text-secondary hover:text-primary"
+          >
+            {{ t('common.clear') }}
+          </button>
+        </div>
       </div>
 
       <div v-if="loading" class="p-12 text-center text-text-secondary">
@@ -317,7 +377,7 @@ function skuLabel(sku) {
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            <template v-for="product in products" :key="product.id">
+            <template v-for="product in filteredProducts" :key="product.id">
               <!-- 没有 SKU 的商品：一行 -->
               <tr v-if="!product.skus || product.skus.length === 0" class="hover:bg-gray-50">
                 <td class="px-3 py-2">
