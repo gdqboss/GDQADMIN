@@ -26,6 +26,50 @@ async function generateQrcodes(conn, { count, product_id, sku_id, warehouse_id, 
   return codes
 }
 
+/**
+// 出入库后 recheck 库存预警
+// 事务内调用（用同一个 conn）
+// stock < alert_stock → 触发/保留预警；stock >= alert_stock → 自动 handled
+*/
+async function recheckStockAlert(conn, productId, warehouseId) {
+  const [[alertProd]] = await conn.query(
+    'SELECT id, stock, alert_stock FROM products WHERE id = ?', [productId])
+  if (!alertProd) return
+
+  // alert_stock = NULL/0 → 把现有未处理预警标 handled（避免僵尸预警）
+  if (!alertProd.alert_stock || alertProd.alert_stock <= 0) {
+    await conn.query(
+      `UPDATE stock_alerts SET handled = 1, handled_at = NOW(),
+       handled_reason = 'auto: alert_stock=0/NULL (warning disabled)'
+       WHERE product_id = ? AND warehouse_id = ? AND handled = 0`,
+      [productId, warehouseId])
+    return
+  }
+
+  // 波哥 2026-07-26 规则：建议补货 = alert_stock - 实时库存（补到预警线即可）
+  // 库存 ≥ 预警线 → 已有预警自动 handled（不需要保留，警告已经解除）
+  if (alertProd.stock < alertProd.alert_stock) {
+    const suggestQty = alertProd.alert_stock - alertProd.stock
+    const [[existing]] = await conn.query(
+      'SELECT id FROM stock_alerts WHERE product_id = ? AND warehouse_id = ? AND handled = 0 LIMIT 1',
+      [productId, warehouseId])
+    if (!existing) {
+      const level = alertProd.stock <= alertProd.alert_stock * 0.5 ? 'critical' : 'low'
+      await conn.query(
+        `INSERT INTO stock_alerts (product_id, warehouse_id, current_stock, alert_stock, suggest_qty, level)
+         VALUES (?,?,?,?,?,?)`,
+        [productId, warehouseId, alertProd.stock, alertProd.alert_stock, suggestQty, level])
+    }
+  } else {
+    // 库存 ≥ 预警线 → 自动 handled（警告已解除，业务允许库存高于预警值）
+    await conn.query(
+      `UPDATE stock_alerts SET handled = 1, handled_at = NOW(),
+       handled_reason = 'auto: stock >= alert_stock after operation'
+       WHERE product_id = ? AND warehouse_id = ? AND handled = 0`,
+      [productId, warehouseId])
+  }
+}
+
 // ---- Inbound ----
 router.get('/inbound', async (req, res, next) => {
   try {
@@ -58,6 +102,106 @@ router.get('/inbound', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// GET /inbound/audit-log/:recordId — 入库审计日志
+router.get('/inbound/audit-log/:recordId', async (req, res, next) => {
+  try {
+    const recordId = req.params.recordId
+    const [rows] = await pool.query(
+      `SELECT * FROM inbound_audit_log WHERE record_id = ? ORDER BY created_at DESC`, [recordId]
+    )
+    res.json({ code: 0, data: rows, message: 'ok' })
+  } catch (err) { next(err) }
+})
+
+// GET /inbound/check-duplicate — 入库前预检 (warehouse_id, product_id, sku_id) 三元组是否已存在
+router.get('/inbound/check-duplicate', async (req, res, next) => {
+  try {
+    const { warehouse_id, product_id, sku_id } = req.query
+    if (!warehouse_id || !product_id) {
+      return res.status(400).json({ code: 400, message: 'warehouse_id 和 product_id 必填' })
+    }
+    let rows
+    if (sku_id === undefined || sku_id === null || sku_id === '') {
+      [rows] = await pool.query(
+        `SELECT ws.id, ws.quantity, ws.warehouse_id, ws.product_id, ws.sku_id,
+                w.name as warehouse_name, p.name as product_name,
+                (SELECT ii.record_id FROM inbound_items ii
+                  JOIN inbound_records ir ON ir.id = ii.record_id
+                  WHERE ii.product_id = ws.product_id AND ii.sku_id IS NULL
+                    AND ir.warehouse_id = ws.warehouse_id
+                  ORDER BY ii.id DESC LIMIT 1) as record_id,
+                (SELECT ir.record_no FROM inbound_items ii
+                  JOIN inbound_records ir ON ir.id = ii.record_id
+                  WHERE ii.product_id = ws.product_id AND ii.sku_id IS NULL
+                    AND ir.warehouse_id = ws.warehouse_id
+                  ORDER BY ii.id DESC LIMIT 1) as record_no,
+                (SELECT ir.created_at FROM inbound_items ii
+                  JOIN inbound_records ir ON ir.id = ii.record_id
+                  WHERE ii.product_id = ws.product_id AND ii.sku_id IS NULL
+                    AND ir.warehouse_id = ws.warehouse_id
+                  ORDER BY ii.id DESC LIMIT 1) as created_at
+         FROM warehouse_stock ws
+         LEFT JOIN warehouses w ON ws.warehouse_id = w.id
+         LEFT JOIN products p ON ws.product_id = p.id
+         WHERE ws.warehouse_id = ? AND ws.product_id = ? AND ws.sku_id IS NULL`,
+        [warehouse_id, product_id])
+    } else {
+      [rows] = await pool.query(
+        `SELECT ws.id, ws.quantity, ws.warehouse_id, ws.product_id, ws.sku_id,
+                w.name as warehouse_name, p.name as product_name,
+                (SELECT ii.record_id FROM inbound_items ii
+                  JOIN inbound_records ir ON ir.id = ii.record_id
+                  WHERE ii.product_id = ws.product_id AND ii.sku_id = ?
+                    AND ir.warehouse_id = ws.warehouse_id
+                  ORDER BY ii.id DESC LIMIT 1) as record_id,
+                (SELECT ir.record_no FROM inbound_items ii
+                  JOIN inbound_records ir ON ir.id = ii.record_id
+                  WHERE ii.product_id = ws.product_id AND ii.sku_id = ?
+                    AND ir.warehouse_id = ws.warehouse_id
+                  ORDER BY ii.id DESC LIMIT 1) as record_no,
+                (SELECT ir.created_at FROM inbound_items ii
+                  JOIN inbound_records ir ON ir.id = ii.record_id
+                  WHERE ii.product_id = ws.product_id AND ii.sku_id = ?
+                    AND ir.warehouse_id = ws.warehouse_id
+                  ORDER BY ii.id DESC LIMIT 1) as created_at
+         FROM warehouse_stock ws
+         LEFT JOIN warehouses w ON ws.warehouse_id = w.id
+         LEFT JOIN products p ON ws.product_id = p.id
+         WHERE ws.warehouse_id = ? AND ws.product_id = ? AND ws.sku_id = ?`,
+        [sku_id, sku_id, sku_id, warehouse_id, product_id, sku_id])
+    }
+    if (rows.length > 0) {
+      res.json({
+        code: 0,
+        data: { exists: true, ...rows[0] },
+        message: '该商品在此仓库已存在库存记录，请去编辑原记录补货'
+      })
+    } else {
+      res.json({ code: 0, data: { exists: false }, message: 'ok' })
+    }
+  } catch (err) { next(err) }
+})
+
+// GET /inbound/:id — 入库单详情
+router.get('/inbound/:id', async (req, res, next) => {
+  try {
+    const [[row]] = await pool.query(
+      `SELECT r.*, w.name as warehouse_name FROM inbound_records r
+       LEFT JOIN warehouses w ON r.warehouse_id = w.id
+       WHERE r.id = ?`, [req.params.id])
+    if (!row) return res.status(404).json({ code: 404, message: '入库记录不存在' })
+    const [items] = await pool.query(
+      `SELECT i.*, p.name as product_name, p.sku, p.image_main,
+              ps.sku as sku_code, ps.specs as sku_specs
+       FROM inbound_items i
+       JOIN products p ON i.product_id = p.id
+       LEFT JOIN product_skus ps ON i.sku_id = ps.id
+       WHERE i.record_id = ?`, [req.params.id])
+    row.items = items
+    res.json({ code: 0, data: row, message: 'ok' })
+  } catch (err) { next(err) }
+})
+
 router.post('/inbound', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
@@ -68,13 +212,6 @@ router.post('/inbound', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (r
     if (!warehouse_id || !items?.length) {
       return res.status(400).json({ code: 400, message: '仓库和商品明细必填' })
     }
-
-    // ✅ 累加模式：同一 SKU 在同一仓库入库会自动累加库存
-    // 不再拒绝"SKU 已存在"的请求（波哥 2026-06-24 反馈：补货是正常业务）
-    // - 同 SKU×仓库 已存在 → quantity = old + new（补货）
-    // - 不存在 → 直接 INSERT（首次入库）
-    // 仍记录冲突信息供前端提示（"此商品已存在，本次入库会累加到现有库存 X"）
-
     const totalQty = items.reduce((s, i) => s + (i.quantity || 0), 0)
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
     let recordNo
@@ -88,137 +225,116 @@ router.post('/inbound', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (r
           'INSERT INTO inbound_records (record_no, warehouse_id, supplier, total_qty, operator, status) VALUES (?,?,?,?,?,?)',
           [recordNo, warehouse_id, supplier || '', totalQty, operator, 'completed']
         )
+        const operatorId = req.user?.id || null
         for (const item of items) {
-          // 查询商品是否需要一物一码
+          // 1. 查询商品基本信息（用于错误提示和审计日志）
           const [[prod]] = await conn.query(
-            'SELECT require_qrcode FROM products WHERE id = ?', [item.product_id])
-          const needQrcode = prod?.require_qrcode === 1
+            'SELECT id, name, require_qrcode FROM products WHERE id = ?', [item.product_id])
+          if (!prod) {
+            await conn.rollback()
+            return res.status(400).json({ code: 400, message: `商品 ${item.product_id} 不存在` })
+          }
+          const needQrcode = prod.require_qrcode === 1
 
-          // 入库明细记录（qrcode_count 标识生成了几个二维码）
-          // alert_stock 记录这次入库设置的预警值（再编辑时能恢复，NULL=未设）
-          const [itemRes] = await conn.query(
-            'INSERT INTO inbound_items (record_id, product_id, sku_id, qrcode_count, quantity, alert_stock) VALUES (?,?,?,?,?,?)',
-            [result.insertId, item.product_id, item.sku_id || null,
-             needQrcode ? item.quantity : 0, item.quantity,
-             (item.alert_stock !== undefined && item.alert_stock !== null && item.alert_stock !== '')
-               ? Number(item.alert_stock) : null])
-          const inboundItemId = itemRes.insertId
-
-          // ✅ 入库时同步更新 products.alert_stock（前端可定档预警值）
-          // 业务规则：直接覆盖预警值（波哥 2026-06-24 反馈原 GREATEST 不能降值）
-          // - 传 > 0：覆盖为新值（可升可降）
-          // - 传 0 或 null：不修改（保留旧值）
-          if (item.alert_stock !== undefined && item.alert_stock !== null && Number(item.alert_stock) >= 0) {
-            await conn.query(
-              'UPDATE products SET alert_stock = ? WHERE id = ?',
-              [Number(item.alert_stock), item.product_id])
+          // 2. 业务规则：(warehouse_id, product_id, sku_id) 三元组唯一 — 重复则拦截
+          //    跨仓库不算重复，每个仓库独立
+          //    SKU 三元组已存在也算重复（避免同一商品多个 SKU 行造成种类错乱）
+          //    补货 = 去编辑原记录改大 quantity
+          const skuId = item.sku_id || null
+          let existingStockRows
+          if (skuId === null) {
+            [existingStockRows] = await conn.query(
+              'SELECT id, quantity FROM warehouse_stock WHERE warehouse_id=? AND product_id=? AND sku_id IS NULL FOR UPDATE',
+              [warehouse_id, item.product_id])
+          } else {
+            [existingStockRows] = await conn.query(
+              'SELECT id, quantity FROM warehouse_stock WHERE warehouse_id=? AND product_id=? AND sku_id=? FOR UPDATE',
+              [warehouse_id, item.product_id, skuId])
+          }
+          if (existingStockRows.length > 0) {
+            // 找出原入库单号（用于前端直接跳转编辑）
+            let originRecord = null
+            if (skuId === null) {
+              [originRecord] = await conn.query(
+                `SELECT ir.id as record_id, ir.record_no, ir.created_at
+                 FROM inbound_items ii JOIN inbound_records ir ON ir.id = ii.record_id
+                 WHERE ii.product_id = ? AND ii.sku_id IS NULL AND ir.warehouse_id = ?
+                 ORDER BY ii.id DESC LIMIT 1`,
+                [item.product_id, warehouse_id])
+            } else {
+              [originRecord] = await conn.query(
+                `SELECT ir.id as record_id, ir.record_no, ir.created_at
+                 FROM inbound_items ii JOIN inbound_records ir ON ir.id = ii.record_id
+                 WHERE ii.product_id = ? AND ii.sku_id = ? AND ir.warehouse_id = ?
+                 ORDER BY ii.id DESC LIMIT 1`,
+                [item.product_id, skuId, warehouse_id])
+            }
+            await conn.rollback()
+            return res.status(409).json({
+              code: 409,
+              message: `商品 "${prod.name}"${skuId ? `(SKU ${skuId})` : ''} 在该仓库已存在库存记录，请编辑原记录补货`,
+              data: {
+                existing_warehouse_stock_id: existingStockRows[0].id,
+                record_id: originRecord?.[0]?.record_id || null,
+                record_no: originRecord?.[0]?.record_no || null,
+                created_at: originRecord?.[0]?.created_at || null,
+                product_id: item.product_id,
+                product_name: prod.name,
+                sku_id: skuId,
+                warehouse_id,
+                current_quantity: existingStockRows[0].quantity
+              }
+            })
           }
 
-          // 一物一码：每个实物生成独立 qrcode
+          // 3. 入库明细记录
+          const [itemRes] = await conn.query(
+            'INSERT INTO inbound_items (record_id, product_id, sku_id, qrcode_count, quantity, alert_stock) VALUES (?,?,?,?,?,?)',
+            [result.insertId, item.product_id, skuId,
+             needQrcode ? item.quantity : 0, item.quantity,
+             (item.alert_stock !== undefined && item.alert_stock !== null && item.alert_stock !== '') ? Number(item.alert_stock) : null])
+          const inboundItemId = itemRes.insertId
+
+          // 4. 一物一码
           if (needQrcode && item.quantity > 0) {
             await generateQrcodes(conn, {
               count: item.quantity,
               product_id: item.product_id,
-              sku_id: item.sku_id,
+              sku_id: skuId,
               warehouse_id,
               operator,
               inbound_item_id: inboundItemId
             })
           }
 
-          // ✅ 累加模式：warehouse_stock UPSERT
-          // - 首次入库 → INSERT 新记录
-          // - 补货/同 SKU 再次入库 → UPDATE quantity = old + new
-          // （前端不再需要走"库存管理 → 调整"流程）
-          let newStockId
-          let beforeQty = 0
-          if (item.sku_id) {
-            // 先查现状
-            const [[existing]] = await conn.query(
-              `SELECT id, quantity FROM warehouse_stock
-               WHERE warehouse_id=? AND product_id=? AND sku_id=?`,
-              [warehouse_id, item.product_id, item.sku_id]
-            )
-            if (existing) {
-              beforeQty = existing.quantity
-              await conn.query(
-                'UPDATE warehouse_stock SET quantity = quantity + ? WHERE id = ?',
-                [item.quantity, existing.id]
-              )
-              newStockId = existing.id
-            } else {
-              const [insertRes] = await conn.query(
-                `INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,?,?)`,
-                [warehouse_id, item.product_id, item.sku_id, item.quantity])
-              newStockId = insertRes.insertId
-            }
-          } else {
-            // sku_id=NULL 的情况：先查
-            const [[existing]] = await conn.query(
-              `SELECT id, quantity FROM warehouse_stock
-               WHERE warehouse_id=? AND product_id=? AND sku_id IS NULL`,
-              [warehouse_id, item.product_id]
-            )
-            if (existing) {
-              beforeQty = existing.quantity
-              await conn.query(
-                'UPDATE warehouse_stock SET quantity = quantity + ? WHERE id = ?',
-                [item.quantity, existing.id]
-              )
-              newStockId = existing.id
-            } else {
-              const [insertRes] = await conn.query(
-                `INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,NULL,?)`,
-                [warehouse_id, item.product_id, item.quantity])
-              newStockId = insertRes.insertId
-            }
-          }
+          // 5. INSERT 新 warehouse_stock 行（不累加）
+          await conn.query(
+            'INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,?,?)',
+            [warehouse_id, item.product_id, skuId, item.quantity])
 
-          // 写流水：入库 +N (before=已有, after=已有+本次)
-          // 先查 stock_movements 表是否存在（北京没这表）
-          const [[smInfo]] = await conn.query(
-            "SELECT COUNT(*) as has_sm FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'stock_movements'")
-          if (smInfo.has_sm > 0) {
-            await conn.query(
-              `INSERT INTO stock_movements
-               (warehouse_id, product_id, sku_id, change_type, delta, before_qty, after_qty, operator, ref_type, ref_id, remark)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-              [warehouse_id, item.product_id, item.sku_id || null, 'inbound',
-               item.quantity, beforeQty, beforeQty + item.quantity, operator,
-               'inbound_records', result.insertId, supplier ? `供应商：${supplier}` : null])
-          }
-
+          // 6. products.stock 累加
           await conn.query(
             'UPDATE products SET stock = COALESCE(stock, 0) + ? WHERE id = ?',
             [item.quantity, item.product_id])
 
-          // ✅ 入库后 recheck 库存预警
-          // 规则：stock < alert_stock → 触发预警；stock >= alert_stock → 自动 handled
-          const [[alertProd]] = await conn.query(
-            'SELECT id, stock, alert_stock FROM products WHERE id = ?', [item.product_id])
-          if (alertProd && alertProd.alert_stock > 0) {
-            if (alertProd.stock < alertProd.alert_stock) {
-              // 创建或保留未 handled 的预警（去重）
-              const [[existing]] = await conn.query(
-                'SELECT id FROM stock_alerts WHERE product_id = ? AND warehouse_id = ? AND handled = 0 LIMIT 1',
-                [item.product_id, warehouse_id])
-              if (!existing) {
-                const suggestQty = alertProd.alert_stock * 2 - alertProd.stock
-                const level = alertProd.stock <= alertProd.alert_stock * 0.5 ? 'critical' : 'low'
-                await conn.query(
-                  `INSERT INTO stock_alerts (product_id, warehouse_id, current_stock, alert_stock, suggest_qty, level)
-                   VALUES (?,?,?,?,?,?)`,
-                  [item.product_id, warehouse_id, alertProd.stock, alertProd.alert_stock, suggestQty, level])
-              }
-            } else {
-              // 库存够了 → 自动标 handled
-              await conn.query(
-                `UPDATE stock_alerts SET handled = 1, handled_at = NOW(),
-                 handled_reason = 'auto: stock >= alert_stock after inbound'
-                 WHERE product_id = ? AND warehouse_id = ? AND handled = 0`,
-                [item.product_id, warehouse_id])
-            }
+          // 7. alert_stock 同步（覆盖式保存）
+          if (item.alert_stock !== undefined && item.alert_stock !== null && item.alert_stock !== '' && Number(item.alert_stock) >= 0) {
+            await conn.query(
+              'UPDATE products SET alert_stock = ? WHERE id = ?',
+              [Number(item.alert_stock), item.product_id])
           }
+
+          // 8. recheck 库存预警
+          await recheckStockAlert(conn, item.product_id, warehouse_id)
+
+          // 9. 写审计日志 — 新增
+          await conn.query(
+            `INSERT INTO inbound_audit_log
+              (record_id, item_id, action, operator_id, operator_name, after_qty, after_alert_stock, note)
+             VALUES (?,?,?,?,?,?,?,?)`,
+            [result.insertId, inboundItemId, 'create', operatorId, operator, item.quantity,
+             (item.alert_stock !== undefined && item.alert_stock !== null && item.alert_stock !== '') ? Number(item.alert_stock) : null,
+             `新建入库 ${prod.name}${skuId ? `(SKU ${skuId})` : ''} 数量 ${item.quantity}`])
         }
         await conn.commit()
         return res.json({ code: 0, data: { id: result.insertId, record_no: recordNo }, message: 'ok' })
@@ -331,20 +447,26 @@ router.post('/outbound', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (
     }
 
     // 校验库存 & require_qrcode
+    // 重要：warehouse_stock 表可能因为 NULL sku_id UNIQUE 索引失效产生重复行
+    // 必须 SUM 所有行的 quantity，不能只看一行
     for (const item of finalItems) {
-      // 库存按 SKU 维度校验（兼容无 SKU 商品）
       const stockSql = item.sku_id
-        ? 'SELECT quantity FROM warehouse_stock WHERE warehouse_id = ? AND product_id = ? AND sku_id = ?'
-        : 'SELECT quantity FROM warehouse_stock WHERE warehouse_id = ? AND product_id = ? AND sku_id IS NULL'
+        ? 'SELECT COALESCE(SUM(quantity), 0) AS total FROM warehouse_stock WHERE warehouse_id = ? AND product_id = ? AND sku_id = ?'
+        : 'SELECT COALESCE(SUM(quantity), 0) AS total FROM warehouse_stock WHERE warehouse_id = ? AND product_id = ? AND sku_id IS NULL'
       const stockParams = item.sku_id
         ? [warehouse_id, item.product_id, item.sku_id]
         : [warehouse_id, item.product_id]
       const [[stock]] = await conn.query(stockSql, stockParams)
-      if (!stock || stock.quantity < item.quantity) {
+      if (!stock || stock.total < item.quantity) {
         await conn.rollback()
-        return res.status(400).json({ code: 400, message: `商品ID ${item.product_id} 库存不足` })
+        return res.status(400).json({ code: 400, message: `商品ID ${item.product_id} 库存不足 (需 ${item.quantity}, 实际 ${stock?.total || 0})` })
       }
-      // 不需要校验 require_qrcode（出库允许不绑定一物一码）
+      // 检查是否需要一物一码（支持 qrcode_id 单个 + qrcodes 数组）
+      const [[prod]] = await conn.query('SELECT require_qrcode FROM products WHERE id = ?', [item.product_id])
+      if (prod?.require_qrcode && !item.qrcode_id && !(item.qrcodes && item.qrcodes.length > 0)) {
+        await conn.rollback()
+        return res.status(400).json({ code: 400, message: `商品ID ${item.product_id} 出库必须绑定一物一码` })
+      }
     }
 
     const totalQty = items.reduce((s, i) => s + (i.quantity || 0), 0)
@@ -376,15 +498,32 @@ router.post('/outbound', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (
             }
           }
           // warehouse_stock 扣减（拆 SKU 维度）
-          const wsSql = item.sku_id
-            ? 'UPDATE warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_id = ? AND sku_id = ? AND quantity >= ?'
-            : 'UPDATE warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_id = ? AND sku_id IS NULL AND quantity >= ?'
-          const wsParams = item.sku_id
-            ? [item.quantity, warehouse_id, item.product_id, item.sku_id, item.quantity]
-            : [item.quantity, warehouse_id, item.product_id, item.quantity]
-          const [wsResult] = await conn.query(wsSql, wsParams)
-          if (wsResult.affectedRows === 0) {
-            throw Object.assign(new Error(`商品ID ${item.product_id} 库存不足`), { status: 400 })
+          // 修复：warehouse_stock 可能因 NULL sku_id UNIQUE 索引失效产生重复行
+          // 必须用 SUM 一次性判断总库存是否够，循环扣到扣完为止
+          const checkSql = item.sku_id
+            ? 'SELECT COALESCE(SUM(quantity), 0) AS total FROM warehouse_stock WHERE warehouse_id = ? AND product_id = ? AND sku_id = ?'
+            : 'SELECT COALESCE(SUM(quantity), 0) AS total FROM warehouse_stock WHERE warehouse_id = ? AND product_id = ? AND sku_id IS NULL'
+          const checkParams = item.sku_id
+            ? [warehouse_id, item.product_id, item.sku_id]
+            : [warehouse_id, item.product_id]
+          const [[stockCheck]] = await conn.query(checkSql, checkParams)
+          if (!stockCheck || stockCheck.total < item.quantity) {
+            throw Object.assign(new Error(`商品ID ${item.product_id} 库存不足 (需 ${item.quantity}, 实际 ${stockCheck?.total || 0})`), { status: 400 })
+          }
+          // 循环扣减：从最早一行开始扣，扣到完为止（避免 NULL sku_id 重复行问题）
+          let remaining = item.quantity
+          while (remaining > 0) {
+            const getOneSql = item.sku_id
+              ? 'SELECT id, quantity FROM warehouse_stock WHERE warehouse_id = ? AND product_id = ? AND sku_id = ? AND quantity > 0 ORDER BY id LIMIT 1'
+              : 'SELECT id, quantity FROM warehouse_stock WHERE warehouse_id = ? AND product_id = ? AND sku_id IS NULL AND quantity > 0 ORDER BY id LIMIT 1'
+            const [[oneRow]] = await conn.query(getOneSql, checkParams)
+            if (!oneRow) break  // 防御：理论上 checkSql 已经校验过
+            const deductThis = Math.min(remaining, oneRow.quantity)
+            await conn.query('UPDATE warehouse_stock SET quantity = quantity - ? WHERE id = ?', [deductThis, oneRow.id])
+            remaining -= deductThis
+          }
+          if (remaining > 0) {
+            throw Object.assign(new Error(`商品ID ${item.product_id} 库存扣减失败, 剩余 ${remaining}`), { status: 400 })
           }
           const [pResult] = await conn.query(
             'UPDATE products SET stock = COALESCE(stock, 0) - ? WHERE id = ? AND COALESCE(stock, 0) >= ?',
@@ -392,6 +531,8 @@ router.post('/outbound', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (
           if (pResult.affectedRows === 0) {
             throw Object.assign(new Error(`商品ID ${item.product_id} 总库存不足`), { status: 400 })
           }
+          // ✅ 出库后 recheck 库存预警（库存下降可能触发预警）
+          await recheckStockAlert(conn, item.product_id, warehouse_id)
         }
         await conn.commit()
         return res.json({ code: 0, data: { id: result.insertId, record_no: recordNo }, message: 'ok' })
@@ -541,18 +682,32 @@ router.post('/returns', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (r
           await conn.query('INSERT INTO return_items (record_id, product_id, sku_id, quantity, qrcode_id) VALUES (?,?,?,?,?)',
             [result.insertId, item.product_id, item.sku_id || null, item.quantity, item.qrcode_id || null])
           // warehouse_stock 数量回退（拆 SKU 维度，兼容无 SKU）
+          // 注意：MySQL UNIQUE INDEX 对 NULL 不去重，显式 SELECT FOR UPDATE 累加
+          const targetWh = item.warehouse_id || warehouse_id
           if (item.sku_id) {
-            await conn.query(
-              `INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,?,?)
-               ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)`,
-              [item.warehouse_id || warehouse_id, item.product_id, item.sku_id, item.quantity]
-            )
+            const [existing] = await conn.query(
+              'SELECT id, quantity FROM warehouse_stock WHERE warehouse_id=? AND product_id=? AND sku_id=? FOR UPDATE',
+              [targetWh, item.product_id, item.sku_id])
+            if (existing.length > 0) {
+              await conn.query('UPDATE warehouse_stock SET quantity = quantity + ? WHERE id = ?',
+                [item.quantity, existing[0].id])
+            } else {
+              await conn.query(
+                'INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,?,?)',
+                [targetWh, item.product_id, item.sku_id, item.quantity])
+            }
           } else {
-            await conn.query(
-              `INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,NULL,?)
-               ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)`,
-              [item.warehouse_id || warehouse_id, item.product_id, item.quantity]
-            )
+            const [existing] = await conn.query(
+              'SELECT id, quantity FROM warehouse_stock WHERE warehouse_id=? AND product_id=? AND sku_id IS NULL FOR UPDATE',
+              [targetWh, item.product_id])
+            if (existing.length > 0) {
+              await conn.query('UPDATE warehouse_stock SET quantity = quantity + ? WHERE id = ?',
+                [item.quantity, existing[0].id])
+            } else {
+              await conn.query(
+                'INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,NULL,?)',
+                [targetWh, item.product_id, item.quantity])
+            }
           }
 
           await conn.query(
@@ -605,12 +760,47 @@ router.put('/inbound/:id', requirePermission(PERMISSIONS.INVENTORY_WRITE), async
       return res.status(400).json({ code: 400, message: '仓库和商品明细必填' })
     }
 
-    // Rollback old stock
+    // 先抓 old items 的 before 数据（在 rollback 之前，用于审计日志）
     const [oldItems] = await conn.query('SELECT * FROM inbound_items WHERE record_id = ?', [recordId])
+    const beforeMap = {} // key: `${product_id}_${sku_id}` -> {qty, alert}
     for (const item of oldItems) {
-      await conn.query(
-        'UPDATE warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_id = ?',
-        [item.quantity, record.warehouse_id, item.product_id])
+      const skuKey = item.sku_id || 'null'
+      const mapKey = `${item.product_id}_${skuKey}`
+      let beforeStockRows
+      if (item.sku_id) {
+        [beforeStockRows] = await conn.query(
+          'SELECT id, quantity FROM warehouse_stock WHERE warehouse_id=? AND product_id=? AND sku_id=?',
+          [record.warehouse_id, item.product_id, item.sku_id])
+      } else {
+        [beforeStockRows] = await conn.query(
+          'SELECT id, quantity FROM warehouse_stock WHERE warehouse_id=? AND product_id=? AND sku_id IS NULL',
+          [record.warehouse_id, item.product_id])
+      }
+      const [[beforeProd]] = await conn.query(
+        'SELECT alert_stock FROM products WHERE id = ?', [item.product_id])
+      beforeMap[mapKey] = {
+        qty: beforeStockRows.length > 0 ? beforeStockRows[0].quantity : 0,
+        alert: beforeProd?.alert_stock ?? null
+      }
+    }
+
+    // Rollback old stock (拆 SKU 维度，扣减 + 扣完 0 → 删行)
+    for (const item of oldItems) {
+      if (item.sku_id) {
+        await conn.query(
+          'UPDATE warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_id = ? AND sku_id = ? AND quantity >= ?',
+          [item.quantity, record.warehouse_id, item.product_id, item.sku_id, item.quantity])
+        await conn.query(
+          'DELETE FROM warehouse_stock WHERE warehouse_id = ? AND product_id = ? AND sku_id = ? AND quantity = 0',
+          [record.warehouse_id, item.product_id, item.sku_id])
+      } else {
+        await conn.query(
+          'UPDATE warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_id = ? AND sku_id IS NULL AND quantity >= ?',
+          [item.quantity, record.warehouse_id, item.product_id, item.quantity])
+        await conn.query(
+          'DELETE FROM warehouse_stock WHERE warehouse_id = ? AND product_id = ? AND sku_id IS NULL AND quantity = 0',
+          [record.warehouse_id, item.product_id])
+      }
       await conn.query('UPDATE products SET stock = stock - ? WHERE id = ?', [item.quantity, item.product_id])
     }
 
@@ -622,22 +812,66 @@ router.put('/inbound/:id', requirePermission(PERMISSIONS.INVENTORY_WRITE), async
 
     // Delete old items, insert new
     await conn.query('DELETE FROM inbound_items WHERE record_id = ?', [recordId])
+    const operatorId = req.user?.id || null
+    const operator = req.user?.name || ''
     for (const item of items) {
+      const skuId = item.sku_id || null
+      const skuKey = skuId || 'null'
+      const mapKey = `${item.product_id}_${skuKey}`
+      // 从 rollback 前抓的 beforeMap 取真实 before 数据
+      const beforeQty = beforeMap[mapKey]?.qty ?? 0
+      const beforeAlert = beforeMap[mapKey]?.alert ?? null
+
+      const newAlert = (item.alert_stock !== undefined && item.alert_stock !== null && item.alert_stock !== '') ? Number(item.alert_stock) : null
+
       await conn.query(
         'INSERT INTO inbound_items (record_id, product_id, sku_id, quantity, alert_stock) VALUES (?,?,?,?,?)',
-        [recordId, item.product_id, item.sku_id || null, item.quantity,
-         (item.alert_stock !== undefined && item.alert_stock !== null && item.alert_stock !== '')
-           ? Number(item.alert_stock) : null])
-      // Apply new stock
-      await conn.query(
-        `INSERT INTO warehouse_stock (warehouse_id, product_id, quantity) VALUES (?,?,?)
-         ON DUPLICATE KEY UPDATE quantity = quantity + ?`,
-        [warehouse_id, item.product_id, item.quantity, item.quantity])
-      await conn.query('UPDATE products SET stock = stock + ? WHERE id = ?', [item.quantity, item.product_id])
-      // ✅ 编辑入库时也同步更新 alert_stock（按需覆盖）
-      if (item.alert_stock !== undefined && item.alert_stock !== null && item.alert_stock !== '') {
-        await conn.query('UPDATE products SET alert_stock = ? WHERE id = ?', [Number(item.alert_stock), item.product_id])
+        [recordId, item.product_id, skuId, item.quantity, newAlert])
+
+      // Apply new stock — 检查 rollback 前是否原 warehouse_stock 行存在
+      // （rollback 可能把行删了，所以这里要重新 SELECT FOR UPDATE 而不是用 beforeRows）
+      let stockRows
+      if (skuId === null) {
+        [stockRows] = await conn.query(
+          'SELECT id, quantity FROM warehouse_stock WHERE warehouse_id=? AND product_id=? AND sku_id IS NULL FOR UPDATE',
+          [warehouse_id, item.product_id])
+      } else {
+        [stockRows] = await conn.query(
+          'SELECT id, quantity FROM warehouse_stock WHERE warehouse_id=? AND product_id=? AND sku_id=? FOR UPDATE',
+          [warehouse_id, item.product_id, skuId])
       }
+      if (stockRows.length > 0) {
+        await conn.query('UPDATE warehouse_stock SET quantity = quantity + ? WHERE id = ?',
+          [item.quantity, stockRows[0].id])
+      } else {
+        if (skuId === null) {
+          await conn.query(
+            'INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,NULL,?)',
+            [warehouse_id, item.product_id, item.quantity])
+        } else {
+          await conn.query(
+            'INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,?,?)',
+            [warehouse_id, item.product_id, skuId, item.quantity])
+        }
+      }
+      await conn.query('UPDATE products SET stock = stock + ? WHERE id = ?', [item.quantity, item.product_id])
+
+      // 编辑入库时同步更新 products.alert_stock
+      if (newAlert !== null) {
+        await conn.query('UPDATE products SET alert_stock = ? WHERE id = ?', [newAlert, item.product_id])
+      }
+
+      // 编辑入库后 recheck 库存预警
+      await recheckStockAlert(conn, item.product_id, warehouse_id)
+
+      // 写审计日志 — 更新
+      const [[prodInfo]] = await conn.query('SELECT name FROM products WHERE id = ?', [item.product_id])
+      await conn.query(
+        `INSERT INTO inbound_audit_log
+          (record_id, action, operator_id, operator_name, before_qty, after_qty, before_alert_stock, after_alert_stock, note)
+         VALUES (?,?,?,?,?,?,?,?,?)`,
+        [recordId, 'update', operatorId, operator, beforeQty, item.quantity, beforeAlert, newAlert,
+         `编辑入库 ${prodInfo?.name || ''}${skuId ? `(SKU ${skuId})` : ''} 数量 ${beforeQty}→${item.quantity}`])
     }
 
     await conn.commit()
@@ -668,13 +902,20 @@ router.put('/outbound/:id', requirePermission(PERMISSIONS.INVENTORY_WRITE), asyn
       return res.status(400).json({ code: 400, message: '仓库和商品明细必填' })
     }
 
-    // Rollback old stock
+    // Rollback old stock — MySQL UNIQUE INDEX 对 NULL 不去重，显式 SELECT FOR UPDATE
     const [oldItems] = await conn.query('SELECT * FROM outbound_items WHERE record_id = ?', [recordId])
     for (const item of oldItems) {
-      await conn.query(
-        `INSERT INTO warehouse_stock (warehouse_id, product_id, quantity) VALUES (?,?,?)
-         ON DUPLICATE KEY UPDATE quantity = quantity + ?`,
-        [record.warehouse_id, item.product_id, item.quantity, item.quantity])
+      const [existingB] = await conn.query(
+        'SELECT id FROM warehouse_stock WHERE warehouse_id=? AND product_id=? AND sku_id IS NULL FOR UPDATE',
+        [record.warehouse_id, item.product_id])
+      if (existingB.length > 0) {
+        await conn.query('UPDATE warehouse_stock SET quantity = quantity + ? WHERE id = ?',
+          [item.quantity, existingB[0].id])
+      } else {
+        await conn.query(
+          'INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,NULL,?)',
+          [record.warehouse_id, item.product_id, item.quantity])
+      }
       await conn.query('UPDATE products SET stock = stock + ? WHERE id = ?', [item.quantity, item.product_id])
       if (item.qrcode_id) {
         await conn.query("UPDATE qrcodes SET status = 'bound' WHERE id = ?", [item.qrcode_id])
@@ -690,8 +931,7 @@ router.put('/outbound/:id', requirePermission(PERMISSIONS.INVENTORY_WRITE), asyn
     // Delete old items, insert new
     await conn.query('DELETE FROM outbound_items WHERE record_id = ?', [recordId])
     for (const item of items) {
-      await conn.query(
-        'INSERT INTO outbound_items (record_id, product_id, sku_id, quantity, qrcode_id) VALUES (?,?,?,?,?)',
+      await conn.query('INSERT INTO outbound_items (record_id, product_id, sku_id, quantity, qrcode_id) VALUES (?,?,?,?,?)',
         [recordId, item.product_id, item.sku_id || null, item.quantity, item.qrcode_id || null])
       // Apply new stock deduction
       await conn.query(
@@ -699,8 +939,10 @@ router.put('/outbound/:id', requirePermission(PERMISSIONS.INVENTORY_WRITE), asyn
         [item.quantity, warehouse_id, item.product_id])
       await conn.query('UPDATE products SET stock = stock - ? WHERE id = ?', [item.quantity, item.product_id])
       if (item.qrcode_id) {
-        await conn.query("UPDATE qrcodes SET status = 'used' WHERE id = ?", item.qrcode_id)
+        await conn.query("UPDATE qrcodes SET status = 'used' WHERE id = ?", [item.qrcode_id])
       }
+      // ✅ 编辑出库后 recheck 库存预警
+      await recheckStockAlert(conn, item.product_id, warehouse_id)
     }
 
     await conn.commit()
@@ -746,17 +988,28 @@ router.delete('/inbound/:id', requireRole('admin'), async (req, res, next) => {
         )
       }
 
-      // 2. warehouse_stock 扣减（拆 SKU 维度）
+      // 2. warehouse_stock 扣减（拆 SKU 维度，扣完如果是 0 就清掉，避免重新入库被 409 误拦截）
       if (item.sku_id) {
         await conn.query(
           `UPDATE warehouse_stock SET quantity = quantity - ?
            WHERE warehouse_id=? AND product_id=? AND sku_id=? AND quantity >= ?`,
           [item.quantity, record.warehouse_id, item.product_id, item.sku_id, item.quantity]
         )
+        // 扣完是 0 → 删除该行
+        await conn.query(
+          `DELETE FROM warehouse_stock
+           WHERE warehouse_id=? AND product_id=? AND sku_id=? AND quantity = 0`,
+          [record.warehouse_id, item.product_id, item.sku_id]
+        )
       } else {
         await conn.query(
           'UPDATE warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_id = ? AND sku_id IS NULL AND quantity >= ?',
           [item.quantity, record.warehouse_id, item.product_id, item.quantity]
+        )
+        // 扣完是 0 → 删除该行
+        await conn.query(
+          'DELETE FROM warehouse_stock WHERE warehouse_id = ? AND product_id = ? AND sku_id IS NULL AND quantity = 0',
+          [record.warehouse_id, item.product_id]
         )
       }
 
@@ -767,6 +1020,19 @@ router.delete('/inbound/:id', requireRole('admin'), async (req, res, next) => {
     // Delete items and record
     await conn.query('DELETE FROM inbound_items WHERE record_id = ?', [recordId])
     await conn.query('DELETE FROM inbound_records WHERE id = ?', [recordId])
+
+    // 写审计日志 — 删除（每条 item 一条）
+    const operatorId = req.user?.id || null
+    const operator = req.user?.name || ''
+    for (const item of items) {
+      const [[prodInfo]] = await conn.query('SELECT name FROM products WHERE id = ?', [item.product_id])
+      await conn.query(
+        `INSERT INTO inbound_audit_log
+          (record_id, action, operator_id, operator_name, before_qty, before_alert_stock, note)
+         VALUES (?,?,?,?,?,?,?)`,
+        [recordId, 'delete', operatorId, operator, item.quantity, item.alert_stock,
+         `删除入库 ${prodInfo?.name || ''}${item.sku_id ? `(SKU ${item.sku_id})` : ''} 数量 ${item.quantity}`])
+    }
 
     await conn.commit()
     res.json({ code: 0, data: null, message: '删除成功' })
@@ -799,18 +1065,31 @@ router.delete('/outbound/:id', requireRole('admin'), async (req, res, next) => {
     // Rollback stock changes and qrcode status
     for (const item of items) {
       // 1. 库存回退（拆 SKU 维度）
+      // 注意：MySQL UNIQUE INDEX 对 NULL 不去重，显式 SELECT FOR UPDATE 累加
       if (item.sku_id) {
-        await conn.query(
-          `INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,?,?)
-           ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)`,
-          [record.warehouse_id, item.product_id, item.sku_id, item.quantity]
-        )
+        const [existing] = await conn.query(
+          'SELECT id, quantity FROM warehouse_stock WHERE warehouse_id=? AND product_id=? AND sku_id=? FOR UPDATE',
+          [record.warehouse_id, item.product_id, item.sku_id])
+        if (existing.length > 0) {
+          await conn.query('UPDATE warehouse_stock SET quantity = quantity + ? WHERE id = ?',
+            [item.quantity, existing[0].id])
+        } else {
+          await conn.query(
+            'INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,?,?)',
+            [record.warehouse_id, item.product_id, item.sku_id, item.quantity])
+        }
       } else {
-        await conn.query(
-          `INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,NULL,?)
-           ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)`,
-          [record.warehouse_id, item.product_id, item.quantity]
-        )
+        const [existing] = await conn.query(
+          'SELECT id, quantity FROM warehouse_stock WHERE warehouse_id=? AND product_id=? AND sku_id IS NULL FOR UPDATE',
+          [record.warehouse_id, item.product_id])
+        if (existing.length > 0) {
+          await conn.query('UPDATE warehouse_stock SET quantity = quantity + ? WHERE id = ?',
+            [item.quantity, existing[0].id])
+        } else {
+          await conn.query(
+            'INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,NULL,?)',
+            [record.warehouse_id, item.product_id, item.quantity])
+        }
       }
       await conn.query('UPDATE products SET stock = stock + ? WHERE id = ?', [item.quantity, item.product_id])
 
@@ -882,11 +1161,18 @@ router.put('/returns/:id', requirePermission(PERMISSIONS.INVENTORY_WRITE), async
     for (const item of items) {
       await conn.query('INSERT INTO return_items (record_id, product_id, sku_id, quantity, qrcode_id) VALUES (?,?,?,?,?)',
         [recordId, item.product_id, item.sku_id || null, item.quantity, item.qrcode_id || null])
-      // Apply stock return
-      await conn.query(
-        `INSERT INTO warehouse_stock (warehouse_id, product_id, quantity) VALUES (?,?,?)
-         ON DUPLICATE KEY UPDATE quantity = quantity + ?`,
-        [warehouse_id, item.product_id, item.quantity, item.quantity])
+      // Apply stock return — MySQL UNIQUE INDEX 对 NULL 不去重，显式 SELECT FOR UPDATE
+      const [existingC] = await conn.query(
+        'SELECT id FROM warehouse_stock WHERE warehouse_id=? AND product_id=? AND sku_id IS NULL FOR UPDATE',
+        [warehouse_id, item.product_id])
+      if (existingC.length > 0) {
+        await conn.query('UPDATE warehouse_stock SET quantity = quantity + ? WHERE id = ?',
+          [item.quantity, existingC[0].id])
+      } else {
+        await conn.query(
+          'INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,NULL,?)',
+          [warehouse_id, item.product_id, item.quantity])
+      }
       await conn.query('UPDATE products SET stock = stock + ? WHERE id = ?', [item.quantity, item.product_id])
       if (item.qrcode_id) {
         await conn.query("UPDATE qrcodes SET status = 'bound' WHERE id = ?", [item.qrcode_id])
@@ -1234,259 +1520,6 @@ router.post('/reconcile', requireRole('admin'), async (req, res, next) => {
   } catch (err) {
     await conn.rollback(); next(err)
   } finally { conn.release() }
-})
-
-// ========== 库存管理（新模型：主表 + 调整） ==========
-
-// GET /api/inventory/stock — 库存列表（带商品/SKU/仓库信息）
-router.get('/stock', requirePermission(PERMISSIONS.INVENTORY_READ), async (req, res, next) => {
-  try {
-    const { page, size } = parsePagination(req.query)
-    const offset = (page - 1) * size
-    const { warehouse_id, product_id, keyword } = req.query
-    const where = ['1=1']
-    const params = []
-    if (warehouse_id) { where.push('ws.warehouse_id = ?'); params.push(warehouse_id) }
-    if (product_id)   { where.push('ws.product_id = ?');   params.push(product_id) }
-    if (keyword) {
-      where.push('(p.name LIKE ? OR ps.sku LIKE ? OR ps.sku_key LIKE ?)')
-      const kw = `%${keyword}%`
-      params.push(kw, kw, kw)
-    }
-    const whereSql = where.join(' AND ')
-    const [[{ total }]] = await pool.query(
-      `SELECT COUNT(*) as total FROM warehouse_stock ws
-       JOIN products p ON ws.product_id = p.id
-       LEFT JOIN product_skus ps ON ws.sku_id = ps.id
-       WHERE ${whereSql}`, params)
-    const [rows] = await pool.query(
-      `SELECT ws.id, ws.warehouse_id, ws.product_id, ws.sku_id, ws.quantity, ws.location,
-              p.name AS product_name, p.sku AS product_sku, p.image_main, p.alert_stock, p.stock AS product_total_stock,
-              ps.sku AS sku_code, ps.sku_key, ps.specs,
-              w.name AS warehouse_name,
-              CASE
-                WHEN p.alert_stock IS NULL OR p.alert_stock = 0 THEN 'none'
-                WHEN ws.quantity < p.alert_stock * 0.5 THEN 'critical'
-                WHEN ws.quantity < p.alert_stock THEN 'low'
-                ELSE 'ok'
-              END AS alert_status
-       FROM warehouse_stock ws
-       JOIN products p ON ws.product_id = p.id
-       LEFT JOIN product_skus ps ON ws.sku_id = ps.id
-       LEFT JOIN warehouses w ON ws.warehouse_id = w.id
-       WHERE ${whereSql}
-       ORDER BY ws.id DESC LIMIT ? OFFSET ?`,
-      [...params, size, offset])
-    res.json({ code: 0, data: { list: rows, total, page, size }, message: 'ok' })
-  } catch (err) { next(err) }
-})
-
-// PUT /api/inventory/stock/:id/adjust — 调整数量（增量 +/-）
-router.put('/stock/:id/adjust', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (req, res, next) => {
-  const conn = await pool.getConnection()
-  try {
-    await conn.beginTransaction()
-    const stockId = Number(req.params.id)
-    const { delta, remark } = req.body
-    const operator = req.user?.name || req.body.operator || 'system'
-    if (!Number.isFinite(delta) || delta === 0) {
-      return res.status(400).json({ code: 400, message: 'delta 必须是非 0 整数' })
-    }
-    const [[stock]] = await conn.query(
-      'SELECT * FROM warehouse_stock WHERE id = ? FOR UPDATE', [stockId])
-    if (!stock) {
-      return res.status(404).json({ code: 404, message: '库存记录不存在' })
-    }
-    const beforeQty = stock.quantity
-    const afterQty = beforeQty + delta
-    if (afterQty < 0) {
-      return res.status(400).json({ code: 400, message: `调整后数量不能为负（当前 ${beforeQty}，delta ${delta}）` })
-    }
-    await conn.query('UPDATE warehouse_stock SET quantity = ? WHERE id = ?', [afterQty, stockId])
-    await conn.query(
-      `INSERT INTO stock_movements
-       (warehouse_id, product_id, sku_id, change_type, delta, before_qty, after_qty, operator, ref_type, ref_id, remark)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-      [stock.warehouse_id, stock.product_id, stock.sku_id, 'adjust',
-       delta, beforeQty, afterQty, operator,
-       'manual_adjust', stockId, remark || null])
-    await conn.commit()
-    res.json({ code: 0, data: { id: stockId, before: beforeQty, after: afterQty, delta }, message: 'ok' })
-  } catch (err) { await conn.rollback(); next(err) }
-  finally { conn.release() }
-})
-
-// DELETE /api/inventory/stock/:id — 删除库存关系（必须 quantity=0）
-router.delete('/stock/:id', requirePermission(PERMISSIONS.INVENTORY_WRITE), async (req, res, next) => {
-  const conn = await pool.getConnection()
-  try {
-    await conn.beginTransaction()
-    const stockId = Number(req.params.id)
-    const operator = req.user?.name || req.body.operator || 'system'
-    const [[stock]] = await conn.query(
-      'SELECT * FROM warehouse_stock WHERE id = ? FOR UPDATE', [stockId])
-    if (!stock) {
-      return res.status(404).json({ code: 404, message: '库存记录不存在' })
-    }
-    if (stock.quantity !== 0) {
-      return res.status(400).json({ code: 400, message: `当前数量为 ${stock.quantity}，必须先调整到 0 才能删除` })
-    }
-    // 写流水
-    await conn.query(
-      `INSERT INTO stock_movements
-       (warehouse_id, product_id, sku_id, change_type, delta, before_qty, after_qty, operator, ref_type, ref_id, remark)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-      [stock.warehouse_id, stock.product_id, stock.sku_id, 'delete',
-       0, 0, 0, operator, 'manual_delete', stockId, '彻底删除库存关系'])
-    await conn.query('DELETE FROM warehouse_stock WHERE id = ?', [stockId])
-    await conn.commit()
-    res.json({ code: 0, message: '已删除' })
-  } catch (err) { await conn.rollback(); next(err) }
-  finally { conn.release() }
-})
-
-// GET /api/inventory/stock/:id/movements — 流水记录
-router.get('/stock/:id/movements', requirePermission(PERMISSIONS.STOCK_MOVEMENTS_READ), async (req, res, next) => {
-  try {
-    const stockId = Number(req.params.id)
-    const [[stock]] = await pool.query('SELECT * FROM warehouse_stock WHERE id = ?', [stockId])
-    if (!stock) return res.status(404).json({ code: 404, message: '库存记录不存在' })
-    const [movements] = await pool.query(
-      `SELECT * FROM stock_movements
-       WHERE warehouse_id=? AND product_id=? AND (sku_id <=> ?)
-       ORDER BY created_at DESC LIMIT 100`,
-      [stock.warehouse_id, stock.product_id, stock.sku_id])
-    res.json({ code: 0, data: { stock, movements }, message: 'ok' })
-  } catch (err) { next(err) }
-})
-
-// GET /api/inventory/stock-movements — 全流水查询（操作记录 Tab 用）
-// 支持筛选: warehouse_id, change_type, operator, start_date, end_date, keyword(SKU/商品编号)
-router.get('/stock-movements', requirePermission(PERMISSIONS.STOCK_MOVEMENTS_READ), async (req, res, next) => {
-  try {
-    const { warehouse_id, change_type, operator, start_date, end_date, keyword } = req.query
-    const page = Math.max(1, Number(req.query.page) || 1)
-    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50))
-    const offset = (page - 1) * limit
-
-    const where = []
-    const params = []
-    if (warehouse_id) { where.push('m.warehouse_id = ?'); params.push(Number(warehouse_id)) }
-    if (change_type)  { where.push('m.change_type = ?');  params.push(change_type) }
-    if (operator)     { where.push('m.operator = ?');     params.push(operator) }
-    if (start_date)   { where.push('m.created_at >= ?');  params.push(start_date + ' 00:00:00') }
-    if (end_date)     { where.push('m.created_at <= ?');  params.push(end_date + ' 23:59:59') }
-    if (keyword)      { where.push('(p.sku LIKE ? OR p.name LIKE ? OR ps.sku_key LIKE ?)')
-                        params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`) }
-    const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : ''
-
-    const [rows] = await pool.query(
-      `SELECT m.*, p.sku AS product_code, p.name AS product_name, ps.sku_key, w.name AS warehouse_name
-       FROM stock_movements m
-       LEFT JOIN products p ON m.product_id = p.id
-       LEFT JOIN product_skus ps ON m.sku_id = ps.id
-       LEFT JOIN warehouses w ON m.warehouse_id = w.id
-       ${whereSql}
-       ORDER BY m.created_at DESC, m.id DESC
-       LIMIT ? OFFSET ?`,
-      [...params, limit, offset])
-    const [[{ total }]] = await pool.query(
-      `SELECT COUNT(*) AS total FROM stock_movements m
-       LEFT JOIN products p ON m.product_id = p.id
-       LEFT JOIN product_skus ps ON m.sku_id = ps.id
-       ${whereSql}`,
-      params)
-    res.json({ code: 0, data: { list: rows, total, page, limit }, message: 'ok' })
-  } catch (err) { next(err) }
-})
-
-// POST /api/stock-movements/adjust — 手动调整库存（补单/冲正/盘点修正）
-// body: { warehouse_id, product_id, sku_id?, new_qty, reason }
-//   - new_qty 是调整后的**最终数量**（不是 delta）
-//   - reason 必填（操作人写的调整原因，会写进 stock_movements.remark）
-router.post('/stock-movements/adjust', requirePermission(PERMISSIONS.STOCK_MOVEMENTS_WRITE), async (req, res, next) => {
-  const conn = await pool.getConnection()
-  try {
-    const { warehouse_id, product_id, sku_id, new_qty, reason } = req.body || {}
-    const operator = req.user?.name || req.user?.phone || 'unknown'
-
-    // 1. 参数校验
-    if (!warehouse_id || !product_id || new_qty == null) {
-      return res.status(400).json({ code: 400, message: '参数不完整：warehouse_id / product_id / new_qty 必填' })
-    }
-    const targetQty = Number(new_qty)
-    if (!Number.isFinite(targetQty) || targetQty < 0) {
-      return res.status(400).json({ code: 400, message: 'new_qty 必须是非负整数' })
-    }
-    if (!reason || !String(reason).trim()) {
-      return res.status(400).json({ code: 400, message: '请填写调整原因（必填，可追溯）' })
-    }
-
-    await conn.beginTransaction()
-
-    // 2. 查当前 stock（如果不存在则视为 0）
-    const [stockRows] = await conn.query(
-      `SELECT id, quantity FROM warehouse_stock
-       WHERE warehouse_id = ? AND product_id = ? AND ${sku_id ? 'sku_id = ?' : 'sku_id IS NULL'}`,
-      sku_id ? [warehouse_id, product_id, sku_id] : [warehouse_id, product_id])
-    const beforeQty = stockRows[0]?.quantity || 0
-    const delta = targetQty - beforeQty
-
-    // 3. 如果数量没变，不写流水（无意义的操作）
-    if (delta === 0) {
-      await conn.rollback()
-      return res.json({ code: 0, data: { adjusted: false, message: '新数量与当前一致，无需调整' }, message: 'ok' })
-    }
-
-    // 4. UPSERT warehouse_stock
-    if (stockRows.length === 0) {
-      await conn.query(
-        `INSERT INTO warehouse_stock (warehouse_id, product_id, sku_id, quantity) VALUES (?,?,?,?)`,
-        [warehouse_id, product_id, sku_id || null, targetQty])
-    } else {
-      await conn.query(
-        `UPDATE warehouse_stock SET quantity = ? WHERE id = ?`,
-        [targetQty, stockRows[0].id])
-    }
-
-    // 5. 写流水
-    const [moveRes] = await conn.query(
-      `INSERT INTO stock_movements
-       (warehouse_id, product_id, sku_id, change_type, delta, before_qty, after_qty, operator, ref_type, ref_id, remark)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-      [warehouse_id, product_id, sku_id || null, 'adjust',
-       delta, beforeQty, targetQty, operator,
-       'manual_adjust', null, `[手动调整] ${reason.trim()}`])
-
-    // 6. 同步 products.stock 总数
-    if (delta !== 0) {
-      // 统计所有仓库的总量
-      const [[{ totalStock }]] = await conn.query(
-        `SELECT COALESCE(SUM(quantity), 0) AS totalStock FROM warehouse_stock WHERE product_id = ?`,
-        [product_id])
-      await conn.query(
-        `UPDATE products SET stock = ? WHERE id = ?`,
-        [totalStock, product_id])
-    }
-
-    await conn.commit()
-    res.json({
-      code: 0,
-      data: {
-        adjusted: true,
-        movement_id: moveRes.insertId,
-        before_qty: beforeQty,
-        after_qty: targetQty,
-        delta,
-      },
-      message: 'ok',
-    })
-  } catch (err) {
-    await conn.rollback()
-    next(err)
-  } finally {
-    conn.release()
-  }
 })
 
 export default router
