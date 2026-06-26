@@ -143,6 +143,62 @@ const categories = computed(() => {
   }
   return Array.from(set).sort()
 })
+
+// ─── 动态规格筛选（颜色/尺寸/公斤/毫升/...自动从 specs 提取）───
+const selectedSpecs = ref({})  // { '颜色': Set(['黑', '白']), '尺寸': Set(['20']) }
+// 解析 SKU.specs（可能是 JSON 字符串或对象），提取所有 spec key → values
+function parseSpecs(specs) {
+  if (!specs) return {}
+  if (typeof specs === 'object') return specs
+  try { return JSON.parse(specs) } catch { return {} }
+}
+const specKeyValues = computed(() => {
+  const map = {}  // { '颜色': Set([...]), '尺寸': Set([...]) }
+  for (const p of products.value) {
+    for (const sku of (p.skus || [])) {
+      const specs = parseSpecs(sku.specs)
+      for (const [k, v] of Object.entries(specs)) {
+        if (v == null || v === '') continue
+        if (!map[k]) map[k] = new Set()
+        map[k].add(String(v))
+      }
+    }
+  }
+  // 转成有序数组（key 按中文/英文顺序）
+  return Object.keys(map).sort().reduce((acc, k) => {
+    acc[k] = Array.from(map[k]).sort()
+    return acc
+  }, {})
+})
+function toggleSpec(key, value) {
+  if (!selectedSpecs.value[key]) selectedSpecs.value[key] = new Set()
+  // 改用 Set 的包装对象（reactive 不追踪 Set 内部变化，用数组代替）
+  const arr = Array.from(selectedSpecs.value[key])
+  const idx = arr.indexOf(value)
+  if (idx >= 0) arr.splice(idx, 1)
+  else arr.push(value)
+  selectedSpecs.value[key] = arr
+  // 触发响应式
+  selectedSpecs.value = { ...selectedSpecs.value }
+}
+function isSpecSelected(key, value) {
+  return (selectedSpecs.value[key] || []).includes(value)
+}
+function clearAllSpecs() {
+  selectedSpecs.value = {}
+}
+// 过滤 SKU（按选中 specs）— 商品行内只保留匹配的 SKU
+function filterSkus(skus) {
+  if (!Object.keys(selectedSpecs.value).length) return skus || []
+  return (skus || []).filter(sku => {
+    const specs = parseSpecs(sku.specs)
+    for (const [k, values] of Object.entries(selectedSpecs.value)) {
+      if (!values.length) continue
+      if (!values.includes(String(specs[k]))) return false  // AND 关系
+    }
+    return true
+  })
+}
 const filteredProducts = computed(() => {
   const kw = searchKeyword.value.trim().toLowerCase()
   return products.value.filter(p => {
@@ -164,6 +220,18 @@ const selectedProductCount = computed(() => {
     if (has) n++
   }
   return n
+})
+// 统计：当前规格筛选命中的 SKU 总数
+const matchedSkuCount = computed(() => {
+  let n = 0
+  for (const p of filteredProducts.value) {
+    n += filterSkus(p.skus).length
+  }
+  return n
+})
+// 是否有任何规格筛选生效
+const hasSpecFilter = computed(() => {
+  return Object.values(selectedSpecs.value).some(arr => arr.length > 0)
 })
 
 onMounted(async () => {
@@ -347,6 +415,31 @@ function skuLabel(sku) {
             {{ t('common.clear') }}
           </button>
         </div>
+        <!-- 动态规格筛选（颜色/尺寸/公斤/毫升...）— 自动从 SKU.specs 提取 -->
+        <div v-if="Object.keys(specKeyValues).length > 0" class="mt-3 space-y-1.5">
+          <div v-for="(values, key) in specKeyValues" :key="key" class="flex items-start gap-2">
+            <span class="text-xs text-text-secondary w-14 pt-1 shrink-0">{{ key }}:</span>
+            <div class="flex flex-wrap gap-1.5 flex-1">
+              <button
+                v-for="val in (values.length > 12 ? values.slice(0, 12) : values)"
+                :key="val"
+                type="button"
+                @click="toggleSpec(key, val)"
+                :class="[
+                  'px-2.5 py-0.5 text-xs rounded-full border transition-colors',
+                  isSpecSelected(key, val)
+                    ? 'bg-primary text-white border-primary'
+                    : 'bg-white text-text-secondary border-gray-200 hover:border-primary hover:text-primary'
+                ]"
+              >{{ val }}</button>
+              <span v-if="values.length > 12" class="text-xs text-text-secondary pt-1">+{{ values.length - 12 }} more</span>
+            </div>
+          </div>
+          <div v-if="hasSpecFilter" class="flex items-center gap-2 pt-1">
+            <span class="text-xs text-text-secondary">已选 <strong class="text-primary">{{ matchedSkuCount }}</strong> 个 SKU</span>
+            <button @click="clearAllSpecs" class="text-xs text-primary hover:underline">{{ t('common.clear') }}</button>
+          </div>
+        </div>
       </div>
 
       <div v-if="loading" class="p-12 text-center text-text-secondary">
@@ -367,11 +460,9 @@ function skuLabel(sku) {
               <th class="px-3 py-3 font-medium text-left w-24">{{ t('order.image') }}</th>
               <th class="px-3 py-3 font-medium text-left min-w-[120px]">{{ t('order.sku') }}</th>
               <th class="px-3 py-3 font-medium text-left">{{ t('order.productName') }}</th>
-              <th class="px-3 py-3 font-medium text-left">{{ t('order.spec') }}</th>
-              <th class="px-3 py-3 font-medium text-center w-20">{{ t('order.color') }}</th>
-              <th class="px-3 py-3 font-medium text-center w-20">{{ t('order.size') }}</th>
+              <th class="px-3 py-3 font-medium text-left min-w-[160px]">{{ t('order.spec') }}</th>
               <th class="px-3 py-3 font-medium text-right w-24">{{ t('order.unitPrice') }}</th>
-              <th class="px-3 py-3 font-medium text-right w-24">{{ t('order.stock') }}</th>
+              <th class="px-3 py-3 font-medium text-right w-20">{{ t('order.stock') }}</th>
               <th class="px-3 py-3 font-medium text-center w-28">{{ t('order.tQty') }} <span class="text-red-500">*</span></th>
               <th class="px-3 py-3 font-medium text-right w-28">{{ t('order.subtotal') }}</th>
             </tr>
@@ -379,7 +470,7 @@ function skuLabel(sku) {
           <tbody class="divide-y divide-gray-100">
             <template v-for="product in filteredProducts" :key="product.id">
               <!-- 没有 SKU 的商品：一行 -->
-              <tr v-if="!product.skus || product.skus.length === 0" class="hover:bg-gray-50">
+              <tr v-if="!product.skus || filterSkus(product.skus).length === 0 && (!product.skus || product.skus.length === 0)" class="hover:bg-gray-50">
                 <td class="px-3 py-2">
                   <img v-if="product.image_main" :src="product.image_main" class="w-16 h-16 object-cover rounded border border-gray-100" />
                   <div v-else class="w-16 h-16 bg-gray-100 rounded flex items-center justify-center">
@@ -389,8 +480,6 @@ function skuLabel(sku) {
                 <td class="px-3 py-2 font-mono text-xs text-text-secondary">{{ product.sku }}</td>
                 <td class="px-3 py-2 font-medium text-text-primary">{{ product.name }}</td>
                 <td class="px-3 py-2 text-xs text-text-secondary">—</td>
-                <td class="px-3 py-2 text-center text-xs text-text-secondary">—</td>
-                <td class="px-3 py-2 text-center text-xs text-text-secondary">—</td>
                 <td class="px-3 py-2 text-right">¥{{ Number(product.sale_price || 0).toFixed(2) }}</td>
                 <td class="px-3 py-2 text-right font-medium text-success">{{ product.total_stock || 0 }}</td>
                 <td class="px-3 py-2">
@@ -402,41 +491,45 @@ function skuLabel(sku) {
                   ¥{{ ((Number(getQty(product.id, null)) || 0) * Number(product.sale_price || 0)).toFixed(2) }}
                 </td>
               </tr>
-              <!-- 有 SKU 的商品：每个 SKU 一行 -->
+              <!-- 有 SKU 的商品：每个匹配的 SKU 一行 -->
               <template v-else>
-                <tr v-for="sku in product.skus" :key="product.id + '-' + sku.id" class="hover:bg-gray-50">
-                  <td v-if="sku === product.skus[0]" :rowspan="product.skus.length" class="px-3 py-2 align-top border-r border-gray-100">
-                    <img v-if="product.image_main" :src="product.image_main" class="w-16 h-16 object-cover rounded border border-gray-100" />
-                    <div v-else class="w-16 h-16 bg-gray-100 rounded flex items-center justify-center">
-                      <span class="material-symbols-outlined text-gray-300">image</span>
-                    </div>
-                  </td>
-                  <td v-if="sku === product.skus[0]" :rowspan="product.skus.length" class="px-3 py-2 align-top font-mono text-xs text-text-secondary border-r border-gray-100">
-                    {{ product.sku }}
-                  </td>
-                  <td v-if="sku === product.skus[0]" :rowspan="product.skus.length" class="px-3 py-2 align-top font-medium text-text-primary border-r border-gray-100">
-                    {{ product.name }}
-                  </td>
-                  <td class="px-3 py-2 text-xs text-text-secondary">{{ skuLabel(sku) }}</td>
-                  <td class="px-3 py-2 text-center text-xs">{{ sku.color || '—' }}</td>
-                  <td class="px-3 py-2 text-center text-xs">{{ sku.size || '—' }}</td>
-                  <td class="px-3 py-2 text-right">¥{{ Number(sku.unit_price || product.sale_price || 0).toFixed(2) }}</td>
-                  <td class="px-3 py-2 text-right text-success font-medium text-xs">{{ sku.stock || 0 }}</td>
-                  <td class="px-3 py-2">
-                    <input type="number" min="0" :value="getQty(product.id, sku.id)"
-                           @input="setQty(product.id, sku.id, $event.target.value)"
-                           class="w-full px-2 py-1 border border-gray-200 rounded text-center text-sm focus:border-primary focus:outline-none" />
-                  </td>
-                  <td class="px-3 py-2 text-right text-primary font-medium">
-                    ¥{{ ((Number(getQty(product.id, sku.id)) || 0) * Number(sku.unit_price || product.sale_price || 0)).toFixed(2) }}
-                  </td>
-                </tr>
+                <template v-for="(sku, idx) in filterSkus(product.skus)" :key="product.id + '-' + sku.id">
+                  <tr class="hover:bg-gray-50">
+                    <td v-if="idx === 0" :rowspan="filterSkus(product.skus).length" class="px-3 py-2 align-top border-r border-gray-100">
+                      <img v-if="product.image_main" :src="product.image_main" class="w-16 h-16 object-cover rounded border border-gray-100" />
+                      <div v-else class="w-16 h-16 bg-gray-100 rounded flex items-center justify-center">
+                        <span class="material-symbols-outlined text-gray-300">image</span>
+                      </div>
+                    </td>
+                    <td v-if="idx === 0" :rowspan="filterSkus(product.skus).length" class="px-3 py-2 align-top font-mono text-xs text-text-secondary border-r border-gray-100">
+                      {{ product.sku }}
+                    </td>
+                    <td v-if="idx === 0" :rowspan="filterSkus(product.skus).length" class="px-3 py-2 align-top font-medium text-text-primary border-r border-gray-100">
+                      {{ product.name }}
+                    </td>
+                    <td class="px-3 py-2 text-xs text-text-secondary">
+                      <span v-for="(v, k) in parseSpecs(sku.specs)" :key="k" class="inline-block mr-1.5">
+                        <span class="text-text-secondary">{{ k }}:</span><span class="text-text-primary ml-0.5">{{ v }}</span>
+                      </span>
+                    </td>
+                    <td class="px-3 py-2 text-right">¥{{ Number(sku.unit_price || product.sale_price || 0).toFixed(2) }}</td>
+                    <td class="px-3 py-2 text-right text-success font-medium text-xs">{{ sku.stock || 0 }}</td>
+                    <td class="px-3 py-2">
+                      <input type="number" min="0" :value="getQty(product.id, sku.id)"
+                             @input="setQty(product.id, sku.id, $event.target.value)"
+                             class="w-full px-2 py-1 border border-gray-200 rounded text-center text-sm focus:border-primary focus:outline-none" />
+                    </td>
+                    <td class="px-3 py-2 text-right text-primary font-medium">
+                      ¥{{ ((Number(getQty(product.id, sku.id)) || 0) * Number(sku.unit_price || product.sale_price || 0)).toFixed(2) }}
+                    </td>
+                  </tr>
+                </template>
               </template>
             </template>
           </tbody>
           <tfoot v-if="orderItems.length > 0" class="bg-primary/5 font-medium">
             <tr>
-              <td colspan="8" class="px-3 py-3 text-right text-text-primary">{{ t('order.total') }}：</td>
+              <td colspan="6" class="px-3 py-3 text-right text-text-primary">{{ t('order.total') }}：</td>
               <td class="px-3 py-3 text-center text-primary text-lg font-bold">{{ totalQty }}</td>
               <td class="px-3 py-3 text-right text-primary text-lg font-bold">¥{{ totalAmount.toFixed(2) }}</td>
             </tr>
