@@ -4,6 +4,36 @@ import { requirePermission, requireRole, PERMISSIONS } from '../middleware/rbac.
 
 const router = Router()
 
+// GET /warehouses/available-products - 所有仓库有库存的商品 + SKU（用于订货选择表）
+router.get('/available-products', requirePermission(PERMISSIONS.INVENTORY_READ), async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT
+        p.id, p.sku, p.name, p.image_main, p.sale_price, p.unit, p.category,
+        COALESCE(SUM(ws.quantity), 0) AS total_stock
+      FROM products p
+      INNER JOIN warehouse_stock ws ON ws.product_id = p.id AND ws.quantity > 0
+      GROUP BY p.id
+      HAVING total_stock > 0
+      ORDER BY p.name ASC
+    `)
+    // 加载每个商品的 SKU
+    for (const p of rows) {
+      const [skus] = await pool.query(`
+        SELECT id, sku, sku AS sku_code,
+          COALESCE(specs, '{}') AS specs,
+          COALESCE(purchase_price, 0) AS unit_price,
+          image
+        FROM product_skus
+        WHERE product_id = ?
+        ORDER BY id ASC
+      `, [p.id])
+      p.skus = skus
+    }
+    res.json({ code: 0, data: rows, message: 'ok' })
+  } catch (err) { next(err) }
+})
+
 // GET /warehouses - 仓库列表
 router.get('/', async (req, res, next) => {
   try {
