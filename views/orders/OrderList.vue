@@ -166,7 +166,14 @@ function goNewOrder() {
 
 <template>
   <div class="min-h-screen bg-gray-50 p-6">
-    <PageHeader title="订单管理" subtitle="新加坡彩美特商城订单列表" />
+    <PageHeader title="订单管理" subtitle="新加坡彩美特商城订单列表">
+      <template #actions>
+        <router-link to="/orders/create" class="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium">
+          <span class="material-symbols-outlined text-[18px]">add_shopping_cart</span>
+          新建订货单
+        </router-link>
+      </template>
+    </PageHeader>
 
     <!-- Tabs -->
     <div class="bg-white rounded-xl shadow-sm mb-4 overflow-hidden">

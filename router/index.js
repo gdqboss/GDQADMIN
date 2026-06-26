@@ -91,6 +91,7 @@ const routes = [
       { path: 'retail', name: 'RetailRecords', component: lazyLoad(() => import('../views/retail/RetailRecords.vue')), meta: { title: '零售记录', permission: 'retail:write' } },
       { path: 'aftersale', name: 'AftersaleManage', component: lazyLoad(() => import('../views/aftersale/AftersaleManage.vue')), meta: { title: '售后管理', permission: 'aftersale:write' } },
       { path: 'orders', name: 'OrderList', component: lazyLoad(() => import('../views/orders/OrderList.vue')), meta: { title: '订单管理', parent: '商城', permission: 'order:read' } },
+      { path: 'orders/create', name: 'OnlineOrderCreate', component: lazyLoad(() => import('../views/orders/OnlineOrderCreate.vue')), meta: { title: '新建订货单', parent: '商城', permission: 'order:create' } },
       { path: 'orders/:id', name: 'OrderDetail', component: lazyLoad(() => import('../views/orders/OrderDetail.vue')), meta: { title: '订单详情', parent: '商城', permission: 'order:read' } },
       { path: 'referral', name: 'ReferralManage', component: lazyLoad(() => import('../views/orders/ReferralManage.vue')), meta: { title: '推荐裂变', parent: '商城', permission: 'referral:read' } },
 

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch, onBeforeRouteUpdate } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useWecomStore } from '../stores/wecom'
@@ -212,6 +212,7 @@ const menuGroups = computed(() => [
     to: null,
     children: [
       { key: 'order:read', label: t('nav.orders'), to: '/orders' },
+      { key: 'order:create', label: t('order.createTitle') || '新建订货单', to: '/orders/create' },
       { key: 'qrcode:write', label: t('nav.scanSale'), to: '/qrcode' },
       { key: 'aftersale:write', label: t('nav.aftersale'), to: '/aftersale' },
     ]
