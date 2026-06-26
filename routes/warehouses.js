@@ -4,19 +4,31 @@ import { requirePermission, requireRole, PERMISSIONS } from '../middleware/rbac.
 
 const router = Router()
 
-// GET /warehouses/available-products - 所有仓库有库存的商品 + SKU（用于订货选择表）
+// GET /warehouses/available-products - 全部上架商品 + SKU（订货选择表）
 router.get('/available-products', requirePermission(PERMISSIONS.INVENTORY_READ), async (req, res, next) => {
   try {
+    const { keyword = '', category = '' } = req.query
+    const where = ["p.status='active'"]
+    const params = []
+    if (keyword) {
+      where.push('(p.name LIKE ? OR p.sku LIKE ?)')
+      const kw = `%${keyword}%`
+      params.push(kw, kw)
+    }
+    if (category) {
+      where.push('p.category = ?')
+      params.push(category)
+    }
     const [rows] = await pool.query(`
       SELECT
         p.id, p.sku, p.name, p.image_main, p.sale_price, p.unit, p.category,
         COALESCE(SUM(ws.quantity), 0) AS total_stock
       FROM products p
-      INNER JOIN warehouse_stock ws ON ws.product_id = p.id AND ws.quantity > 0
+      LEFT JOIN warehouse_stock ws ON ws.product_id = p.id AND ws.quantity > 0
+      WHERE ${where.join(' AND ')}
       GROUP BY p.id
-      HAVING total_stock > 0
       ORDER BY p.name ASC
-    `)
+    `, params)
     // 加载每个商品的 SKU
     for (const p of rows) {
       const [skus] = await pool.query(`
