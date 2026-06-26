@@ -11,42 +11,70 @@ const { t } = useI18n()
 const router = useRouter()
 
 const alerts = ref([])
-const filterLevel = ref('all')
+const filterLevel = ref('unhandled')  // 默认只显示未处理（波哥 2026-07-19 反馈：补完货列表就不出现）
 const showReplenishDialog = ref(false)
 const selectedAlert = ref(null)
+const batchQty = ref(null)  // 批量补货数量（null=用各行 suggest_qty）
+const selectedIds = ref(new Set())  // 勾选的 alert ids
+const batchBusy = ref(false)
 
 onMounted(async () => {
   const res = await api.get('/stock-alerts')
   alerts.value = res.data
 })
 
-const stats = computed(() => ({
-  total: alerts.value.length,
-  critical: alerts.value.filter(a => a.level === 'critical').length,
-  warning: alerts.value.filter(a => a.level === 'warning').length,
-  handled: alerts.value.filter(a => a.handled).length,
-}))
+// 修复：卡片数字必须和列表一致
+// 列表默认显示未处理，所以"全部"/"严重"/"一般"卡片都按"未处理"算
+// "已处理"卡片独立
+const stats = computed(() => {
+  const unhandled = alerts.value.filter(a => !a.handled)
+  return {
+    unhandled: unhandled.length,                          // 未处理总数（默认 tab 显示）
+    critical: unhandled.filter(a => a.level === 'critical').length,  // 未处理中严重的
+    warning: unhandled.filter(a => a.level === 'warning').length,    // 未处理中一般的
+    handled: alerts.value.filter(a => a.handled).length,  // 已处理
+  }
+})
 
 const filteredAlerts = computed(() => {
-  if (filterLevel.value === 'all') return alerts.value
-  if (filterLevel.value === 'critical') return alerts.value.filter(a => a.level === 'critical')
-  if (filterLevel.value === 'warning') return alerts.value.filter(a => a.level === 'warning')
+  // 默认全部 tab 也排除已处理（波哥 2026-07-19 反馈：补完货列表就不出现）
+  // 想看已处理切到"已处理" tab
+  if (filterLevel.value === 'handled') return alerts.value.filter(a => a.handled)
+  if (filterLevel.value === 'critical') return alerts.value.filter(a => a.level === 'critical' && !a.handled)
+  if (filterLevel.value === 'warning') return alerts.value.filter(a => a.level === 'warning' && !a.handled)
   if (filterLevel.value === 'unhandled') return alerts.value.filter(a => !a.handled)
-  return alerts.value
+  // 'all' 也只显示未处理（避免视觉噪音）
+  return alerts.value.filter(a => !a.handled)
+})
+
+const allSelected = computed(() => {
+  const unhandled = filteredAlerts.value.filter(a => !a.handled)
+  return unhandled.length > 0 && selectedIds.value.size === unhandled.length
 })
 
 const filterTabs = computed(() => [
-  { key: 'all', label: t('alert.all') },
+  { key: 'unhandled', label: t('alert.unhandled') },
   { key: 'critical', label: t('alert.critical') },
   { key: 'warning', label: t('alert.general') },
-  { key: 'unhandled', label: t('alert.unhandled') },
+  { key: 'handled', label: '已处理' },
 ])
 
 async function markHandled(id) {
   if (!confirm('确认此预警已处理？')) return
   await api.put('/stock-alerts/' + id)
   const res = await api.get('/stock-alerts')
-  alerts.value = res.data
+  alerts.value = res.data?.data || []
+}
+
+async function deleteAlert(alert) {
+  if (!confirm(`确认删除该预警记录？\n商品: ${alert.product_name || alert.product_id}\n仓库: ${alert.warehouse_name || alert.warehouse_id}\n此操作不可恢复`)) return
+  try {
+    await api.delete('/stock-alerts/' + alert.id)
+    const res = await api.get('/stock-alerts')
+    alerts.value = res.data?.data || []
+  } catch (e) {
+    alert('删除失败：' + (e?.message || e?.data?.message || JSON.stringify(e)))
+  }
 }
 
 function openReplenish(alert) {
@@ -93,20 +121,99 @@ async function replenishOnly() {
   closeReplenish()
   await markHandled(selectedAlert.value.id)
 }
+
+async function reload() {
+  const res = await api.get('/stock-alerts')
+  alerts.value = res.data
+  selectedIds.value = new Set()
+}
+
+function toggleSelect(id) {
+  if (selectedIds.value.has(id)) selectedIds.value.delete(id)
+  else selectedIds.value.add(id)
+  // 触发响应式
+  selectedIds.value = new Set(selectedIds.value)
+}
+
+function toggleSelectAll() {
+  const visible = filteredAlerts.value.filter(a => !a.handled)
+  if (selectedIds.value.size === visible.length && visible.length > 0) {
+    selectedIds.value = new Set()
+  } else {
+    selectedIds.value = new Set(visible.map(a => a.id))
+  }
+}
+
+async function batchReplenish() {
+  if (batchBusy.value) return
+  const ids = selectedIds.value.size > 0 ? Array.from(selectedIds.value) : null
+  const unhandledCount = alerts.value.filter(a => !a.handled).length
+  const target = ids ? `${ids.length} 个选中` : `全部 ${unhandledCount} 个未处理`
+  if (unhandledCount === 0 && !ids) {
+    alert('当前没有未处理的预警')
+    return
+  }
+  if (!confirm(`确认一键补货 ${target}${batchQty.value ? `，每条数量 = ${batchQty.value}` : '（用各行建议数量）'}？`)) return
+  batchBusy.value = true
+  try {
+    const body = ids ? { alert_ids: ids } : {}
+    if (batchQty.value !== null && batchQty.value !== '' && Number(batchQty.value) >= 0) {
+      body.override_qty = Number(batchQty.value)
+    }
+    const r = await api.post('/stock-alerts/batch-replenish', body)
+    const d = r.data || {}
+    const records = d.records || []
+    alert(`✅ 一键补货完成\n生成 ${d.created} 张入库单\n处理 ${d.alert_count} 个预警\n\n${records.map(x => '• ' + x.record_no + '（' + x.item_count + ' SKU / 共 ' + x.total_qty + ' 件）').join('\n')}`)
+    await reload()
+  } catch (e) {
+    alert('❌ 补货失败：' + (e?.message || e?.data?.message || JSON.stringify(e)))
+  } finally {
+    batchBusy.value = false
+  }
+}
 </script>
 
 <template>
   <div>
     <PageHeader :title="$t('alert.title')" :subtitle="$t('alert.subtitle')" />
 
-    <!-- Stats -->
+    <!-- Stats (可点击切换 tab) -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-      <StatCard :title="$t('alert.totalAlerts')" :value="String(stats.total)" icon="notifications_active" colorClass="blue" />
-      <StatCard :title="$t('alert.criticalAlerts')" :value="String(stats.critical)" icon="error" colorClass="red" :alert="true">
+      <StatCard
+        :title="$t('alert.totalAlerts')"
+        :value="String(stats.unhandled)"
+        icon="notifications_active"
+        colorClass="blue"
+        :active="filterLevel === 'unhandled'"
+        @click="filterLevel = 'unhandled'"
+      />
+      <StatCard
+        :title="$t('alert.criticalAlerts')"
+        :value="String(stats.critical)"
+        icon="error"
+        colorClass="red"
+        :alert="true"
+        :active="filterLevel === 'critical'"
+        @click="filterLevel = 'critical'"
+      >
         <template #footer><span class="text-danger font-medium">{{ $t('dashboard.needsImmediate') }}</span></template>
       </StatCard>
-      <StatCard :title="$t('alert.generalAlerts')" :value="String(stats.warning)" icon="warning" colorClass="orange" />
-      <StatCard :title="$t('alert.handled')" :value="String(stats.handled)" icon="check_circle" colorClass="green" />
+      <StatCard
+        :title="$t('alert.generalAlerts')"
+        :value="String(stats.warning)"
+        icon="warning"
+        colorClass="orange"
+        :active="filterLevel === 'warning'"
+        @click="filterLevel = 'warning'"
+      />
+      <StatCard
+        :title="$t('alert.handled')"
+        :value="String(stats.handled)"
+        icon="check_circle"
+        colorClass="green"
+        :active="filterLevel === 'handled'"
+        @click="filterLevel = 'handled'"
+      />
     </div>
 
     <!-- Filter + Table -->
@@ -121,10 +228,20 @@ async function replenishOnly() {
             filterLevel === f.key ? 'bg-primary text-white' : 'bg-gray-100 text-text-secondary hover:bg-gray-200'
           ]"
         >{{ f.label }}</button>
-        <div class="ml-auto">
-          <button class="flex items-center gap-2 bg-danger hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+        <div class="ml-auto flex items-center gap-2">
+          <label class="text-xs text-text-secondary">{{ $t('alert.batchQty') }}</label>
+          <input
+            v-model.number="batchQty"
+            type="number" min="0" placeholder="默认"
+            class="w-20 px-2 py-1.5 border border-gray-200 rounded text-sm text-center focus:outline-none focus:border-primary"
+          />
+          <button
+            @click="batchReplenish"
+            :disabled="batchBusy"
+            class="flex items-center gap-2 bg-danger hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50">
             <span class="material-symbols-outlined text-[18px]">shopping_cart</span>
             {{ $t('alert.quickReplenish') }}
+            <span v-if="selectedIds.size > 0" class="bg-white/20 px-1.5 rounded text-xs">({{ selectedIds.size }})</span>
           </button>
         </div>
       </div>
@@ -132,6 +249,9 @@ async function replenishOnly() {
         <table class="w-full text-left text-sm">
           <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
             <tr>
+              <th class="px-4 py-3 font-medium w-10">
+                <input type="checkbox" :checked="allSelected" @change="toggleSelectAll" class="cursor-pointer" />
+              </th>
               <th class="px-4 py-3 font-medium">SKU</th>
               <th class="px-4 py-3 font-medium">{{ $t('common.productName') }}</th>
               <th class="px-4 py-3 font-medium">{{ $t('inout.warehouse') }}</th>
@@ -162,7 +282,11 @@ async function replenishOnly() {
               <td class="px-4 py-3 text-right space-x-2">
                 <button v-if="!alert.handled" @click="openReplenish(alert)" class="text-primary hover:text-primary-hover text-xs font-medium">{{ $t('alert.replenish') }}</button>
                 <button v-if="!alert.handled" @click="markHandled(alert.id)" class="text-text-secondary hover:text-text-primary text-xs">标记已处理</button>
-                <span v-else class="text-text-secondary text-xs">-</span>
+                <button v-if="alert.handled" @click="deleteAlert(alert)" class="inline-flex items-center gap-1 text-red-600 hover:text-red-800 text-xs font-medium">
+                  <span class="material-symbols-outlined text-[14px]">delete</span>
+                  删除
+                </button>
+                <span v-if="alert.handled === undefined" class="text-text-secondary text-xs">-</span>
               </td>
             </tr>
           </tbody>
