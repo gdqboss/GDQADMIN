@@ -22,6 +22,13 @@ const form = ref({
   status: 'active'
 })
 
+// ─── Operation Log Modal ────────────────────────────────────────────────────
+const showOpLogModal = ref(false)
+const opLogWarehouse = ref(null)
+const opLogRecords = ref([])
+const opLogLoading = ref(false)
+const opLogFilters = ref({ type: '', operator: '', start_date: '', end_date: '' })
+
 const typeColors = computed(() => ({
   [t('warehouse.domestic')]: 'bg-blue-100 text-primary',
   [t('warehouse.overseas')]: 'bg-green-100 text-success',
@@ -107,6 +114,77 @@ async function handleDelete(wh, event) {
 function viewDetail(wh) {
   router.push(`/warehouses/${wh.id}`)
 }
+
+// ─── Operation Log Functions ────────────────────────────────────────────────
+async function openOpLog(wh, event) {
+  event.preventDefault()
+  event.stopPropagation()
+  opLogWarehouse.value = wh
+  opLogRecords.value = []
+  opLogFilters.value = { type: '', operator: '', start_date: '', end_date: '' }
+  showOpLogModal.value = true
+  await loadOpLog()
+}
+
+async function loadOpLog() {
+  if (!opLogWarehouse.value) return
+  opLogLoading.value = true
+  try {
+    const params = new URLSearchParams()
+    params.append('limit', '200')
+    if (opLogFilters.value.type) params.append('type', opLogFilters.value.type)
+    if (opLogFilters.value.operator) params.append('operator', opLogFilters.value.operator)
+    if (opLogFilters.value.start_date) params.append('start_date', opLogFilters.value.start_date)
+    if (opLogFilters.value.end_date) params.append('end_date', opLogFilters.value.end_date)
+    const res = await api.get(`/warehouses/${opLogWarehouse.value.id}/history?${params}`)
+    opLogRecords.value = res.data || []
+  } catch (err) {
+    console.error('Failed to load operation log', err)
+    opLogRecords.value = []
+  } finally {
+    opLogLoading.value = false
+  }
+}
+
+function resetOpLogFilters() {
+  opLogFilters.value = { type: '', operator: '', start_date: '', end_date: '' }
+  loadOpLog()
+}
+
+function getOpTypeLabel(type) {
+  const map = {
+    inbound: '入库',
+    outbound: '出库',
+    transfer: '调库',
+    adjust: '调整',
+    delete: '删除',
+    return: '退货'
+  }
+  return map[type] || type
+}
+
+function getOpTypeColor(type) {
+  const map = {
+    inbound: 'text-green-600 bg-green-50',
+    outbound: 'text-red-600 bg-red-50',
+    transfer: 'text-blue-600 bg-blue-50',
+    adjust: 'text-orange-600 bg-orange-50',
+    delete: 'text-red-700 bg-red-50',
+    return: 'text-purple-600 bg-purple-50'
+  }
+  return map[type] || 'text-gray-600 bg-gray-50'
+}
+
+function getDeltaColor(delta) {
+  if (delta > 0) return 'text-green-600'
+  if (delta < 0) return 'text-red-600'
+  return 'text-gray-500'
+}
+
+function formatDate(str) {
+  if (!str) return ''
+  return String(str).slice(0, 19).replace('T', ' ')
+}
 </script>
 
 <template>
@@ -160,6 +238,13 @@ function viewDetail(wh) {
           >
             <span class="material-symbols-outlined text-[16px]">edit</span>
             {{ $t('common.edit') }}
+          </button>
+          <button
+            @click="openOpLog(wh, $event)"
+            class="flex items-center gap-1 text-blue-600 hover:text-blue-700 text-xs font-medium transition-colors"
+          >
+            <span class="material-symbols-outlined text-[16px]">history</span>
+            操作记录
           </button>
           <button
             v-if="userStore.canAccess('warehouse:delete')"
@@ -254,6 +339,138 @@ function viewDetail(wh) {
               class="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium transition-colors"
             >
               {{ isEdit ? $t('common.save') : $t('common.create') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Operation Log Modal -->
+    <Teleport to="body">
+      <div v-if="showOpLogModal" class="fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-black/30" @click="showOpLogModal = false"></div>
+        <div class="relative bg-white rounded-xl shadow-xl w-full max-w-5xl max-h-[90vh] flex flex-col">
+          <div class="flex items-center justify-between px-6 py-4 border-b">
+            <div>
+              <h3 class="text-lg font-bold text-text-primary">
+                <span class="material-symbols-outlined align-middle mr-1">history</span>
+                操作记录
+              </h3>
+              <p class="text-sm text-text-secondary mt-0.5">{{ opLogWarehouse?.name }}</p>
+            </div>
+            <button @click="showOpLogModal = false" class="text-text-secondary hover:text-text-primary">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+
+          <!-- Filters -->
+          <div class="px-6 py-3 border-b bg-gray-50 flex items-center gap-3 flex-wrap">
+            <select
+              v-model="opLogFilters.type"
+              @change="loadOpLog"
+              class="px-3 py-1.5 border border-gray-200 rounded text-sm bg-white focus:border-primary focus:outline-none"
+            >
+              <option value="">所有类型</option>
+              <option value="inbound">入库</option>
+              <option value="outbound">出库</option>
+              <option value="transfer">调库</option>
+              <option value="adjust">调整</option>
+              <option value="delete">删除</option>
+              <option value="return">退货</option>
+            </select>
+            <input
+              v-model="opLogFilters.operator"
+              @keyup.enter="loadOpLog"
+              type="text"
+              placeholder="操作人"
+              class="px-3 py-1.5 border border-gray-200 rounded text-sm bg-white focus:border-primary focus:outline-none w-32"
+            />
+            <input
+              v-model="opLogFilters.start_date"
+              @change="loadOpLog"
+              type="date"
+              class="px-3 py-1.5 border border-gray-200 rounded text-sm bg-white focus:border-primary focus:outline-none"
+            />
+            <span class="text-text-secondary text-sm">至</span>
+            <input
+              v-model="opLogFilters.end_date"
+              @change="loadOpLog"
+              type="date"
+              class="px-3 py-1.5 border border-gray-200 rounded text-sm bg-white focus:border-primary focus:outline-none"
+            />
+            <button
+              @click="resetOpLogFilters"
+              class="px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary border border-gray-200 rounded bg-white"
+            >
+              重置
+            </button>
+            <span class="ml-auto text-sm text-text-secondary">
+              共 {{ opLogRecords.length }} 条记录
+            </span>
+          </div>
+
+          <!-- Records -->
+          <div class="flex-1 overflow-y-auto p-6">
+            <div v-if="opLogLoading" class="text-center py-12 text-text-secondary text-sm">
+              <span class="material-symbols-outlined text-4xl block mb-2 text-gray-300 animate-spin">progress_activity</span>
+              加载中...
+            </div>
+
+            <div v-else-if="opLogRecords.length === 0" class="text-center py-12 text-text-secondary text-sm">
+              <span class="material-symbols-outlined text-4xl block mb-2 text-gray-300">inbox</span>
+              暂无操作记录
+            </div>
+
+            <div v-else class="overflow-x-auto">
+              <table class="w-full text-left text-sm">
+                <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
+                  <tr>
+                    <th class="px-3 py-2 font-medium">时间</th>
+                    <th class="px-3 py-2 font-medium">类型</th>
+                    <th class="px-3 py-2 font-medium">商品</th>
+                    <th class="px-3 py-2 font-medium text-center">变化</th>
+                    <th class="px-3 py-2 font-medium text-center">数量</th>
+                    <th class="px-3 py-2 font-medium">操作人</th>
+                    <th class="px-3 py-2 font-medium">单据</th>
+                    <th class="px-3 py-2 font-medium">备注</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  <tr v-for="rec in opLogRecords" :key="rec.id + '-' + rec.source" class="hover:bg-gray-50">
+                    <td class="px-3 py-2 text-xs text-text-secondary whitespace-nowrap">{{ formatDate(rec.created_at) }}</td>
+                    <td class="px-3 py-2">
+                      <span :class="['px-2 py-0.5 rounded text-xs font-medium', getOpTypeColor(rec.change_type)]">
+                        {{ getOpTypeLabel(rec.change_type) }}
+                      </span>
+                    </td>
+                    <td class="px-3 py-2">
+                      <div class="font-medium text-text-primary text-xs">{{ rec.product_name || `商品#${rec.product_id}` }}</div>
+                      <div v-if="rec.product_sku" class="text-xs text-text-secondary font-mono">{{ rec.product_sku }}</div>
+                    </td>
+                    <td class="px-3 py-2 text-center">
+                      <span :class="['font-bold', getDeltaColor(rec.delta)]">
+                        {{ rec.delta > 0 ? '+' : '' }}{{ rec.delta }}
+                      </span>
+                    </td>
+                    <td class="px-3 py-2 text-center text-xs text-text-secondary">
+                      {{ rec.before_qty ?? '—' }} → {{ rec.after_qty ?? '—' }}
+                    </td>
+                    <td class="px-3 py-2 text-text-primary text-xs">{{ rec.operator }}</td>
+                    <td class="px-3 py-2 text-xs font-mono text-text-secondary">{{ rec.record_no || '—' }}</td>
+                    <td class="px-3 py-2 text-xs text-text-secondary max-w-xs truncate" :title="rec.remark">{{ rec.remark || '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="px-6 py-3 border-t flex justify-between items-center text-xs text-text-secondary">
+            <span>数据来源：warehouse_stock_history + stock_movements + inbound_audit_log</span>
+            <button
+              @click="showOpLogModal = false"
+              class="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              关闭
             </button>
           </div>
         </div>
