@@ -16,6 +16,7 @@ const allPermissions = ref([])
 const expandedRoleId = ref(null)
 const savingRoleId = ref(null)
 const rolePendingPerms = ref({}) // roleId -> Set of pending permIds
+const expandedGroups = ref([]) // roleId -> array of group keys that are expanded (sidebar-style collapse)
 
 // ─── 用户视角预设模板（按真实业务场景组织，一键加载）────────────────────────────
 // 原则：每个模板 = 一个角色的日常工作需要的权限全集
@@ -147,56 +148,105 @@ const permissionsByCategory = computed(() => {
   return map
 })
 
-// category 排序 + i18n label
-const categoryOrder = [
-  { key: 'system', label: '系统设置' },
-  { key: 'product', label: '商品管理' },
-  { key: 'warehouse', label: '仓库' },
-  { key: 'inventory', label: '库存' },
-  { key: 'stock', label: '库存预警' },
-  { key: 'stock_movements', label: '库存流水' },
-  { key: 'qrcode', label: '二维码' },
-  { key: 'order', label: '订单' },
-  { key: 'retail', label: '零售' },
-  { key: 'aftersale', label: '售后' },
-  { key: 'finance', label: '财务' },
-  { key: 'report', label: '报表' },
-  { key: 'bi', label: '数据分析' },
-  { key: 'approval', label: '审批' },
-  { key: 'task', label: '任务' },
-  { key: 'attendance', label: '考勤' },
-  { key: 'leave', label: '请假' },
-  { key: 'shift', label: '排班' },
-  { key: 'schedule', label: '日程' },
-  { key: 'oa', label: 'OA 办公' },
-  { key: 'work_log', label: '工作日志' },
-  { key: 'supply', label: '供应链' },
-  { key: 'workflow', label: '工作流' },
-  { key: 'wecom', label: '企业微信' },
-  { key: 'referral', label: '推荐返佣' },
-  { key: 'ai', label: 'AI 课堂' },
-  { key: 'ai-automation', label: 'AI 自动化' },
-  { key: 'articles', label: '文章' },
-  { key: 'restaurant', label: '餐饮' },
-  { key: 'yuyue', label: '预约' },
-  { key: 'coupon', label: '优惠券' },
-  { key: 'score_shop', label: '积分商城' },
-  { key: 'kefu', label: '客服' },
-  { key: 'workbench', label: '工作台' },
-  { key: 'navigation', label: '🧭 导航组件' },
-  { key: 'quick-action', label: '⚡ 快捷操作' },
-  { key: 'action', label: '🔘 普通操作' },
-  { key: 'other', label: '其他' },
+// 一级菜单分组（按业务场景归类）
+// 结构：key → { label, icon, cats: [category...] }
+// 35 个 category 全部映射到 19 个业务菜单 + 4 个外层（⚡快捷/🧭导航/🤖AI/🔧其他）
+const MENU_GROUPS = [
+  { key: 'product',     label: '商品管理', icon: '📦', cats: ['product'] },
+  { key: 'warehouse',   label: '仓库与库存', icon: '🏢', cats: ['warehouse', 'inventory', 'stock', 'stock_movements'] },
+  { key: 'supply',      label: '供应链',   icon: '🚚', cats: ['supply'] },
+  { key: 'order',       label: '订单管理', icon: '🛒', cats: ['order', 'retail', 'aftersale'] },
+  { key: 'preorder',    label: '产品预订', icon: '🛍️', cats: ['preorder'] },  // 3 个 preorder:*
+  { key: 'qrcode',      label: '二维码',   icon: '📱', cats: ['qrcode'] },
+  { key: 'finance',     label: '财务',     icon: '💰', cats: ['finance', 'report'] },
+  { key: 'bi',          label: '数据分析', icon: '📊', cats: ['bi'] },
+  { key: 'approval',    label: '审批',     icon: '✍️', cats: ['approval'] },
+  { key: 'task',        label: '任务',     icon: '📝', cats: ['task'] },
+  { key: 'oa',          label: 'OA 办公',  icon: '🏢', cats: ['oa', 'attendance', 'leave', 'shift', 'schedule', 'work_log'] },
+  { key: 'workflow',    label: '工作流',   icon: '🔄', cats: ['workflow'] },
+  { key: 'wecom',       label: '企业微信', icon: '💬', cats: ['wecom'] },
+  { key: 'referral',    label: '推荐返佣', icon: '🎁', cats: ['referral'] },
+  { key: 'articles',    label: '文章',     icon: '📰', cats: ['articles'] },
+  { key: 'restaurant',  label: '餐饮',     icon: '🍽️', cats: ['restaurant'] },
+  { key: 'yuyue',       label: '预约',     icon: '📅', cats: ['yuyue'] },
+  { key: 'marketing',   label: '营销',     icon: '📣', cats: ['marketing'] },
+  { key: 'coupon',      label: '优惠券',   icon: '🎟️', cats: ['coupon'] },
+  { key: 'score_shop',  label: '积分商城', icon: '🏆', cats: ['score_shop'] },
+  { key: 'kefu',        label: '客服',     icon: '💁', cats: ['kefu'] },
+  { key: 'system',      label: '系统设置', icon: '⚙️', cats: ['system'] },
+  // 外层分组（不归属具体菜单）
+  { key: '__quickaction', label: '工作台快捷操作', icon: '⚡', cats: ['quick-action'] },
+  { key: '__navigation',  label: '导航组件',       icon: '🧭', cats: ['navigation'] },
+  { key: '__ai',          label: 'AI 课堂',        icon: '🤖', cats: ['ai', 'ai-automation'] },
+  { key: '__other',       label: '其他业务功能',   icon: '🔧', cats: ['other'] },
 ]
 
-const sortedCategories = computed(() => {
-  return categoryOrder
-    .filter(c => permissionsByCategory.value[c.key]?.length)
-    .map(c => c.key)
+// category → menuGroup 反向索引（用于从 DB permission.category 找到所属菜单）
+const categoryToGroup = computed(() => {
+  const map = {}
+  for (const g of MENU_GROUPS) {
+    for (const cat of g.cats) map[cat] = g.key
+  }
+  return map
 })
 
+// 把权限按菜单分组（保持 MENU_GROUPS 顺序）
+const permissionsByGroup = computed(() => {
+  const map = {}
+  for (const g of MENU_GROUPS) map[g.key] = []
+  for (const p of (allPermissions.value || [])) {
+    const grpKey = categoryToGroup.value[p.category || 'other'] || '__other'
+    if (!map[grpKey]) map[grpKey] = []
+    map[grpKey].push(p)
+  }
+  return map
+})
+
+// 只显示有权限的菜单组（保留 MENU_GROUPS 顺序）
+const sortedGroups = computed(() => {
+  return MENU_GROUPS
+    .filter(g => permissionsByGroup.value[g.key]?.length > 0)
+    .map(g => g.key)
+})
+
+function getGroupInfo(key) {
+  return MENU_GROUPS.find(g => g.key === key) || { key, label: key, icon: '📁' }
+}
+
+// 是否该菜单组下所有权限都已勾选（用 pending Set 才能响应 click 修改）
+function isGroupAllChecked(role, grpKey) {
+  ensurePendingPerms(role)
+  const idSet = rolePendingPerms.value[role.id]
+  const perms = permissionsByGroup.value[grpKey] || []
+  return perms.length > 0 && perms.every(p => idSet.has(p.id))
+}
+
+// 菜单组是否有任一权限已勾选（用 pending Set）
+function isGroupAnyChecked(role, grpKey) {
+  ensurePendingPerms(role)
+  const idSet = rolePendingPerms.value[role.id]
+  const perms = permissionsByGroup.value[grpKey] || []
+  return perms.some(p => idSet.has(p.id))
+}
+
+// 一键勾选/取消勾选整个菜单组
+function toggleGroupAll(role, grpKey) {
+  ensurePendingPerms(role)
+  const idSet = rolePendingPerms.value[role.id]
+  const perms = permissionsByGroup.value[grpKey] || []
+  const allChecked = isGroupAllChecked(role, grpKey)
+  if (allChecked) {
+    perms.forEach(p => idSet.delete(p.id))
+  } else {
+    perms.forEach(p => idSet.add(p.id))
+  }
+  role.permission_count = [...idSet].size
+  rolePendingPerms.value = { ...rolePendingPerms.value }
+}
+
+// 旧接口保留（兼容预设模板逻辑）
 function getCategoryLabel(key) {
-  return categoryOrder.find(c => c.key === key)?.label || key
+  return getGroupInfo(categoryToGroup.value[key] || '__other').label
 }
 
 // perm_name -> perm_id 反向索引（用于预设模板）
@@ -317,6 +367,35 @@ async function loadAllPermissions() {
 // ─── Role card expand/collapse ─────────────────────────────────────────────────
 function toggleRole(roleId) {
   expandedRoleId.value = expandedRoleId.value === roleId ? null : roleId
+}
+
+// ─── Permission group expand/collapse（侧边栏风格：一级菜单折叠，二级菜单展开显示子权限）────────
+function toggleGroupExpand(roleId, grpKey) {
+  const list = expandedGroups.value[roleId] || []
+  if (list.includes(grpKey)) {
+    expandedGroups.value[roleId] = list.filter(k => k !== grpKey)
+  } else {
+    expandedGroups.value[roleId] = [...list, grpKey]
+  }
+  // 触发响应式（嵌套对象需要重新赋值）
+  expandedGroups.value = { ...expandedGroups.value }
+}
+
+function isGroupExpanded(roleId, grpKey) {
+  return (expandedGroups.value[roleId] || []).includes(grpKey)
+}
+
+// 一键展开/折叠当前角色的所有 group
+function toggleAllGroups(roleId) {
+  const cur = expandedGroups.value[roleId] || []
+  const allKeys = sortedGroups.value
+  expandedGroups.value[roleId] = cur.length === allKeys.length ? [] : [...allKeys]
+  expandedGroups.value = { ...expandedGroups.value }
+}
+
+function isAllGroupsExpanded(roleId) {
+  const cur = expandedGroups.value[roleId] || []
+  return cur.length > 0 && cur.length === sortedGroups.value.length
 }
 
 // ─── Permission tag toggle ────────────────────────────────────────────────────
@@ -516,42 +595,79 @@ onMounted(async () => { await Promise.all([loadRoles(), loadAllPermissions()]) }
                         </div>
                       </div>
 
-                      <!-- 按分类浏览权限（带中文标签） -->
-                      <div class="text-xs font-semibold text-gray-700 mb-2">
-                        📋 按功能分类 <span class="text-gray-400 font-normal">— 微调具体权限</span>
+                      <!-- 按菜单勾选（一级菜单折叠/二级菜单展开 — 和 Sidebar 一致风格） -->
+                      <div class="flex items-center justify-between mb-2">
+                        <div class="text-xs font-semibold text-gray-700">
+                          📋 按菜单勾选 <span class="text-gray-400 font-normal">— 一级菜单点击展开（菜单 = 模块）</span>
+                        </div>
+                        <el-button
+                          size="small"
+                          text
+                          type="primary"
+                          @click="toggleAllGroups(role.id)"
+                        >
+                          {{ isAllGroupsExpanded(role.id) ? '全部折叠' : '全部展开' }}
+                        </el-button>
                       </div>
-                      <div class="space-y-3 max-h-96 overflow-y-auto pr-1">
-                        <div v-for="cat in sortedCategories" :key="cat" class="bg-gray-50 rounded-md p-2">
-                          <div class="flex items-center justify-between mb-1.5">
-                            <div class="text-xs font-medium text-gray-600">
-                              {{ getCategoryLabel(cat) }}
-                              <span class="text-gray-400 text-[10px]">({{ permissionsByCategory[cat].length }})</span>
-                              <span v-if="isCategoryAnyChecked(role, cat)" class="text-blue-500 text-[10px] ml-1">
-                                · 已选 {{ permissionsByCategory[cat].filter(p => isPermChecked(role, p.id)).length }}/{{ permissionsByCategory[cat].length }}
+                      <div class="max-h-[30rem] overflow-y-auto pr-1 space-y-1.5">
+                        <div
+                          v-for="grpKey in sortedGroups"
+                          :key="grpKey"
+                          class="rounded-md border transition-colors"
+                          :class="isGroupExpanded(role.id, grpKey) ? 'border-blue-200 bg-blue-50/30' : 'border-gray-200 bg-white hover:border-gray-300'"
+                        >
+                          <!-- 一级菜单（菜单头）：图标 + 菜单名 + 计数 + 展开箭头 + 全选按钮 -->
+                          <div
+                            class="flex items-center justify-between px-3 py-2 cursor-pointer select-none"
+                            @click="toggleGroupExpand(role.id, grpKey)"
+                          >
+                            <div class="flex items-center gap-2 min-w-0">
+                              <!-- 展开/折叠箭头（和 Sidebar 一致：chevron_right 旋转 90°） -->
+                              <span class="material-symbols-outlined text-[16px] text-gray-500 transition-transform"
+                                :class="isGroupExpanded(role.id, grpKey) ? 'rotate-90' : ''">
+                                chevron_right
                               </span>
+                              <span class="text-base">{{ getGroupInfo(grpKey).icon }}</span>
+                              <span class="text-sm font-semibold text-gray-800">{{ getGroupInfo(grpKey).label }}</span>
+                              <span class="text-[10px] text-gray-400">({{ permissionsByGroup[grpKey].length }})</span>
+                              <!-- 部分已选：蓝色提示 -->
+                              <span v-if="isGroupAnyChecked(role, grpKey) && !isGroupAllChecked(role, grpKey)"
+                                class="text-blue-500 text-[10px] font-medium">
+                                · 已选 {{ permissionsByGroup[grpKey].filter(p => isPermChecked(role, p.id)).length }}/{{ permissionsByGroup[grpKey].length }}
+                              </span>
+                              <!-- 全部已选：绿色对勾 -->
+                              <span v-if="isGroupAllChecked(role, grpKey)" class="text-green-500 text-[10px] font-medium">✓ 全部</span>
                             </div>
-                            <el-button
-                              size="small"
-                              text
-                              :type="isCategoryAllChecked(role, cat) ? 'danger' : 'primary'"
-                              @click="toggleCategoryAll(role, cat)"
-                            >
-                              {{ isCategoryAllChecked(role, cat) ? '取消全选' : '全选' }}
-                            </el-button>
+                            <div class="flex items-center gap-1" @click.stop>
+                              <el-button
+                                size="small"
+                                text
+                                :type="isGroupAllChecked(role, grpKey) ? 'danger' : 'primary'"
+                                @click="toggleGroupAll(role, grpKey)"
+                              >
+                                {{ isGroupAllChecked(role, grpKey) ? '取消全选' : '全选' }}
+                              </el-button>
+                            </div>
                           </div>
-                          <div class="flex flex-wrap gap-1.5">
-                            <el-tag
-                              v-for="perm in permissionsByCategory[cat]"
-                              :key="perm.id"
-                              :type="isPermChecked(role, perm.id) ? 'primary' : 'info'"
-                              class="cursor-pointer text-xs select-none"
-                              :class="isPermChecked(role, perm.id) ? '' : 'opacity-60'"
-                              @click="togglePermission(role, perm.id)"
-                            >
-                              <el-tooltip :content="perm.name" placement="top" effect="light">
-                                <span>{{ perm.label || perm.name }}</span>
-                              </el-tooltip>
-                            </el-tag>
+                          <!-- 二级菜单（子权限）：折叠时不显示 -->
+                          <div
+                            v-if="isGroupExpanded(role.id, grpKey)"
+                            class="px-3 pb-2.5 pt-1 border-t border-blue-100 ml-6"
+                          >
+                            <div class="flex flex-wrap gap-1.5">
+                              <el-tag
+                                v-for="perm in permissionsByGroup[grpKey]"
+                                :key="perm.id"
+                                :type="isPermChecked(role, perm.id) ? 'primary' : 'info'"
+                                class="cursor-pointer text-xs select-none"
+                                :class="isPermChecked(role, perm.id) ? '' : 'opacity-60'"
+                                @click="togglePermission(role, perm.id)"
+                              >
+                                <el-tooltip :content="perm.name" placement="top" effect="light">
+                                  <span>{{ perm.label || perm.name }}</span>
+                                </el-tooltip>
+                              </el-tag>
+                            </div>
                           </div>
                         </div>
                       </div>

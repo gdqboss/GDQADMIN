@@ -22,19 +22,6 @@ const giftApprovalCount = ref(0)
 // 数据库菜单配置（从后端加载）
 const dbMenuConfig = ref([])
 
-// 服务器允许的模块列表（从后端 public-settings 加载）
-const serverModules = ref([])
-
-// 加载服务器模块列表
-async function loadServerModules() {
-  try {
-    const res = await api.get('/public-settings')
-    if (res.code === 0 && res.data && res.data.modules) {
-      serverModules.value = res.data.modules
-    }
-  } catch { /* ignore */ }
-}
-
 // 菜单显隐配置（key=菜单key, value=visible）
 const menuVisibility = ref({})
 
@@ -59,7 +46,6 @@ async function loadMenuConfig() {
 }
 
 onMounted(async () => {
-  await loadServerModules()
   await loadMenuConfig()
   try {
     const res = await api.get('/users/roles')
@@ -154,7 +140,7 @@ const navOrder = computed(() => {
 // 二级菜单分组定义（key = 权限 key，与 rbac_permissions.name 一一对应）
 const menuGroups = computed(() => [
   {
-    key: 'dashboard',
+    key: 'dashboard:view',
     icon: 'dashboard',
     label: t('nav.dashboard'),
     to: '/',
@@ -190,7 +176,6 @@ const menuGroups = computed(() => [
       { key: 'warehouse:write', label: t('nav.warehouses'), to: '/warehouses' },
       { key: 'qrcode:write', label: t('nav.qrcode'), to: '/qrcode' },
       { key: 'stock:read', label: t('nav.alerts'), to: '/alerts', badge: alertCount.value },
-      { key: 'order:create', label: t('order.createTitle') || '新建订货单', to: '/orders/create' },
       { key: 'transfer:read', label: t('nav.transfer'), to: '/transfer' },
       { key: 'inventory:return', label: t('nav.returnRecords'), to: '/inventory/returns' },
     ]
@@ -226,6 +211,16 @@ const menuGroups = computed(() => [
       { key: 'supplier:write', label: t('nav.suppliers'), to: '/suppliers' },
       { key: 'dealer:write', label: t('nav.dealers'), to: '/dealers' },
       { key: 'store:write', label: t('nav.stores'), to: '/stores' },
+    ]
+  },
+  {
+    key: 'preorder',
+    icon: 'inventory_2',
+    label: '产品预订',
+    to: null,
+    children: [
+      { key: 'preorder:create', label: '新增订货单', to: '/orders/create' },
+      { key: 'preorder:aggregate', label: '订货单汇总表', to: '/preorder/summary' },
     ]
   },
   {
@@ -300,98 +295,20 @@ const menuGroups = computed(() => [
   },
 ])
 
-// 路由路径 → module_key 映射（用于按服务器模块过滤）
-// module_key 格式与 PROFILE_MODULES / server_modules.module_key 保持一致
-const routeToModule = {
-  '/': 'dashboard',
-  '/ai-classroom': 'ai-classroom',
-  '/tasks': 'tasks',
-  '/logs/work-logs': 'tasks',
-  '/logs/visit-logs': 'tasks',
-  '/oa/attendance': 'oa',
-  '/approvals': 'oa',
-  '/products': 'products',
-  '/in-out': 'in-out',
-  '/warehouses': 'warehouses',
-  '/alerts': 'alerts',
-  '/transfer': 'transfer',
-  '/inventory/returns': 'returns',
-  '/finance': 'finance',
-  '/retail': 'retail',
-  '/finance/invoices': 'finance',
-  '/orders': 'orders',
-  '/qrcode': 'qrcode',
-  '/aftersale': 'aftersale',
-  '/suppliers': 'suppliers',
-  '/dealers': 'dealers',
-  '/stores': 'stores',
-  '/excel-analyzer': 'excel-analyzer',
-  '/referral': 'referral',
-  '/reports': 'reports',
-  '/restaurant': 'restaurant',
-  '/restaurant/tables': 'restaurant',
-  '/restaurant/dishes': 'restaurant',
-  '/restaurant/dine-orders': 'restaurant',
-  '/restaurant/takeout': 'restaurant',
-  '/restaurant/reservations': 'restaurant',
-  '/restaurant/queue': 'restaurant',
-  '/restaurant/cashier': 'restaurant',
-  '/hotel': 'hotel',
-  '/hotel/room-types': 'hotel',
-  '/hotel/price-calendar': 'hotel',
-  '/hotel/orders': 'hotel',
-  '/hotel/reviews': 'hotel',
-  '/score-products': 'score_shop',
-  '/score-orders': 'score_shop',
-  '/coupon-manage': 'coupon',
-  '/logistics': 'logistics',
-  '/logistics/express': 'logistics',
-  '/logistics/templates': 'logistics',
-  '/logistics/channels': 'logistics',
-  '/articles': 'article',
-  '/yuyue': 'yuyue',
-  '/kefu': 'kefu',
-  '/settings': 'settings',
-  '/settings/users': 'users',
-  '/settings/roles': 'roles',
-  '/settings/server-profiles': 'server_profiles',
-}
-
-// 过滤后的菜单分组
+// 过滤后的菜单分组（单一过滤源：canAccess）
 const filteredGroups = computed(() => {
   return menuGroups.value
     .map(group => {
-      // 工作台：登录用户都可见
-      if (group.key === 'dashboard') {
-        return { ...group, label: t('nav.dashboard') }
-      }
-      // 独立一级菜单（如 AI课堂）：按 module_key 过滤
+      // 独立一级菜单（无 children）— 全部按 group.key 权限过滤
       if (!group.children || group.children.length === 0) {
-        const mod = routeToModule[group.to]
-        // modules 为空（北京等无 server_profiles 表的服务器）→ 不过滤，显示全部
-        // modules 非空 → 按模块过滤
-        if (mod && serverModules.value.length > 0 && !serverModules.value.includes(mod)) {
-          return null
-        }
+        if (!canAccess(group.key)) return null
         return { ...group, label: group.label }
       }
-      // 有 children 的分组：按模块过滤子菜单
+      // 有 children 的分组：按子菜单权限过滤
       const filteredChildren = group.children
-        .filter(child => {
-          if (!canAccess(child.key)) return false
-          const mod = routeToModule[child.to]
-          // server_profiles 永远不在被管理方显示（无论 modules 是否为空）
-          if (mod === 'server_profiles' && !serverModules.value.includes('server_profiles')) {
-            return false
-          }
-          // modules 为空 → 不过滤，显示全部；modules 非空 → 按模块过滤
-          if (mod && serverModules.value.length > 0 && !serverModules.value.includes(mod)) {
-            return false
-          }
-          return true
-        })
+        .filter(child => canAccess(child.key))
         .map(child => ({ ...child }))
-      // 规则：有children但全部被过滤则隐藏；无children（独立一级菜单）始终显示
+      // 规则：有 children 但全部被过滤 → 隐藏
       if (group.children.length > 0 && filteredChildren.length === 0) return null
       return { ...group, children: filteredChildren }
     })

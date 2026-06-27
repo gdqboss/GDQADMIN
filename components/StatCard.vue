@@ -8,15 +8,20 @@ defineProps({
   trendLabel: { type: String, default: '' },
   colorClass: { type: String, default: 'blue' },
   alert: Boolean,
+  active: Boolean,  // 当前激活状态（点击高亮）
 })
+defineEmits(['click'])
 </script>
 
 <template>
   <div
     :class="[
-      'bg-white p-4 sm:p-5 rounded-lg border shadow-card hover:shadow-card-hover transition-shadow group',
-      alert ? 'border-danger/20 relative overflow-hidden' : 'border-gray-100'
+      'bg-white p-4 sm:p-5 rounded-lg border shadow-card transition-all group',
+      clickable || active ? 'cursor-pointer hover:shadow-card-hover' : '',
+      alert ? 'border-danger/20 relative overflow-hidden' : 'border-gray-100',
+      active ? 'ring-2 ring-primary border-primary' : ''
     ]"
+    @click="$emit('click')"
   >
     <div v-if="alert" class="absolute right-0 top-0 p-1">
       <div class="size-2 rounded-full bg-danger animate-pulse-red"></div>

@@ -104,3 +104,17 @@
 .shadow-card-hover {
   box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.1);
 }
+
+/* ElementPlus 浮层组件强制白底
+   根因：main.js 导入了 dark.css，但 html 没 dark class → --el-bg-color 变量未定义
+   → el-dialog / el-message-box / el-drawer 等都引用此变量，背景全透明
+   ⚠ lightningcss 会吞"和原规则等价"的覆盖，必须用不会和默认合并的属性 */
+.el-dialog {
+  background: #ffffff !important;
+}
+.el-message-box {
+  background: #ffffff !important;
+}
+.el-drawer {
+  background: #ffffff !important;
+}

@@ -69,7 +69,7 @@ const routes = [
     component: MainLayout,
     children: [
       // ── 核心模块 ────────────────────────────────────────────
-      { path: '', name: 'Dashboard', component: lazyLoad(() => import('../views/Dashboard.vue')), meta: { title: '工作台', icon: 'dashboard' } },
+      { path: '', name: 'Dashboard', component: lazyLoad(() => import('../views/Dashboard.vue')), meta: { title: '工作台', icon: 'dashboard', permission: 'dashboard:view' } },
 
       // 商品
       { path: 'products', name: 'Products', component: lazyLoad(() => import('../views/products/ProductList.vue')), meta: { title: '商品管理', parent: '库存管理', permission: 'product:write' } },
@@ -91,9 +91,14 @@ const routes = [
       { path: 'retail', name: 'RetailRecords', component: lazyLoad(() => import('../views/retail/RetailRecords.vue')), meta: { title: '零售记录', permission: 'retail:write' } },
       { path: 'aftersale', name: 'AftersaleManage', component: lazyLoad(() => import('../views/aftersale/AftersaleManage.vue')), meta: { title: '售后管理', permission: 'aftersale:write' } },
       { path: 'orders', name: 'OrderList', component: lazyLoad(() => import('../views/orders/OrderList.vue')), meta: { title: '订单管理', parent: '商城', permission: 'order:read' } },
-      { path: 'orders/create', name: 'OnlineOrderCreate', component: lazyLoad(() => import('../views/orders/OnlineOrderCreate.vue')), meta: { title: '新建订货单', parent: '商城', permission: 'order:create' } },
+      // 店长勾 preorder:create 就能看到「新增订货单」（店长无需 order:write 完整订单权限）
+      { path: 'orders/create', name: 'OnlineOrderCreate', component: lazyLoad(() => import('../views/orders/OnlineOrderCreate.vue')), meta: { title: '新建订货单', parent: '产品预订', permission: 'preorder:create' } },
       { path: 'orders/:id', name: 'OrderDetail', component: lazyLoad(() => import('../views/orders/OrderDetail.vue')), meta: { title: '订单详情', parent: '商城', permission: 'order:read' } },
       { path: 'referral', name: 'ReferralManage', component: lazyLoad(() => import('../views/orders/ReferralManage.vue')), meta: { title: '推荐裂变', parent: '商城', permission: 'referral:read' } },
+
+      // ── 门店预订单（独立模块：产品预订）────────────────────
+      // 「新增订货单」复用 /orders/create 的 OnlineOrderCreate.vue（昨日已开发）
+      { path: 'preorder/summary', name: 'PreorderSummary', component: lazyLoad(() => import('../views/preorder/PreorderSummary.vue')), meta: { title: '订货单汇总表', parent: '产品预订', permission: 'preorder:aggregate' } },
 
       // ── 餐饮管理 ──────────────────────────────────────────────
       { path: 'restaurant', name: 'RestaurantDashboard', component: lazyLoad(() => import('../views/restaurant/RestaurantDashboard.vue')), meta: { title: '餐饮管理', permission: 'restaurant:read' } },
@@ -250,39 +255,49 @@ router.beforeEach((to, from, next) => {
   }, 100)
 
   const userStore = useUserStore()
-
   // public 路由直接放行
   if (to.meta.public) {
     return next()
   }
 
+  // 双轨判断：store + localStorage（防止 Pinia 首次初始化时机问题）
+  const hasTokenFromLS = !!localStorage.getItem('caimeite_token')
+  const isLoggedInEffective = userStore.isLoggedIn || hasTokenFromLS
+
   // 未登录引导到登录页
-  if (to.path !== '/login' && !userStore.isLoggedIn) {
+  if (to.path !== '/login' && !isLoggedInEffective) {
     return next('/login')
   }
 
   // 已登录访问登录页则跳转首页
-  if (to.path === '/login' && userStore.isLoggedIn) {
+  if (to.path === '/login' && isLoggedInEffective) {
     return next('/')
   }
 
-  // 权限检查 — 无权限时给用户友好提示（按波哥"出现就能操作"原则）
-  if (to.meta.permission) {
-    if (userStore.canAccess(to.meta.permission)) {
-      return next()
-    } else {
-      // 用 ElMessage 提示权限不足，而不是静默跳回首页
-      import('element-plus').then(({ ElMessage }) => {
-        ElMessage.warning({
-          message: `无权访问「${to.meta.title || to.path}」，请联系管理员开通权限`,
-          duration: 3000,
-        })
-      })
-      return next(false)  // 中止跳转，留在原页面
+  // 权限检查 — 无权限时跳转到第一个有权限的菜单（按波哥"出现就能操作"原则）
+    if (to.meta.permission) {
+      if (userStore.canAccess(to.meta.permission)) {
+        return next()
+      } else {
+        // 找第一个有权限的路由
+        const firstAllowed = router.options.routes
+          .find(r => r.children?.some(c => c.meta?.permission && userStore.canAccess(c.meta.permission)))
+        const fallback = firstAllowed?.children?.find(c => c.meta?.permission && userStore.canAccess(c.meta.permission))
+        if (fallback) {
+          import('element-plus').then(({ ElMessage }) => {
+            ElMessage.warning({
+              message: `无权访问「${to.meta.title || to.path}」，已跳转到您有权限的页面`,
+              duration: 3000,
+            })
+          })
+          return next({ path: '/' + fallback.path.replace(/^\//, '') })
+        }
+        // 实在找不到任何有权限的路由
+        return next(false)
+      }
     }
-  }
 
-  next()
+    return next()
 })
 
 router.afterEach(() => {

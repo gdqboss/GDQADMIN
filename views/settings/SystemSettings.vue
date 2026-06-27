@@ -19,6 +19,8 @@ const users = ref([])
 const pendingUsers = ref([])
 const warehouses = ref([])
 const suppliers = ref([])
+const dealers = ref([])
+const stores = ref([])
 const departments = ref([])
 const jobLevels = ref([])
 const responsibilities = ref([])
@@ -75,14 +77,18 @@ function getLevelColor(code) {
 
 onMounted(async () => {
   try {
-    const [usersRes, whRes, supRes] = await Promise.all([
+    const [usersRes, whRes, supRes, dealerRes, storeRes] = await Promise.all([
       api.get('/users'),
       api.get('/warehouses'),
       api.get('/suppliers'),
+      api.get('/dealers').catch(() => ({ data: { list: [] } })),
+      api.get('/stores').catch(() => ({ data: { list: [] } })),
     ])
     if (usersRes.code === 0) users.value = (usersRes.data || []).filter(u => !u.is_service_customer)
     if (whRes.code === 0) warehouses.value = whRes.data.list || whRes.data
     if (supRes.code === 0) suppliers.value = supRes.data.list || supRes.data
+    if (dealerRes.code === 0) dealers.value = dealerRes.data.list || dealerRes.data || []
+    if (storeRes.code === 0) stores.value = storeRes.data.list || storeRes.data || [] // stores API 通常直接返回数组
 
     // 加载所有角色（包括自定义角色）
     await loadRoles()
@@ -164,13 +170,13 @@ const ROLE_COLORS = { admin: 'danger', manager: 'primary', operator: 'info', mem
 // ─── User modal ────────────────────────────────────────────────────────────────
 const showUserModal = ref(false)
 const editingUser = ref(null)
-const userForm = ref({ name: '', phone: '', password: '', role: ROLES.OPERATOR, department_id: null, permissions: [], supplier_id: null, supplier_ids: [], supervisor_id: null, responsibility_id: null, require_attendance: false, require_worklog: false })
+const userForm = ref({ name: '', phone: '', password: '', role: ROLES.OPERATOR, department_id: null, permissions: [], supplier_id: null, supplier_ids: [], dealer_ids: [], store_ids: [], supervisor_id: null, responsibility_id: null, require_attendance: false, require_worklog: false })
 const userLoading = ref(false)
 const userError = ref('')
 
 function openAddUser() {
   editingUser.value = null
-  userForm.value = { name: '', phone: '', password: '', role: ROLES.OPERATOR, department_id: null, permissions: [], supplier_id: null, supplier_ids: [], supervisor_id: null, responsibility_id: null, require_attendance: false, require_worklog: false }
+  userForm.value = { name: '', phone: '', password: '', role: ROLES.OPERATOR, department_id: null, permissions: [], supplier_id: null, supplier_ids: [], dealer_ids: [], store_ids: [], supervisor_id: null, responsibility_id: null, require_attendance: false, require_worklog: false }
   userError.value = ''
   showUserModal.value = true
 }
@@ -186,6 +192,8 @@ function openEditUser(u) {
     permissions: Array.isArray(u.permissions) ? [...u.permissions] : [],
     supplier_id: u.supplier_id || null,
     supplier_ids: Array.isArray(u.suppliers) ? u.suppliers.map(s => s.id) : [],
+    dealer_ids: Array.isArray(u.dealers) ? u.dealers.map(d => d.id) : [],
+    store_ids: Array.isArray(u.stores) ? u.stores.map(s => s.id) : [],
     supervisor_id: u.supervisor_id || null,
     responsibility_id: u.responsibility_id || null, require_attendance: u.require_attendance === 1, require_worklog: u.require_worklog === 1
   }
@@ -245,6 +253,8 @@ async function saveUser() {
       department_id: userForm.value.department_id,
       supplier_id: userForm.value.supplier_id || null,
       supplier_ids: userForm.value.supplier_ids || [],
+      dealer_ids: userForm.value.dealer_ids || [],
+      store_ids: userForm.value.store_ids || [],
       supervisor_id: userForm.value.supervisor_id, responsibility_id: userForm.value.responsibility_id || null, require_attendance: userForm.value.require_attendance ? 1 : 0, require_worklog: userForm.value.require_worklog ? 1 : 0,
       // 只有选择"自定义权限（临时）"时才传递permissions，其他角色由后端根据role自动处理
       permissions: userForm.value.role === 'custom' ? userForm.value.permissions : undefined,
@@ -1969,6 +1979,28 @@ async function deleteUser(user) {
             <p v-if="userForm.supplier_ids.length > 0" class="text-xs text-text-secondary mt-1">
               {{ $t('settings.selectedSuppliers', { count: userForm.supplier_ids.length }) }}
             </p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('settings.dealerAssociation') }} <span class="text-xs text-text-secondary font-normal">{{ $t('settings.dealerAssociationHint') }}</span></label>
+            <div class="border border-gray-200 rounded-lg p-3 bg-white max-h-48 overflow-y-auto">
+              <label v-for="d in dealers" :key="d.id" class="flex items-center gap-2 py-1.5 hover:bg-gray-50 rounded px-2 cursor-pointer">
+                <input type="checkbox" :value="d.id" v-model="userForm.dealer_ids" class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary focus:ring-2" />
+                <span class="text-sm text-text-primary">{{ d.name }}</span>
+              </label>
+              <div v-if="dealers.length === 0" class="text-sm text-text-secondary text-center py-2">{{ $t('settings.noDealers') }}</div>
+            </div>
+            <p v-if="userForm.dealer_ids.length > 0" class="text-xs text-text-secondary mt-1">{{ $t('settings.selectedDealers', { count: userForm.dealer_ids.length }) }}</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('settings.storeAssociation') }} <span class="text-xs text-text-secondary font-normal">{{ $t('settings.storeAssociationHint') }}</span></label>
+            <div class="border border-gray-200 rounded-lg p-3 bg-white max-h-48 overflow-y-auto">
+              <label v-for="st in stores" :key="st.id" class="flex items-center gap-2 py-1.5 hover:bg-gray-50 rounded px-2 cursor-pointer">
+                <input type="checkbox" :value="st.id" v-model="userForm.store_ids" class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary focus:ring-2" />
+                <span class="text-sm text-text-primary">{{ st.name }}</span>
+              </label>
+              <div v-if="stores.length === 0" class="text-sm text-text-secondary text-center py-2">{{ $t('settings.noStores') }}</div>
+            </div>
+            <p v-if="userForm.store_ids.length > 0" class="text-xs text-text-secondary mt-1">{{ $t('settings.selectedStores', { count: userForm.store_ids.length }) }}</p>
           </div>
           <div>
             <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('common.phone') }} <span class="text-danger">*</span></label>

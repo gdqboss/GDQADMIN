@@ -57,88 +57,128 @@
     <!-- Charts Section -->
     <div v-if="showChart && summary" class="charts-wrap">
 
-      <!-- 门店分析：独占一行 -->
+      <!-- 门店分析：独占一行（矩阵风格） -->
       <div class="store-section">
         <div class="chart-card chart-full">
           <h3>🏪 {{ $t('importDetail.storeAnalysis') }}<span class="text-gray">({{ allStores.length }})</span></h3>
           <div class="chart-placeholder">
-          <div v-for="(s, i) in allStores" :key="s.store_code" class="store-row-wrap">
-            <!-- 主行：可展开 -->
-            <div class="bar-item store-main-row" :class="{ expanded: expandedStore === s.store_code }" @click="toggleStore(s.store_code)">
-              <span class="bar-rank">{{ i + 1 }}</span>
-              <span class="store-name" :title="s.store_name || s.store_code" :style="{ minWidth: '200px', flexShrink: 0 }">{{ s.store_name || s.store_code || '-' }}</span>
-              <div class="bar-wrap">
-                <div class="bar bar-green" :style="{ width: getBarWidth(s, allStores, 'qty') + '%' }"></div>
-              </div>
-              <span class="bar-value">{{ Number(s.qty).toLocaleString() }} {{ $t('importDetail.pcs') }}</span>
-              <span class="expand-icon">{{ expandedStore === s.store_code ? '▲' : '▼' }}</span>
-            </div>
-            <!-- 展开详情：门店下钻 -->
-            <div v-if="expandedStore === s.store_code" class="store-expand-detail">
-              <div v-if="storeDetail && storeDetail.store?.store_code === s.store_code" class="store-expand-inner">
-                <div class="store-expand-stats">
-                  <span class="stat-chip">{{ $t('importDetail.salesQty') }} <strong>{{ Number(storeDetail.store?.total_qty || 0).toLocaleString() }}</strong> {{ $t('importDetail.pcs') }}</span>
-                  <span class="stat-chip">{{ $t('importDetail.salesAmount') }} <strong>¥{{ Number(storeDetail.store?.total_amount || 0).toLocaleString() }}</strong></span>
-                  <span class="stat-chip">{{ $t('importDetail.modelCount') }} <strong>{{ storeDetail.store?.model_count }}</strong></span>
-                  <span class="stat-chip">{{ $t('importDetail.skuCount') }} <strong>{{ storeDetail.store?.sku_count }}</strong></span>
-                </div>
-                <!-- 型号分布 -->
-                <div class="report-section sub-section">
-                  <h4>📦 {{ $t('importDetail.modelDistribution') }} ({{ storeDetail.byModel?.length || 0 }})</h4>
-                  <div class="model-bar-list">
-                    <div v-for="(m, mi) in storeDetail.byModel" :key="mi" class="model-bar-item">
-                      <span class="model-rank">#{{ mi + 1 }}</span>
-                      <img v-if="m.image_url" :src="m.image_url" class="model-thumb" alt="" />
-                      <div v-else class="model-thumb-placeholder">📦</div>
-                      <span class="model-name" :title="m.model">{{ (m.model || '-').substring(0, 14) }}</span>
-                      <span class="model-skus">{{ m.sku_count }} {{ $t('importDetail.skuCount') }}</span>
-                      <div class="bar-wrap" style="max-width: 200px;">
-                        <div class="bar bar-green" :style="{ width: getBarWidth(m, storeDetail.byModel, 'qty') + '%' }"></div>
+          <div class="matrix-table-wrap store-wrap">
+          <table v-if="allStores.length > 0" class="matrix-table store-matrix">
+            <thead>
+              <tr>
+                <th>{{ $t('importDetail.rank') }}</th>
+                <th>{{ $t('importDetail.store') }}</th>
+                <th class="num">{{ $t('importDetail.detailCount') }}</th>
+                <th class="num">{{ $t('importDetail.salesQty') }}</th>
+                <th class="num">{{ $t('importDetail.salesAmountCol') }}</th>
+                <th>{{ $t('importDetail.operation') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="(s, i) in allStores" :key="s.store_code">
+              <tr :class="{ expanded: expandedStore === s.store_code }">
+                <td>{{ i + 1 }}</td>
+                <td class="store-name-cell" :title="s.store_name || s.store_code">{{ s.store_name || s.store_code || '-' }}</td>
+                <td class="num">{{ s.item_count ?? '-' }}</td>
+                <td class="num qty-cell">{{ Number(s.qty).toLocaleString() }}</td>
+                <td class="num amount-cell">{{ s.amount ? '¥' + Number(s.amount).toLocaleString() : '-' }}</td>
+                <td><button class="btn-xs" @click="toggleStore(s.store_code)">{{ expandedStore === s.store_code ? $t('importDetail.collapse') : $t('importDetail.expand') }}</button></td>
+              </tr>
+              <tr v-if="expandedStore === s.store_code" class="expand-row">
+                <td colspan="6">
+                  <div v-if="storeDetail && storeDetail.store?.store_code === s.store_code" class="store-expand-inner">
+                    <!-- 门店汇总 chips -->
+                    <div class="store-expand-stats">
+                      <span class="stat-chip">{{ $t('importDetail.salesQty') }} <strong>{{ Number(storeDetail.store?.total_qty || 0).toLocaleString() }}</strong> {{ $t('importDetail.pcs') }}</span>
+                      <span class="stat-chip">{{ $t('importDetail.salesAmount') }} <strong>¥{{ Number(storeDetail.store?.total_amount || 0).toLocaleString() }}</strong></span>
+                      <span class="stat-chip">{{ $t('importDetail.modelCount') }} <strong>{{ storeDetail.store?.model_count }}</strong></span>
+                      <span class="stat-chip">{{ $t('importDetail.skuCount') }} <strong>{{ storeDetail.store?.sku_count }}</strong></span>
+                    </div>
+                    <!-- 型号分布矩阵 -->
+                    <div class="report-section sub-section">
+                      <h4>📦 {{ $t('importDetail.modelDistribution') }} ({{ storeDetail.byModel?.length || 0 }})</h4>
+                      <div class="matrix-table-wrap">
+                      <table v-if="storeDetail.byModel?.length > 0" class="matrix-table model-matrix">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>{{ $t('importDetail.image') }}</th>
+                            <th>{{ $t('importDetail.model') }}</th>
+                            <th class="num">{{ $t('importDetail.skuCount') }}</th>
+                            <th class="num">{{ $t('importDetail.quantity') }}</th>
+                            <th class="num">{{ $t('importDetail.amount') }}</th>
+                            <th>{{ $t('importDetail.operation') }}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <template v-for="(m, mi) in storeDetail.byModel" :key="m.model">
+                          <tr :class="{ expanded: expandedModel === m.model }">
+                            <td>{{ mi + 1 }}</td>
+                            <td>
+                              <img v-if="m.image_url" :src="m.image_url" class="model-thumb" alt="" />
+                              <div v-else class="model-thumb-placeholder">📦</div>
+                            </td>
+                            <td :title="m.model">{{ (m.model || '-').substring(0, 20) }}</td>
+                            <td class="num">{{ m.sku_count }}</td>
+                            <td class="num qty-cell">{{ Number(m.qty).toLocaleString() }}</td>
+                            <td class="num amount-cell">{{ m.amount ? '¥' + Number(m.amount).toLocaleString() : '-' }}</td>
+                            <td><button class="btn-xs" @click="toggleModel(m.model)">{{ expandedModel === m.model ? $t('importDetail.collapse') : $t('importDetail.matrix') }}</button></td>
+                          </tr>
+                          <!-- SKU 颜色×尺码 真矩阵 -->
+                          <tr v-if="expandedModel === m.model && matrixForModel.colors.length > 0" class="expand-row">
+                            <td colspan="7">
+                              <div class="sku-matrix-wrap">
+                                <div class="sku-matrix-layout">
+                                  <!-- 左侧：型号大图 -->
+                                  <div class="model-image-cell">
+                                    <img v-if="matrixForModel.modelImage" :src="matrixForModel.modelImage" class="model-image-large" alt="" />
+                                    <div v-else class="model-image-placeholder">📦</div>
+                                    <div class="model-image-label">{{ $t('importDetail.modelImageLabel') }}</div>
+                                  </div>
+                                  <!-- 右侧：颜色×尺码矩阵 -->
+                                  <div class="sku-matrix-right">
+                                    <table class="matrix-table sku-matrix">
+                                      <thead>
+                                        <tr>
+                                          <th class="color-col">{{ $t('importDetail.colorSizeMatrix') }}</th>
+                                          <th v-for="sz in matrixForModel.sizes" :key="sz" class="num size-col">{{ sz }}</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        <tr v-for="c in matrixForModel.colors" :key="c">
+                                          <td class="color-cell">{{ c }}</td>
+                                          <td v-for="sz in matrixForModel.sizes" :key="sz" class="num cell-data">
+                                            <div v-for="item in (matrixForModel.cells[c]?.[sz] || [])" :key="item.sku" class="cell-sku">
+                                              <span class="sku-num">{{ item.sku }}</span>
+                                              <span class="sku-qty">/{{ item.qty }}PCS</span>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                          <tr v-if="expandedModel === m.model && matrixForModel.colors.length === 0" class="expand-row">
+                            <td colspan="7" class="empty-cell">{{ $t('importDetail.noSkuData') }}</td>
+                          </tr>
+                          </template>
+                        </tbody>
+                      </table>
                       </div>
-                      <span class="model-qty">{{ Number(m.qty).toLocaleString() }} {{ $t('importDetail.pcs') }}</span>
-                      <button class="btn-expand-model" @click="toggleModel(m.model)">
-                        {{ expandedModel === m.model ? '▲' : '▼' }}
-                      </button>
-                      <!-- SKU明细嵌在每个型号行内部，紧跟其后 -->
-                      <div v-if="expandedModel === m.model && modelSkus.length > 0" class="model-sku-detail">
-                        <table class="sku-table">
-                          <thead>
-                            <tr>
-                              <th>{{ $t('importDetail.image') }}</th>
-                              <th>{{ $t('importDetail.sku') }}</th>
-                              <th>{{ $t('importDetail.color') }}</th>
-                              <th>{{ $t('importDetail.size') }}</th>
-                              <th>{{ $t('importDetail.unitPrice') }}</th>
-                              <th>{{ $t('importDetail.quantity') }}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr v-for="sku in modelSkus" :key="sku.sku + sku.color + sku.size">
-                              <td>
-                                <img v-if="sku.image_url" :src="sku.image_url" class="sku-thumb" alt="" />
-                                <div v-else class="sku-thumb-placeholder">📦</div>
-                              </td>
-                              <td class="sku-code">{{ sku.sku }}</td>
-                              <td>{{ getColorDisplay(sku) || '-' }}</td>
-                              <td>{{ sku.size || '-' }}</td>
-                              <td>
-                                <span v-if="sku.unit_price !== null && sku.unit_price !== undefined && sku.unit_price !== ''" class="num">¥{{ Number(sku.unit_price).toLocaleString() }}</span>
-                                <span v-else class="text-gray">-</span>
-                              </td>
-                              <td class="qty">{{ Number(sku.total_qty).toLocaleString() }} {{ $t('importDetail.pcs') }}</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                      <div v-if="expandedModel === m.model && modelSkus.length === 0" class="empty-section" style="padding:8px;color:#f56c6c;font-size:12px;">无SKU数据</div>
+                      <div v-if="!(storeDetail.byModel?.length > 0)" class="empty-cell">{{ $t('importDetail.noModelDataMatrix') }}</div>
                     </div>
                   </div>
-                </div>
-              </div>
-              <div v-else class="empty-section">{{ $t('importDetail.noData') || 'Loading...' }}</div>
-            </div>
+                  <div v-else class="empty-cell">{{ $t('importDetail.noData') || 'Loading...' }}</div>
+                </td>
+              </tr>
+              </template>
+            </tbody>
+          </table>
           </div>
-          <div v-if="allStores.length === 0" class="empty-chart">{{ $t('importDetail.noData') }}</div>
+          <div v-if="!(allStores.length > 0)" class="empty-chart">{{ $t('importDetail.noData') }}</div>
           </div>
         </div>
       </div>
@@ -331,6 +371,50 @@ async function toggleStore(storeCode) {
   await loadStoreSummary(storeCode)
 }
 
+// 当前展开型号的 颜色×尺码 矩阵（行=颜色，列=尺码，格=Sku编号/数量）
+const matrixForModel = computed(() => {
+  const skus = modelSkus.value || []
+  if (skus.length === 0) return { sizes: [], colors: [], cells: {}, colorImageMap: {}, modelImage: '' }
+
+  // 1. 收集所有颜色 + 尺码
+  const colorSet = new Set()
+  const sizeSet = new Set()
+  const colorImageMap = {}  // 颜色 → 图片（取第一个该颜色的 image_url）
+  let modelImage = ''
+  for (const s of skus) {
+    const c = (s.color || '').toString().trim() || '-'
+    const sz = (s.size || '').toString().trim()
+    if (sz) sizeSet.add(sz)
+    colorSet.add(c)
+    if (s.image_url && !colorImageMap[c]) colorImageMap[c] = s.image_url
+    if (s.image_url && !modelImage) modelImage = s.image_url
+  }
+  // 尺码排序：数字按数字排，字母按字母排
+  const sizes = Array.from(sizeSet).sort((a, b) => {
+    const na = parseFloat(a), nb = parseFloat(b)
+    if (!isNaN(na) && !isNaN(nb)) return na - nb
+    return a.localeCompare(b)
+  })
+  // 颜色排序
+  const colors = Array.from(colorSet).sort((a, b) => a.localeCompare(b))
+
+  // 2. 构格 cells[color][size] = [{sku, qty}, ...]
+  const cells = {}
+  for (const c of colors) {
+    cells[c] = {}
+    for (const sz of sizes) cells[c][sz] = []
+  }
+  for (const s of skus) {
+    const c = (s.color || '').toString().trim() || '-'
+    const sz = (s.size || '').toString().trim()
+    if (!sz) continue
+    if (!cells[c][sz]) cells[c][sz] = []
+    cells[c][sz].push({ sku: s.sku, qty: Number(s.total_qty || 0) })
+  }
+
+  return { sizes, colors, cells, colorImageMap, modelImage }
+})
+
 function toggleModel(model) {
   if (expandedModel.value === model) {
     expandedModel.value = null
@@ -460,7 +544,7 @@ onMounted(() => {
 
 .charts-wrap { display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px; }
 .store-section { width: 100%; }
-.chart-full { width: 100%; }
+.chart-full { width: 100%; max-width: 1280px; margin: 0 auto; }
 .global-section { display: flex; flex-direction: column; gap: 16px; }
 .global-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .global-wide { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -559,4 +643,71 @@ onMounted(() => {
 .sku-thumb-placeholder { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: #f5f7fa; border-radius: 4px; font-size: 16px; }
 .sku-code { font-family: monospace; font-size: 11px; color: #409eff; overflow: hidden; text-overflow: ellipsis; }
 .sku-detail-row .qty { color: #67c23a; font-weight: 600; }
+
+/* ============ 矩阵表格（门店/型号/SKU）紧凑版 ============ */
+.matrix-table { width: 100%; border-collapse: collapse; font-size: 12px; background: white; table-layout: auto; }
+.matrix-table th, .matrix-table td { padding: 3px 4px; border: 1px solid #ebeef5; text-align: center; vertical-align: middle; line-height: 1.35; }
+.matrix-table th { background: #f5f7fa; font-weight: 600; color: #303133; white-space: nowrap; }
+.matrix-table tbody tr:hover { background: #f5f7fa; }
+.matrix-table tbody tr.expanded { background: #ecf5ff; }
+.matrix-table .num { text-align: center; font-variant-numeric: tabular-nums; }
+.matrix-table .qty-cell { color: #67c23a; font-weight: 600; }
+.matrix-table .amount-cell { color: #e6a23c; font-weight: 600; }
+.matrix-table .expand-row td { background: #fafbfc; padding: 4px 6px; }
+.matrix-table .empty-cell { text-align: center; color: #909399; padding: 12px; }
+.matrix-table .store-name-cell { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.matrix-table.store-matrix { table-layout: fixed; width: 100%; }
+.matrix-table.store-matrix th:nth-child(1), .matrix-table.store-matrix td:nth-child(1) { width: 32px; text-align: center; }
+.matrix-table.store-matrix th:nth-child(2), .matrix-table.store-matrix td:nth-child(2) { width: 160px; min-width: 160px; max-width: 160px; text-align: center; }
+.matrix-table.store-matrix th:nth-child(3), .matrix-table.store-matrix td:nth-child(3) { width: 56px; text-align: center; }
+.matrix-table.store-matrix th:nth-child(4), .matrix-table.store-matrix td:nth-child(4) { width: 64px; text-align: center; }
+.matrix-table.store-matrix th:nth-child(5), .matrix-table.store-matrix td:nth-child(5) { width: 88px; text-align: center; }
+.matrix-table.store-matrix th:nth-child(6), .matrix-table.store-matrix td:nth-child(6) { width: 52px; text-align: center; padding: 2px; }
+
+/* 型号分布表：限高+内部滚动，避免撑爆卡片 */
+.matrix-table.model-matrix thead { position: sticky; top: 0; z-index: 1; }
+.matrix-table.model-matrix { table-layout: fixed; width: 100%; }
+.matrix-table.model-matrix th:nth-child(1), .matrix-table.model-matrix td:nth-child(1) { width: 32px; text-align: center; }
+.matrix-table.model-matrix th:nth-child(2), .matrix-table.model-matrix td:nth-child(2) { width: 48px; text-align: center; }
+.matrix-table.model-matrix th:nth-child(3), .matrix-table.model-matrix td:nth-child(3) { width: 200px; min-width: 200px; max-width: 200px; text-align: center; }
+.matrix-table.model-matrix th:nth-child(4), .matrix-table.model-matrix td:nth-child(4) { width: 56px; text-align: center; }
+.matrix-table.model-matrix th:nth-child(5), .matrix-table.model-matrix td:nth-child(5) { width: 64px; text-align: center; }
+.matrix-table.model-matrix th:nth-child(6), .matrix-table.model-matrix td:nth-child(6) { width: 88px; text-align: center; }
+.matrix-table.model-matrix th:nth-child(7), .matrix-table.model-matrix td:nth-child(7) { width: 52px; text-align: center; padding: 2px; }
+.matrix-table.model-matrix td.model-thumb, .matrix-table.model-matrix td.model-thumb-placeholder { padding: 1px; }
+.matrix-table.model-matrix .model-thumb { width: 32px; height: 32px; }
+.matrix-table.model-matrix .model-thumb-placeholder { width: 32px; height: 32px; font-size: 16px; }
+.matrix-table-wrap { max-height: 420px; overflow-y: auto; overflow-x: auto; border: 1px solid #ebeef5; border-radius: 4px; width: max-content; max-width: 100%; }
+.matrix-table-wrap .matrix-table.model-matrix { border: none; }
+.matrix-table-wrap .matrix-table.model-matrix th, .matrix-table-wrap .matrix-table.model-matrix td { border-left: none; border-right: none; }
+.matrix-table-wrap .matrix-table.model-matrix thead th { border-top: none; }
+
+/* 门店排名表：限高，避免门店多时卡片过高 */
+.matrix-table-wrap.store-wrap { max-height: 320px; overflow-y: auto; overflow-x: auto; width: max-content; max-width: 100%; }
+
+/* SKU 颜色×尺码 矩阵 — 紧凑版 */
+.sku-matrix-wrap { background: white; border-radius: 4px; padding: 4px; overflow-x: auto; border: 1px solid #dcdfe6; width: max-content; max-width: 100%; }
+.sku-matrix-layout { display: flex; gap: 6px; align-items: flex-start; }
+.sku-matrix-right { flex: 0 0 auto; min-width: 0; }
+.sku-matrix { border-collapse: collapse; table-layout: fixed; width: auto; }
+.sku-matrix th, .sku-matrix td { border: 1px solid #dcdfe6 !important; }
+.sku-matrix .size-col { background: #f0f2f5; width: 60px !important; min-width: 60px; max-width: 60px; padding: 3px 2px !important; font-size: 11px; font-weight: 600; text-align: center; }
+.sku-matrix tbody tr:hover { background: #f5f7fa; }
+.sku-matrix .empty-qty { color: #c0c4cc; }
+.sku-matrix tfoot td { background: #f0f2f5; border-top: 2px solid #dcdfe6; }
+
+/* 左侧型号大图 — 缩到 64×64，和缩略图比例协调 */
+.model-image-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 2px; background: #fafbfc; border-radius: 4px; min-width: 72px; flex-shrink: 0; }
+.model-image-large { width: 64px; height: 64px; object-fit: cover; border-radius: 4px; border: 1px solid #ebeef5; }
+.model-image-placeholder { width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; background: #f5f7fa; border-radius: 4px; font-size: 24px; }
+.model-image-label { font-size: 9px; color: #909399; font-weight: 700; letter-spacing: 1px; }
+
+/* 颜色列 — 紧凑，固定宽 90px（颜色名最长 ~JGRN-BRZ）*/
+.sku-matrix .color-col { background: #f0f2f5; font-size: 11px; color: #606266; width: 90px !important; min-width: 90px; max-width: 90px; padding: 3px 2px !important; font-weight: 600; text-align: center; }
+.sku-matrix .color-cell { background: #fafbfc; font-size: 11px; color: #303133; font-weight: 600; width: 90px !important; min-width: 90px; max-width: 90px; padding: 3px 2px !important; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sku-matrix .cell-data { padding: 3px 2px !important; vertical-align: middle; width: 60px !important; min-width: 60px; max-width: 60px; text-align: center; }
+.sku-matrix .cell-sku { display: flex; flex-direction: column; align-items: center; gap: 8px; line-height: 1; width: auto; min-width: 0; }
+.sku-matrix .sku-num { font-family: monospace; font-size: 10px; color: #409eff; border-bottom: 1px solid #409eff; padding: 0 2px 1px; text-align: center; font-weight: 600; }
+.sku-matrix .sku-qty { font-size: 10px; color: #67c23a; font-weight: 600; text-align: center; }
 </style>

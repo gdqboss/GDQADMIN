@@ -133,9 +133,39 @@ async function loadProducts() {
   }
 }
 
-// ─── 搜索/筛选 ─────────────────────────────────────────────────────
+// ─── 搜索/筛选（按确认键才过滤，避免输入时频繁刷新） ──────────────────
 const searchKeyword = ref('')
+const pendingKeyword = ref('')  // 输入框的临时值
+const isSearchClicked = ref(false)  // 用户是否点过"确认"按钮（视觉反馈）
 const selectedCategory = ref('')
+function confirmSearch() {
+  // 按确认键/Enter → 把输入值提交为实际搜索关键字
+  searchKeyword.value = pendingKeyword.value.trim()
+  isSearchClicked.value = true
+  setTimeout(() => isSearchClicked.value = false, 800)
+}
+function clearSearch() {
+  pendingKeyword.value = ''
+  searchKeyword.value = ''
+  selectedCategory.value = ''
+}
+// 多规格商品展开状态：{ productId: true }（默认全部折叠）
+const expandedSkus = ref({})
+function toggleSkuExpand(productId) {
+  expandedSkus.value[productId] = !expandedSkus.value[productId]
+  expandedSkus.value = { ...expandedSkus.value }  // 触发响应式
+}
+// 计算某商品所有 SKU 的小计（已选 quantity × unit_price 的总和）
+function productSubtotal(productId, defaultPrice) {
+  let sum = 0
+  const skuList = products.value.find(p => p.id === productId)?.skus || []
+  for (const sku of skuList) {
+    const q = Number(getQty(productId, sku.id)) || 0
+    const p = Number(sku.unit_price || defaultPrice || 0)
+    sum += q * p
+  }
+  return sum
+}
 const categories = computed(() => {
   const set = new Set()
   for (const p of products.value) {
@@ -394,11 +424,18 @@ function skuLabel(sku) {
           <div class="flex-1 relative">
             <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[18px]">search</span>
             <input
-              v-model="searchKeyword"
+              v-model="pendingKeyword"
               type="text"
               :placeholder="t('order.searchPlaceholder')"
-              class="w-full pl-10 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:border-primary focus:outline-none bg-white"
+              @keyup.enter="confirmSearch"
+              class="w-full pl-10 pr-10 py-2 text-sm border border-gray-200 rounded-lg focus:border-primary focus:outline-none bg-white"
             />
+            <button
+              type="button"
+              @click="confirmSearch"
+              class="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary text-[20px] cursor-pointer"
+              :title="t('order.searchBtn') || '搜索'"
+            >search</button>
           </div>
           <select
             v-model="selectedCategory"
@@ -408,8 +445,8 @@ function skuLabel(sku) {
             <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
           </select>
           <button
-            v-if="searchKeyword || selectedCategory"
-            @click="searchKeyword=''; selectedCategory=''"
+            v-if="searchKeyword || pendingKeyword || selectedCategory"
+            @click="clearSearch"
             class="text-xs text-text-secondary hover:text-primary"
           >
             {{ t('common.clear') }}
@@ -491,28 +528,44 @@ function skuLabel(sku) {
                   ¥{{ ((Number(getQty(product.id, null)) || 0) * Number(product.sale_price || 0)).toFixed(2) }}
                 </td>
               </tr>
-              <!-- 有 SKU 的商品：每个匹配的 SKU 一行 -->
+              <!-- 有 SKU 的商品：默认折叠，点 + 展开全部 SKU -->
               <template v-else>
-                <template v-for="(sku, idx) in filterSkus(product.skus)" :key="product.id + '-' + sku.id">
-                  <tr class="hover:bg-gray-50">
-                    <td v-if="idx === 0" :rowspan="filterSkus(product.skus).length" class="px-3 py-2 align-top border-r border-gray-100">
-                      <img v-if="product.image_main" :src="product.image_main" class="w-16 h-16 object-cover rounded border border-gray-100" />
-                      <div v-else class="w-16 h-16 bg-gray-100 rounded flex items-center justify-center">
-                        <span class="material-symbols-outlined text-gray-300">image</span>
-                      </div>
-                    </td>
-                    <td v-if="idx === 0" :rowspan="filterSkus(product.skus).length" class="px-3 py-2 align-top font-mono text-xs text-text-secondary border-r border-gray-100">
-                      {{ product.sku }}
-                    </td>
-                    <td v-if="idx === 0" :rowspan="filterSkus(product.skus).length" class="px-3 py-2 align-top font-medium text-text-primary border-r border-gray-100">
-                      {{ product.name }}
-                    </td>
-                    <td class="px-3 py-2 text-xs text-text-secondary">
-                      <span v-for="(v, k) in parseSpecs(sku.specs)" :key="k" class="inline-block mr-1.5">
-                        <span class="text-text-secondary">{{ k }}:</span><span class="text-text-primary ml-0.5">{{ v }}</span>
+                <tr class="hover:bg-gray-50 cursor-pointer" @click="toggleSkuExpand(product.id)">
+                  <td class="px-3 py-2 align-top">
+                    <button type="button" class="material-symbols-outlined text-primary text-[20px] hover:bg-primary/10 rounded p-0.5" @click.stop="toggleSkuExpand(product.id)">
+                      {{ expandedSkus[product.id] ? 'remove' : 'add' }}
+                    </button>
+                  </td>
+                  <td class="px-3 py-2 align-top">
+                    <img v-if="product.image_main" :src="product.image_main" class="w-16 h-16 object-cover rounded border border-gray-100" />
+                    <div v-else class="w-16 h-16 bg-gray-100 rounded flex items-center justify-center">
+                      <span class="material-symbols-outlined text-gray-300">image</span>
+                    </div>
+                  </td>
+                  <td class="px-3 py-2 align-top font-mono text-xs text-text-secondary">{{ product.sku }}</td>
+                  <td class="px-3 py-2 align-top font-medium text-text-primary">{{ product.name }}</td>
+                  <td class="px-3 py-2 text-xs text-text-secondary">
+                    <span class="px-2 py-0.5 bg-gray-100 rounded text-[11px]">{{ filterSkus(product.skus).length }} {{ t('order.specCount') || '个规格' }}</span>
+                  </td>
+                  <td class="px-3 py-2 text-right">¥{{ Number(product.sale_price || 0).toFixed(2) }}</td>
+                  <td class="px-3 py-2 text-right font-medium text-success">{{ product.total_stock || 0 }}</td>
+                  <td class="px-3 py-2 text-center text-text-secondary text-xs">
+                    <span v-if="!expandedSkus[product.id]">{{ t('order.clickToExpand') || '点击展开' }}</span>
+                  </td>
+                  <td class="px-3 py-2 text-right text-primary font-medium">
+                    ¥{{ productSubtotal(product.id, product.sale_price).toFixed(2) }}
+                  </td>
+                </tr>
+                <!-- 展开后的 SKU 详情行（每规格一行） -->
+                <template v-if="expandedSkus[product.id]">
+                  <tr v-for="sku in filterSkus(product.skus)" :key="product.id + '-' + sku.id" class="bg-gray-50/50 hover:bg-gray-100">
+                    <td class="px-3 py-2"></td>
+                    <td colspan="2" class="px-3 py-2 text-xs text-text-secondary">
+                      <span v-for="(v, k) in parseSpecs(sku.specs)" :key="k" class="inline-block mr-2">
+                        <span class="text-text-secondary">{{ k }}:</span><span class="text-text-primary ml-0.5 font-medium">{{ v }}</span>
                       </span>
                     </td>
-                    <td class="px-3 py-2 text-right">¥{{ Number(sku.unit_price || product.sale_price || 0).toFixed(2) }}</td>
+                    <td class="px-3 py-2 text-right text-xs">¥{{ Number(sku.unit_price || product.sale_price || 0).toFixed(2) }}</td>
                     <td class="px-3 py-2 text-right text-success font-medium text-xs">{{ sku.stock || 0 }}</td>
                     <td class="px-3 py-2">
                       <input type="number" min="0" :value="getQty(product.id, sku.id)"

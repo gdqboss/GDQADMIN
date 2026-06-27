@@ -20,7 +20,7 @@ import {
   ElRadio, ElRadioGroup, ElRate, ElResult, ElRow, ElScrollbar, ElSelect,
   ElSkeleton, ElSkeletonItem, ElSlider, ElSpace, ElStatistic, ElStep, ElSteps,
   ElSubMenu, ElSwitch, ElTabPane, ElTable, ElTableColumn, ElTabs, ElTag,
-  ElText, ElTextarea, ElTimeline, ElTimelineItem, ElTooltip, ElTransfer,
+  ElText, ElTimeline, ElTimelineItem, ElTooltip, ElTransfer,
   ElTree, ElUpload,
 } from 'element-plus'
 
@@ -101,6 +101,7 @@ import 'element-plus/theme-chalk/el-icon.css'
 import 'element-plus/theme-chalk/el-radio-group.css'
 import 'element-plus/theme-chalk/el-checkbox-group.css'
 import 'element-plus/theme-chalk/el-loading.css'
+import 'element-plus/theme-chalk/el-overlay.css'
 
 // ElementPlus Icons（图标按需自动注册）
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
@@ -119,6 +120,23 @@ app.use(createPinia())
 app.use(router)
 app.use(i18n)
 app.use(ElLoading)
+// 全局注册 ElementPlus UI 组件（按需引入的 El* 必须显式注册才能 <el-select> 渲染）
+const EP_COMPONENTS = {
+  ElAlert, ElAside, ElAutocomplete, ElAvatar, ElBacktop, ElBadge,
+  ElBreadcrumb, ElBreadcrumbItem, ElButton, ElCard, ElCarousel, ElCarouselItem,
+  ElCascader, ElCheckbox, ElCheckboxGroup, ElCol, ElCollapse, ElCollapseItem,
+  ElColorPicker, ElContainer, ElDescriptions, ElDescriptionsItem, ElDialog,
+  ElDivider, ElDrawer, ElDropdown, ElDropdownItem, ElDropdownMenu, ElEmpty,
+  ElFooter, ElForm, ElFormItem, ElHeader, ElIcon, ElImage, ElInput, ElInputNumber,
+  ElLink, ElMain, ElMenu, ElMenuItem, ElOption, ElPageHeader, ElPagination,
+  ElPopover, ElProgress, ElRadio, ElRadioGroup, ElRate, ElResult, ElRow, ElScrollbar, ElSelect,
+  ElSkeleton, ElSkeletonItem, ElSlider, ElSpace, ElStatistic, ElStep, ElSteps,
+  ElSubMenu, ElSwitch, ElTabPane, ElTable, ElTableColumn, ElTabs, ElTag,
+  ElText, ElTimeline, ElTimelineItem, ElTooltip, ElTransfer, ElTree, ElUpload,
+}
+for (const [name, comp] of Object.entries(EP_COMPONENTS)) {
+  app.component(name, comp)
+}
 // 注册 ElementPlus 服务（message/notification 等）
 app.config.globalProperties.$message = ElMessage
 app.config.globalProperties.$notify = ElNotification
@@ -128,6 +146,11 @@ app.config.globalProperties.$confirm = ElMessageBox.confirm
 app.config.globalProperties.$prompt = ElMessageBox.prompt
 // ElementPlus 指令
 app.directive('loading', ElLoading.directive)
+
+// 下拉/弹层容器背景兜底（EP 按需 CSS 没注入时强制白底）
+const _style = document.createElement('style')
+_style.textContent = '.el-select-dropdown,.el-popper,.el-dropdown-menu,.el-cascader__dropdown,.el-autocomplete__popper,.el-tooltip__popper,.el-popover{background-color:#fff!important}'
+document.head.appendChild(_style)
 
 // 加载系统设置（站点名称等全局配置）
 const savedLocale = localStorage.getItem('caimeite_locale') || 'zh'
