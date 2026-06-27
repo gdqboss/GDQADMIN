@@ -1,11 +1,12 @@
 import { Router } from 'express'
 import { pool } from '../db/connection.js'
-import { requirePermission, requireRole, PERMISSIONS } from '../middleware/rbac.js'
+import { requirePermission, requireAnyPermission, requireRole, PERMISSIONS } from '../middleware/rbac.js'
 
 const router = Router()
 
 // GET /warehouses/available-products - 全部上架商品 + SKU（订货选择表）
-router.get('/available-products', requirePermission(PERMISSIONS.INVENTORY_READ), async (req, res, next) => {
+// 需要库存读权限或订货创建权限（店长订货时也要查商品）
+router.get('/available-products', requireAnyPermission(PERMISSIONS.INVENTORY_READ, 'preorder:create'), async (req, res, next) => {
   try {
     const { keyword = '', category = '' } = req.query
     const where = ["p.status='active'"]

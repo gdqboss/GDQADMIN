@@ -72,9 +72,9 @@ import logInteractionsRoutes from './routes/log-interactions.js'
 import tasksRoutes from './routes/tasks.js'
 import responsibilitiesRoutes from './routes/responsibilities.js'
 import giftApprovalRoutes from './routes/gift-approvals.js'
+import preorderRoutes from './routes/preorder.js'
 import openclawRoutes from './routes/openclaw.js'
 import customerLevelRoutes from './routes/customer-level.js'
-import inventoryAlertRoutes from './routes/inventory-alert.js'
 import escalationRoutes from './routes/escalation.js'
 import biRoutes from './routes/bi.js'
 import excelReportRoutes from './routes/excelReport.js'
@@ -188,6 +188,7 @@ app.use(langMiddleware)
 
 // Public routes
 app.use('/api/auth', authRoutes)
+app.use('/api/preorder', auth, preorderRoutes)
 app.use('/api/openclaw', openclawRoutes)
 app.use('/api/boss', auth, bossChatRoutes)
 app.use('/api/ai-config', auth, aiConfigRoutes)
@@ -474,7 +475,7 @@ app.use('/api/invoices', auth, apiLimiter, invoiceRoutes)
 app.use('/api/job-responsibilities', auth, apiLimiter, jobResponsibilitiesRoutes)
 app.use('/api/work-logs', auth, apiLimiter, workLogsRoutes)
 app.use('/api/customer-level', auth, apiLimiter, customerLevelRoutes)
-app.use('/api/inventory-alert', auth, apiLimiter, inventoryAlertRoutes)
+// /api/inventory-alert 已删除（inventory-alert.js + inventory_alerts/inventory_rules 表已清理）
 app.use('/api/escalation', auth, apiLimiter, escalationRoutes)
 app.use('/api/log-interactions', auth, apiLimiter, logInteractionsRoutes)
 app.use('/api/order-aggregator', apiLimiter, orderAggregatorRoutes)
@@ -483,7 +484,7 @@ app.use('/api/smart-studio', smartStudioRoutes)
 app.use('/api/visit-logs', auth, apiLimiter, visitLogsRoutes)
 app.use('/api/share-logs', shareLogsRoutes) // Mixed auth (some public, some protected)
 app.use('/api/feedback', feedbackRoutes) // Mixed auth (some public, some protected)
-app.use('/api/transfer', auth, apiLimiter, transferRoutes)
+// /api/transfer 重复注册已删除（line 469 已注册，此处为历史冗余）
 // returns.js disabled — inventory.js 内置 /returns 路由接管（L313/L340）
 // 原 returns.js 路由字段与 return_records 表结构不匹配，导致补货流程 500
 // // 北京 L399 原本: app.use('/api/returns', auth, apiLimiter, returnsRoutes)

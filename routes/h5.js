@@ -421,27 +421,6 @@ router.get('/roles', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
-// POST /api/h5/after-sale/repair - 维修员登记维修记录（需要后台权限）
-router.post('/after-sale/repair', h5Auth, async (req, res, next) => {
-  try {
-    const { qrcode_id, issue, solution } = req.body
-    if (!qrcode_id) return res.status(400).json({ code: 400, message: '二维码ID必填' })
-    if (!issue) return res.status(400).json({ code: 400, message: '故障描述必填' })
-
-    // 检查二维码是否存在
-    const [[qr]] = await pool.query('SELECT id, code FROM qrcodes WHERE id = ?', [qrcode_id])
-    if (!qr) return res.status(404).json({ code: 404, message: '二维码不存在' })
-
-    // 登记维修记录
-    await pool.query(
-      'INSERT INTO repair_records (qrcode_id, repair_person, issue, solution, repaired_at) VALUES (?, ?, ?, ?, NOW())',
-      [qrcode_id, req.h5user.name || req.h5user.phone, issue, solution || '']
-    )
-
-    res.json({ code: 0, data: null, message: '维修记录已提交' })
-  } catch (err) { next(err) }
-})
-
 // GET /api/h5/my-team - View my team (requires level >= 3)
 router.get('/my-team', h5Auth, async (req, res, next) => {
   try {

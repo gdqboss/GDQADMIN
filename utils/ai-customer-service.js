@@ -236,6 +236,15 @@ export async function processCustomerMessage(aftersaleId, qrcodeId, h5UserId, cu
 
 export async function saveAIMessage(aftersaleId, content) {
   try {
+    // 去重检查：5秒内同一aftersale_id + 同一AI回复内容，不重复写入
+    const [[dup]] = await pool.query(
+      'SELECT id FROM aftersale_messages WHERE aftersale_id = ? AND sender_type = "staff" AND content = ? AND created_at > DATE_SUB(NOW(), INTERVAL 5 SECOND) LIMIT 1',
+      [aftersaleId, content]
+    )
+    if (dup) {
+      console.log('[AI客服] 跳过重复AI回复:', content.slice(0, 50))
+      return
+    }
     await pool.query(
       `INSERT INTO aftersale_messages (aftersale_id, sender_type, sender_id, sender_name, content) VALUES (?, 'staff', '江小鱼AI', '江小鱼AI', ?)`,
       [aftersaleId, content]

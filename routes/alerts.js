@@ -87,6 +87,20 @@ router.put('/:id', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// 删除已处理预警（波哥 2026-07-27 要求：清理历史记录用）
+// 安全约束：只允许删 handled=1 的，防止误删未处理预警
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const [result] = await pool.query(
+      'DELETE FROM stock_alerts WHERE id = ? AND handled = 1',
+      [req.params.id])
+    if (result.affectedRows === 0) {
+      return res.status(400).json({ code: 400, message: '该预警未处理，无法删除（请先标记为已处理）' })
+    }
+    res.json({ code: 0, data: { deleted: result.affectedRows }, message: 'ok' })
+  } catch (err) { next(err) }
+})
+
 // Check and generate alerts for all products
 router.post('/check', async (req, res, next) => {
   try {

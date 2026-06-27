@@ -56,10 +56,13 @@ const PERMISSIONS = {
 
   // 供应商/经销商
   SUPPLIERS_READ: 'supplier:read',
+  SUPPLIERS_WRITE: 'supplier:write',
   DEALERS_READ: 'dealer:read',
+  DEALERS_WRITE: 'dealer:write',
 
   // 门店
   STORES_READ: 'store:read',
+  STORES_WRITE: 'store:write',
 
   // 任务
   TASKS_READ: 'task:read',
@@ -91,6 +94,11 @@ const PERMISSIONS = {
 
   // Dashboard 组件可见性
   DASHBOARD_WAREHOUSE_SUMMARY: 'dashboard:warehouse_summary',
+
+  // 门店预订单（店长下单 → 汇总 → DUNHILL/VOYAGER 等批次）
+  PREORDER_CREATE:    'preorder:create',     // 店长/员工提交预订单
+  PREORDER_READ:      'preorder:read',       // 查看预订单列表
+  PREORDER_AGGREGATE: 'preorder:aggregate',  // 汇总表（合并多店 → 出 PO）
 }
 
 // 角色常量
@@ -294,11 +302,11 @@ export function requirePermission(...requiredPerms) {
     if (!req.user) {
       return res.status(401).json({ code: 401, message: '未登录' })
     }
-    
+
     try {
       const userPerms = await getUserPermissions(req.user.id, req.user.role)
       const hasAll = requiredPerms.every(p => userPerms.includes(p))
-      
+
       if (!hasAll) {
         return res.status(403).json({ code: 403, message: '无权限访问' })
       }
@@ -310,18 +318,18 @@ export function requirePermission(...requiredPerms) {
 }
 
 /**
- * 权限检查 - 拥有任意指定权限即可（OR）
+ * 权限检查 - 拥有任一指定权限即可（OR）
  */
-export function requireAnyPermission(...requiredPerms) {
+export function requireAnyPermission(...anyPerms) {
   return async (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ code: 401, message: '未登录' })
     }
-    
+
     try {
       const userPerms = await getUserPermissions(req.user.id, req.user.role)
-      const hasAny = requiredPerms.some(p => userPerms.includes(p))
-      
+      const hasAny = anyPerms.some(p => userPerms.includes(p))
+
       if (!hasAny) {
         return res.status(403).json({ code: 403, message: '无权限访问' })
       }
