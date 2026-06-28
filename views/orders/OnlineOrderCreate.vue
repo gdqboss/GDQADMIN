@@ -17,13 +17,22 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import PageHeader from '../../components/PageHeader.vue'
 import api from '../../services/api.js'
 import { formatSkuLabel } from '../../utils/sku.js'
+import { useUserStore } from '../../stores/user.js'
 
 const { t } = useI18n()
 const router = useRouter()
+const userStore = useUserStore()
+
+// ─── 当前用户角色（决定是否显示供货商字段）───────────────────────
+// 业务规则：
+//   shopkeeper（店长）→ 不需要供货商（公司直发，不经经销商）
+//   admin/manager → 需要供货商（进货/采购场景）
+const isShopkeeper = computed(() => userStore.user?.role === 'shopkeeper')
+const showSupplier = computed(() => !isShopkeeper.value)
 
 // ─── 数据 ─────────────────────────────────────────────────────────────
 const stores = ref([])               // 门店列表
-const suppliers = ref([])             // 供货商列表
+const suppliers = ref([])             // 供货商列表（admin 才用）
 const selectedStoreId = ref(null)    // 选中的门店
 const selectedSupplierId = ref(null) // 选中的供货商
 const deliveryAddress = ref('')
@@ -32,7 +41,7 @@ const deliveryPhone = ref('')
 const remark = ref('')
 
 // 商品 + 库存数据
-const products = ref([])              // warehouse_stock 中有库存的商品
+const products = ref([])              // /preorder/products 返回的可订商品
 const loading = ref(false)
 const submitting = ref(false)
 
@@ -41,6 +50,33 @@ const quantities = ref({})
 
 // ─── 选中的门店信息 ─────────────────────────────────────────────────
 const selectedStore = computed(() => stores.value.find(s => s.id === selectedStoreId.value))
+
+// ─── 门店变化时自动填充收货信息（用户未手动修改的前提下） ──────────
+// 行为：
+//   1. 门店切换时，把 stores 表的 contact/phone/address 写入表单
+//   2. 如果用户已经手动改过对应字段（值非空），不覆盖
+//   3. 门店清空（id=null）时不修改字段
+// ─── 门店变化时：自动填收货信息 + 重新加载商品列表 ──────────────
+// 行为：
+//   1. 门店切换时，把 stores 表的 contact/phone/address 写入表单（仅在字段为空时）
+//   2. 重新调 /preorder/products 加载该门店可订商品
+//   3. 门店清空（id=null）时不修改字段，清空商品列表
+watch(selectedStoreId, (newId) => {
+  if (newId == null) {
+    products.value = []
+    return
+  }
+  // 兼容 string/int：<select>.value 永远是 string，store.id 是 int
+  const store = stores.value.find(s => String(s.id) === String(newId))
+  if (store) {
+    // 只在字段为空时填充（用户已填就不动）
+    if (!deliveryContact.value && store.contact) deliveryContact.value = store.contact
+    if (!deliveryPhone.value && store.phone) deliveryPhone.value = store.phone
+    if (!deliveryAddress.value && store.address) deliveryAddress.value = store.address
+  }
+  // 重载商品列表（按门店过滤）
+  loadProducts()
+})
 
 // ─── 计算总览 ───────────────────────────────────────────────────────
 const totalQty = computed(() => {
@@ -87,14 +123,25 @@ const orderItems = computed(() => {
 // ─── 加载数据 ───────────────────────────────────────────────────────
 async function loadStores() {
   try {
-    const r = await api.get('/stores')
-    if (r.code === 0) stores.value = r.data || []
+    // 用 /api/preorder/stores 而非 /api/stores：
+    //   admin → 全部门店
+    //   shopkeeper/member → 只返回自己关联的门店（user_stores JOIN 过滤）
+    const r = await api.get('/preorder/stores')
+    if (r.code === 0) {
+      stores.value = r.data || []
+      // UX：只有 1 个门店时，自动选中（用户不用再点一下）
+      // 仅在用户当前未选任何门店时生效，避免覆盖用户主动选择
+      if (stores.value.length === 1 && !selectedStoreId.value) {
+        selectedStoreId.value = stores.value[0].id
+      }
+    }
   } catch (e) {
     console.error('loadStores', e)
   }
 }
 
 async function loadSuppliers() {
+  if (!showSupplier.value) return  // shopkeeper 不需要供货商
   try {
     const r = await api.get('/suppliers')
     if (r.code === 0) suppliers.value = r.data || []
@@ -104,34 +151,33 @@ async function loadSuppliers() {
 }
 
 async function loadProducts() {
+  if (!selectedStoreId.value) {
+    products.value = []
+    return
+  }
   loading.value = true
   try {
-    // 拿所有上架商品（LEFT JOIN，无库存也返回） + 它们的 SKU
-    const r = await api.get('/warehouses/available-products')
+    // 用 /preorder/products 而不是 /warehouses/available-products：
+    //   - /preorder/products 返回 is_preorderable=1 的商品（店长预订单商品池）
+    //   - shopkeeper 有 preorder:read 权限，inventory:read 缺失
+    //   - 传 store_id：独立门店走 is_preorderable 过滤；经销商门店走 dealer_preorder_products
+    const r = await api.get(`/preorder/products?store_id=${selectedStoreId.value}`)
     if (r.code === 0) {
       products.value = r.data || []
     } else {
-      // 兜底（理论上不会走）
-      const [pRes, wRes] = await Promise.all([
-        api.get('/products?page=1&size=100'),
-        api.get('/warehouse-stock?page=1&size=100')
-      ])
-      const stockMap = {}
-      for (const w of (wRes.data?.list || [])) {
-        stockMap[w.product_id] = (stockMap[w.product_id] || 0) + Number(w.quantity)
-      }
-      const list = (pRes.data?.list || []).map(p => {
-        p.total_stock = stockMap[p.id] || 0
-        return p
-      })
-      products.value = list
+      products.value = []
+      ElMessage.error(r.message || t('order.loadProductsFailed'))
     }
   } catch (e) {
+    products.value = []
     ElMessage.error(t('order.loadProductsFailed') + ': ' + (e?.message || ''))
   } finally {
     loading.value = false
   }
 }
+
+// 门店切换时自动重载商品列表（在上面的 watch 里统一处理）
+// （保留这里作为占位说明，避免后续误加重复 watch）
 
 // ─── 搜索/筛选（按确认键才过滤，避免输入时频繁刷新） ──────────────────
 const searchKeyword = ref('')
@@ -265,7 +311,10 @@ const hasSpecFilter = computed(() => {
 })
 
 onMounted(async () => {
-  await Promise.all([loadStores(), loadSuppliers(), loadProducts()])
+  // 顺序：先 loadStores（拿到 selectedStoreId 后自动 watch 触发 loadProducts）
+  await loadStores()
+  // shopkeeper 不需要供货商，但 admin 需要
+  if (showSupplier.value) await loadSuppliers()
 })
 
 // ─── 数量操作 ───────────────────────────────────────────────────────
@@ -309,24 +358,36 @@ async function submit() {
     ElMessage.warning(t('order.emptyOrder'))
     return
   }
+  // shopkeeper 模式：supplier_id 不能传
+  if (showSupplier.value && !selectedSupplierId.value) {
+    ElMessage.warning(t('order.selectSupplier') || '请选择供货商')
+    return
+  }
   submitting.value = true
   try {
     const payload = {
       store_id: selectedStoreId.value,
-      supplier_id: selectedSupplierId.value || null,
       delivery_address: deliveryAddress.value || null,
       delivery_contact: deliveryContact.value || null,
       delivery_phone: deliveryPhone.value || null,
       remark: remark.value || null,
       items: orderItems.value.map(it => ({
-        ...it,
-        unit_price: it.unit_price.toFixed(2)
+        product_id: it.product_id,
+        sku_id: it.product_sku_id || null,
+        quantity: Number(it.quantity),
+        box_qty: 0,
+        unit_price: Number(it.unit_price || 0)
       }))
     }
-    const r = await api.post('/online-orders', payload)
+    // admin/manager 模式：加 supplier_id
+    if (showSupplier.value) {
+      payload.supplier_id = selectedSupplierId.value
+    }
+    // 走预订单 API（而不是 online-orders 完整工作流）
+    const r = await api.post('/preorder/create', payload)
     if (r.code === 0) {
       ElMessage.success(t('order.submitSuccess') + ': ' + r.data.order_no)
-      router.push('/orders/' + r.data.id)
+      router.push('/preorder/summary')
     } else {
       ElMessage.error(r.message || t('order.submitFailed'))
     }
@@ -341,6 +402,19 @@ async function submit() {
 function skuLabel(sku) {
   if (!sku) return ''
   return formatSkuLabel(sku)
+}
+
+// ─── 规格摘要（折叠行直接显示前 3 个 SKU 的规格组合）─────────────
+// 输入：sku = { specs: '{"尺寸":"20","颜色":"碳灰-A"}' }
+// 输出：'20/碳灰-A'（值用 / 分隔）
+function formatSpecSummary(sku) {
+  if (!sku) return ''
+  let specs = {}
+  try {
+    specs = typeof sku.specs === 'string' ? JSON.parse(sku.specs) : (sku.specs || {})
+  } catch (e) { specs = {} }
+  const values = Object.values(specs).filter(v => v != null && v !== '')
+  return values.length ? values.join('/') : (sku.sku_code || '—')
 }
 </script>
 
@@ -360,7 +434,7 @@ function skuLabel(sku) {
 
     <!-- 顶部：门店 + 供货商 + 收货信息 -->
     <div class="bg-white rounded-lg border border-gray-100 shadow-card p-5 mb-4">
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div :class="['grid grid-cols-1 gap-4', showSupplier ? 'md:grid-cols-4' : 'md:grid-cols-3']">
         <div>
           <label class="block text-xs text-text-secondary mb-1">{{ t('order.store') }} <span class="text-red-500">*</span></label>
           <select v-model="selectedStoreId" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-primary focus:outline-none">
@@ -373,7 +447,8 @@ function skuLabel(sku) {
           <input :value="selectedStore?.region || selectedStore?.area || ''" readonly
                  class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-text-secondary" />
         </div>
-        <div>
+        <!-- 供货商：仅 admin/manager 显示（shopkeeper 不需要，公司直发） -->
+        <div v-if="showSupplier">
           <label class="block text-xs text-text-secondary mb-1">{{ t('order.supplier') }}</label>
           <select v-model="selectedSupplierId" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-primary focus:outline-none">
             <option :value="null">{{ t('order.selectSupplier') }}</option>
@@ -544,13 +619,23 @@ function skuLabel(sku) {
                   </td>
                   <td class="px-3 py-2 align-top font-mono text-xs text-text-secondary">{{ product.sku }}</td>
                   <td class="px-3 py-2 align-top font-medium text-text-primary">{{ product.name }}</td>
+                  <!-- 规格摘要：直接展示该商品所有 SKU 的规格组合（如 "20/碳灰-A, 20/玫瑰金-A"） -->
                   <td class="px-3 py-2 text-xs text-text-secondary">
-                    <span class="px-2 py-0.5 bg-gray-100 rounded text-[11px]">{{ filterSkus(product.skus).length }} {{ t('order.specCount') || '个规格' }}</span>
+                    <div class="flex flex-wrap gap-1 max-w-[260px]">
+                      <span v-for="(sku, idx) in product.skus.slice(0, 3)" :key="sku.id"
+                            class="px-1.5 py-0.5 bg-gray-100 rounded text-[11px] text-text-secondary">
+                        {{ formatSpecSummary(sku) }}
+                      </span>
+                      <span v-if="product.skus.length > 3"
+                            class="px-1.5 py-0.5 bg-primary/10 text-primary rounded text-[11px] font-medium">
+                        +{{ product.skus.length - 3 }} ({{ t('order.clickToExpand') || '点开' }})
+                      </span>
+                    </div>
                   </td>
                   <td class="px-3 py-2 text-right">¥{{ Number(product.sale_price || 0).toFixed(2) }}</td>
-                  <td class="px-3 py-2 text-right font-medium text-success">{{ product.total_stock || 0 }}</td>
+                  <td class="px-3 py-2 text-right font-medium text-success">{{ product.total_stock || product.skus.reduce((s, x) => s + (x.stock || 0), 0) }}</td>
                   <td class="px-3 py-2 text-center text-text-secondary text-xs">
-                    <span v-if="!expandedSkus[product.id]">{{ t('order.clickToExpand') || '点击展开' }}</span>
+                    <span v-if="!expandedSkus[product.id]">{{ t('order.clickToExpand') || '点开展开填数量' }}</span>
                   </td>
                   <td class="px-3 py-2 text-right text-primary font-medium">
                     ¥{{ productSubtotal(product.id, product.sale_price).toFixed(2) }}

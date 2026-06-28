@@ -96,9 +96,13 @@ const routes = [
       { path: 'orders/:id', name: 'OrderDetail', component: lazyLoad(() => import('../views/orders/OrderDetail.vue')), meta: { title: '订单详情', parent: '商城', permission: 'order:read' } },
       { path: 'referral', name: 'ReferralManage', component: lazyLoad(() => import('../views/orders/ReferralManage.vue')), meta: { title: '推荐裂变', parent: '商城', permission: 'referral:read' } },
 
-      // ── 门店预订单（独立模块：产品预订）────────────────────
+      // ── 门店预订单（独立模块：产品预订）─────────────────────
       // 「新增订货单」复用 /orders/create 的 OnlineOrderCreate.vue（昨日已开发）
       { path: 'preorder/summary', name: 'PreorderSummary', component: lazyLoad(() => import('../views/preorder/PreorderSummary.vue')), meta: { title: '订货单汇总表', parent: '产品预订', permission: 'preorder:aggregate' } },
+      // 箱唛打印页（A4 横版排 2 张贴码）
+      { path: 'preorder/carton-print/:drf_id', name: 'CartonPrint', component: lazyLoad(() => import('../views/preorder/CartonPrint.vue')), meta: { title: '箱唛打印', parent: '产品预订', permission: 'preorder:confirm_warehouse' } },
+      // 扫码收货页（仓管扫码枪录入 BDSP 条码）
+      { path: 'preorder/scan', name: 'CartonScan', component: lazyLoad(() => import('../views/preorder/CartonScan.vue')), meta: { title: '扫码收货', parent: '产品预订', permission: 'preorder:confirm_warehouse' } },
 
       // ── 餐饮管理 ──────────────────────────────────────────────
       { path: 'restaurant', name: 'RestaurantDashboard', component: lazyLoad(() => import('../views/restaurant/RestaurantDashboard.vue')), meta: { title: '餐饮管理', permission: 'restaurant:read' } },

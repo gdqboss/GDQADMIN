@@ -196,6 +196,36 @@ export default {
     storeManage: 'Store Manage',
     messages: 'Messages',
     openClaw: 'OpenClaw',
+    // Product Pre-order (from Sidebar hardcoded → i18n)
+    preorder: 'Pre-order',
+    preorderCreate: 'New Pre-order',
+    preorderSummary: 'Pre-order Summary',
+    // Restaurant Management
+    restaurant: 'Restaurant',
+    restaurantDashboard: 'Restaurant Dashboard',
+    restaurantTables: 'Table Management',
+    restaurantDishes: 'Menu Management',
+    dineOrders: 'Dine-in Orders',
+    takeoutOrders: 'Takeout Orders',
+    reservations: 'Reservations',
+    queue: 'Queue Management',
+    cashier: 'Cashier',
+    // Hotel Management
+    hotel: 'Hotel',
+    hotelDashboard: 'Hotel Dashboard',
+    roomTypes: 'Room Types',
+    priceCalendar: 'Price Calendar',
+    hotelOrders: 'Hotel Orders',
+    hotelReviews: 'Reviews',
+    // Mall
+    mall: 'Mall',
+    scoreProducts: 'Points Products',
+    scoreOrders: 'Points Orders',
+    coupons: 'Coupons',
+    logistics: 'Logistics',
+    articles: 'Articles',
+    yuyue: 'Booking Service',
+    kefu: 'Customer Service',
   },
   logs: {
     // Work Logs

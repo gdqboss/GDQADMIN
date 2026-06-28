@@ -261,6 +261,36 @@ export default {
     storeManage: '门店管理',
     messages: '消息',
     openClaw: 'OpenClaw',
+    // 产品预订（Sidebar 硬编码 → i18n）
+    preorder: '产品预订',
+    preorderCreate: '新增订货单',
+    preorderSummary: '订货单汇总表',
+    // 餐饮管理
+    restaurant: '餐饮管理',
+    restaurantDashboard: '餐饮仪表盘',
+    restaurantTables: '桌台管理',
+    restaurantDishes: '菜品管理',
+    dineOrders: '堂食订单',
+    takeoutOrders: '外卖订单',
+    reservations: '预订管理',
+    queue: '排队叫号',
+    cashier: '收银管理',
+    // 酒店管理
+    hotel: '酒店管理',
+    hotelDashboard: '酒店仪表盘',
+    roomTypes: '房型管理',
+    priceCalendar: '价格日历',
+    hotelOrders: '酒店订单',
+    hotelReviews: '评价管理',
+    // 商城
+    mall: '商城',
+    scoreProducts: '积分商品',
+    scoreOrders: '积分订单',
+    coupons: '优惠券管理',
+    logistics: '物流管理',
+    articles: '文章管理',
+    yuyue: '预约服务',
+    kefu: '客服消息',
   },
   logs: {
     // 工作日志

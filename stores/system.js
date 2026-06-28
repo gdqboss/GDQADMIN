@@ -10,6 +10,8 @@ const systemSettings = reactive({
   site_name: '彩美特',
   system_name_en: 'TRAVELMATE',
   site_name_en: 'TRAVELMATE',
+  // 当前服务器启用的模块列表（来自 public-settings.data.modules）
+  modules: [],
 })
 
 // 加载系统设置（从后端公开接口）
@@ -26,6 +28,8 @@ async function loadSystemSettings(locale = 'zh') {
       systemSettings.site_name = json.data.site_name || systemSettings.site_name
       systemSettings.system_name_en = json.data.system_name_en || systemSettings.system_name_en
       systemSettings.site_name_en = json.data.site_name_en || systemSettings.site_name_en
+      // 目标服务器管理：modules 数组决定哪些菜单/功能可显示
+      systemSettings.modules = Array.isArray(json.data.modules) ? json.data.modules : []
 
       // 同时更新 i18n 的 system 字段（运行时覆盖静态翻译）
       // 同时更新 zh 和 en 两个 locale，确保切换语言时名字一致

@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useWecomStore } from '../stores/wecom'
+import { systemSettings } from '../stores/system.js'
 import { useI18n } from 'vue-i18n'
 import { ROLES } from '../constants/roles.js'
 import api, { menuApi } from '../services/api.js'
@@ -216,11 +217,11 @@ const menuGroups = computed(() => [
   {
     key: 'preorder',
     icon: 'inventory_2',
-    label: '产品预订',
+    label: t('nav.preorder'),
     to: null,
     children: [
-      { key: 'preorder:create', label: '新增订货单', to: '/orders/create' },
-      { key: 'preorder:aggregate', label: '订货单汇总表', to: '/preorder/summary' },
+      { key: 'preorder:create', label: t('nav.preorderCreate'), to: '/orders/create' },
+      { key: 'preorder:aggregate', label: t('nav.preorderSummary'), to: '/preorder/summary' },
     ]
   },
   {
@@ -240,45 +241,45 @@ const menuGroups = computed(() => [
   {
     key: 'restaurant',
     icon: 'restaurant',
-    label: '餐饮管理',
+    label: t('nav.restaurant'),
     to: null,
     children: [
-      { key: 'restaurant:read', label: '餐饮仪表盘', to: '/restaurant' },
-      { key: 'restaurant:write', label: '桌台管理', to: '/restaurant/tables' },
-      { key: 'restaurant:write', label: '菜品管理', to: '/restaurant/dishes' },
-      { key: 'restaurant:read', label: '堂食订单', to: '/restaurant/dine-orders' },
-      { key: 'restaurant:read', label: '外卖订单', to: '/restaurant/takeout' },
-      { key: 'restaurant:read', label: '预订管理', to: '/restaurant/reservations' },
-      { key: 'restaurant:read', label: '排队叫号', to: '/restaurant/queue' },
-      { key: 'restaurant:write', label: '收银管理', to: '/restaurant/cashier' },
+      { key: 'restaurant:read', label: t('nav.restaurantDashboard'), to: '/restaurant' },
+      { key: 'restaurant:write', label: t('nav.restaurantTables'), to: '/restaurant/tables' },
+      { key: 'restaurant:write', label: t('nav.restaurantDishes'), to: '/restaurant/dishes' },
+      { key: 'restaurant:read', label: t('nav.dineOrders'), to: '/restaurant/dine-orders' },
+      { key: 'restaurant:read', label: t('nav.takeoutOrders'), to: '/restaurant/takeout' },
+      { key: 'restaurant:read', label: t('nav.reservations'), to: '/restaurant/reservations' },
+      { key: 'restaurant:read', label: t('nav.queue'), to: '/restaurant/queue' },
+      { key: 'restaurant:write', label: t('nav.cashier'), to: '/restaurant/cashier' },
     ]
   },
   {
     key: 'hotel',
     icon: 'hotel',
-    label: '酒店管理',
+    label: t('nav.hotel'),
     to: null,
     children: [
-      { key: 'hotel:read', label: '酒店仪表盘', to: '/hotel' },
-      { key: 'hotel:write', label: '房型管理', to: '/hotel/room-types' },
-      { key: 'hotel:write', label: '价格日历', to: '/hotel/price-calendar' },
-      { key: 'hotel:read', label: '酒店订单', to: '/hotel/orders' },
-      { key: 'hotel:read', label: '评价管理', to: '/hotel/reviews' },
+      { key: 'hotel:read', label: t('nav.hotelDashboard'), to: '/hotel' },
+      { key: 'hotel:write', label: t('nav.roomTypes'), to: '/hotel/room-types' },
+      { key: 'hotel:write', label: t('nav.priceCalendar'), to: '/hotel/price-calendar' },
+      { key: 'hotel:read', label: t('nav.hotelOrders'), to: '/hotel/orders' },
+      { key: 'hotel:read', label: t('nav.hotelReviews'), to: '/hotel/reviews' },
     ]
   },
   {
     key: 'mall',
     icon: 'shopping_bag',
-    label: '商城',
+    label: t('nav.mall'),
     to: null,
     children: [
-      { key: 'mall:score', label: '积分商品', to: '/score-products' },
-      { key: 'order:read', label: '积分订单', to: '/score-orders' },
-      { key: 'order:read', label: '优惠券管理', to: '/coupon-manage' },
-      { key: 'logistics:read', label: '物流管理', to: '/logistics' },
-      { key: 'articles:read', label: '文章管理', to: '/articles' },
-      { key: 'yuyue:read', label: '预约服务', to: '/yuyue' },
-      { key: 'kefu:read', label: '客服消息', to: '/kefu' },
+      { key: 'mall:score', label: t('nav.scoreProducts'), to: '/score-products' },
+      { key: 'order:read', label: t('nav.scoreOrders'), to: '/score-orders' },
+      { key: 'order:read', label: t('nav.coupons'), to: '/coupon-manage' },
+      { key: 'logistics:read', label: t('nav.logistics'), to: '/logistics' },
+      { key: 'articles:read', label: t('nav.articles'), to: '/articles' },
+      { key: 'yuyue:read', label: t('nav.yuyue'), to: '/yuyue' },
+      { key: 'kefu:read', label: t('nav.kefu'), to: '/kefu' },
     ]
   },
   {
@@ -286,27 +287,47 @@ const menuGroups = computed(() => [
     icon: 'settings',
     label: t('nav.systemManagement'),
     to: null,
+    moduleKeys: ['settings', 'server_profiles'],
     children: [
       { key: 'system:config', label: t('nav.settingsIndex'), to: '/settings' },
       { key: 'user:write', label: t('nav.userManagement'), to: '/settings/users' },
       { key: 'role:write', label: t('nav.roleManageIndex'), to: '/settings/roles' },
-      { key: 'system:config', label: t('nav.serverProfiles'), to: '/settings/server-profiles' },
+      // 目标服务器管理：仅启用 server_profiles 模块的服务器显示（北京/3号仓库无）
+      { key: 'system:config', label: t('nav.serverProfiles'), to: '/settings/server-profiles', moduleKey: 'server_profiles' },
     ]
   },
 ])
 
-// 过滤后的菜单分组（单一过滤源：canAccess）
+// 过滤后的菜单分组（过滤源：canAccess + 当前服务器启用的模块）
 const filteredGroups = computed(() => {
+  // 当前服务器启用的模块列表（来自 public-settings.modules）
+  // 空数组表示后端没返回（向后兼容），不过滤
+  const enabledModules = systemSettings.modules || []
+  const enabledSet = new Set(enabledModules)
+
   return menuGroups.value
     .map(group => {
+      // 一级菜单按 moduleKeys 过滤：group.moduleKeys 与 enabledModules 至少一个交集才显示
+      // 向后兼容：如果 group 没 moduleKeys（旧菜单），不按模块过滤
+      if (enabledModules.length > 0 && Array.isArray(group.moduleKeys) && group.moduleKeys.length > 0) {
+        const hasEnabled = group.moduleKeys.some(k => enabledSet.has(k))
+        if (!hasEnabled) return null
+      }
+
       // 独立一级菜单（无 children）— 全部按 group.key 权限过滤
       if (!group.children || group.children.length === 0) {
         if (!canAccess(group.key)) return null
         return { ...group, label: group.label }
       }
-      // 有 children 的分组：按子菜单权限过滤
+      // 有 children 的分组：按子菜单权限 + 模块双重过滤
       const filteredChildren = group.children
-        .filter(child => canAccess(child.key))
+        .filter(child => {
+          // 权限过滤
+          if (!canAccess(child.key)) return false
+          // 模块过滤：child.moduleKey 设了但当前服务器没启用 → 隐藏
+          if (enabledModules.length > 0 && child.moduleKey && !enabledSet.has(child.moduleKey)) return false
+          return true
+        })
         .map(child => ({ ...child }))
       // 规则：有 children 但全部被过滤 → 隐藏
       if (group.children.length > 0 && filteredChildren.length === 0) return null

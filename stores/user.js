@@ -12,16 +12,28 @@ export const useUserStore = defineStore('user', () => {
   }
   const user = ref(savedUser)
 
-  // 如果 caimeite_user 没有 permissions 但 caimeite_permissions 有值，则补充
-  if (savedUser && !savedUser.permissions) {
-    try {
-      const savedPerms = JSON.parse(localStorage.getItem('caimeite_permissions') || 'null')
-      if (savedPerms && Array.isArray(savedPerms)) {
-        savedUser.permissions = savedPerms
-        user.value = savedUser
-        localStorage.setItem('caimeite_user', JSON.stringify(savedUser))
-      }
-    } catch { /* ignore */ }
+  // 如果 caimeite_user 没有 permissions 或 permissions 是字符串（兼容历史数据），则补充/解析
+  if (savedUser) {
+    let needsUpdate = false
+    if (!savedUser.permissions) {
+      try {
+        const savedPerms = JSON.parse(localStorage.getItem('caimeite_permissions') || 'null')
+        if (savedPerms && Array.isArray(savedPerms)) {
+          savedUser.permissions = savedPerms
+          needsUpdate = true
+        }
+      } catch { /* ignore */ }
+    } else if (typeof savedUser.permissions === 'string') {
+      // 兼容：旧数据可能存的是字符串（修复 login 之前的版本）
+      try {
+        savedUser.permissions = JSON.parse(savedUser.permissions)
+        needsUpdate = true
+      } catch { savedUser.permissions = null }
+    }
+    if (needsUpdate) {
+      user.value = savedUser
+      localStorage.setItem('caimeite_user', JSON.stringify(savedUser))
+    }
   }
 
   // Get token and validate it's not 'null' or 'undefined' string
@@ -51,16 +63,25 @@ export const useUserStore = defineStore('user', () => {
   async function login(phone, password) {
     const res = await api.post('/auth/login', { phone, password })
     if (res.code === 0) {
-      // 优先使用后端返回的 permissions 字段（解析后的权限数组）
+      // 后端有时返回 JSON 字符串（DB longtext 字段），有时返回数组
+      // 必须先解析成数组，否则 canAccess 的 Array.isArray 校验失败
+      const rawPerms = res.data.permissions ?? res.data.user?.permissions ?? null
+      const permsArray = (() => {
+        if (Array.isArray(rawPerms)) return rawPerms
+        if (typeof rawPerms === 'string') {
+          try { return JSON.parse(rawPerms) } catch { return null }
+        }
+        return null
+      })()
       const userWithPerms = {
         ...res.data.user,
-        permissions: res.data.permissions ?? res.data.user?.permissions ?? null
+        permissions: permsArray
       }
       user.value = userWithPerms
       token.value = res.data.token
       localStorage.setItem('caimeite_user', JSON.stringify(userWithPerms))
       localStorage.setItem('caimeite_token', res.data.token)
-      localStorage.setItem('caimeite_permissions', JSON.stringify(res.data.permissions || []))
+      localStorage.setItem('caimeite_permissions', JSON.stringify(permsArray || []))
     }
     return res
   }
@@ -76,11 +97,16 @@ export const useUserStore = defineStore('user', () => {
     try {
       const res = await api.get('/auth/me')
       if (res.code === 0) {
-        // fetchMe 返回的 user 没有 permissions 字段，需要从 localStorage 补充
+        // fetchMe 返回的 user 可能没有 permissions 字段，需要从 localStorage 补充
+        // 并兼容后端 permissions 为 JSON 字符串的情况
         const savedPerms = JSON.parse(localStorage.getItem('caimeite_permissions') || 'null')
+        let perms = savedPerms ?? res.data.permissions ?? null
+        if (typeof perms === 'string') {
+          try { perms = JSON.parse(perms) } catch { perms = null }
+        }
         const userData = {
           ...res.data,
-          permissions: savedPerms ?? res.data.permissions ?? null
+          permissions: Array.isArray(perms) ? perms : null
         }
         user.value = userData
         localStorage.setItem('caimeite_user', JSON.stringify(userData))

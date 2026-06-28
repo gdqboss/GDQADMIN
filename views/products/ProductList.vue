@@ -458,6 +458,7 @@ async function openEdit(p) {
     purchase_price: p.purchase_price || '',
     sale_price: p.sale_price || '',
     status: p.status || 'active',
+    is_preorderable: p.is_preorderable || 0,
     image_main: p.image_main || '',
     images: p.images ? (Array.isArray(p.images) ? [...p.images] : JSON.parse(p.images || '[]')) : [],
     external_links: p.external_links ? (Array.isArray(p.external_links) ? [...p.external_links] : JSON.parse(p.external_links || '[]')) : []
@@ -1380,6 +1381,17 @@ async function deleteCategory(cat) {
                   <option value="active">{{ $t('product.active') }}</option>
                   <option value="discontinued">{{ $t('product.discontinued') }}</option>
                 </select>
+              </div>
+
+              <!-- 可预订开关（总开关：开启后该商品才能被经销商/门店选为可预订） -->
+              <div class="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-100">
+                <div>
+                  <p class="text-sm font-medium text-text-primary">{{ $t('product.preorderableLabel') || '可预订商品' }}</p>
+                  <p class="text-xs text-text-secondary mt-0.5">{{ $t('product.preorderableHint') || '开启后，经销商/门店可以选这个商品加入可预订列表' }}</p>
+                </div>
+                <label class="flex items-center cursor-pointer select-none">
+                  <input type="checkbox" v-model="form.is_preorderable" :true-value="1" :false-value="0" class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary focus:ring-2" />
+                </label>
               </div>
             </div>
 

@@ -21,6 +21,15 @@ const emptyForm = () => ({ name: '', store_code: '', dealer_id: '', contact: '',
 const newForm = ref(emptyForm())
 const editForm = ref(emptyForm())
 
+// 可预订商品管理（独立门店）
+const showPreorderModal = ref(false)
+const preorderStore = ref(null)
+const preorderProducts = ref([])
+const preorderPool = ref([])
+const preorderSelectedIds = ref([])
+const preorderLoading = ref(false)
+const preorderKeyword = ref('')
+
 async function fetchStores() {
   if (USE_MOCK_DATA) {
     stores.value = mockStores
@@ -71,6 +80,69 @@ async function handleDelete(id) {
   if (!confirm(t('store.confirmDelete'))) return
   await api.delete(`/stores/${id}`)
   await fetchStores()
+}
+
+// ─── 可预订商品管理（独立门店，无 dealer_id 时显示） ──────────────────────────
+async function openPreorderModal(s) {
+  preorderStore.value = s
+  preorderKeyword.value = ''
+  showPreorderModal.value = true
+  await loadStorePreorderData()
+}
+
+async function loadStorePreorderData() {
+  if (!preorderStore.value) return
+  preorderLoading.value = true
+  try {
+    const selRes = await api.get(`/stores/${preorderStore.value.id}/preorder-products`)
+    preorderProducts.value = selRes.data || []
+    preorderSelectedIds.value = preorderProducts.value.map(p => p.id)
+    const poolRes = await api.get(`/dealers/${preorderStore.value.id}/available-products`, { params: { keyword: preorderKeyword.value } })
+    preorderPool.value = poolRes.data || []
+  } catch (e) {
+    console.error('loadStorePreorderData', e)
+    preorderProducts.value = []
+    preorderPool.value = []
+  } finally {
+    preorderLoading.value = false
+  }
+}
+
+async function searchStorePreorderPool() {
+  if (!preorderStore.value) return
+  preorderLoading.value = true
+  try {
+    const poolRes = await api.get(`/dealers/${preorderStore.value.id}/available-products`, { params: { keyword: preorderKeyword.value } })
+    preorderPool.value = poolRes.data || []
+  } finally {
+    preorderLoading.value = false
+  }
+}
+
+async function saveStorePreorderSelection() {
+  if (!preorderStore.value) return
+  preorderLoading.value = true
+  try {
+    await api.put(`/stores/${preorderStore.value.id}/preorder-products`, {
+      product_ids: preorderSelectedIds.value
+    })
+    showPreorderModal.value = false
+  } catch (e) {
+    console.error('saveStorePreorderSelection', e)
+    alert('保存失败：' + (e?.response?.data?.message || e.message))
+  } finally {
+    preorderLoading.value = false
+  }
+}
+
+function toggleStorePreorderProduct(pid) {
+  const idx = preorderSelectedIds.value.indexOf(pid)
+  if (idx >= 0) preorderSelectedIds.value.splice(idx, 1)
+  else preorderSelectedIds.value.push(pid)
+}
+
+function isStorePreorderSelected(pid) {
+  return preorderSelectedIds.value.includes(pid)
 }
 
 const extraFormFields = computed(() => [
@@ -132,6 +204,7 @@ const extraFormFields = computed(() => [
               </td>
               <td class="px-4 py-3 text-right">
                 <button @click="openEdit(s)" class="text-primary hover:text-primary-hover text-xs font-medium mr-3">{{ $t('common.edit') }}</button>
+                <button v-if="!s.dealer_id" @click="openPreorderModal(s)" class="text-amber-600 hover:text-amber-700 text-xs font-medium mr-3">可预订商品</button>
                 <button @click="handleDelete(s.id)" class="text-danger hover:text-red-700 text-xs font-medium">{{ $t('common.delete') }}</button>
               </td>
             </tr>
@@ -214,6 +287,75 @@ const extraFormFields = computed(() => [
           <div class="px-6 py-4 border-t flex gap-3 justify-end">
             <button @click="showEditDrawer = false" class="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50">{{ $t('common.cancel') }}</button>
             <button @click="handleEdit" class="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium">{{ $t('common.save') }}</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- 可预订商品管理 Modal（独立门店） -->
+    <Teleport to="body">
+      <div v-if="showPreorderModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" @click="showPreorderModal = false"></div>
+        <div class="relative w-full max-w-4xl bg-white rounded-lg shadow-2xl flex flex-col max-h-[90vh]">
+          <div class="flex items-center justify-between px-6 py-4 border-b">
+            <div>
+              <h3 class="text-lg font-bold text-text-primary">可预订商品</h3>
+              <p class="text-xs text-text-secondary mt-0.5">独立门店：{{ preorderStore?.name }}</p>
+            </div>
+            <button @click="showPreorderModal = false"><span class="material-symbols-outlined">close</span></button>
+          </div>
+
+          <div class="flex-1 overflow-hidden flex">
+            <div class="w-1/2 border-r flex flex-col">
+              <div class="px-4 py-3 border-b bg-gray-50">
+                <p class="text-sm font-medium text-text-primary mb-2">商品池（已开启可预订的商品）</p>
+                <div class="flex items-center bg-white rounded-lg px-3 py-2 border border-gray-200">
+                  <span class="material-symbols-outlined text-text-secondary text-[18px]">search</span>
+                  <input v-model="preorderKeyword" @input="searchStorePreorderPool" type="text" placeholder="搜索商品名/SKU" class="bg-transparent border-none focus:ring-0 focus:outline-none text-sm w-full ml-2" />
+                </div>
+              </div>
+              <div class="flex-1 overflow-y-auto p-2">
+                <div v-if="preorderLoading" class="text-center text-text-secondary text-sm py-8">加载中…</div>
+                <div v-else-if="preorderPool.length === 0" class="text-center text-text-secondary text-sm py-8">
+                  商品池为空<br />
+                  <span class="text-xs">需要先在商品管理里把商品设为"可预订"</span>
+                </div>
+                <label v-for="p in preorderPool" :key="p.id" class="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                  <input type="checkbox" :checked="isStorePreorderSelected(p.id)" @change="toggleStorePreorderProduct(p.id)" class="w-4 h-4 text-primary border-gray-300 rounded" />
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm text-text-primary truncate">{{ p.name }}</p>
+                    <p class="text-xs text-text-secondary">SKU: {{ p.sku }}</p>
+                  </div>
+                  <span v-if="isStorePreorderSelected(p.id)" class="text-xs text-primary">已选</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="w-1/2 flex flex-col">
+              <div class="px-4 py-3 border-b bg-gray-50">
+                <p class="text-sm font-medium text-text-primary">已选商品（{{ preorderSelectedIds.length }}）</p>
+              </div>
+              <div class="flex-1 overflow-y-auto p-2">
+                <div v-if="preorderSelectedIds.length === 0" class="text-center text-text-secondary text-sm py-8">
+                  还没选商品<br />
+                  <span class="text-xs">从左侧勾选</span>
+                </div>
+                <div v-for="pid in preorderSelectedIds" :key="pid" class="flex items-center gap-2 p-2 hover:bg-gray-50 rounded">
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm text-text-primary truncate">
+                      {{ (preorderPool.find(p => p.id === pid) || preorderProducts.find(p => p.product_id === pid))?.name || ('商品 #' + pid) }}
+                    </p>
+                    <p class="text-xs text-text-secondary">SKU: {{ (preorderPool.find(p => p.id === pid) || preorderProducts.find(p => p.product_id === pid))?.sku || '-' }}</p>
+                  </div>
+                  <button @click="toggleStorePreorderProduct(pid)" class="text-danger hover:text-red-700 text-xs">移除</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-6 py-4 border-t flex gap-3 justify-end">
+            <button @click="showPreorderModal = false" class="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50">取消</button>
+            <button @click="saveStorePreorderSelection" :disabled="preorderLoading" class="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium disabled:opacity-50">保存</button>
           </div>
         </div>
       </div>

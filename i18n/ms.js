@@ -188,6 +188,36 @@ export default {
         storeManage: 'Urus Stor',
         messages: 'Mesej',
         openClaw: 'OpenClaw',
+        // Product Pre-order (Sidebar hardcoded → i18n)
+        preorder: 'Tempahan Produk',
+        preorderCreate: 'Tempahan Baru',
+        preorderSummary: 'Ringkasan Tempahan',
+        // Restaurant Management
+        restaurant: 'Pengurusan Restoran',
+        restaurantDashboard: 'Papan Pemuka Restoran',
+        restaurantTables: 'Urus Meja',
+        restaurantDishes: 'Urus Menu',
+        dineOrders: 'Pesanan Makan Di Tempat',
+        takeoutOrders: 'Pesanan Bawa Balik',
+        reservations: 'Tempahan',
+        queue: 'Urus Giliran',
+        cashier: 'Juruwang',
+        // Hotel Management
+        hotel: 'Pengurusan Hotel',
+        hotelDashboard: 'Papan Pemuka Hotel',
+        roomTypes: 'Jenis Bilik',
+        priceCalendar: 'Kalendar Harga',
+        hotelOrders: 'Pesanan Hotel',
+        hotelReviews: 'Ulasan',
+        // Mall
+        mall: 'Mall',
+        scoreProducts: 'Produk Mata',
+        scoreOrders: 'Pesanan Mata',
+        coupons: 'Kupon',
+        logistics: 'Logistik',
+        articles: 'Artikel',
+        yuyue: 'Perkhidmatan Tempahan',
+        kefu: 'Perkhidmatan Pelanggan',
   },
   logs: {
     // Work Logs

@@ -5,3 +5,14 @@ dist/
 
 # Test/diagnostic outputs
 dist-*/
+
+# Trae IDE knowledge base (含敏感凭证，不进 Git)
+.trae/
+AGENTS.md
+
+# Backup files
+*.bak
+*.bak.*
+main.js.bak.*
+Sidebar.vue.bak.*
+

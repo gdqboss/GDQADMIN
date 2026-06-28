@@ -86,7 +86,12 @@
               </p>
             </div>
             <div class="flex gap-2 items-center">
-              <el-tag v-if="canInitDrf" type="info" size="small">从已审批订单初始化</el-tag>
+              <el-button v-if="canInitDrf" type="primary" size="small" @click="openAsnDialog" :disabled="!pendingDrfs.length">
+                📋 创建 ASN（{{ pendingDrfs.length }}）
+              </el-button>
+              <el-button v-if="canConfirmWarehouse" type="success" size="small" @click="goScanPage">
+                📷 扫码收货
+              </el-button>
               <el-tag>待仓管：{{ drfStats.warehouse_visible }}</el-tag>
               <el-tag type="warning">待店长：{{ drfStats.pending_shopkeeper }}</el-tag>
               <el-tag type="success">已完成：{{ drfStats.done }}</el-tag>
@@ -184,36 +189,112 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="140" align="center" fixed="right">
+            <el-table-column label="操作" width="280" align="center" fixed="right">
               <template #default="{ row }">
-                <el-button v-if="canWarehouseEdit(row)" size="small" type="primary"
-                           @click="warehouseConfirm(row)">
-                  仓管确认
-                </el-button>
-                <el-button v-else-if="canShopkeeperEdit(row)" size="small" type="success"
-                           @click="shopkeeperConfirm(row)">
-                  店长终审
-                </el-button>
-                <span v-else class="text-xs text-gray-400">
-                  {{ row.warehouse_confirmer || '' }}
-                  <span v-if="row.shopkeeper_confirmer">→ {{ row.shopkeeper_confirmer }}</span>
-                </span>
+                <div class="flex gap-1 flex-wrap justify-center">
+                  <el-button v-if="canWarehouseEdit(row)" size="small" type="primary"
+                             @click="warehouseConfirm(row)">
+                    仓管确认
+                  </el-button>
+                  <el-button v-else-if="canShopkeeperEdit(row)" size="small" type="success"
+                             @click="shopkeeperConfirm(row)">
+                    店长终审
+                  </el-button>
+                  <span v-else class="text-xs text-gray-400">
+                    {{ row.warehouse_confirmer || '' }}
+                    <span v-if="row.shopkeeper_confirmer">→ {{ row.shopkeeper_confirmer }}</span>
+                  </span>
+                  <el-button v-if="canWarehouseEdit(row) && !row.has_cartons" size="small" type="warning"
+                             @click="openGenerateCarton(row)">
+                    生成箱唛
+                  </el-button>
+                  <el-button v-if="row.has_cartons" size="small" type="info"
+                             @click="goPrint(row)">
+                    打印箱唛
+                  </el-button>
+                </div>
               </template>
             </el-table-column>
           </el-table>
         </el-card>
       </el-tab-pane>
     </el-tabs>
+
+    <!-- 创建 ASN 弹窗 -->
+    <el-dialog v-model="asnDialogVisible" title="📋 创建 ASN 送货单" width="640px">
+      <el-form :model="asnForm" label-width="120px">
+        <el-form-item label="选择 DRF">
+          <el-table :data="pendingDrfs" border max-height="220" @selection-change="rows => asnForm.drf_ids = rows.map(r => r.id)">
+            <el-table-column type="selection" width="48" />
+            <el-table-column prop="order_no" label="订单" min-width="160" />
+            <el-table-column prop="store_name" label="门店" min-width="120" />
+            <el-table-column prop="expected_qty" label="件数" width="70" align="center" />
+          </el-table>
+          <div class="text-xs text-gray-500 mt-1">已选 {{ asnForm.drf_ids.length }} 个 DRF</div>
+        </el-form-item>
+        <el-form-item label="仓库">
+          <el-input v-model="asnForm.warehouse_name" placeholder="例 DC1" />
+        </el-form-item>
+        <el-form-item label="月台">
+          <el-input v-model="asnForm.docking_bay" placeholder="例 Bay 4" />
+        </el-form-item>
+        <el-form-item label="到货时间">
+          <el-date-picker v-model="asnForm.delivery_time" type="datetime" placeholder="选择日期时间" value-format="YYYY-MM-DD HH:mm:ss" />
+        </el-form-item>
+        <el-form-item label="司机">
+          <el-input v-model="asnForm.driver_name" />
+        </el-form-item>
+        <el-form-item label="帮手数">
+          <el-input-number v-model="asnForm.helper_count" :min="0" />
+        </el-form-item>
+        <el-form-item label="车型">
+          <el-input v-model="asnForm.vehicle_type" placeholder="例 6-WHEELER FWD VAN" />
+        </el-form-item>
+        <el-form-item label="车牌号">
+          <el-input v-model="asnForm.plate_no" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="asnForm.remark" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="asnDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitAsn" :disabled="!asnForm.drf_ids.length">创建</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 生成箱唛弹窗 -->
+    <el-dialog v-model="cartonDialogVisible" title="📦 生成箱唛" width="480px">
+      <p class="mb-2 text-sm">DRF #{{ cartonForm.drf_id }} · {{ cartonForm.product_name }}</p>
+      <p class="mb-4 text-xs text-gray-500">件数：{{ cartonForm.expected_qty }}（系统自动均分到每箱）</p>
+      <el-form :model="cartonForm" label-width="100px">
+        <el-form-item label="总箱数">
+          <el-input-number v-model="cartonForm.total_boxes" :min="1" :max="100" />
+        </el-form-item>
+        <el-form-item label="重量 (kg)">
+          <el-input-number v-model="cartonForm.weight_kg" :min="0" :precision="2" />
+        </el-form-item>
+        <el-form-item label="尺寸 (cm)">
+          <el-input v-model="cartonForm.dimensions" placeholder="60x40x30" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="cartonDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitGenerateCarton">生成</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRouter } from 'vue-router'
 import * as XLSX from 'xlsx'
 import api from '../../services/api.js'
 import { useUserStore } from '../../stores/user.js'
 
+const router = useRouter()
 const userStore = useUserStore()
 const activeTab = ref('summary')
 
@@ -241,7 +322,7 @@ const batchNo = computed(() => {
 async function loadProducts() {
   try {
     const r = await api.get('/preorder/products')
-    products.value = r.data?.data || []
+    products.value = r.data || []
   } catch (e) { ElMessage.error('产品加载失败: ' + e.message) }
 }
 
@@ -322,6 +403,81 @@ const drfList = ref([])
 const sourceOrders = ref([])
 const selectedOrderIds = ref([])
 
+// 可创建 ASN 的 DRF（pending 状态）
+const pendingDrfs = computed(() => drfList.value.filter(r => r.status === 'pending'))
+
+// ASN 弹窗
+const asnDialogVisible = ref(false)
+const asnForm = ref({
+  drf_ids: [],
+  warehouse_name: 'DC1',
+  docking_bay: '',
+  delivery_time: null,
+  driver_name: '',
+  helper_count: 0,
+  vehicle_type: '',
+  plate_no: '',
+  remark: ''
+})
+
+// 箱唛生成弹窗
+const cartonDialogVisible = ref(false)
+const cartonForm = ref({
+  drf_id: null,
+  product_name: '',
+  expected_qty: 0,
+  total_boxes: 2,
+  weight_kg: null,
+  dimensions: ''
+})
+
+function openAsnDialog() {
+  asnForm.value.drf_ids = []
+  asnDialogVisible.value = true
+}
+
+function openGenerateCarton(row) {
+  cartonForm.value = {
+    drf_id: row.id,
+    product_name: row.product_name,
+    expected_qty: row.expected_qty,
+    total_boxes: Math.max(1, Math.ceil(row.expected_qty / 3)),  // 默认 3 件/箱
+    weight_kg: null,
+    dimensions: ''
+  }
+  cartonDialogVisible.value = true
+}
+
+async function submitAsn() {
+  try {
+    const r = await api.post('/preorder/asn/create', asnForm.value)
+    ElMessage.success(`ASN 已创建：${r.data.asn_no}（${r.data.total_vdrs} 个 DRF）`)
+    asnDialogVisible.value = false
+    await loadDrfList()
+  } catch (e) {
+    ElMessage.error('创建失败: ' + (e.response?.data?.message || e.message))
+  }
+}
+
+async function submitGenerateCarton() {
+  try {
+    const r = await api.post('/preorder/cartons/generate', cartonForm.value)
+    ElMessage.success(`已生成 ${r.data.created} 个箱唛，BDSP 格式：${cartonForm.value.drf_id.toString().padStart(10,'0')}`)
+    cartonDialogVisible.value = false
+    await loadDrfList()
+  } catch (e) {
+    ElMessage.error('生成失败: ' + (e.response?.data?.message || e.message))
+  }
+}
+
+function goPrint(row) {
+  router.push(`/preorder/carton-print/${row.id}`)
+}
+
+function goScanPage() {
+  router.push('/preorder/scan')
+}
+
 const drfStats = computed(() => {
   const stats = { warehouse_visible: 0, pending_shopkeeper: 0, done: 0 }
   for (const r of drfList.value) {
@@ -365,14 +521,26 @@ function canShopkeeperEdit(row) {
 async function loadDrfList() {
   try {
     const r = await api.get('/preorder/drf/list')
-    drfList.value = r.data?.data || []
+    console.log('[DRF_DEBUG] r=', JSON.stringify(r).slice(0,500), 'r.data=', JSON.stringify(r.data).slice(0,300))
+    const rows = r.data || []
+    console.log('[DRF_DEBUG] rows.length=', rows.length)
+    // 并发查每个 DRF 的 carton 状态（只查有 carton's）
+    await Promise.all(rows.map(async drf => {
+      try {
+        const cr = await api.get(`/preorder/cartons/list?drf_id=${drf.id}`)
+        drf.has_cartons = (cr.data || []).length > 0
+      } catch {
+        drf.has_cartons = false
+      }
+    }))
+    drfList.value = rows
   } catch (e) { ElMessage.error('DRF 加载失败: ' + e.message) }
 }
 async function loadSourceOrders() {
   if (!canInitDrf.value) { sourceOrders.value = []; return }
   try {
     const r = await api.get('/preorder/drf/source-orders')
-    sourceOrders.value = (r.data?.data || []).filter(o => !o.drf_id)
+    sourceOrders.value = (r.data || []).filter(o => !o.drf_id)
   } catch (e) { ElMessage.error('源订单加载失败: ' + e.message) }
 }
 
@@ -380,7 +548,7 @@ async function initDrf() {
   if (!selectedOrderIds.value.length) return
   try {
     const r = await api.post('/preorder/drf/init', { order_item_ids: selectedOrderIds.value })
-    const { created, skipped } = r.data?.data || {}
+    const { created, skipped } = r.data || {}
     ElMessage.success(`DRF 行已初始化：新建 ${created} 条，跳过 ${skipped} 条`)
     selectedOrderIds.value = []
     await loadSourceOrders()
