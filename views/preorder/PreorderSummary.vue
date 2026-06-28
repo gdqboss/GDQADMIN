@@ -106,6 +106,12 @@
               <el-table-column type="selection" width="48" />
               <el-table-column prop="order_no" label="订单号" min-width="180" />
               <el-table-column prop="store_name" label="门店" min-width="140" />
+              <el-table-column prop="supplier_name" label="供应商" min-width="160">
+                <template #default="{ row }">
+                  <span v-if="row.supplier_name">{{ row.supplier_name }}</span>
+                  <span v-else class="text-orange-500 text-xs">⚠ 未关联</span>
+                </template>
+              </el-table-column>
               <el-table-column prop="product_name" label="产品" min-width="160" />
               <el-table-column prop="quantity" label="预订数" width="80" align="center" />
               <el-table-column label="DRF 状态" width="100" align="center">
@@ -121,36 +127,45 @@
 
           <!-- 主 DRF 列表（仓管 + 店长看到的内容不同） -->
           <el-table :data="drfList" border stripe>
-            <el-table-column prop="order_no" label="订单号" min-width="180" />
-            <el-table-column prop="store_name" label="门店" min-width="140" />
-            <el-table-column label="产品 / SKU" min-width="200">
+            <el-table-column prop="order_no" label="订单号" min-width="160" />
+            <el-table-column label="供应商 (VENDOR)" min-width="180">
+              <template #default="{ row }">
+                <div>{{ row.supplier_name || '—' }}</div>
+                <div v-if="row.vendor_code" class="text-xs text-gray-500">CODE: {{ row.vendor_code }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="store_name" label="门店" min-width="120" />
+            <el-table-column label="产品 / SKU" min-width="180">
               <template #default="{ row }">
                 <div>{{ row.product_name }}</div>
                 <div class="text-xs text-gray-500">{{ formatSkuLabel(row) }}</div>
               </template>
             </el-table-column>
-            <el-table-column prop="expected_qty" label="预订数" width="80" align="center" />
-            <el-table-column label="期望到货" width="120" align="center">
+            <el-table-column prop="expected_qty" label="预订" width="70" align="center" />
+            <el-table-column label="DRF 申请" width="80" align="center">
+              <template #default="{ row }">{{ row.applied_qty ?? '—' }}</template>
+            </el-table-column>
+            <el-table-column label="期望到货" width="110" align="center">
               <template #default="{ row }">{{ row.expected_date || '—' }}</template>
             </el-table-column>
-            <el-table-column label="实收数 (PCS)" width="120" align="center">
+            <el-table-column label="实收 (PCS)" width="110" align="center">
               <template #default="{ row }">
                 <el-input-number v-if="canWarehouseEdit(row)"
                                  v-model="row.actual_qty" :min="0" size="small"
-                                 style="width: 100px"
+                                 style="width: 90px"
                                  @change="v => row.discrepancy_rate = calcDiscrepancy(row)" />
                 <span v-else>{{ row.actual_qty }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="实收箱数" width="100" align="center">
+            <el-table-column label="箱数" width="90" align="center">
               <template #default="{ row }">
                 <el-input-number v-if="canWarehouseEdit(row)"
                                  v-model="row.actual_boxes" :min="0" size="small"
-                                 style="width: 80px" />
+                                 style="width: 70px" />
                 <span v-else>{{ row.actual_boxes }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="差异率" width="90" align="center">
+            <el-table-column label="差异" width="80" align="center">
               <template #default="{ row }">
                 <el-tag v-if="row.discrepancy_rate > 5" type="danger" size="small">
                   {{ row.discrepancy_rate }}%
@@ -162,7 +177,7 @@
                 <span v-else class="text-gray-400">—</span>
               </template>
             </el-table-column>
-            <el-table-column label="状态" width="120" align="center">
+            <el-table-column label="状态" width="110" align="center">
               <template #default="{ row }">
                 <el-tag :type="statusTagType(row.status)" size="small">
                   {{ statusLabel(row.status) }}
