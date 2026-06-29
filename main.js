@@ -152,9 +152,17 @@ const _style = document.createElement('style')
 _style.textContent = '.el-select-dropdown,.el-popper,.el-dropdown-menu,.el-cascader__dropdown,.el-autocomplete__popper,.el-tooltip__popper,.el-popover{background-color:#fff!important}'
 document.head.appendChild(_style)
 
-// 加载系统设置（站点名称等全局配置）
+// 加载系统设置（站点名称等全局配置）——必须在 app.mount 前完成，否则 sidebar 等组件首次渲染时 modules 还是 []，会"全菜单显示"
 const savedLocale = localStorage.getItem('caimeite_locale') || 'zh'
-loadSystemSettings(savedLocale)
+
+// 包装成 Promise：loadSystemSettings 内部已 try/catch 不抛错，这里捕获任意异常兜底
+function ensureSystemSettings() {
+  return loadSystemSettings(savedLocale).catch((e) => {
+    console.warn('[main] loadSystemSettings failed:', e)
+    // 5 秒后重试一次
+    setTimeout(() => loadSystemSettings(savedLocale).catch(() => {}), 5000)
+  })
+}
 
 // 全局 Vue 错误处理：静默处理，不弹 alert
 app.config.errorHandler = (err, instance, info) => {
@@ -204,22 +212,26 @@ function showApp() {
 }
 
 // 等路由准备好（所有异步组件加载完成）再挂载，防止 i18n key 暴露
-router.isReady().then(() => {
-  app.mount('#app')
+// 关键：系统设置（modules）必须在 app.mount 前加载好，否则 sidebar 第一次渲染时 modules=[] 会"全菜单显示"
+router.isReady()
+  .then(() => ensureSystemSettings())
+  .then(() => {
+    app.mount('#app')
 
-  // 等待 Vue 完成首次渲染 + i18n 翻译 + CSS 应用
-  nextTick(() => {
-    // 等待 2 帧确保浏览器完成绘制和 i18n 翻译
-    requestAnimationFrame(() => {
+    // 等待 Vue 完成首次渲染 + i18n 翻译 + CSS 应用
+    nextTick(() => {
+      // 等待 2 帧确保浏览器完成绘制和 i18n 翻译
       requestAnimationFrame(() => {
-        showApp()
+        requestAnimationFrame(() => {
+          showApp()
+        })
       })
     })
   })
-}).catch(() => {
-  app.mount('#app')
-  showApp()
-})
+  .catch(() => {
+    app.mount('#app')
+    showApp()
+  })
 
 // 兜底：最多 5 秒后强制移除 loading overlay
 setTimeout(() => {

@@ -38,7 +38,8 @@ async function loadMenuConfig() {
       dbMenuConfig.value = res.data
       menuVisibility.value = {}
       res.data.forEach(item => {
-        menuVisibility.value[item.menu_key] = item.visible === 1
+        // 兼容后端两种格式：true/false（布尔）或 1/0（数字）→ 都归一为布尔
+        menuVisibility.value[item.menu_key] = Boolean(item.visible)
       })
     }
   } catch {
@@ -139,12 +140,15 @@ const navOrder = computed(() => {
 })
 
 // 二级菜单分组定义（key = 权限 key，与 rbac_permissions.name 一一对应）
+// 用模块原则：每个 group 必须显式声明 moduleKeys（绑定到 server_modules 里的 module_key）
+// 过滤逻辑：group.moduleKeys 至少一个在 enabledModules → 显示；否则隐藏
 const menuGroups = computed(() => [
   {
     key: 'dashboard:view',
     icon: 'dashboard',
     label: t('nav.dashboard'),
     to: '/',
+    moduleKeys: ['dashboard'],
     children: []
   },
   {
@@ -152,6 +156,7 @@ const menuGroups = computed(() => [
     icon: 'school',
     label: t('nav.aiClassroom'),
     to: '/ai-classroom',
+    moduleKeys: ['ai-classroom'],
     children: []
   },
   {
@@ -159,6 +164,7 @@ const menuGroups = computed(() => [
     icon: 'business',
     label: t('nav.operations'),
     to: null,
+    moduleKeys: ['oa', 'tasks'],
     children: [
       { key: 'task:read', label: t('tasks.title'), to: '/tasks' },
       { key: 'work_log:read', label: t('logs.workLog'), to: '/logs/work-logs' },
@@ -171,6 +177,7 @@ const menuGroups = computed(() => [
     icon: 'inventory_2',
     label: t('nav.inventory'),
     to: null,
+    moduleKeys: ['products', 'in-out', 'warehouses', 'qrcode', 'alerts', 'transfer', 'returns'],
     children: [
       { key: 'product:write', label: t('nav.products'), to: '/products' },
       { key: 'inventory:inout', label: t('nav.inout'), to: '/in-out' },
@@ -186,6 +193,7 @@ const menuGroups = computed(() => [
     icon: 'payments',
     label: t('nav.financeCenter'),
     to: null,
+    moduleKeys: ['finance', 'retail'],
     children: [
       { key: 'finance:read', label: t('nav.financeOverview'), to: '/finance' },
       { key: 'retail:write', label: t('nav.retail'), to: '/retail' },
@@ -197,6 +205,7 @@ const menuGroups = computed(() => [
     icon: 'shopping_cart',
     label: t('nav.sales'),
     to: null,
+    moduleKeys: ['orders', 'aftersale'],
     children: [
       { key: 'order:read', label: t('nav.orders'), to: '/orders' },
       { key: 'qrcode:write', label: t('nav.scanSale'), to: '/qrcode' },
@@ -208,6 +217,7 @@ const menuGroups = computed(() => [
     icon: 'handshake',
     label: t('nav.partners'),
     to: null,
+    moduleKeys: ['suppliers', 'dealers', 'stores'],
     children: [
       { key: 'supplier:write', label: t('nav.suppliers'), to: '/suppliers' },
       { key: 'dealer:write', label: t('nav.dealers'), to: '/dealers' },
@@ -219,9 +229,12 @@ const menuGroups = computed(() => [
     icon: 'inventory_2',
     label: t('nav.preorder'),
     to: null,
+    moduleKeys: ['preorder'],
     children: [
       { key: 'preorder:create', label: t('nav.preorderCreate'), to: '/orders/create' },
       { key: 'preorder:aggregate', label: t('nav.preorderSummary'), to: '/preorder/summary' },
+      { key: 'preorder:demo', label: '可售库存清单', to: '/preorder/stock-demo' },
+      { key: 'preorder:read', label: '即将到货清单', to: '/preorder/upcoming' },
     ]
   },
   {
@@ -229,6 +242,7 @@ const menuGroups = computed(() => [
     icon: 'trending_up',
     label: t('nav.growth'),
     to: null,
+    moduleKeys: ['excel-analyzer', 'reports', 'referral'],
     children: [
       { key: 'bi:excel', label: t('nav.excelAnalyzer'), to: '/excel-analyzer' },
       { key: 'bi:report', label: t('nav.reportManage'), to: '/excel-report-manage' },
@@ -243,6 +257,7 @@ const menuGroups = computed(() => [
     icon: 'restaurant',
     label: t('nav.restaurant'),
     to: null,
+    moduleKeys: ['restaurant'],
     children: [
       { key: 'restaurant:read', label: t('nav.restaurantDashboard'), to: '/restaurant' },
       { key: 'restaurant:write', label: t('nav.restaurantTables'), to: '/restaurant/tables' },
@@ -259,6 +274,7 @@ const menuGroups = computed(() => [
     icon: 'hotel',
     label: t('nav.hotel'),
     to: null,
+    moduleKeys: ['hotel'],
     children: [
       { key: 'hotel:read', label: t('nav.hotelDashboard'), to: '/hotel' },
       { key: 'hotel:write', label: t('nav.roomTypes'), to: '/hotel/room-types' },
@@ -272,6 +288,7 @@ const menuGroups = computed(() => [
     icon: 'shopping_bag',
     label: t('nav.mall'),
     to: null,
+    moduleKeys: ['mall'],
     children: [
       { key: 'mall:score', label: t('nav.scoreProducts'), to: '/score-products' },
       { key: 'order:read', label: t('nav.scoreOrders'), to: '/score-orders' },
@@ -287,7 +304,7 @@ const menuGroups = computed(() => [
     icon: 'settings',
     label: t('nav.systemManagement'),
     to: null,
-    moduleKeys: ['settings', 'server_profiles'],
+    moduleKeys: ['settings', 'server_profiles', 'users', 'roles'],
     children: [
       { key: 'system:config', label: t('nav.settingsIndex'), to: '/settings' },
       { key: 'user:write', label: t('nav.userManagement'), to: '/settings/users' },
@@ -298,34 +315,37 @@ const menuGroups = computed(() => [
   },
 ])
 
-// 过滤后的菜单分组（过滤源：canAccess + 当前服务器启用的模块）
+// 过滤后的菜单分组（用模块原则：模块驱动 + 权限补充）
+// 原则：
+// 1. 一级菜单强制走 moduleKeys ∩ enabledModules（必须命中至少一个才显示）
+// 2. enabledModules 为空（loadSystemSettings 失败/未完成）= 默认全部隐藏，**避免出现"全显示"bug**
+// 3. 二级菜单的 canAccess 只用于权限细化（管理员/仓管/店长差异），不再作 menu_key fallback
 const filteredGroups = computed(() => {
-  // 当前服务器启用的模块列表（来自 public-settings.modules）
-  // 空数组表示后端没返回（向后兼容），不过滤
   const enabledModules = systemSettings.modules || []
   const enabledSet = new Set(enabledModules)
+  const modulesLoaded = enabledModules.length > 0
 
   return menuGroups.value
     .map(group => {
-      // 一级菜单按 moduleKeys 过滤：group.moduleKeys 与 enabledModules 至少一个交集才显示
-      // 向后兼容：如果 group 没 moduleKeys（旧菜单），不按模块过滤
-      if (enabledModules.length > 0 && Array.isArray(group.moduleKeys) && group.moduleKeys.length > 0) {
-        const hasEnabled = group.moduleKeys.some(k => enabledSet.has(k))
-        if (!hasEnabled) return null
+      // 一级菜单模块过滤（强制）：未加载到 enabledModules → 不显示（避免乱显示）
+      if (!Array.isArray(group.moduleKeys) || group.moduleKeys.length === 0) {
+        return null
       }
+      if (!modulesLoaded) return null
+      const hasEnabled = group.moduleKeys.some(k => enabledSet.has(k))
+      if (!hasEnabled) return null
 
-      // 独立一级菜单（无 children）— 全部按 group.key 权限过滤
+      // 独立一级菜单（无 children）— 模块通过即显示
       if (!group.children || group.children.length === 0) {
-        if (!canAccess(group.key)) return null
         return { ...group, label: group.label }
       }
-      // 有 children 的分组：按子菜单权限 + 模块双重过滤
+      // 有 children 的分组：按子菜单权限 + 子菜单 moduleKey 双重过滤
       const filteredChildren = group.children
         .filter(child => {
-          // 权限过滤
+          // 权限过滤：admin 永远过；非 admin 走 userStore.canAccess
           if (!canAccess(child.key)) return false
-          // 模块过滤：child.moduleKey 设了但当前服务器没启用 → 隐藏
-          if (enabledModules.length > 0 && child.moduleKey && !enabledSet.has(child.moduleKey)) return false
+          // 子菜单 moduleKey 过滤：设了但当前服务器没启用 → 隐藏
+          if (child.moduleKey && !enabledSet.has(child.moduleKey)) return false
           return true
         })
         .map(child => ({ ...child }))
