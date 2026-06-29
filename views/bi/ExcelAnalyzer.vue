@@ -179,6 +179,8 @@
           <button class="filter-btn primary" @click="applyStoreFilter">{{ $t('excelAnalyzer.apply') }}</button>
           <button class="filter-btn" @click="clearStoreFilter">{{ $t('excelAnalyzer.clear') }}</button>
           <button class="filter-btn export" @click="exportStoreCsv">📥 {{ $t('excelAnalyzer.exportCsv') }}</button>
+          <button class="filter-btn print" @click="printCurrentStores">🖨️ {{ $t('excelAnalyzer.printCurrentBranch') }}</button>
+          <button class="filter-btn print" @click="printWholeMonthReport">🖨️ {{ $t('excelAnalyzer.printWholeMonth') }}</button>
           <button class="filter-btn" @click="hideStoreChart = !hideStoreChart">📊 {{ hideStoreChart ? $t('excelAnalyzer.showChart') : $t('excelAnalyzer.hideChart') }}</button>
         </div>
 
@@ -438,6 +440,132 @@ function exportStoreCsv() {
   a.download = `store_sales_${new Date().toISOString().slice(0, 10)}.csv`
   a.click()
   URL.revokeObjectURL(url)
+}
+
+// 打印当前筛选的门店报告（按当前 Filter by SKU/Store/Stock # 结果）
+function printCurrentStores() {
+  const totalStores = filteredStores.value.length
+  const totalQty = filteredStores.value.reduce((sum, s) => sum + (s.qty || 0), 0)
+  const totalAmount = filteredStores.value.reduce((sum, s) => sum + (s.amount || 0), 0)
+  const date = new Date().toLocaleString()
+  const filterDesc = [
+    storeFilter.value.sku && `SKU: ${storeFilter.value.sku}`,
+    storeFilter.value.store && `Store: ${storeFilter.value.store}`,
+    storeFilter.value.stockNum && `Stock#: ${storeFilter.value.stockNum}`
+  ].filter(Boolean).join(' | ') || 'No filter'
+
+  const rows = filteredStores.value.map((s, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${s.name}</td>
+      <td style="text-align:right">${s.items}</td>
+      <td style="text-align:right">${s.qty}</td>
+      <td style="text-align:right">¥${(s.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+      <td style="text-align:right">${s.percent}%</td>
+    </tr>`).join('')
+
+  const html = `
+    <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Store Report</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 20px; }
+      h1 { margin: 0 0 8px; font-size: 22px; }
+      .meta { color: #555; font-size: 12px; margin-bottom: 16px; }
+      table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      th, td { border: 1px solid #ccc; padding: 6px 10px; }
+      th { background: #f4f4f4; }
+      .summary { margin-top: 16px; font-size: 13px; color: #333; }
+    </style></head><body>
+    <h1>Store Sales Report (${totalStores} stores)</h1>
+    <div class="meta">
+      File: ${fileName.value || '-'} | Supplier: ${report.value.supplier || '-'} | Brand: ${report.value.brand || '-'} | Date Range: ${report.value.dateRange || '-'} | Filter: ${filterDesc} | Printed: ${date}
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>Store</th><th>Items</th><th>Sales Qty</th><th>Sales Amount</th><th>%</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="summary">
+      <strong>Summary:</strong> ${totalStores} stores, ${totalQty} pcs total, ¥${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} total
+    </div>
+    </body></html>`
+  openPrintWindow(html)
+}
+
+// 打印整月完整报告（全部门店 + 全部 SKU 明细）
+function printWholeMonthReport() {
+  const totalStores = report.value.allStores?.length || 0
+  const totalQty = report.value.allStores?.reduce((sum, s) => sum + (s.qty || 0), 0) || 0
+  const totalAmount = report.value.allStores?.reduce((sum, s) => sum + (s.amount || 0), 0) || 0
+  const date = new Date().toLocaleString()
+
+  // 门店汇总
+  const storeRows = (report.value.allStores || []).map((s, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${s.name}</td>
+      <td style="text-align:right">${s.items}</td>
+      <td style="text-align:right">${s.qty}</td>
+      <td style="text-align:right">¥${(s.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+      <td style="text-align:right">${s.percent}%</td>
+    </tr>`).join('')
+
+  // SKU 明细（前 50，按门店分组）
+  let detailRows = ''
+  const storeSkus = report.value.storeSkus || {}
+  Object.entries(storeSkus).forEach(([store, skus]) => {
+    detailRows += `<tr style="background:#f9f9f9"><td colspan="4" style="font-weight:bold">${store}</td></tr>`
+    Object.entries(skus).slice(0, 50).forEach(([sku, sd]) => {
+      detailRows += `<tr><td>${sku}</td><td>${sd.desc || ''}</td><td style="text-align:right">${sd.qty}</td><td></td></tr>`
+    })
+  })
+
+  const html = `
+    <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Whole Month Report</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 20px; }
+      h1 { margin: 0 0 8px; font-size: 22px; page-break-before: avoid; }
+      h2 { margin: 16px 0 8px; font-size: 16px; page-break-after: avoid; }
+      .meta { color: #555; font-size: 12px; margin-bottom: 16px; }
+      table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 12px; }
+      th, td { border: 1px solid #ccc; padding: 4px 8px; }
+      th { background: #f4f4f4; }
+      .summary { margin-top: 16px; font-size: 13px; color: #333; }
+      @media print { .page-break { page-break-before: always; } }
+    </style></head><body>
+    <h1>Whole Month Sales Report</h1>
+    <div class="meta">
+      File: ${fileName.value || '-'} | Supplier: ${report.value.supplier || '-'} | Brand: ${report.value.brand || '-'} | Date Range: ${report.value.dateRange || '-'} | Printed: ${date}
+    </div>
+
+    <h2>Store Summary (${totalStores} stores)</h2>
+    <table>
+      <thead><tr><th>#</th><th>Store</th><th>Items</th><th>Sales Qty</th><th>Sales Amount</th><th>%</th></tr></thead>
+      <tbody>${storeRows}</tbody>
+    </table>
+    <div class="summary">
+      <strong>Monthly Summary:</strong> ${totalStores} stores, ${totalQty} pcs total, ¥${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} total
+    </div>
+
+    <h2 class="page-break">SKU Detail by Store</h2>
+    <table>
+      <thead><tr><th>SKU #</th><th>Description</th><th>Qty</th><th></th></tr></thead>
+      <tbody>${detailRows || '<tr><td colspan="4" style="text-align:center;color:#999">No detail data</td></tr>'}</tbody>
+    </table>
+    </body></html>`
+  openPrintWindow(html)
+}
+
+// 打开新窗口打印（避免 SPA 路由干扰）
+function openPrintWindow(html) {
+  const win = window.open('', '_blank', 'width=900,height=700')
+  if (!win) {
+    alert(locale.value === 'zh' ? '请允许弹窗以打印' : 'Please allow popups to print')
+    return
+  }
+  win.document.write(html)
+  win.document.close()
+  win.focus()
+  // 等待资源加载后触发打印
+  setTimeout(() => { win.print() }, 300)
 }
 
 // 筛选computed
@@ -1243,6 +1371,8 @@ function goManage() {
 .store-filter-bar .filter-btn.primary:hover { background: #2563eb; }
 .store-filter-bar .filter-btn.export { background: #10b981; color: #fff; border-color: #10b981; }
 .store-filter-bar .filter-btn.export:hover { background: #059669; }
+.store-filter-bar .filter-btn.print { background: #6366f1; color: #fff; border-color: #6366f1; }
+.store-filter-bar .filter-btn.print:hover { background: #4f46e5; }
 .store-filter-bar .filter-btn.small { padding: 4px 10px; font-size: 12px; }
 .store-detail-row { background: #f8fafc; }
 .store-detail-row .nested-table { width: 100%; font-size: 13px; }

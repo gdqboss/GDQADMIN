@@ -64,6 +64,8 @@ export default {
     apply: 'Apply',
     clear: 'Clear',
     exportCsv: 'Export CSV',
+    printCurrentBranch: 'Print Current',
+    printWholeMonth: 'Print Whole Month',
     hideChart: 'Hide Chart',
     showChart: 'Show Chart',
     sizeDistribution: 'Size Distribution',

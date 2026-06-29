@@ -64,6 +64,8 @@ export default {
     apply: '应用',
     clear: '清除',
     exportCsv: '导出 CSV',
+    printCurrentBranch: '打印当前门店',
+    printWholeMonth: '打印整月报告',
     hideChart: '隐藏图表',
     showChart: '显示图表',
     sizeDistribution: '尺寸分布',

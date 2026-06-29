@@ -60,6 +60,8 @@ export default {
         apply: 'Guna',
         clear: 'Kosongkan',
         exportCsv: 'Eksport CSV',
+    printCurrentBranch: 'Cetak Semasa',
+    printWholeMonth: 'Cetak Bulan Penuh',
         hideChart: 'Sembunyi Carta',
         showChart: 'Tunjuk Carta',
         sizeDistribution: 'Size Distribution',
