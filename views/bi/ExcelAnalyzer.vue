@@ -169,14 +169,51 @@
 
       <!-- Store Distribution -->
       <div class="report-section" v-if="report.allStores?.length">
-        <h2>🏪 {{ $t('excelAnalyzer.storeSalesRanking') }}</h2>
+        <h2>🏪 {{ $t('excelAnalyzer.storeAnalysis') }} ({{ report.uniqueStores || 0 }})</h2>
+
+        <!-- 搜索栏：SM 原图 Filter by SKU / Filter by Store / Stock # -->
+        <div class="store-filter-bar">
+          <input v-model="storeFilter.sku" :placeholder="$t('excelAnalyzer.filterBySku')" class="filter-input" @keyup.enter="applyStoreFilter" />
+          <input v-model="storeFilter.store" :placeholder="$t('excelAnalyzer.filterByStore')" class="filter-input" @keyup.enter="applyStoreFilter" />
+          <input v-model="storeFilter.stockNum" :placeholder="$t('excelAnalyzer.filterByStockNum')" class="filter-input" @keyup.enter="applyStoreFilter" />
+          <button class="filter-btn primary" @click="applyStoreFilter">{{ $t('excelAnalyzer.apply') }}</button>
+          <button class="filter-btn" @click="clearStoreFilter">{{ $t('excelAnalyzer.clear') }}</button>
+          <button class="filter-btn export" @click="exportStoreCsv">📥 {{ $t('excelAnalyzer.exportCsv') }}</button>
+          <button class="filter-btn" @click="hideStoreChart = !hideStoreChart">📊 {{ hideStoreChart ? $t('excelAnalyzer.showChart') : $t('excelAnalyzer.hideChart') }}</button>
+        </div>
+
         <table class="data-table">
-          <thead><tr><th>#</th><th>{{ $t('excelAnalyzer.store') }}</th><th>{{ $t('excelAnalyzer.qty') }}</th><th>%</th></tr></thead>
+          <thead><tr><th>#</th><th>{{ $t('excelAnalyzer.store') }}</th><th>{{ $t('excelAnalyzer.items') }}</th><th>{{ $t('excelAnalyzer.salesQty') }}</th><th>{{ $t('excelAnalyzer.salesAmount') }}</th><th>%</th><th>{{ $t('excelAnalyzer.action') }}</th></tr></thead>
           <tbody>
-            <tr v-for="(s, i) in report.allStores" :key="i">
-              <td class="rank">{{ s.rank }}</td>
-              <td>{{ s.name }}</td><td>{{ s.qty?.toLocaleString() }}</td><td>{{ s.percent }}%</td>
-            </tr>
+            <template v-for="(s, i) in filteredStores" :key="s.name">
+              <tr>
+                <td class="rank">{{ i + 1 }}</td>
+                <td>{{ s.name }}</td>
+                <td>{{ s.items?.toLocaleString() }}</td>
+                <td>{{ s.qty?.toLocaleString() }}</td>
+                <td>¥{{ (s.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</td>
+                <td>{{ s.percent }}%</td>
+                <td>
+                  <button class="filter-btn small" @click="toggleStoreExpand(s.name)">
+                    {{ expandedStores.has(s.name) ? $t('excelAnalyzer.collapse') : $t('excelAnalyzer.expand') }}
+                  </button>
+                </td>
+              </tr>
+              <tr v-if="expandedStores.has(s.name)" class="store-detail-row">
+                <td colspan="7">
+                  <table class="nested-table">
+                    <thead><tr><th>SKU #</th><th>{{ $t('excelAnalyzer.description') }}</th><th>{{ $t('excelAnalyzer.qty') }}</th></tr></thead>
+                    <tbody>
+                      <tr v-for="(sd, sku) in getStoreSkuDetail(s.name)" :key="sku">
+                        <td>{{ sku }}</td>
+                        <td>{{ sd.desc }}</td>
+                        <td>{{ sd.qty?.toLocaleString() }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
@@ -354,6 +391,55 @@ const filterKeyword = ref('')
 const filteredItems = ref([])
 const sclassList = ref([])
 
+// SM 原图 1.A/1.B 门店销售排名 筛选（SKU / Store / Stock #）
+const storeFilter = ref({ sku: '', store: '', stockNum: '' })
+const expandedStores = ref(new Set())
+const hideStoreChart = ref(false)
+const filteredStores = computed(() => {
+  const list = report.value.allStores || []
+  const skuKw = storeFilter.value.sku.trim().toLowerCase()
+  const storeKw = storeFilter.value.store.trim().toLowerCase()
+  const stockKw = storeFilter.value.stockNum.trim().toLowerCase()
+  return list.filter(s => {
+    if (storeKw && !s.name.toLowerCase().includes(storeKw)) return false
+    if (skuKw || stockKw) {
+      const detail = report.value.storeSkus?.[s.name] || {}
+      const skus = Object.keys(detail)
+      const skuMatch = skuKw ? skus.some(k => k.toLowerCase().includes(skuKw)) : true
+      const stockMatch = stockKw ? skus.some(k => k.toLowerCase().includes(stockKw)) : true
+      if (!skuMatch || !stockMatch) return false
+    }
+    return true
+  })
+})
+function toggleStoreExpand(name) {
+  if (expandedStores.value.has(name)) expandedStores.value.delete(name)
+  else expandedStores.value.add(name)
+  // 触发响应式
+  expandedStores.value = new Set(expandedStores.value)
+}
+function applyStoreFilter() { /* computed 自动响应，no-op 但保留按钮交互 */ }
+function clearStoreFilter() {
+  storeFilter.value = { sku: '', store: '', stockNum: '' }
+}
+function getStoreSkuDetail(name) {
+  return report.value.storeSkus?.[name] || {}
+}
+function exportStoreCsv() {
+  const rows = [['#', 'Store', 'Items', 'Sales Qty', 'Sales Amount', 'Percent']]
+  filteredStores.value.forEach((s, i) => {
+    rows.push([i + 1, s.name, s.items, s.qty, s.amount || 0, s.percent + '%'])
+  })
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `store_sales_${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 // 筛选computed
 const filteredReport = computed(() => {
   if (!report.value.items || report.value.items.length === 0) return report.value
@@ -478,9 +564,13 @@ function triggerUpload() {
   fileInputRef.value?.click()
 }
 
-function handleFileSelect(e) {
+async function handleFileSelect(e) {
   const files = Array.from(e.target.files)
   if (files.length === 0) return
+  // 确保商品SKU对照表已加载（用于 Sales Amount 计算：productMap[sku].price）
+  if (Object.keys(productMap.value).length === 0) {
+    await loadProductMap()
+  }
   if (files.length === 1) {
     uploadedFile.value = files[0] // 保存原始File对象供saveReport使用
     analyzeFile(files[0])
@@ -891,16 +981,24 @@ function analyzeSMFile(jsonData, headers, fileNameVal) {
   let totalQty = 0
   const storeMap = {}, sizeMap = {}, colorMap = {}, skuMap = {}, skuDescMap = {}, storeSkuMap = {}, comboMap = {}
   let supplier = '', brand = '', dateRange = ''
-  
+
   rows.forEach(row => {
     const qty = parseFloat(idxQty !== -1 ? row[idxQty] : row[12]) || 0
     const store = String(idxBranch !== -1 ? row[idxBranch] : row[6] || '').trim()
     const desc = String(idxDesc !== -1 ? row[idxDesc] : row[9] || '').trim()
     const sku = String(idxSKU !== -1 ? row[idxSKU] : row[8] || '').trim()
-    
+
     totalQty += qty
-    if (store) storeMap[store] = (storeMap[store] || 0) + qty
-    
+    if (store) {
+      if (!storeMap[store]) storeMap[store] = { qty: 0, items: new Set(), amount: 0 }
+      // 优先用 Excel 自身金额列（若有），否则从商品库 productMap 查 SKU 单价 × 数量
+      const unitPrice = productMap.value[sku]?.price || 0
+      const rowAmount = unitPrice * qty
+      storeMap[store].qty += qty
+      storeMap[store].amount += rowAmount
+      if (sku) storeMap[store].items.add(sku)
+    }
+
     if (store && sku && qty > 0) {
       if (!storeSkuMap[store]) storeSkuMap[store] = {}
       if (!storeSkuMap[store][sku]) storeSkuMap[store][sku] = { qty: 0, desc }
@@ -936,7 +1034,13 @@ function analyzeSMFile(jsonData, headers, fileNameVal) {
   })
   
   const allStores = Object.entries(storeMap)
-    .map(([name, qty]) => ({ name, qty, percent: ((qty / totalQty) * 100).toFixed(1) }))
+    .map(([name, v]) => ({
+      name,
+      qty: v.qty,
+      items: v.items.size,
+      amount: v.amount,
+      percent: totalQty ? ((v.qty / totalQty) * 100).toFixed(1) : '0.0'
+    }))
     .sort((a, b) => b.qty - a.qty)
   
   const topSKU = Object.entries(skuMap)
@@ -1108,4 +1212,40 @@ function goManage() {
   .info-table { display: block; overflow-x: auto; }
   .save-success button { display: block; width: 100%; margin: 10px 0 0 0; }
 }
+
+/* SM 原图 门店销售排名 搜索栏 + 折叠样式 */
+.store-filter-bar {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  margin: 12px 0 16px 0;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  align-items: center;
+}
+.store-filter-bar .filter-input {
+  flex: 1; min-width: 180px;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fff;
+}
+.store-filter-bar .filter-input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+.store-filter-bar .filter-btn {
+  padding: 8px 16px; border-radius: 6px;
+  border: 1px solid #cbd5e1; background: #fff;
+  color: #334155; cursor: pointer; font-size: 14px;
+  transition: all 0.15s;
+}
+.store-filter-bar .filter-btn:hover { background: #f1f5f9; }
+.store-filter-bar .filter-btn.primary { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+.store-filter-bar .filter-btn.primary:hover { background: #2563eb; }
+.store-filter-bar .filter-btn.export { background: #10b981; color: #fff; border-color: #10b981; }
+.store-filter-bar .filter-btn.export:hover { background: #059669; }
+.store-filter-bar .filter-btn.small { padding: 4px 10px; font-size: 12px; }
+.store-detail-row { background: #f8fafc; }
+.store-detail-row .nested-table { width: 100%; font-size: 13px; }
+.store-detail-row .nested-table th { background: #e2e8f0; color: #475569; }
+.store-detail-row .nested-table td { padding: 6px 10px; }
 </style>
