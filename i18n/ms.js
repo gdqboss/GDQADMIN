@@ -3676,6 +3676,7 @@ export default {
         collapseDetail: 'Collapse Detail',
         storeDetail: 'Store Detail',
         sku: 'SKU',
+        printStores: '🖨️ Print Store List',
   },
   importMulti: {
     pageTitle: 'Analisis Multi-Stor',

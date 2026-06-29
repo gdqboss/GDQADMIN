@@ -1228,5 +1228,6 @@ export default {
     collapseDetail: 'Tutup Butiran',
     storeDetail: 'Butiran Stor',
     sku: 'SKU',
+    printStores: '🖨️ Cetak Senarai Stor',
   },
 }

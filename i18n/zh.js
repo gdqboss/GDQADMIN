@@ -3890,6 +3890,7 @@ export default {
     collapseDetail: '收起明细',
     storeDetail: '门店明细',
     sku: 'SKU',
+    printStores: '🖨️ 打印门店清单',
   },
   storeSales: {
     title: '门店销售报表',

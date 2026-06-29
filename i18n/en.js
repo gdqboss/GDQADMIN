@@ -3779,6 +3779,7 @@ export default {
     collapseDetail: 'Collapse Detail',
     storeDetail: 'Store Detail',
     sku: 'SKU',
+    printStores: '🖨️ Print Store List',
   },
   storeSales: {
     title: 'Store Sales Report',

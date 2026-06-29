@@ -63,6 +63,7 @@
           <div class="store-section-header">
             <h3>🏪 {{ $t('importDetail.storeAnalysis') }}<span class="text-gray">({{ allStores.length }})</span></h3>
             <div class="store-section-actions">
+              <button class="btn-xs btn-print" @click="printStores">🖨️ {{ $t('importDetail.printStores') }}</button>
               <button class="btn-xs btn-toggle-all" @click="toggleAllRecords">
                 {{ expandedAllRecords ? $t('importDetail.collapse') : $t('importDetail.expandAllRecords') }}
               </button>
@@ -476,6 +477,84 @@ function toggleAllRecords() {
   if (expandedAllRecords.value && items.value.length === 0) loadItems(1)
 }
 
+// 🖨 打印整张门店分析表 — 把 allStores 一页打出来
+async function printStores() {
+  if (!allStores.value.length) return
+  // 进浏览器打印前给个标题（让打印页眉更友好）
+  const title = `门店销售分析 · ${record.value?.file_name || recordId} · ${new Date().toLocaleString()}`
+  const rows = allStores.value.map((s, i) => `
+    <tr>
+      <td style="text-align:center">${i + 1}</td>
+      <td>${(s.store_name || s.store_code || '-').replace(/[<>&]/g, c => ({ '<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</td>
+      <td style="text-align:center">${s.item_count ?? '-'}</td>
+      <td style="text-align:right">${Number(s.qty || 0).toLocaleString()}</td>
+      <td style="text-align:right">${s.amount ? '¥' + Number(s.amount).toLocaleString() : '-'}</td>
+    </tr>`).join('')
+  const totalQty = allStores.value.reduce((sum, s) => sum + Number(s.qty || 0), 0)
+  const totalAmt = allStores.value.reduce((sum, s) => sum + Number(s.amount || 0), 0)
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
+    <style>
+      body { font-family: 'Microsoft YaHei','Helvetica',Arial,sans-serif; padding: 16px; color:#222; }
+      h1 { font-size: 16px; margin: 0 0 4px; }
+      .meta { font-size: 12px; color:#666; margin-bottom: 12px; }
+      table { border-collapse: collapse; width: 100%; font-size: 12px; }
+      th, td { border: 1px solid #999; padding: 4px 8px; }
+      th { background: #f0f2f5; }
+      tfoot td { font-weight: bold; background: #fafbfc; }
+    </style>
+1.html>
+  <body>
+    <h1>🏪 门店销售分析</h1>
+    <div class="meta">${title} · 门店数: <strong>${allStores.value.length}</strong> · 总销量: <strong>${totalQty.toLocaleString()}</strong> PCS · 总销售额: <strong>¥${totalAmt.toLocaleString()}</strong></div>
+    <table>
+      <thead>
+        <tr><th>#</th><th>门店</th><th>明细数</th><th style="text-align:right">销量(PCS)</th><th style="text-align:right">销售额</th></tr>
+      </thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        <tr><td colspan="2" style="text-align:center">合计 ${allStores.value.length} 店</td>
+            <td style="text-align:center">${allStores.value.reduce((a, s) => a + Number(s.item_count || 0), 0).toLocaleString()}</td>
+            <td style="text-align:right">${totalQty.toLocaleString()}</td>
+            <td style="text-align:right">¥${totalAmt.toLocaleString()}</td></tr>
+      </tfoot>
+    </table>
+  </body>
+  </html>`.replace('1.html>', '</head>')
+
+  const w = window.open('', '_blank')
+  if (!w) { alert('弹窗被浏览器拦截，请允许本站弹出窗口后再点打印'); return }
+
+  // 分段拼装避免模板字符串里套标签出错
+  const docStart = '<!doctype html><html><head><meta charset="utf-8"><title>' + title + '</title>'
+  const styleBlock = '<style>' +
+    "body{font-family:'Microsoft YaHei','Helvetica',Arial,sans-serif;padding:16px;color:#222}" +
+    'h1{font-size:16px;margin:0 0 4px}' +
+    '.meta{font-size:12px;color:#666;margin-bottom:12px}' +
+    'table{border-collapse:collapse;width:100%;font-size:12px}' +
+    'th,td{border:1px solid #999;padding:4px 8px}' +
+    'th{background:#f0f2f5}' +
+    'tfoot td{font-weight:bold;background:#fafbfc}' +
+    '</style></head><body>'
+  const bodyEnd = '</body></html>'
+
+  w.document.open()
+  w.document.write(docStart + styleBlock
+    + '<h1>🏪 门店销售分析</h1>'
+    + '<div class="meta">' + title + ' · 门店数: <strong>' + allStores.value.length
+    + '</strong> · 总销量: <strong>' + totalQty.toLocaleString()
+    + '</strong> PCS · 总销售额: <strong>¥' + totalAmt.toLocaleString() + '</strong></div>'
+    + '<table><thead><tr><th>#</th><th>门店</th><th>明细数</th>'
+    + '<th style="text-align:right">销量(PCS)</th><th style="text-align:right">销售额</th></tr></thead>'
+    + '<tbody>' + rows + '</tbody>'
+    + '<tfoot><tr><td colspan="2" style="text-align:center">合计 ' + allStores.value.length + ' 店</td>'
+    + '<td style="text-align:center">' + allStores.value.reduce((a, s) => a + Number(s.item_count || 0), 0).toLocaleString() + '</td>'
+    + '<td style="text-align:right">' + totalQty.toLocaleString() + '</td>'
+    + '<td style="text-align:right">¥' + totalAmt.toLocaleString() + '</td></tr></tfoot>'
+    + '</table>' + bodyEnd)
+  w.document.close()
+  setTimeout(() => { w.focus(); w.print() }, 250)
+}
+
 // 当前展开型号的 颜色×尺码 矩阵（行=颜色，列=尺码，格=Sku编号/数量）
 const matrixForModel = computed(() => {
   const skus = modelSkus.value || []
@@ -793,13 +872,19 @@ onMounted(() => {
 .matrix-table.model-matrix td.model-thumb, .matrix-table.model-matrix td.model-thumb-placeholder { padding: 1px; }
 .matrix-table.model-matrix .model-thumb { width: 32px; height: 32px; }
 .matrix-table.model-matrix .model-thumb-placeholder { width: 32px; height: 32px; font-size: 16px; }
-.matrix-table-wrap { max-height: 420px; overflow-y: auto; overflow-x: auto; border: 1px solid #ebeef5; border-radius: 4px; width: max-content; max-width: 100%; }
+/* 通用 — 加大，避免多行内容卡死 */
+.matrix-table-wrap { max-height: 720px; overflow-y: auto; overflow-x: auto; border: 1px solid #ebeef5; border-radius: 4px; width: max-content; max-width: 100%; }
 .matrix-table-wrap .matrix-table.model-matrix { border: none; }
 .matrix-table-wrap .matrix-table.model-matrix th, .matrix-table-wrap .matrix-table.model-matrix td { border-left: none; border-right: none; }
 .matrix-table-wrap .matrix-table.model-matrix thead th { border-top: none; }
 
-/* 门店排名表：限高，避免门店多时卡片过高 */
-.matrix-table-wrap.store-wrap { max-height: 320px; overflow-y: auto; overflow-x: auto; width: max-content; max-width: 100%; }
+/* 门店排名表：全展开，老板要看全 46 行不再卡死 */
+.matrix-table-wrap.store-wrap { max-height: none; overflow-y: visible; overflow-x: auto; width: 100%; max-width: 100%; border: none; }
+
+/* 门店明细（展开行的内层） */
+.store-detail-section .matrix-table-wrap { max-height: 600px; }
+/* 全记录明细（46 店的全部行，按页 50 条） */
+.all-records-wrap { max-height: 600px; }
 
 /* SKU 颜色×尺码 矩阵 — 紧凑版 */
 .sku-matrix-wrap { background: white; border-radius: 4px; padding: 4px; overflow-x: auto; border: 1px solid #dcdfe6; width: max-content; max-width: 100%; }
