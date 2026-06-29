@@ -60,7 +60,56 @@
       <!-- 门店分析：独占一行（矩阵风格） -->
       <div class="store-section">
         <div class="chart-card chart-full">
-          <h3>🏪 {{ $t('importDetail.storeAnalysis') }}<span class="text-gray">({{ allStores.length }})</span></h3>
+          <div class="store-section-header">
+            <h3>🏪 {{ $t('importDetail.storeAnalysis') }}<span class="text-gray">({{ allStores.length }})</span></h3>
+            <div class="store-section-actions">
+              <button class="btn-xs btn-toggle-all" @click="toggleAllRecords">
+                {{ expandedAllRecords ? $t('importDetail.collapse') : $t('importDetail.expandAllRecords') }}
+              </button>
+            </div>
+          </div>
+          <div v-if="expandedAllRecords" class="all-records-wrap matrix-table-wrap">
+            <table class="matrix-table all-records-matrix">
+              <thead>
+                <tr>
+                  <th class="num">#</th>
+                  <th>{{ $t('importDetail.sku') || 'SKU' }}</th>
+                  <th>{{ $t('importDetail.productName') }}</th>
+                  <th>{{ $t('importDetail.model') }}</th>
+                  <th>{{ $t('importDetail.color') }}</th>
+                  <th>{{ $t('importDetail.size') }}</th>
+                  <th class="num">{{ $t('importDetail.quantity') }}</th>
+                  <th class="num">{{ $t('importDetail.unitPrice') }}</th>
+                  <th class="num">{{ $t('importDetail.amount') }}</th>
+                  <th>{{ $t('importDetail.store') }}</th>
+                  <th>{{ $t('importDetail.saleDate') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(it, idx) in items" :key="it.id">
+                  <td class="num">{{ idx + 1 }}</td>
+                  <td class="sku-cell">{{ it.sku }}</td>
+                  <td :title="it.product_name">{{ (it.product_name || '-').toString().substring(0, 24) }}</td>
+                  <td :title="it.model">{{ (it.model || '-').toString().substring(0, 16) }}</td>
+                  <td>{{ getColorDisplay(it) || '-' }}</td>
+                  <td class="num">{{ it.size || '-' }}</td>
+                  <td class="num qty-cell">{{ Number(it.quantity || 0).toLocaleString() }}</td>
+                  <td class="num">{{ it.unit_price ? '¥' + Number(it.unit_price).toLocaleString() : '-' }}</td>
+                  <td class="num amount-cell">{{ it.amount ? '¥' + Number(it.amount).toLocaleString() : '-' }}</td>
+                  <td :title="it.store_name || it.store_code">{{ (it.store_name || it.store_code || '-').toString().substring(0, 18) }}</td>
+                  <td>{{ it.sale_date || '-' }}</td>
+                </tr>
+                <tr v-if="!items.length">
+                  <td colspan="11" class="empty-cell">{{ $t('importDetail.noItems') || 'No data' }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-if="total > pageSize" class="pagination mini-pagination">
+              <button class="btn-small" :disabled="page <= 1" @click="loadItems(page - 1)">‹</button>
+              <span>{{ page }} / {{ Math.ceil(total / pageSize) }}</span>
+              <button class="btn-small" :disabled="page >= Math.ceil(total / pageSize)" @click="loadItems(page + 1)">›</button>
+            </div>
+          </div>
           <div class="chart-placeholder">
           <div class="matrix-table-wrap store-wrap">
           <table v-if="allStores.length > 0" class="matrix-table store-matrix">
@@ -82,7 +131,12 @@
                 <td class="num">{{ s.item_count ?? '-' }}</td>
                 <td class="num qty-cell">{{ Number(s.qty).toLocaleString() }}</td>
                 <td class="num amount-cell">{{ s.amount ? '¥' + Number(s.amount).toLocaleString() : '-' }}</td>
-                <td><button class="btn-xs" @click="toggleStore(s.store_code)">{{ expandedStore === s.store_code ? $t('importDetail.collapse') : $t('importDetail.expand') }}</button></td>
+                <td>
+                  <div class="store-row-actions">
+                    <button class="btn-xs" @click="toggleStore(s.store_code)">{{ expandedStore === s.store_code ? $t('importDetail.collapse') : $t('importDetail.expand') }}</button>
+                    <button class="btn-xs btn-toggle-store-detail" @click="toggleStoreDetail(s.store_code)">{{ expandedStoreDetail === s.store_code ? $t('importDetail.collapseDetail') : $t('importDetail.expandDetail') }}</button>
+                  </div>
+                </td>
               </tr>
               <tr v-if="expandedStore === s.store_code" class="expand-row">
                 <td colspan="6">
@@ -169,6 +223,41 @@
                       </table>
                       </div>
                       <div v-if="!(storeDetail.byModel?.length > 0)" class="empty-cell">{{ $t('importDetail.noModelDataMatrix') }}</div>
+                    </div>
+
+                    <!-- ②门店明细 — 该店所有 SKU 列表（独立按钮触发） -->
+                    <div v-if="expandedStoreDetail === s.store_code" class="report-section sub-section store-detail-section">
+                      <h4>📋 {{ $t('importDetail.storeDetail') }} ({{ storeDetail.bySku?.length || 0 }})</h4>
+                      <div class="matrix-table-wrap">
+                        <table v-if="storeDetail.bySku?.length > 0" class="matrix-table store-detail-matrix">
+                          <thead>
+                            <tr>
+                              <th class="num">#</th>
+                              <th>{{ $t('importDetail.sku') || 'SKU' }}</th>
+                              <th>{{ $t('importDetail.model') }}</th>
+                              <th>{{ $t('importDetail.color') }}</th>
+                              <th>{{ $t('importDetail.size') }}</th>
+                              <th class="num">{{ $t('importDetail.quantity') }}</th>
+                              <th class="num">{{ $t('importDetail.amount') }}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr v-for="(sk, ki) in storeDetail.bySku" :key="sk.sku + '_' + ki">
+                              <td class="num">{{ ki + 1 }}</td>
+                              <td class="sku-cell">{{ sk.sku }}</td>
+                              <td :title="sk.model">{{ (sk.model || '-').toString().substring(0, 16) }}</td>
+                              <td>{{ getColorDisplay(sk) || '-' }}</td>
+                              <td class="num">{{ sk.size || '-' }}</td>
+                              <td class="num qty-cell">{{ Number(sk.total_qty || sk.qty || 0).toLocaleString() }}</td>
+                              <td class="num amount-cell">{{ (sk.total_amount || sk.amount) ? '¥' + Number(sk.total_amount || sk.amount).toLocaleString() : '-' }}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                        <div v-if="!(storeDetail.bySku?.length > 0)" class="empty-cell">{{ $t('importDetail.noData') }}</div>
+                      </div>
+                      <div class="store-detail-footer">
+                        <button class="btn-xs btn-toggle-store-detail" @click="toggleStoreDetail(s.store_code)">{{ $t('importDetail.collapseDetail') }}</button>
+                      </div>
                     </div>
                   </div>
                   <div v-else class="empty-cell">{{ $t('importDetail.noData') || 'Loading...' }}</div>
@@ -357,6 +446,8 @@ const allStores = computed(() => {
 
 const expandedStore = ref(null)
 const expandedModel = ref(null)
+const expandedStoreDetail = ref(null)
+const expandedAllRecords = ref(false)
 const modelSkus = ref([])
 
 async function toggleStore(storeCode) {
@@ -366,9 +457,23 @@ async function toggleStore(storeCode) {
   }
   expandedStore.value = storeCode
   expandedModel.value = null
+  expandedStoreDetail.value = null
   modelSkus.value = []
   storeDetail.value = null
   await loadStoreSummary(storeCode)
+}
+
+async function toggleStoreDetail(storeCode) {
+  // 必须先展开 store（否则没 storeDetail 数据）
+  if (expandedStore.value !== storeCode) {
+    await toggleStore(storeCode)
+  }
+  expandedStoreDetail.value = expandedStoreDetail.value === storeCode ? null : storeCode
+}
+
+function toggleAllRecords() {
+  expandedAllRecords.value = !expandedAllRecords.value
+  if (expandedAllRecords.value && items.value.length === 0) loadItems(1)
 }
 
 // 当前展开型号的 颜色×尺码 矩阵（行=颜色，列=尺码，格=Sku编号/数量）
@@ -623,6 +728,16 @@ onMounted(() => {
 .sub-section h4 { margin: 0 0 10px; font-size: 13px; color: #606266; }
 .sub-section:last-child { margin-bottom: 0; }
 .text-gray { color: #909399; font-weight: normal; font-size: 13px; margin-left: 8px; }
+.store-section-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 8px; }
+.store-section-header h3 { margin: 0; font-size: 15px; color: #303133; }
+.store-section-actions { display: flex; gap: 8px; }
+.store-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn-toggle-all, .btn-toggle-store-detail { background: #ecf5ff; color: #1890ff; border-color: #91d5ff; }
+.store-detail-section { margin-top: 12px; padding-top: 12px; border-top: 1px dashed #dcdfe6; }
+.store-detail-section h4 { margin: 0 0 10px; font-size: 13px; color: #606266; }
+.store-detail-footer { margin-top: 8px; text-align: right; }
+.all-records-wrap { margin-bottom: 16px; }
+.mini-pagination { justify-content: flex-end; padding-top: 8px; }
 
 /* Model bar with image */
 .model-bar-item { display: flex; align-items: center; gap: 6px; position: relative; }

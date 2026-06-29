@@ -3774,6 +3774,11 @@ export default {
     noSkuData: 'No SKU data',
     noStoreData: 'No store data',
     noModelDataMatrix: 'No model data',
+    expandAllRecords: '📋 Expand All Records',
+    expandDetail: 'Detail',
+    collapseDetail: 'Collapse Detail',
+    storeDetail: 'Store Detail',
+    sku: 'SKU',
   },
   storeSales: {
     title: 'Store Sales Report',

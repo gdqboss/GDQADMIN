@@ -1220,5 +1220,13 @@ export default {
     noComboData: 'Tiada data gabungan',
     modelDistribution: 'Taburan Model',
     colorSizeHotCombo: 'Gabungan Hangat Warna×Saiz',
+    noSkuData: 'Tiada data SKU',
+    noStoreData: 'Tiada data stor',
+    noModelDataMatrix: 'Tiada data model',
+    expandAllRecords: '📋 Buka Semua Rekod',
+    expandDetail: 'Butiran',
+    collapseDetail: 'Tutup Butiran',
+    storeDetail: 'Butiran Stor',
+    sku: 'SKU',
   },
 }

@@ -3885,6 +3885,11 @@ export default {
     noSkuData: '无SKU数据',
     noStoreData: '无门店数据',
     noModelDataMatrix: '无型号数据',
+    expandAllRecords: '📋 展开全记录明细',
+    expandDetail: '门店明细',
+    collapseDetail: '收起明细',
+    storeDetail: '门店明细',
+    sku: 'SKU',
   },
   storeSales: {
     title: '门店销售报表',
