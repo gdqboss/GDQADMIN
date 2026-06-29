@@ -63,7 +63,7 @@
           <div class="store-section-header">
             <h3>🏪 {{ $t('importDetail.storeAnalysis') }}<span class="text-gray">({{ allStores.length }})</span></h3>
             <div class="store-section-actions">
-              <button class="btn-xs btn-print" @click="printStores">🖨️ {{ $t('importDetail.printStores') }}</button>
+              <button class="btn-xs btn-print" @click="printStores">{{ $t('importDetail.printStores') }}</button>
               <button class="btn-xs btn-toggle-all" @click="toggleAllRecords">
                 {{ expandedAllRecords ? $t('importDetail.collapse') : $t('importDetail.expandAllRecords') }}
               </button>
