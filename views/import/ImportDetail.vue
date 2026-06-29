@@ -821,33 +821,41 @@ onMounted(() => {
 .store-main-row.expanded { background: #ecf5ff; }
 .store-name { min-width: 220px; max-width: 400px; font-size: 12px; color: #303133; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; text-align: left; }
 .expand-icon { font-size: 10px; color: #909399; width: 16px; }
-.store-expand-detail { padding: 12px 0 8px 28px; }
-.store-expand-inner { background: #fafafa; border-radius: 8px; padding: 12px; }
-.store-expand-stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
-.sub-section { background: white; border-radius: 6px; padding: 12px; margin-bottom: 10px; }
-.sub-section h4 { margin: 0 0 10px; font-size: 13px; color: #606266; }
+.store-expand-detail { padding: 6px 0 4px 12px; }
+.store-expand-inner { background: #fafafa; border-radius: 4px; padding: 6px; }
+.store-expand-stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.sub-section { background: white; border-radius: 4px; padding: 6px 8px; margin-bottom: 6px; }
+.sub-section h4 { margin: 0 0 6px; font-size: 13px; color: #606266; }
 .sub-section:last-child { margin-bottom: 0; }
 .text-gray { color: #909399; font-weight: normal; font-size: 13px; margin-left: 8px; }
-.store-section-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 8px; }
+.store-section-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
 .store-section-header h3 { margin: 0; font-size: 15px; color: #303133; }
-.store-section-actions { display: flex; gap: 8px; }
+.store-section-actions { display: flex; gap: 6px; }
 .store-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .btn-toggle-all, .btn-toggle-store-detail, .btn-print { background: #ecf5ff; color: #1890ff; border-color: #91d5ff; }
 .btn-print { background: #fff7e6; color: #d48806; border-color: #ffd591; }
-.store-detail-section { margin-top: 12px; padding-top: 12px; border-top: 1px dashed #dcdfe6; }
-.store-detail-section h4 { margin: 0 0 10px; font-size: 13px; color: #606266; }
-.store-detail-footer { margin-top: 8px; text-align: right; }
+.store-detail-section { margin-top: 8px; padding-top: 6px; border-top: 1px dashed #dcdfe6; }
+.store-detail-section h4 { margin: 0 0 6px; font-size: 13px; color: #606266; }
+.store-detail-footer { margin-top: 6px; text-align: right; }
 
-/* 多矩阵列表（按 model 分组的若干个 SKU 矩阵） — 与 single-matrix-card 同密度 */
-.multi-matrix-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
-.multi-matrix-card { background: #ffffff; border: 1px solid #ebeef5; border-radius: 4px; padding: 4px 6px; }
-.multi-matrix-header { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid #ebeef5; }
-.multi-matrix-header .model-thumb-sm { width: 28px; height: 28px; object-fit: cover; border-radius: 3px; border: 1px solid #ebeef5; }
+/* 多矩阵列表（按 model 分组的若干个 SKU 矩阵） — 严格按 matrix-table 同密度，无外圈 box */
+.multi-matrix-list { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+/* 完全去掉外层 box / padding / radius：让每张卡和 matrix-table 视觉等价 */
+.multi-matrix-card { background: #ffffff; padding: 0; margin: 0; border: none; border-radius: 0; }
+.multi-matrix-header { display: flex; align-items: center; gap: 6px; margin: 0 0 2px; padding: 2px 4px; background: #f5f7fa; border-radius: 2px; }
+.multi-matrix-header .model-thumb-sm { width: 24px; height: 24px; object-fit: cover; border-radius: 2px; border: 1px solid #ebeef5; }
 .multi-matrix-header .model-label { font-size: 12px; color: #303133; line-height: 1.3; }
 .multi-matrix-header .model-label strong { color: #1890ff; font-family: monospace; }
 .multi-matrix-header .model-stat { font-size: 11px; color: #909399; margin-left: auto; }
-/* 卡片内矩阵 — 多 card 时取消外侧 padding，紧贴模型标题（保持表格 cell padding 不变） */
-.multi-matrix-card .sku-matrix-wrap { padding: 0; border: none; }
+/* 卡片内的矩阵表 — 完全紧贴外层，无 padding、无 border */
+.multi-matrix-card .sku-matrix-wrap { padding: 0; border: 0; background: transparent; border-radius: 0; }
+/* 让每个矩阵表保持与 matrix-table-wrap 同样的视觉：上下无边线、左上左上角圆角对齐 */
+.multi-matrix-card .sku-matrix { border-top: 1px solid #ebeef5; }
+/* SKU 矩阵 cell 收紧 padding，让“左右距离”和原 matrix-table (3px 4px) 对齐 */
+.multi-matrix-card .sku-matrix .cell-data,
+.multi-matrix-card .sku-matrix .size-col,
+.multi-matrix-card .sku-matrix .color-cell,
+.multi-matrix-card .sku-matrix .color-col { padding: 2px 3px !important; }
 
 .all-records-wrap { margin-bottom: 16px; max-height: none; overflow: visible; }
 .mini-pagination { justify-content: flex-end; padding-top: 8px; }
