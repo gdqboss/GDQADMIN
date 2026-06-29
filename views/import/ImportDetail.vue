@@ -69,42 +69,39 @@
               </button>
             </div>
           </div>
-          <div v-if="expandedAllRecords" class="all-records-wrap matrix-table-wrap">
-            <table class="matrix-table all-records-matrix">
-              <thead>
-                <tr>
-                  <th class="num">#</th>
-                  <th>{{ $t('importDetail.sku') || 'SKU' }}</th>
-                  <th>{{ $t('importDetail.productName') }}</th>
-                  <th>{{ $t('importDetail.model') }}</th>
-                  <th>{{ $t('importDetail.color') }}</th>
-                  <th>{{ $t('importDetail.size') }}</th>
-                  <th class="num">{{ $t('importDetail.quantity') }}</th>
-                  <th class="num">{{ $t('importDetail.unitPrice') }}</th>
-                  <th class="num">{{ $t('importDetail.amount') }}</th>
-                  <th>{{ $t('importDetail.store') }}</th>
-                  <th>{{ $t('importDetail.saleDate') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(it, idx) in items" :key="it.id">
-                  <td class="num">{{ idx + 1 }}</td>
-                  <td class="sku-cell">{{ it.sku }}</td>
-                  <td :title="it.product_name">{{ (it.product_name || '-').toString().substring(0, 24) }}</td>
-                  <td :title="it.model">{{ (it.model || '-').toString().substring(0, 16) }}</td>
-                  <td>{{ getColorDisplay(it) || '-' }}</td>
-                  <td class="num">{{ it.size || '-' }}</td>
-                  <td class="num qty-cell">{{ Number(it.quantity || 0).toLocaleString() }}</td>
-                  <td class="num">{{ it.unit_price ? '¥' + Number(it.unit_price).toLocaleString() : '-' }}</td>
-                  <td class="num amount-cell">{{ it.amount ? '¥' + Number(it.amount).toLocaleString() : '-' }}</td>
-                  <td :title="it.store_name || it.store_code">{{ (it.store_name || it.store_code || '-').toString().substring(0, 18) }}</td>
-                  <td>{{ it.sale_date || '-' }}</td>
-                </tr>
-                <tr v-if="!items.length">
-                  <td colspan="11" class="empty-cell">{{ $t('importDetail.noItems') || 'No data' }}</td>
-                </tr>
-              </tbody>
-            </table>
+          <div v-if="expandedAllRecords" class="all-records-wrap">
+            <div v-if="allRecordsGroups.length" class="multi-matrix-list">
+              <div v-for="grp in allRecordsGroups" :key="grp.model" class="multi-matrix-card">
+                <div class="multi-matrix-header">
+                  <img v-if="grp.image" :src="grp.image" class="model-thumb-sm" alt="" />
+                  <span class="model-label">{{ $t('importDetail.model') }}: <strong>{{ grp.model }}</strong></span>
+                  <span class="model-stat">{{ grp.rows.length }} {{ $t('importDetail.pcs') || '行' }}</span>
+                </div>
+                <div class="sku-matrix-wrap" v-if="grp.matrix.colors.length">
+                  <table class="sku-matrix">
+                    <thead>
+                      <tr>
+                        <th class="color-col">{{ $t('importDetail.colorSizeMatrix') }}</th>
+                        <th v-for="sz in grp.matrix.sizes" :key="sz" class="num size-col">{{ sz }}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="c in grp.matrix.colors" :key="c">
+                        <td class="color-cell">{{ getColorDisplay({color: c}) || c }}</td>
+                        <td v-for="sz in grp.matrix.sizes" :key="sz" class="num cell-data">
+                          <div v-for="cell in (grp.matrix.cells[c]?.[sz] || [])" :key="cell.sku" class="cell-sku">
+                            <span class="sku-num">{{ cell.sku }}</span>
+                            <span class="sku-qty">{{ cell.qty }}{{ $t('importDetail.pcs') }}</span>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div v-else class="empty-cell">{{ $t('importDetail.noSkuData') }}</div>
+              </div>
+            </div>
+            <div v-else class="empty-cell">{{ $t('importDetail.noItems') || 'No data' }}</div>
             <div v-if="total > pageSize" class="pagination mini-pagination">
               <button class="btn-small" :disabled="page <= 1" @click="loadItems(page - 1)">‹</button>
               <span>{{ page }} / {{ Math.ceil(total / pageSize) }}</span>
@@ -226,36 +223,41 @@
                       <div v-if="!(storeDetail.byModel?.length > 0)" class="empty-cell">{{ $t('importDetail.noModelDataMatrix') }}</div>
                     </div>
 
-                    <!-- ②门店明细 — 该店所有 SKU 列表（独立按钮触发） -->
+                    <!-- ②门店明细 — 该店所有 SKU（按型号分组矩阵显示） -->
                     <div v-if="expandedStoreDetail === s.store_code" class="report-section sub-section store-detail-section">
-                      <h4>📋 {{ $t('importDetail.storeDetail') }} ({{ storeDetail.bySku?.length || 0 }})</h4>
-                      <div class="matrix-table-wrap">
-                        <table v-if="storeDetail.bySku?.length > 0" class="matrix-table store-detail-matrix">
-                          <thead>
-                            <tr>
-                              <th class="num">#</th>
-                              <th>{{ $t('importDetail.sku') || 'SKU' }}</th>
-                              <th>{{ $t('importDetail.model') }}</th>
-                              <th>{{ $t('importDetail.color') }}</th>
-                              <th>{{ $t('importDetail.size') }}</th>
-                              <th class="num">{{ $t('importDetail.quantity') }}</th>
-                              <th class="num">{{ $t('importDetail.amount') }}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr v-for="(sk, ki) in storeDetail.bySku" :key="sk.sku + '_' + ki">
-                              <td class="num">{{ ki + 1 }}</td>
-                              <td class="sku-cell">{{ sk.sku }}</td>
-                              <td :title="sk.model">{{ (sk.model || '-').toString().substring(0, 16) }}</td>
-                              <td>{{ getColorDisplay(sk) || '-' }}</td>
-                              <td class="num">{{ sk.size || '-' }}</td>
-                              <td class="num qty-cell">{{ Number(sk.total_qty || sk.qty || 0).toLocaleString() }}</td>
-                              <td class="num amount-cell">{{ (sk.total_amount || sk.amount) ? '¥' + Number(sk.total_amount || sk.amount).toLocaleString() : '-' }}</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                        <div v-if="!(storeDetail.bySku?.length > 0)" class="empty-cell">{{ $t('importDetail.noData') }}</div>
+                      <h4>📋 {{ $t('importDetail.storeDetail') }} ({{ storeDetail.bySku?.length || 0 }} SKU · {{ storeDetailGroups.length }} {{ $t('importDetail.model') }})</h4>
+                      <div v-if="storeDetailGroups.length" class="multi-matrix-list">
+                        <div v-for="grp in storeDetailGroups" :key="grp.model" class="multi-matrix-card">
+                          <div class="multi-matrix-header">
+                            <img v-if="grp.image" :src="grp.image" class="model-thumb-sm" alt="" />
+                            <span class="model-label">{{ $t('importDetail.model') }}: <strong>{{ grp.model }}</strong></span>
+                            <span class="model-stat">{{ grp.rows.length }} SKU</span>
+                          </div>
+                          <div class="sku-matrix-wrap" v-if="grp.matrix.colors.length">
+                            <table class="sku-matrix">
+                              <thead>
+                                <tr>
+                                  <th class="color-col">{{ $t('importDetail.colorSizeMatrix') }}</th>
+                                  <th v-for="sz in grp.matrix.sizes" :key="sz" class="num size-col">{{ sz }}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr v-for="c in grp.matrix.colors" :key="c">
+                                  <td class="color-cell">{{ getColorDisplay({color: c}) || c }}</td>
+                                  <td v-for="sz in grp.matrix.sizes" :key="sz" class="num cell-data">
+                                    <div v-for="cell in (grp.matrix.cells[c]?.[sz] || [])" :key="cell.sku" class="cell-sku">
+                                      <span class="sku-num">{{ cell.sku }}</span>
+                                      <span class="sku-qty">{{ cell.qty }}{{ $t('importDetail.pcs') }}</span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                          <div v-else class="empty-cell">{{ $t('importDetail.noSkuData') }}</div>
+                        </div>
                       </div>
+                      <div v-else class="empty-cell">{{ $t('importDetail.noData') }}</div>
                       <div class="store-detail-footer">
                         <button class="btn-xs btn-toggle-store-detail" @click="toggleStoreDetail(s.store_code)">{{ $t('importDetail.collapseDetail') }}</button>
                       </div>
@@ -556,16 +558,18 @@ async function printStores() {
 }
 
 // 当前展开型号的 颜色×尺码 矩阵（行=颜色，列=尺码，格=Sku编号/数量）
-const matrixForModel = computed(() => {
-  const skus = modelSkus.value || []
-  if (skus.length === 0) return { sizes: [], colors: [], cells: {}, colorImageMap: {}, modelImage: '' }
+const matrixForModel = computed(() => buildMatrix(modelSkus.value))
 
-  // 1. 收集所有颜色 + 尺码
+// 通用矩阵构建函数 — rows = [{sku, color, size, total_qty|qty, image_url, ...}]
+// 返回 { sizes[], colors[], cells[color][size] = [{sku, qty}], colorImageMap, modelImage }
+function buildMatrix(rows) {
+  const arr = rows || []
+  if (arr.length === 0) return { sizes: [], colors: [], cells: {}, colorImageMap: {}, modelImage: '' }
   const colorSet = new Set()
   const sizeSet = new Set()
-  const colorImageMap = {}  // 颜色 → 图片（取第一个该颜色的 image_url）
+  const colorImageMap = {}
   let modelImage = ''
-  for (const s of skus) {
+  for (const s of arr) {
     const c = (s.color || '').toString().trim() || '-'
     const sz = (s.size || '').toString().trim()
     if (sz) sizeSet.add(sz)
@@ -573,31 +577,48 @@ const matrixForModel = computed(() => {
     if (s.image_url && !colorImageMap[c]) colorImageMap[c] = s.image_url
     if (s.image_url && !modelImage) modelImage = s.image_url
   }
-  // 尺码排序：数字按数字排，字母按字母排
   const sizes = Array.from(sizeSet).sort((a, b) => {
     const na = parseFloat(a), nb = parseFloat(b)
     if (!isNaN(na) && !isNaN(nb)) return na - nb
     return a.localeCompare(b)
   })
-  // 颜色排序
   const colors = Array.from(colorSet).sort((a, b) => a.localeCompare(b))
-
-  // 2. 构格 cells[color][size] = [{sku, qty}, ...]
   const cells = {}
   for (const c of colors) {
     cells[c] = {}
     for (const sz of sizes) cells[c][sz] = []
   }
-  for (const s of skus) {
+  for (const s of arr) {
     const c = (s.color || '').toString().trim() || '-'
     const sz = (s.size || '').toString().trim()
     if (!sz) continue
     if (!cells[c][sz]) cells[c][sz] = []
-    cells[c][sz].push({ sku: s.sku, qty: Number(s.total_qty || 0) })
+    cells[c][sz].push({ sku: s.sku, qty: Number(s.total_qty || s.qty || 0) })
   }
-
   return { sizes, colors, cells, colorImageMap, modelImage }
-})
+}
+
+// 按 model 分组：{ '555485M': [rows...], '598841M': [rows...] }
+function groupByModel(rows) {
+  const map = {}
+  for (const r of rows || []) {
+    const m = (r.model || '-').toString().trim() || '-'
+    if (!map[m]) map[m] = []
+    map[m].push(r)
+  }
+  return Object.keys(map).sort().map(model => ({
+    model,
+    image: map[model].find(r => r.image_url)?.image_url || '',
+    rows: map[model],
+    matrix: buildMatrix(map[model])
+  }))
+}
+
+// 门店明细：按 model 分组后的所有矩阵
+const storeDetailGroups = computed(() => groupByModel(storeDetail.value?.bySku))
+
+// 全记录明细：按 model 分组后的所有矩阵
+const allRecordsGroups = computed(() => groupByModel(items.value))
 
 function toggleModel(model) {
   if (expandedModel.value === model) {
@@ -811,11 +832,22 @@ onMounted(() => {
 .store-section-header h3 { margin: 0; font-size: 15px; color: #303133; }
 .store-section-actions { display: flex; gap: 8px; }
 .store-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.btn-toggle-all, .btn-toggle-store-detail { background: #ecf5ff; color: #1890ff; border-color: #91d5ff; }
+.btn-toggle-all, .btn-toggle-store-detail, .btn-print { background: #ecf5ff; color: #1890ff; border-color: #91d5ff; }
+.btn-print { background: #fff7e6; color: #d48806; border-color: #ffd591; }
 .store-detail-section { margin-top: 12px; padding-top: 12px; border-top: 1px dashed #dcdfe6; }
 .store-detail-section h4 { margin: 0 0 10px; font-size: 13px; color: #606266; }
 .store-detail-footer { margin-top: 8px; text-align: right; }
-.all-records-wrap { margin-bottom: 16px; }
+
+/* 多矩阵列表（按 model 分组的若干个 SKU 矩阵） */
+.multi-matrix-list { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+.multi-matrix-card { background: #fafbfc; border: 1px solid #ebeef5; border-radius: 6px; padding: 10px 12px; }
+.multi-matrix-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #dcdfe6; }
+.multi-matrix-header .model-thumb-sm { width: 28px; height: 28px; object-fit: cover; border-radius: 3px; border: 1px solid #ebeef5; }
+.multi-matrix-header .model-label { font-size: 13px; color: #303133; }
+.multi-matrix-header .model-label strong { color: #1890ff; font-family: monospace; }
+.multi-matrix-header .model-stat { font-size: 11px; color: #909399; margin-left: auto; }
+
+.all-records-wrap { margin-bottom: 16px; max-height: none; overflow: visible; }
 .mini-pagination { justify-content: flex-end; padding-top: 8px; }
 
 /* Model bar with image */
