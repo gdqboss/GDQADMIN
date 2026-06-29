@@ -838,14 +838,16 @@ onMounted(() => {
 .store-detail-section h4 { margin: 0 0 10px; font-size: 13px; color: #606266; }
 .store-detail-footer { margin-top: 8px; text-align: right; }
 
-/* 多矩阵列表（按 model 分组的若干个 SKU 矩阵） */
-.multi-matrix-list { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
-.multi-matrix-card { background: #fafbfc; border: 1px solid #ebeef5; border-radius: 6px; padding: 10px 12px; }
-.multi-matrix-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #dcdfe6; }
+/* 多矩阵列表（按 model 分组的若干个 SKU 矩阵） — 与 single-matrix-card 同密度 */
+.multi-matrix-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.multi-matrix-card { background: #ffffff; border: 1px solid #ebeef5; border-radius: 4px; padding: 4px 6px; }
+.multi-matrix-header { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid #ebeef5; }
 .multi-matrix-header .model-thumb-sm { width: 28px; height: 28px; object-fit: cover; border-radius: 3px; border: 1px solid #ebeef5; }
-.multi-matrix-header .model-label { font-size: 13px; color: #303133; }
+.multi-matrix-header .model-label { font-size: 12px; color: #303133; line-height: 1.3; }
 .multi-matrix-header .model-label strong { color: #1890ff; font-family: monospace; }
 .multi-matrix-header .model-stat { font-size: 11px; color: #909399; margin-left: auto; }
+/* 卡片内矩阵 — 多 card 时取消外侧 padding，紧贴模型标题（保持表格 cell padding 不变） */
+.multi-matrix-card .sku-matrix-wrap { padding: 0; border: none; }
 
 .all-records-wrap { margin-bottom: 16px; max-height: none; overflow: visible; }
 .mini-pagination { justify-content: flex-end; padding-top: 8px; }
