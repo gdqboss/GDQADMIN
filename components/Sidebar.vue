@@ -319,11 +319,14 @@ const menuGroups = computed(() => [
 // 原则：
 // 1. 一级菜单强制走 moduleKeys ∩ enabledModules（必须命中至少一个才显示）
 // 2. enabledModules 为空（loadSystemSettings 失败/未完成）= 默认全部隐藏，**避免出现"全显示"bug**
+//    唯一例外：admin 角色在 modules 未加载完成时仍展示全部菜单（波哥铁律：admin 必须有一切权限）
 // 3. 二级菜单的 canAccess 只用于权限细化（管理员/仓管/店长差异），不再作 menu_key fallback
 const filteredGroups = computed(() => {
   const enabledModules = systemSettings.modules || []
   const enabledSet = new Set(enabledModules)
   const modulesLoaded = enabledModules.length > 0
+  // admin 短路：必须有一切权限（无 modules/无 permission 都不能影响 admin 看见全部菜单）
+  const isAdmin = userStore.isAdmin.value
 
   return menuGroups.value
     .map(group => {
@@ -331,9 +334,13 @@ const filteredGroups = computed(() => {
       if (!Array.isArray(group.moduleKeys) || group.moduleKeys.length === 0) {
         return null
       }
-      if (!modulesLoaded) return null
-      const hasEnabled = group.moduleKeys.some(k => enabledSet.has(k))
-      if (!hasEnabled) return null
+      // modules 未加载：仅 admin 可见，其他角色全部隐藏
+      if (!modulesLoaded) {
+        if (!isAdmin) return null
+      } else {
+        const hasEnabled = group.moduleKeys.some(k => enabledSet.has(k))
+        if (!hasEnabled) return null
+      }
 
       // 独立一级菜单（无 children）— 模块通过即显示
       if (!group.children || group.children.length === 0) {
@@ -344,8 +351,8 @@ const filteredGroups = computed(() => {
         .filter(child => {
           // 权限过滤：admin 永远过；非 admin 走 userStore.canAccess
           if (!canAccess(child.key)) return false
-          // 子菜单 moduleKey 过滤：设了但当前服务器没启用 → 隐藏
-          if (child.moduleKey && !enabledSet.has(child.moduleKey)) return false
+          // 子菜单 moduleKey 过滤：设了但当前服务器没启用 → 隐藏（非 admin + 没加载到 modules 也按未启用处理）
+          if (!isAdmin && child.moduleKey && !enabledSet.has(child.moduleKey)) return false
           return true
         })
         .map(child => ({ ...child }))
