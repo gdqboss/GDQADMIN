@@ -216,11 +216,11 @@
                       <div v-if="!(storeDetail.byModel?.length > 0)" class="empty-cell">{{ $t('importDetail.noModelDataMatrix') }}</div>
                     </div>
 
-                    <!-- ②门店明细 — 该店所有 SKU（颜色×尺码 交错矩阵，每格多 SKU 垂直堆叠） -->
+                    <!-- ②门店明细 — 颜色×尺码 矩阵，cell 只显示该格数量合计（不堆叠 SKU 编号） -->
                     <div v-if="expandedStoreDetail === s.store_code" class="report-section sub-section store-detail-section">
-                      <h4>📋 {{ $t('importDetail.storeDetail') }} ({{ storeDetail.bySku?.length || 0 }} SKU · {{ storeDetailMatrix.colors.length }} colors · {{ storeDetailMatrix.sizes.length }} sizes)</h4>
+                      <h4>📋 {{ $t('importDetail.storeDetail') }} ({{ storeDetailMatrix.colors.length }} colors × {{ storeDetailMatrix.sizes.length }} sizes · {{ storeDetailMatrix.totalSkus }} SKU)</h4>
                       <div v-if="storeDetailMatrix.colors.length" class="matrix-table-wrap">
-                        <table class="matrix-table color-size-matrix">
+                        <table class="matrix-table color-size-matrix store-detail-matrix">
                           <thead>
                             <tr>
                               <th class="color-col">{{ $t('importDetail.colorSizeMatrix') }}</th>
@@ -230,13 +230,9 @@
                           <tbody>
                             <tr v-for="c in storeDetailMatrix.colors" :key="c">
                               <td class="color-cell"><img v-if="storeDetailMatrix.colorImageMap[c]" :src="storeDetailMatrix.colorImageMap[c]" class="color-thumb" /> {{ getColorDisplay({color: c}) || c }}</td>
-                              <td v-for="sz in storeDetailMatrix.sizes" :key="sz" class="num cell-data">
-                                <div v-for="cell in (storeDetailMatrix.cells[c]?.[sz] || [])" :key="cell.sku + cell.model" class="cell-sku">
-                                  <span class="sku-num">{{ cell.sku }}</span>
-                                  <span class="sku-model" :title="cell.model">{{ (cell.model || '').slice(0, 8) }}</span>
-                                  <span class="sku-qty">{{ cell.qty }}{{ $t('importDetail.pcs') }}</span>
-                                </div>
-                                <span v-if="!(storeDetailMatrix.cells[c]?.[sz] || []).length" class="empty-qty">-</span>
+                              <td v-for="sz in storeDetailMatrix.sizes" :key="sz" class="num cell-data cell-qty">
+                                <span v-if="(storeDetailMatrix.cells[c]?.[sz] || []).length" class="qty-num">{{ (storeDetailMatrix.cells[c]?.[sz] || []).reduce((a, b) => a + (Number(b.qty) || 0), 0) }}</span>
+                                <span v-else class="empty-qty">-</span>
                               </td>
                             </tr>
                           </tbody>
@@ -820,6 +816,11 @@ onMounted(() => {
 .matrix-table.color-size-matrix .sku-model { font-size: 9px; color: #909399; font-family: monospace; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50px; }
 .matrix-table.color-size-matrix .sku-qty { font-size: 10px; color: #67c23a; font-weight: 600; line-height: 1.1; }
 .matrix-table.color-size-matrix .empty-qty { color: #c0c4cc; font-size: 11px; }
+
+/* 门店明细矩阵：cell 只显示数量合计（不堆叠 SKU），居中显示 */
+.matrix-table.color-size-matrix.store-detail-matrix .cell-data.cell-qty { text-align: center !important; vertical-align: middle !important; padding: 2px !important; font-weight: 600; }
+.matrix-table.color-size-matrix.store-detail-matrix .qty-num { font-size: 11px; color: #303133; font-weight: 600; }
+.matrix-table.color-size-matrix.store-detail-matrix .empty-qty { font-size: 11px; }
 
 .mini-pagination { justify-content: flex-end; padding-top: 8px; }
 
