@@ -216,7 +216,7 @@
                       <div v-if="!(storeDetail.byModel?.length > 0)" class="empty-cell">{{ $t('importDetail.noModelDataMatrix') }}</div>
                     </div>
 
-                    <!-- ②门店明细 — 颜色×尺码 矩阵（和展开全记录明细一致：cell-sku 堆叠） -->
+                    <!-- ②门店明细 — 颜色×尺码 矩阵（学 matrixForModel：单 cell 单 SKU，不堆叠） -->
                     <div v-if="expandedStoreDetail === s.store_code" class="report-section sub-section store-detail-section">
                       <h4>📋 {{ $t('importDetail.storeDetail') }} ({{ storeDetailMatrix.totalSkus }} SKU · {{ storeDetailMatrix.colors.length }} colors · {{ storeDetailMatrix.sizes.length }} sizes)</h4>
                       <div v-if="storeDetailMatrix.colors.length" class="matrix-table-wrap">
@@ -231,12 +231,11 @@
                             <tr v-for="c in storeDetailMatrix.colors" :key="c">
                               <td class="color-cell"><img v-if="storeDetailMatrix.colorImageMap[c]" :src="storeDetailMatrix.colorImageMap[c]" class="color-thumb" /> {{ getColorDisplay({color: c}) || c }}</td>
                               <td v-for="sz in storeDetailMatrix.sizes" :key="sz" class="num cell-data">
-                                <div v-for="cell in (storeDetailMatrix.cells[c]?.[sz] || [])" :key="cell.sku + cell.model" class="cell-sku">
-                                  <span class="sku-num">{{ cell.sku }}</span>
-                                  <span class="sku-model" :title="cell.model">{{ (cell.model || '').slice(0, 8) }}</span>
-                                  <span class="sku-qty">{{ cell.qty }}{{ $t('importDetail.pcs') }}</span>
+                                <div v-if="(storeDetailMatrix.cells[c]?.[sz] || []).length" class="cell-sku" :title="(storeDetailMatrix.cells[c]?.[sz] || []).map(x => x.sku + '/' + x.qty).join(', ')">
+                                  <span class="sku-num">{{ (storeDetailMatrix.cells[c]?.[sz] || [])[0].sku }}</span>
+                                  <span class="sku-qty">/{{ (storeDetailMatrix.cells[c]?.[sz] || []).reduce((a, b) => a + (Number(b.qty) || 0), 0) }}PCS</span>
                                 </div>
-                                <span v-if="!(storeDetailMatrix.cells[c]?.[sz] || []).length" class="empty-qty">-</span>
+                                <span v-else class="empty-qty">-</span>
                               </td>
                             </tr>
                           </tbody>
