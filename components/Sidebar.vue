@@ -233,8 +233,8 @@ const menuGroups = computed(() => [
     children: [
       { key: 'preorder:create', label: t('nav.preorderCreate'), to: '/orders/create' },
       { key: 'preorder:aggregate', label: t('nav.preorderSummary'), to: '/preorder/summary' },
-      { key: 'preorder:demo', label: '可售库存清单', to: '/preorder/stock-demo' },
-      { key: 'preorder:read', label: '即将到货清单', to: '/preorder/upcoming' },
+      { key: 'preorder:demo', label: t('nav.preorderStockDemo'), to: '/preorder/stock-demo' },
+      { key: 'preorder:read', label: t('nav.preorderUpcoming'), to: '/preorder/upcoming' },
     ]
   },
   {

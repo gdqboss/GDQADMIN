@@ -209,6 +209,8 @@ export default {
         preorder: 'Tempahan Produk',
         preorderCreate: 'Tempahan Baru',
         preorderSummary: 'Ringkasan Tempahan',
+        preorderStockDemo: 'Senarai Stok Tersedia',
+        preorderUpcoming: 'Akan Tiba',
         // Restaurant Management
         restaurant: 'Pengurusan Restoran',
         restaurantDashboard: 'Papan Pemuka Restoran',

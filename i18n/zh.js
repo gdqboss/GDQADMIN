@@ -282,6 +282,8 @@ export default {
     preorder: '产品预订',
     preorderCreate: '新增订货单',
     preorderSummary: '订货单汇总表',
+    preorderStockDemo: '可售库存清单',
+    preorderUpcoming: '即将到货清单',
     // 餐饮管理
     restaurant: '餐饮管理',
     restaurantDashboard: '餐饮仪表盘',

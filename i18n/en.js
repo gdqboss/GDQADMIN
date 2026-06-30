@@ -217,6 +217,8 @@ export default {
     preorder: 'Pre-order',
     preorderCreate: 'New Pre-order',
     preorderSummary: 'Pre-order Summary',
+    preorderStockDemo: 'Available Stock List',
+    preorderUpcoming: 'Upcoming Arrivals',
     // Restaurant Management
     restaurant: 'Restaurant',
     restaurantDashboard: 'Restaurant Dashboard',
