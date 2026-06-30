@@ -70,8 +70,11 @@
             </div>
           </div>
           <div v-if="expandedAllRecords" class="all-records-wrap report-section sub-section">
-            <h4>📋 {{ $t('importDetail.expandAllRecords') }} ({{ allRecordsMatrix.totalSkus }} SKU · {{ allRecordsMatrix.colors.length }} colors · {{ allRecordsMatrix.sizes.length }} sizes)</h4>
-            <div v-if="allRecordsMatrix.colors.length" class="matrix-table-wrap">
+            <div class="section-toolbar">
+              <h4>📋 {{ $t('importDetail.expandAllRecords') }} ({{ allRecordsMatrix.totalSkus }} SKU · {{ allRecordsMatrix.colors.length }} colors · {{ allRecordsMatrix.sizes.length }} sizes)</h4>
+              <button class="btn-xs btn-print" @click="printMatrix('allRecords')">{{ $t('importDetail.print') }}</button>
+            </div>
+            <div v-if="allRecordsMatrix.colors.length" class="matrix-table-wrap" :ref="el => printRefs.allRecords = el">
               <table class="matrix-table color-size-matrix">
                 <thead>
                   <tr>
@@ -172,7 +175,11 @@
                           <!-- SKU 颜色×尺码 真矩阵 -->
                           <tr v-if="expandedModel === m.model && matrixForModel.colors.length > 0" class="expand-row">
                             <td colspan="7">
-                              <div class="sku-matrix-wrap">
+                              <div class="sku-matrix-wrap" :ref="el => printRefs.modelMatrix = el">
+                                <div class="section-toolbar" style="padding: 4px 0;">
+                                  <h4 style="font-size: 12px; margin: 0;">📦 {{ m.model }}</h4>
+                                  <button class="btn-xs btn-print" @click="printModelMatrix(m.model)">{{ $t('importDetail.print') }}</button>
+                                </div>
                                 <div class="sku-matrix-layout">
                                   <!-- 左侧：型号大图 -->
                                   <div class="model-image-cell">
@@ -218,8 +225,11 @@
 
                     <!-- ②门店明细 — 颜色×尺码 矩阵（学 matrixForModel：单 cell 单 SKU，不堆叠） -->
                     <div v-if="expandedStoreDetail === s.store_code" class="report-section sub-section store-detail-section">
-                      <h4>📋 {{ $t('importDetail.storeDetail') }} ({{ storeDetailMatrix.totalSkus }} SKU · {{ storeDetailMatrix.colors.length }} colors · {{ storeDetailMatrix.sizes.length }} sizes)</h4>
-                      <div v-if="storeDetailMatrix.colors.length" class="matrix-table-wrap">
+                      <div class="section-toolbar">
+                        <h4>📋 {{ $t('importDetail.storeDetail') }} ({{ storeDetailMatrix.totalSkus }} SKU · {{ storeDetailMatrix.colors.length }} colors · {{ storeDetailMatrix.sizes.length }} sizes)</h4>
+                        <button class="btn-xs btn-print" @click="printStoreDetail(s.store_code, s.store_name)">{{ $t('importDetail.print') }}</button>
+                      </div>
+                      <div v-if="storeDetailMatrix.colors.length" class="matrix-table-wrap" :ref="el => printRefs.storeDetail = el">
                         <table class="matrix-table color-size-matrix">
                           <thead>
                             <tr>
@@ -437,6 +447,10 @@ const expandedStoreDetail = ref(null)
 const expandedAllRecords = ref(false)
 const modelSkus = ref([])
 
+// 打印 ref：每个矩阵一个 DOM ref，打印时克隆该节点到新窗口
+const printRefs = { allRecords: null, modelMatrix: null, storeDetail: null }
+const printSubtitle = ref('')  // 打印时附加在标题下的副标题
+
 async function toggleStore(storeCode) {
   if (expandedStore.value === storeCode) {
     expandedStore.value = null
@@ -541,6 +555,113 @@ async function printStores() {
   setTimeout(() => { w.focus(); w.print() }, 250)
 }
 
+// 🖨 通用矩阵打印 — 克隆 DOM 节点到新窗口，可预览可多页
+function openPrintWindow(title, subtitle, tableHTML, extraCSS) {
+  const w = window.open('', '_blank')
+  if (!w) { alert('弹窗被浏览器拦截，请允许本站弹出窗口后再点打印'); return null }
+  const css = 'body{font-family:"Microsoft YaHei","Helvetica",Arial,sans-serif;padding:16px;color:#222}' +
+    'h1{font-size:16px;margin:0 0 4px}' +
+    '.meta{font-size:12px;color:#666;margin-bottom:12px}' +
+    'table{border-collapse:collapse;font-size:11px;table-layout:auto}' +
+    'th,td{border:1px solid #999;padding:3px 4px}' +
+    'th{background:#f0f2f5;font-weight:600}' +
+    '.color-cell{background:#fafbfc;font-weight:600;text-align:left}' +
+    '.size-col{background:#f0f2f5;text-align:center;font-weight:600}' +
+    '.cell-data{padding:3px 2px;vertical-align:top;text-align:left;min-width:56px}' +
+    '.cell-sku{display:flex;flex-direction:column;gap:1px;line-height:1.15;padding:1px 0;border-bottom:1px dashed #ddd}' +
+    '.cell-sku:last-child{border-bottom:none}' +
+    '.sku-num{font-family:monospace;font-size:10px;color:#1976d2;font-weight:600}' +
+    '.sku-model{font-size:9px;color:#666;font-family:monospace}' +
+    '.sku-qty{font-size:10px;color:#388e3c;font-weight:600}' +
+    '.empty-qty{color:#bbb;font-size:11px}' +
+    '.color-thumb{width:16px;height:16px;object-fit:cover;border-radius:2px;vertical-align:middle;margin-right:4px}' +
+    '@page{size:A4 landscape;margin:1cm}' +
+    (extraCSS || '')
+
+  w.document.open()
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>' + title + '</title><style>' + css + '</style></head><body>'
+    + '<h1>' + title + '</h1>'
+    + '<div class="meta">' + subtitle + ' · 打印时间: ' + new Date().toLocaleString() + '</div>'
+    + tableHTML
+    + '</body></html>')
+  w.document.close()
+  setTimeout(() => { w.focus(); w.print() }, 300)
+  return w
+}
+
+function buildColorSizeTableHTML(matrix, options = {}) {
+  // matrix = { sizes, colors, cells, colorImageMap, totalSkus }
+  const { showSkuModel = true, qtySuffix = '件', aggregateCell = false } = options
+  if (!matrix.colors?.length) return '<div style="color:#999;text-align:center;padding:24px">无数据</div>'
+
+  // 表头
+  let html = '<table><thead><tr><th class="color-cell">颜色 \\ 尺码</th>'
+  for (const sz of matrix.sizes) html += '<th class="size-col">' + sz + '</th>'
+  html += '</tr></thead><tbody>'
+
+  for (const c of matrix.colors) {
+    html += '<tr><td class="color-cell">'
+    const img = matrix.colorImageMap?.[c]
+    if (img) html += '<img class="color-thumb" src="' + img + '"/> '
+    html += c + '</td>'
+
+    for (const sz of matrix.sizes) {
+      const cellItems = matrix.cells[c]?.[sz] || []
+      html += '<td class="cell-data">'
+      if (cellItems.length === 0) {
+        html += '<span class="empty-qty">-</span>'
+      } else if (aggregateCell) {
+        // 单 cell 单 SKU + 数量合计
+        const first = cellItems[0]
+        const totalQty = cellItems.reduce((a, b) => a + (Number(b.qty) || 0), 0)
+        const title = cellItems.map(x => x.sku + '/' + x.qty).join(', ')
+        html += '<div class="cell-sku" title="' + title + '"><span class="sku-num">' + first.sku + '</span><span class="sku-qty">/' + totalQty + qtySuffix + '</span></div>'
+      } else {
+        // 堆叠每个 SKU
+        for (const item of cellItems) {
+          html += '<div class="cell-sku"><span class="sku-num">' + item.sku + '</span>'
+          if (showSkuModel && item.model) html += '<span class="sku-model">' + (item.model || '').slice(0, 8) + '</span>'
+          html += '<span class="sku-qty">' + item.qty + qtySuffix + '</span></div>'
+        }
+      }
+      html += '</td>'
+    }
+    html += '</tr>'
+  }
+  html += '</tbody></table>'
+  return html
+}
+
+// ① 打印 — 展开全记录明细
+function printMatrix(_key) {
+  const m = allRecordsMatrix.value
+  if (!m.colors?.length) { alert('无数据可打印'); return }
+  const title = '📋 展开全记录明细 — 颜色×尺码矩阵'
+  const subtitle = '导入记录 #' + recordId + ' · ' + (record.value?.file_name || '') + ' · ' + m.totalSkus + ' SKU · ' + m.colors.length + ' colors · ' + m.sizes.length + ' sizes'
+  const html = buildColorSizeTableHTML(m, { showSkuModel: true, qtySuffix: '件', aggregateCell: false })
+  openPrintWindow(title, subtitle, html)
+}
+
+// ② 打印 — 按模型展开的 SKU 矩阵
+function printModelMatrix(modelName) {
+  const m = matrixForModel.value
+  if (!m.colors?.length) { alert('无数据可打印'); return }
+  const title = '📦 型号 ' + modelName + ' — 颜色×尺码矩阵'
+  const subtitle = '导入记录 #' + recordId + ' · ' + (record.value?.file_name || '') + ' · ' + m.totalSkus + ' SKU · ' + m.colors.length + ' colors · ' + m.sizes.length + ' sizes'
+  const html = buildColorSizeTableHTML(m, { showSkuModel: false, qtySuffix: 'PCS', aggregateCell: true })
+  openPrintWindow(title, subtitle, html)
+}
+
+// ③ 打印 — 单门店明细矩阵
+function printStoreDetail(storeCode, storeName) {
+  const m = storeDetailMatrix.value
+  if (!m.colors?.length) { alert('无数据可打印'); return }
+  const title = '🏪 门店明细 — ' + (storeName || storeCode)
+  const subtitle = '门店 ' + storeCode + ' · 导入记录 #' + recordId + ' · ' + (record.value?.file_name || '') + ' · ' + m.totalSkus + ' SKU · ' + m.colors.length + ' colors · ' + m.sizes.length + ' sizes'
+  const html = buildColorSizeTableHTML(m, { showSkuModel: false, qtySuffix: 'PCS', aggregateCell: true })
+  openPrintWindow(title, subtitle, html)
+}
+
 // 当前展开型号的 颜色×尺码 矩阵（行=颜色，列=尺码，格=Sku编号/数量）
 const matrixForModel = computed(() => buildMatrix(modelSkus.value))
 
@@ -549,6 +670,7 @@ const matrixForModel = computed(() => buildMatrix(modelSkus.value))
 // 全局整合所有 model 到同一张颜色×尺码 矩阵（不按 model 拆分）
 function buildMatrix(rows) {
   const arr = rows || []
+  console.log('[buildMatrix] called, rows.length=', arr.length, 'keys=', arr[0] ? Object.keys(arr[0]).join(',') : 'none', 'sample.qty=', arr[0]?.quantity ?? arr[0]?.total_qty ?? arr[0]?.qty ?? 'no qty field')
   if (arr.length === 0) return { sizes: [], colors: [], cells: {}, colorImageMap: {}, totalSkus: 0 }
   const colorSet = new Set()
   const sizeSet = new Set()
@@ -576,7 +698,7 @@ function buildMatrix(rows) {
     const sz = (s.size || '').toString().trim()
     if (!sz) continue
     if (!cells[c][sz]) cells[c][sz] = []
-    cells[c][sz].push({ sku: s.sku, model: s.model, qty: Number(s.total_qty || s.qty || 0), image: s.image_url || '' })
+    cells[c][sz].push({ sku: s.sku, model: s.model, qty: Number(s.total_qty ?? s.quantity ?? s.qty ?? 0), image: s.image_url || '' })
   }
   return { sizes, colors, cells, colorImageMap, totalSkus: arr.length }
 }
@@ -801,6 +923,8 @@ onMounted(() => {
 .store-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .btn-toggle-all, .btn-toggle-store-detail, .btn-print { background: #ecf5ff; color: #1890ff; border-color: #91d5ff; }
 .btn-print { background: #fff7e6; color: #d48806; border-color: #ffd591; }
+.section-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; margin-bottom: 6px; }
+.section-toolbar h4 { margin: 0; }
 .store-detail-section { margin-top: 6px; padding-top: 4px; border-top: 1px dashed #dcdfe6; }
 .store-detail-section h4 { margin: 0 0 4px; font-size: 12px; color: #606266; }
 .store-detail-footer { margin-top: 4px; text-align: right; }

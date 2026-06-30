@@ -3891,6 +3891,7 @@ export default {
     storeDetail: '门店明细',
     sku: 'SKU',
     printStores: '🖨️ 打印门店清单',
+    print: '🖨️ 打印',
   },
   storeSales: {
     title: '门店销售报表',

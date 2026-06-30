@@ -3780,6 +3780,7 @@ export default {
     storeDetail: 'Store Detail',
     sku: 'SKU',
     printStores: '🖨️ Print Store List',
+    print: '🖨️ Print',
   },
   storeSales: {
     title: 'Store Sales Report',
