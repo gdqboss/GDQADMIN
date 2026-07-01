@@ -237,6 +237,13 @@ export default {
         articles: 'Artikel',
         yuyue: 'Perkhidmatan Tempahan',
         kefu: 'Perkhidmatan Pelanggan',
+        temple: 'Perkhidmatan Tokong',
+        templeDashboard: 'Papan Pemuka',
+        templeCaskets: 'Tabung Abu',
+        templeAncestors: 'Arkib Leluhur',
+        templeOrders: 'Pesanan Memorial',
+        templeDonations: 'Sumbangan',
+        templeMonks: 'Sami',
   },
   logs: {
     // Work Logs
@@ -3679,6 +3686,8 @@ export default {
         storeDetail: 'Store Detail',
         sku: 'SKU',
         printStores: '🖨️ Print Store List',
+        colorTotalTip: 'Jumlah semua saiz untuk warna ini',
+        grandTotal: 'JUMLAH BESAR',
   },
   importMulti: {
     pageTitle: 'Analisis Multi-Stor',

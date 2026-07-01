@@ -310,6 +310,13 @@ export default {
     articles: '文章管理',
     yuyue: '预约服务',
     kefu: '客服消息',
+    temple: '寺庙服务',
+    templeDashboard: '服务总览',
+    templeCaskets: '骨灰盒管理',
+    templeAncestors: '逝者档案',
+    templeOrders: '祭拜订单',
+    templeDonations: '捐赠管理',
+    templeMonks: '和尚管理',
   },
   logs: {
     // 工作日志
@@ -3894,6 +3901,8 @@ export default {
     sku: 'SKU',
     printStores: '🖨️ 打印门店清单',
     print: '🖨️ 打印',
+    colorTotalTip: '本颜色所有尺码汇总',
+    grandTotal: '总汇总',
   },
   storeSales: {
     title: '门店销售报表',

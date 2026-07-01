@@ -245,6 +245,13 @@ export default {
     articles: 'Articles',
     yuyue: 'Booking Service',
     kefu: 'Customer Service',
+    temple: 'Temple Service',
+    templeDashboard: 'Dashboard',
+    templeCaskets: 'Caskets',
+    templeAncestors: 'Ancestors',
+    templeOrders: 'Memorial Orders',
+    templeDonations: 'Donations',
+    templeMonks: 'Monks',
   },
   logs: {
     // Work Logs
@@ -3783,6 +3790,8 @@ export default {
     sku: 'SKU',
     printStores: '🖨️ Print Store List',
     print: '🖨️ Print',
+    colorTotalTip: 'Sum of all sizes for this color',
+    grandTotal: 'GRAND TOTAL',
   },
   storeSales: {
     title: 'Store Sales Report',

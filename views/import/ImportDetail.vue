@@ -235,20 +235,37 @@
                             <tr>
                               <th class="color-col">{{ $t('importDetail.colorSizeMatrix') }}</th>
                               <th v-for="sz in storeDetailMatrix.sizes" :key="sz" class="num size-col">{{ sz }}</th>
+                              <th class="num sum-col" :title="$t('importDetail.colorTotalTip')">Σ</th>
                             </tr>
                           </thead>
                           <tbody>
                             <tr v-for="c in storeDetailMatrix.colors" :key="c">
                               <td class="color-cell"><img v-if="storeDetailMatrix.colorImageMap[c]" :src="storeDetailMatrix.colorImageMap[c]" class="color-thumb" /> {{ getColorDisplay({color: c}) || c }}</td>
                               <td v-for="sz in storeDetailMatrix.sizes" :key="sz" class="num cell-data">
-                                <div v-if="(storeDetailMatrix.cells[c]?.[sz] || []).length" class="cell-sku" :title="(storeDetailMatrix.cells[c]?.[sz] || []).map(x => x.sku + '/' + x.qty).join(', ')">
-                                  <span class="sku-num">{{ (storeDetailMatrix.cells[c]?.[sz] || [])[0].sku }}</span>
-                                  <span class="sku-qty">/{{ (storeDetailMatrix.cells[c]?.[sz] || []).reduce((a, b) => a + (Number(b.qty) || 0), 0) }}PCS</span>
-                                </div>
+                                <template v-if="(storeDetailMatrix.cells[c]?.[sz] || []).length">
+                                  <div v-for="cell in storeDetailMatrix.cells[c][sz]" :key="cell.sku" class="cell-sku" :title="cell.sku + ' / ' + cell.qty + 'PCS' + (cell.model ? ' · ' + cell.model : '')">
+                                    <span class="sku-num">{{ cell.sku }}</span>
+                                    <span class="sku-qty">/{{ cell.qty }}PCS</span>
+                                  </div>
+                                </template>
                                 <span v-else class="empty-qty">-</span>
+                              </td>
+                              <td class="num sum-cell">
+                                <span class="color-total">{{ storeDetailMatrix.sizes.reduce((acc, sz) => acc + (storeDetailMatrix.cells[c]?.[sz] || []).reduce((a, b) => a + (Number(b.qty) || 0), 0), 0).toLocaleString() }}</span>
                               </td>
                             </tr>
                           </tbody>
+                          <tfoot>
+                            <tr class="grand-total-row">
+                              <td class="color-cell">{{ $t('importDetail.grandTotal') }}</td>
+                              <td v-for="sz in storeDetailMatrix.sizes" :key="sz" class="num cell-data">
+                                <span class="size-total">{{ storeDetailMatrix.colors.reduce((acc, c) => acc + (storeDetailMatrix.cells[c]?.[sz] || []).reduce((a, b) => a + (Number(b.qty) || 0), 0), 0).toLocaleString() }}</span>
+                              </td>
+                              <td class="num sum-cell">
+                                <span class="grand-total-value">{{ storeDetailMatrix.colors.reduce((cAcc, c) => cAcc + storeDetailMatrix.sizes.reduce((sAcc, sz) => sAcc + (storeDetailMatrix.cells[c]?.[sz] || []).reduce((a, b) => a + (Number(b.qty) || 0), 0), 0), 0).toLocaleString() }}</span>
+                              </td>
+                            </tr>
+                          </tfoot>
                         </table>
                       </div>
                       <div v-else class="empty-cell">{{ $t('importDetail.noData') }}</div>
@@ -928,6 +945,11 @@ onMounted(() => {
 .store-detail-section { margin-top: 6px; padding-top: 4px; border-top: 1px dashed #dcdfe6; }
 .store-detail-section h4 { margin: 0 0 4px; font-size: 12px; color: #606266; }
 .store-detail-footer { margin-top: 4px; text-align: right; }
+/* Σ 颜色汇总列 + GRAND TOTAL 行 — 浅黄底色突出 */
+.matrix-table.color-size-matrix .sum-col,
+.matrix-table.color-size-matrix .sum-cell { width: 56px !important; min-width: 56px; max-width: 56px; background: #fffbe6; font-weight: 700; color: #d48806; text-align: center; }
+.matrix-table.color-size-matrix .grand-total-row td { background: #fff7d9 !important; border-top: 2px solid #d48806; }
+.matrix-table.color-size-matrix .grand-total-value { color: #c2410c; font-size: 13px; }
 
 /* 颜色×尺码 大矩阵 — 与 matrix-table 同密度，无外圈 box，颜色/尺码 cell 内可垂直堆叠多个 SKU */
 .matrix-table.color-size-matrix { table-layout: fixed; width: max-content; }
