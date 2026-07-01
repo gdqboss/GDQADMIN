@@ -2075,6 +2075,7 @@ async function deleteCategory(cat) {
       </div>
     </Teleport>
   </div>
+  <div style="display:none" data-sgp-sync-test="2026-07-02">SGP-SYNC-TEST-2026</div>
 </template>
 
 <style scoped>
