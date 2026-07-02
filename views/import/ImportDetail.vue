@@ -123,7 +123,7 @@
             <tbody>
               <template v-for="(s, i) in allStores" :key="s.store_code">
               <!-- ①门店汇总行（始终可见，点开 tab 就显示全部） -->
-              <tr :class="{ expanded: storeDetailsMap[s.store_code] }">
+              <tr :class="{ expanded: expandedStore[s.store_code] }">
                 <td>{{ i + 1 }}</td>
                 <td class="store-name-cell" :title="s.store_name || s.store_code">{{ s.store_name || s.store_code || '-' }}</td>
                 <td class="num">{{ s.item_count ?? '-' }}</td>
@@ -131,12 +131,12 @@
                 <td class="num amount-cell">{{ s.amount ? '¥' + Number(s.amount).toLocaleString() : '-' }}</td>
                 <td>
                   <div class="store-row-actions">
-                    <button class="btn-xs" @click="toggleStoreDetail(s.store_code)">{{ storeDetailsMap[s.store_code]?.loaded ? $t('importDetail.collapse') : $t('importDetail.expand') }}</button>
+                    <button class="btn-xs" @click="toggleStoreDetail(s.store_code)">{{ expandedStore[s.store_code] ? $t('importDetail.collapse') : $t('importDetail.expand') }}</button>
                   </div>
                 </td>
               </tr>
-              <!-- ②门店明细 — 进 tab 全展开（学 matrixForModel：单 cell 单 SKU） -->
-              <tr v-if="storeDetailsMap[s.store_code]?.loaded" class="expand-row">
+              <!-- ②门店明细 — 默认全部收起，点门店行的"展开"按钮才加载 + 展开（含 chips + 型号分布 + 每个型号的 matrix） -->
+              <tr v-if="expandedStore[s.store_code]" class="expand-row">
                 <td colspan="6">
                   <div class="store-expand-inner">
                     <!-- 门店汇总 chips -->
@@ -408,9 +408,11 @@ const allStores = computed(() => {
 })
 
 // 门店分析：每个门店一个独立 storeDetailsMap[store_code] = { store, byModel, bySku, loaded, expandedModels:[model,...], _matrixCache:{model:matrix} }
-// 进门店分析 tab 时全部门店自动展开（一次性串行发 N 个 store 详情请求）
+// 进门店分析 tab 时**默认全部收起**，点门店行的"展开"按钮才加载 + 展开该店明细
 // 每个门店可同时展开多个型号 matrix（支持"全店全部展开"按钮）；matrix 缓存到 entry._matrixCache 避免重复 build
 const storeDetailsMap = reactive({})
+// 每家店是否展开明细（独立 flag，默认 false；点了 toggleStoreDetail 才 true）
+const expandedStore = reactive({})
 const expandedAllRecords = ref(false)
 
 // 打印 ref：每个矩阵一个 DOM ref，打印时克隆该节点到新窗口
@@ -452,11 +454,13 @@ async function loadAllStoreDetails() {
 // 还原老版"点门店明细"按钮：点门店行 → 展开该门店的 expand-row（含 chips + 型号分布 + 每个型号的 matrix）
 // 每家店独立维护 expandedModels 数组 + _matrixCache，支持同时展开多个型号 matrix
 async function toggleStoreDetail(storeCode) {
-  const entry = storeDetailsMap[storeCode]
-  if (!entry || !entry.loaded) {
-    await loadOneStore(storeCode)
+  // 第一次点展开：触发 lazy load；之后只是 toggle
+  if (!expandedStore[storeCode]) {
+    if (!storeDetailsMap[storeCode]) await loadOneStore(storeCode)
+    expandedStore[storeCode] = true
+  } else {
+    expandedStore[storeCode] = false
   }
-  // 让该门店的 expand-row 可见（lifecycle 上一层 v-if 用 loaded 控制，这里无需再切）
 }
 
 // 每家店的 toggleStoreModel：多选（点同一型号收起，点其他型号切换 / 全店全展开时一起展开）
@@ -484,9 +488,15 @@ function getMatrixFor(storeCode, model) {
   return entry._matrixCache[model]
 }
 
-// 全部门店一次性打开 matrix：每家店所有型号 matrix 全部展开
-function expandAllStoreMatrices() {
+// 全部门店一次性打开 matrix：每家店所有型号 matrix 全部展开（同时把每家店明细也展开，否则 matrix 看不到）
+async function expandAllStoreMatrices() {
   let count = 0
+  // 1) 先确保每家店都 load 过 + 展开明细 flag
+  for (const s of allStores.value) {
+    if (!storeDetailsMap[s.store_code]) await loadOneStore(s.store_code)
+    expandedStore[s.store_code] = true
+  }
+  // 2) 再展开每家店所有型号 matrix
   for (const s of allStores.value) {
     const entry = storeDetailsMap[s.store_code]
     if (!entry || !entry.byModel?.length) continue
@@ -511,6 +521,13 @@ function collapseAllStoreMatrices() {
       entry.expandedModel = null
       if (entry.expandedModels) entry.expandedModels.clear()
     }
+  }
+}
+
+// 全店明细一次性收起（清空每家店的 expandedStore flag）
+function collapseAllStoreDetails() {
+  for (const code in expandedStore) {
+    expandedStore[code] = false
   }
 }
 
@@ -841,8 +858,7 @@ async function loadSummary() {
   try {
     const res = await api.get(`/import/records/${recordId}/summary`)
     if (res.success) summary.value = res.summary
-    // 拿到 byStore 后立即串行加载全部门店详情（还原老版：进 tab 即展开每家店）
-    loadAllStoreDetails()
+    // 不再自动调 loadAllStoreDetails：进 tab 默认全部收起，点了"展开"按钮才 lazy load
   } catch (e) {
     console.error('[ImportDetail] load summary error:', e)
   }
