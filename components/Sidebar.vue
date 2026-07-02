@@ -313,6 +313,21 @@ const menuGroups = computed(() => [
       { key: 'system:config', label: t('nav.serverProfiles'), to: '/settings/server-profiles', moduleKey: 'server_profiles' },
     ]
   },
+  {
+    key: 'temple',
+    icon: 'temple_buddhist',
+    label: t('nav.temple'),
+    to: null,
+    moduleKeys: ['temple'],
+    children: [
+      { key: 'temple:read', label: t('nav.templeDashboard'), to: '/temple' },
+      { key: 'temple:read', label: t('nav.templeCaskets'), to: '/temple/caskets' },
+      { key: 'temple:read', label: t('nav.templeAncestors'), to: '/temple/ancestors' },
+      { key: 'temple:read', label: t('nav.templeOrders'), to: '/temple/orders' },
+      { key: 'temple:read', label: t('nav.templeDonations'), to: '/temple/donations' },
+      { key: 'temple:read', label: t('nav.templeMonks'), to: '/temple/monks' },
+    ]
+  },
 ])
 
 // 过滤后的菜单分组（用模块原则：模块驱动 + 权限补充）

@@ -64,6 +64,12 @@ const routes = [
   { path: '/login', name: 'Login', component: lazyLoad(() => import('../views/Login.vue')), meta: { public: true } },
   // 扫码页公开路由（不登录也能查看产品信息）
   { path: '/scan/:code', name: 'ScanPage', component: lazyLoad(() => import('../views/scan/ScanPage.vue')), meta: { public: true } },
+
+  // 寺庙服务 - C 端公开路由（扫码查骨灰盒 + 请和尚代劳 + 捐赠）
+  { path: '/temple/memorial', name: 'TempleMemorial', component: lazyLoad(() => import('../views/temple/MemorialPage.vue')), meta: { public: true } },
+  { path: '/temple/memorial-order', name: 'TempleMemorialOrder', component: lazyLoad(() => import('../views/temple/MemorialOrder.vue')), meta: { public: true } },
+  { path: '/temple/memorial-status', name: 'TempleMemorialStatus', component: lazyLoad(() => import('../views/temple/MemorialStatus.vue')), meta: { public: true } },
+  { path: '/temple/donation', name: 'TempleDonation', component: lazyLoad(() => import('../views/temple/DonationPage.vue')), meta: { public: true } },
   {
     path: '/',
     component: MainLayout,
@@ -141,6 +147,14 @@ const routes = [
       { path: 'transfer/create', name: 'TransferCreate', component: lazyLoad(() => import('../views/transfer/TransferCreate.vue')), meta: { title: '创建调货单', permission: 'transfer:write' } },
       { path: 'transfer/:id', name: 'TransferDetail', component: lazyLoad(() => import('../views/transfer/TransferDetail.vue')), meta: { title: '调货详情', permission: 'transfer:read' } },
       { path: 'inventory/returns', name: 'ReturnList', component: lazyLoad(() => import('../views/inventory/ReturnList.vue')), meta: { title: '退货记录', parent: '库存管理', permission: 'inventory:return' } },
+
+      // 寺庙服务 - 管理端
+      { path: 'temple', name: 'TempleDashboard', component: lazyLoad(() => import('../views/temple/admin/Dashboard.vue')), meta: { title: '寺庙服务', parent: '寺庙', permission: 'temple:read' } },
+      { path: 'temple/caskets', name: 'TempleCaskets', component: lazyLoad(() => import('../views/temple/admin/CasketManage.vue')), meta: { title: '骨灰盒管理', parent: '寺庙', permission: 'temple:read' } },
+      { path: 'temple/ancestors', name: 'TempleAncestors', component: lazyLoad(() => import('../views/temple/admin/AncestorManage.vue')), meta: { title: '逝者档案', parent: '寺庙', permission: 'temple:read' } },
+      { path: 'temple/orders', name: 'TempleOrders', component: lazyLoad(() => import('../views/temple/admin/OrderManage.vue')), meta: { title: '祭拜订单', parent: '寺庙', permission: 'temple:read' } },
+      { path: 'temple/donations', name: 'TempleDonations', component: lazyLoad(() => import('../views/temple/admin/DonationManage.vue')), meta: { title: '捐赠管理', parent: '寺庙', permission: 'temple:read' } },
+      { path: 'temple/monks', name: 'TempleMonks', component: lazyLoad(() => import('../views/temple/admin/MonkManage.vue')), meta: { title: '和尚管理', parent: '寺庙', permission: 'temple:read' } },
 
       // ── AI / BI ─────────────────────────────────────────────
       { path: 'ai-classroom', name: 'AiClassroom', component: lazyLoad(() => import('../views/AiClassroom.vue')), meta: { title: 'AI 课堂', permission: 'ai-classroom' } },

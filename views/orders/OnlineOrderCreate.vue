@@ -414,7 +414,118 @@ function formatSpecSummary(sku) {
     specs = typeof sku.specs === 'string' ? JSON.parse(sku.specs) : (sku.specs || {})
   } catch (e) { specs = {} }
   const values = Object.values(specs).filter(v => v != null && v !== '')
-  return values.length ? values.join('/') : (sku.sku_code || '—')
+  return values.length ? values.join('/') : (sku.sku || '—')
+}
+
+// ─── 矩阵式下单核心逻辑 ────────────────────────────────────────────
+// 自动识别 2 维规格：颜色 / 尺寸
+// 行标题：尺寸（更长的那维），列标题：颜色
+// 兼容：1 维规格（行=该维值，列=1 个 "数量" 列）
+// 兼容：每行只 1 个 SKU（行=SKU 摘要，列=1 个 input 列）
+function getMatrixDimensions(product) {
+  const skus = filterSkus(product.skus || [])
+  if (!skus.length) return { rows: [], cols: [], rowKey: null, colKey: null }
+  // 收集所有 specs key
+  const keySet = new Set()
+  for (const sku of skus) {
+    const specs = parseSpecs(sku.specs)
+    for (const k of Object.keys(specs)) keySet.add(k)
+  }
+  const keys = Array.from(keySet)
+  if (keys.length === 0) {
+    // specs 全空：行=SKU
+    return { rows: skus.map(s => formatSpecSummary(s)), cols: [], rowKey: null, colKey: null, mode: 'flat' }
+  }
+  if (keys.length === 1) {
+    const k = keys[0]
+    const vals = Array.from(new Set(skus.map(s => String(parseSpecs(s.specs)[k] ?? '—')))).sort()
+    return { rows: vals, cols: [], rowKey: k, colKey: null, mode: '1d' }
+  }
+  // 2 维或以上：行=第一个 key（习惯：尺寸/规格值），列=第二个 key（颜色等）
+  // 选择"行维" = 唯一值更少的那一维（视觉上更适合做行）
+  // 选择"列维" = 唯一值更多的那一维
+  const counts = keys.map(k => ({
+    key: k,
+    count: new Set(skus.map(s => String(parseSpecs(s.specs)[k] ?? '—'))).size
+  }))
+  counts.sort((a, b) => b.count - a.count)  // 多的在前
+  const colKey = counts[0].key
+  const rowKey = counts[1].key
+  const colVals = Array.from(new Set(skus.map(s => String(parseSpecs(s.specs)[colKey] ?? '—')))).sort()
+  const rowVals = Array.from(new Set(skus.map(s => String(parseSpecs(s.specs)[rowKey] ?? '—')))).sort()
+  return { rows: rowVals, cols: colVals, rowKey, colKey, mode: '2d' }
+}
+function getMatrixColumns(product) {
+  const dim = getMatrixDimensions(product)
+  if (dim.mode === 'flat') {
+    return { colValues: ['数量'] }
+  }
+  if (dim.mode === '1d') {
+    return { colValues: ['数量'] }
+  }
+  return { colValues: dim.cols }
+}
+function getMatrixRows(product) {
+  const dim = getMatrixDimensions(product)
+  return { rowValues: dim.rows }
+}
+// 矩阵 cell 找 SKU：返回 (rowVal, colVal) 对应的 SKU 对象
+function getSkuByCell(product, rowVal, colVal) {
+  const skus = filterSkus(product.skus || [])
+  const dim = getMatrixDimensions(product)
+  if (dim.mode === 'flat') {
+    // rowVal 是 formatSpecSummary
+    return skus.find(s => formatSpecSummary(s) === rowVal) || null
+  }
+  if (dim.mode === '1d') {
+    // rowVal 是 dim.rows 里的值，colKey=null
+    return skus.find(s => String(parseSpecs(s.specs)[dim.rowKey] ?? '—') === String(rowVal)) || null
+  }
+  return skus.find(s => {
+    const specs = parseSpecs(s.specs)
+    return String(specs[dim.rowKey] ?? '—') === String(rowVal) && String(specs[dim.colKey] ?? '—') === String(colVal)
+  }) || null
+}
+// 行小计 = 该行所有 SKU 数量之和
+function rowSubtotal(product, rowVal) {
+  const skus = filterSkus(product.skus || [])
+  const dim = getMatrixDimensions(product)
+  let total = 0
+  for (const sku of skus) {
+    let match = false
+    if (dim.mode === 'flat') {
+      match = formatSpecSummary(sku) === rowVal
+    } else if (dim.mode === '1d') {
+      match = String(parseSpecs(sku.specs)[dim.rowKey] ?? '—') === String(rowVal)
+    } else {
+      match = String(parseSpecs(sku.specs)[dim.rowKey] ?? '—') === String(rowVal)
+    }
+    if (match) total += Number(getQty(product.id, sku.id) || 0)
+  }
+  return total
+}
+// 列小计 = 该列所有 SKU 数量之和
+function colSubtotal(product, colVal) {
+  const skus = filterSkus(product.skus || [])
+  const dim = getMatrixDimensions(product)
+  if (dim.mode !== '2d') return ''  // 1d/flat 模式无列
+  let total = 0
+  for (const sku of skus) {
+    if (String(parseSpecs(sku.specs)[dim.colKey] ?? '—') === String(colVal)) {
+      total += Number(getQty(product.id, sku.id) || 0)
+    }
+  }
+  return total
+}
+// 该商品已选规格数（任意 quantity > 0）
+function productSelectedCount(productId) {
+  const product = products.value.find(p => p.id === productId)
+  if (!product) return 0
+  const skus = filterSkus(product.skus || [])
+  if (!skus.length) {
+    return Number(getQty(productId, null)) > 0 ? 1 : 0
+  }
+  return skus.filter(s => Number(getQty(productId, s.id)) > 0).length
 }
 </script>
 
@@ -566,110 +677,105 @@ function formatSpecSummary(sku) {
       </div>
 
       <div v-else class="overflow-x-auto">
+        <!-- 矩阵式下单：表头=规格维度1（颜色/第一维），首列=规格维度2（尺寸/第二维），单元格=数量 -->
+        <!-- 无 SKU 商品：单行单 input。1 维 SKU：行=该维值，列=1 个 input 列 -->
         <table class="w-full text-sm border-collapse">
-          <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
-            <tr>
-              <th class="px-3 py-3 font-medium text-left w-24">{{ t('order.image') }}</th>
-              <th class="px-3 py-3 font-medium text-left min-w-[120px]">{{ t('order.sku') }}</th>
-              <th class="px-3 py-3 font-medium text-left">{{ t('order.productName') }}</th>
-              <th class="px-3 py-3 font-medium text-left min-w-[160px]">{{ t('order.spec') }}</th>
-              <th class="px-3 py-3 font-medium text-right w-24">{{ t('order.unitPrice') }}</th>
-              <th class="px-3 py-3 font-medium text-right w-20">{{ t('order.stock') }}</th>
-              <th class="px-3 py-3 font-medium text-center w-28">{{ t('order.tQty') }} <span class="text-red-500">*</span></th>
-              <th class="px-3 py-3 font-medium text-right w-28">{{ t('order.subtotal') }}</th>
-            </tr>
-          </thead>
           <tbody class="divide-y divide-gray-100">
             <template v-for="product in filteredProducts" :key="product.id">
-              <!-- 没有 SKU 的商品：一行 -->
-              <tr v-if="!product.skus || filterSkus(product.skus).length === 0 && (!product.skus || product.skus.length === 0)" class="hover:bg-gray-50">
-                <td class="px-3 py-2">
-                  <img v-if="product.image_main" :src="product.image_main" class="w-16 h-16 object-cover rounded border border-gray-100" />
-                  <div v-else class="w-16 h-16 bg-gray-100 rounded flex items-center justify-center">
-                    <span class="material-symbols-outlined text-gray-300">image</span>
+              <!-- ================== 无 SKU 商品：单行 ================== -->
+              <tr v-if="!product.skus || filterSkus(product.skus).length === 0" class="hover:bg-gray-50">
+                <td class="px-3 py-2 w-16">
+                  <img v-if="product.image_main" :src="product.image_main" class="w-12 h-12 object-cover rounded border border-gray-100" />
+                  <div v-else class="w-12 h-12 bg-gray-100 rounded flex items-center justify-center">
+                    <span class="material-symbols-outlined text-gray-300 text-sm">image</span>
                   </div>
                 </td>
-                <td class="px-3 py-2 font-mono text-xs text-text-secondary">{{ product.sku }}</td>
-                <td class="px-3 py-2 font-medium text-text-primary">{{ product.name }}</td>
-                <td class="px-3 py-2 text-xs text-text-secondary">—</td>
-                <td class="px-3 py-2 text-right">¥{{ Number(product.sale_price || 0).toFixed(2) }}</td>
-                <td class="px-3 py-2 text-right font-medium text-success">{{ product.total_stock || 0 }}</td>
                 <td class="px-3 py-2">
+                  <div class="font-mono text-xs text-text-secondary">{{ product.sku }}</div>
+                  <div class="font-medium text-text-primary">{{ product.name }}</div>
+                </td>
+                <td class="px-3 py-2 w-32">
                   <input type="number" min="0" :value="getQty(product.id, null)"
                          @input="setQty(product.id, null, $event.target.value)"
-                         class="w-full px-2 py-1 border border-gray-200 rounded text-center text-sm focus:border-primary focus:outline-none" />
-                </td>
-                <td class="px-3 py-2 text-right text-primary font-medium">
-                  ¥{{ ((Number(getQty(product.id, null)) || 0) * Number(product.sale_price || 0)).toFixed(2) }}
+                         class="w-full px-2 py-1 border border-gray-200 rounded text-center text-sm focus:border-primary focus:outline-none"
+                         placeholder="数量" />
                 </td>
               </tr>
-              <!-- 有 SKU 的商品：默认折叠，点 + 展开全部 SKU -->
+
+              <!-- ================== 有 SKU 商品：颜色×尺寸 矩阵 ================== -->
               <template v-else>
-                <tr class="hover:bg-gray-50 cursor-pointer" @click="toggleSkuExpand(product.id)">
-                  <td class="px-3 py-2 align-top">
-                    <button type="button" class="material-symbols-outlined text-primary text-[20px] hover:bg-primary/10 rounded p-0.5" @click.stop="toggleSkuExpand(product.id)">
-                      {{ expandedSkus[product.id] ? 'remove' : 'add' }}
-                    </button>
-                  </td>
-                  <td class="px-3 py-2 align-top">
-                    <img v-if="product.image_main" :src="product.image_main" class="w-16 h-16 object-cover rounded border border-gray-100" />
-                    <div v-else class="w-16 h-16 bg-gray-100 rounded flex items-center justify-center">
-                      <span class="material-symbols-outlined text-gray-300">image</span>
+                <!-- 取该商品所有 SKU 的 specs key（自动识别 2 维：颜色、尺寸等） -->
+                <!-- 第一行：商品信息（跨列） + 矩阵表头 -->
+                <tr class="bg-gray-50">
+                  <td colspan="100" class="px-3 py-2">
+                    <div class="flex items-center gap-3">
+                      <img v-if="product.image_main" :src="product.image_main" class="w-10 h-10 object-cover rounded border border-gray-100" />
+                      <div v-else class="w-10 h-10 bg-gray-100 rounded flex items-center justify-center">
+                        <span class="material-symbols-outlined text-gray-300 text-sm">image</span>
+                      </div>
+                      <div class="flex-1">
+                        <div class="font-medium text-text-primary">{{ product.name }}</div>
+                        <div class="text-xs text-text-secondary font-mono">{{ product.sku }}</div>
+                      </div>
+                      <div class="text-xs text-text-secondary">
+                        已选 <strong class="text-primary">{{ productSelectedCount(product.id) }}</strong> / 共 {{ filterSkus(product.skus).length }} 个规格
+                      </div>
                     </div>
-                  </td>
-                  <td class="px-3 py-2 align-top font-mono text-xs text-text-secondary">{{ product.sku }}</td>
-                  <td class="px-3 py-2 align-top font-medium text-text-primary">{{ product.name }}</td>
-                  <!-- 规格摘要：直接展示该商品所有 SKU 的规格组合（如 "20/碳灰-A, 20/玫瑰金-A"） -->
-                  <td class="px-3 py-2 text-xs text-text-secondary">
-                    <div class="flex flex-wrap gap-1 max-w-[260px]">
-                      <span v-for="(sku, idx) in product.skus.slice(0, 3)" :key="sku.id"
-                            class="px-1.5 py-0.5 bg-gray-100 rounded text-[11px] text-text-secondary">
-                        {{ formatSpecSummary(sku) }}
-                      </span>
-                      <span v-if="product.skus.length > 3"
-                            class="px-1.5 py-0.5 bg-primary/10 text-primary rounded text-[11px] font-medium">
-                        +{{ product.skus.length - 3 }} ({{ t('order.clickToExpand') || '点开' }})
-                      </span>
-                    </div>
-                  </td>
-                  <td class="px-3 py-2 text-right">¥{{ Number(product.sale_price || 0).toFixed(2) }}</td>
-                  <td class="px-3 py-2 text-right font-medium text-success">{{ product.total_stock || product.skus.reduce((s, x) => s + (x.stock || 0), 0) }}</td>
-                  <td class="px-3 py-2 text-center text-text-secondary text-xs">
-                    <span v-if="!expandedSkus[product.id]">{{ t('order.clickToExpand') || '点开展开填数量' }}</span>
-                  </td>
-                  <td class="px-3 py-2 text-right text-primary font-medium">
-                    ¥{{ productSubtotal(product.id, product.sale_price).toFixed(2) }}
                   </td>
                 </tr>
-                <!-- 展开后的 SKU 详情行（每规格一行） -->
-                <template v-if="expandedSkus[product.id]">
-                  <tr v-for="sku in filterSkus(product.skus)" :key="product.id + '-' + sku.id" class="bg-gray-50/50 hover:bg-gray-100">
-                    <td class="px-3 py-2"></td>
-                    <td colspan="2" class="px-3 py-2 text-xs text-text-secondary">
-                      <span v-for="(v, k) in parseSpecs(sku.specs)" :key="k" class="inline-block mr-2">
-                        <span class="text-text-secondary">{{ k }}:</span><span class="text-text-primary ml-0.5 font-medium">{{ v }}</span>
-                      </span>
+                <!-- 矩阵表头：第一列 = 维度2（行标题），其他列 = 维度1（颜色） -->
+                <tr class="bg-gray-50/70 border-b-2 border-gray-200">
+                  <th class="px-2 py-2 text-xs font-medium text-text-secondary text-left w-24">尺寸 / 颜色</th>
+                  <th v-for="colVal in getMatrixColumns(product).colValues" :key="colVal"
+                      class="px-2 py-2 text-xs font-medium text-text-secondary text-center w-20">
+                    {{ colVal }}
+                  </th>
+                  <th class="px-2 py-2 text-xs font-medium text-text-secondary text-center w-16">小计</th>
+                </tr>
+                <!-- 矩阵行：行标题 = 维度2（尺寸），单元格 = 数量输入框 -->
+                <template v-for="rowVal in getMatrixRows(product).rowValues" :key="rowVal">
+                  <tr class="hover:bg-gray-50/50">
+                    <td class="px-2 py-1.5 text-xs font-medium text-text-primary bg-gray-50/30 text-center border-r border-gray-100">
+                      {{ rowVal }}
                     </td>
-                    <td class="px-3 py-2 text-right text-xs">¥{{ Number(sku.unit_price || product.sale_price || 0).toFixed(2) }}</td>
-                    <td class="px-3 py-2 text-right text-success font-medium text-xs">{{ sku.stock || 0 }}</td>
-                    <td class="px-3 py-2">
-                      <input type="number" min="0" :value="getQty(product.id, sku.id)"
-                             @input="setQty(product.id, sku.id, $event.target.value)"
-                             class="w-full px-2 py-1 border border-gray-200 rounded text-center text-sm focus:border-primary focus:outline-none" />
+                    <td v-for="colVal in getMatrixColumns(product).colValues" :key="colVal"
+                        class="px-1 py-1 text-center">
+                      <input v-if="getSkuByCell(product, rowVal, colVal)"
+                             type="number" min="0"
+                             :value="getQty(product.id, getSkuByCell(product, rowVal, colVal).id)"
+                             @input="setQty(product.id, getSkuByCell(product, rowVal, colVal).id, $event.target.value)"
+                             class="w-full px-1 py-1 border border-gray-200 rounded text-center text-sm focus:border-primary focus:outline-none"
+                             placeholder="—" />
+                      <span v-else class="text-gray-300 text-xs">·</span>
                     </td>
-                    <td class="px-3 py-2 text-right text-primary font-medium">
-                      ¥{{ ((Number(getQty(product.id, sku.id)) || 0) * Number(sku.unit_price || product.sale_price || 0)).toFixed(2) }}
+                    <td class="px-2 py-1.5 text-center text-primary font-medium text-sm">
+                      {{ rowSubtotal(product, rowVal) }}
                     </td>
                   </tr>
                 </template>
+                <!-- 矩阵底部：列小计行 -->
+                <tr class="bg-primary/5 font-medium">
+                  <td class="px-2 py-1.5 text-xs text-text-primary text-center border-r border-gray-100">列小计</td>
+                  <td v-for="colVal in getMatrixColumns(product).colValues" :key="colVal"
+                      class="px-2 py-1.5 text-center text-primary text-xs">
+                    {{ colSubtotal(product, colVal) }}
+                  </td>
+                  <td class="px-2 py-1.5 text-center text-primary text-sm font-bold">
+                    {{ productSelectedCount(product.id) }}
+                  </td>
+                </tr>
+                <!-- 商品之间分隔 -->
+                <tr><td colspan="100" class="h-2"></td></tr>
               </template>
             </template>
           </tbody>
-          <tfoot v-if="orderItems.length > 0" class="bg-primary/5 font-medium">
+          <tfoot v-if="orderItems.length > 0" class="bg-primary/10 font-bold">
             <tr>
-              <td colspan="6" class="px-3 py-3 text-right text-text-primary">{{ t('order.total') }}：</td>
-              <td class="px-3 py-3 text-center text-primary text-lg font-bold">{{ totalQty }}</td>
-              <td class="px-3 py-3 text-right text-primary text-lg font-bold">¥{{ totalAmount.toFixed(2) }}</td>
+              <td colspan="100" class="px-3 py-3 text-right text-text-primary">
+                {{ t('order.total') }}：<span class="text-primary text-lg mx-2">{{ orderItems.length }} 项</span>
+                <span class="text-text-secondary text-sm">|</span>
+                <span class="text-primary text-lg ml-2">T.QTY {{ totalQty }}</span>
+              </td>
             </tr>
           </tfoot>
         </table>
