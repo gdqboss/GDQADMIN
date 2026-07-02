@@ -270,7 +270,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import i18n from '@/i18n'
 import api from '@/services/api.js'
 

@@ -119,7 +119,8 @@
             </thead>
             <tbody>
               <template v-for="(s, i) in allStores" :key="s.store_code">
-              <tr :class="{ expanded: expandedStore === s.store_code }">
+              <!-- ①门店汇总行（始终可见，点开 tab 就显示全部） -->
+              <tr :class="{ expanded: storeDetailsMap[s.store_code] }">
                 <td>{{ i + 1 }}</td>
                 <td class="store-name-cell" :title="s.store_name || s.store_code">{{ s.store_name || s.store_code || '-' }}</td>
                 <td class="num">{{ s.item_count ?? '-' }}</td>
@@ -127,26 +128,26 @@
                 <td class="num amount-cell">{{ s.amount ? '¥' + Number(s.amount).toLocaleString() : '-' }}</td>
                 <td>
                   <div class="store-row-actions">
-                    <button class="btn-xs" @click="toggleStore(s.store_code)">{{ expandedStore === s.store_code ? $t('importDetail.collapse') : $t('importDetail.expand') }}</button>
-                    <button class="btn-xs btn-toggle-store-detail" @click="toggleStoreDetail(s.store_code)">{{ expandedStoreDetail === s.store_code ? $t('importDetail.collapseDetail') : $t('importDetail.expandDetail') }}</button>
+                    <button class="btn-xs" @click="toggleStoreDetail(s.store_code)">{{ storeDetailsMap[s.store_code]?.showDetail ? $t('importDetail.collapseDetail') : $t('importDetail.expandDetail') }}</button>
                   </div>
                 </td>
               </tr>
-              <tr v-if="expandedStore === s.store_code" class="expand-row">
+              <!-- ②门店明细 — 进 tab 全展开（学 matrixForModel：单 cell 单 SKU） -->
+              <tr v-if="storeDetailsMap[s.store_code]?.loaded" class="expand-row">
                 <td colspan="6">
-                  <div v-if="storeDetail && storeDetail.store?.store_code === s.store_code" class="store-expand-inner">
+                  <div class="store-expand-inner">
                     <!-- 门店汇总 chips -->
                     <div class="store-expand-stats">
-                      <span class="stat-chip">{{ $t('importDetail.salesQty') }} <strong>{{ Number(storeDetail.store?.total_qty || 0).toLocaleString() }}</strong> {{ $t('importDetail.pcs') }}</span>
-                      <span class="stat-chip">{{ $t('importDetail.salesAmount') }} <strong>¥{{ Number(storeDetail.store?.total_amount || 0).toLocaleString() }}</strong></span>
-                      <span class="stat-chip">{{ $t('importDetail.modelCount') }} <strong>{{ storeDetail.store?.model_count }}</strong></span>
-                      <span class="stat-chip">{{ $t('importDetail.skuCount') }} <strong>{{ storeDetail.store?.sku_count }}</strong></span>
+                      <span class="stat-chip">{{ $t('importDetail.salesQty') }} <strong>{{ Number(storeDetailsMap[s.store_code].store?.total_qty || 0).toLocaleString() }}</strong> {{ $t('importDetail.pcs') }}</span>
+                      <span class="stat-chip">{{ $t('importDetail.salesAmount') }} <strong>¥{{ Number(storeDetailsMap[s.store_code].store?.total_amount || 0).toLocaleString() }}</strong></span>
+                      <span class="stat-chip">{{ $t('importDetail.modelCount') }} <strong>{{ storeDetailsMap[s.store_code].store?.model_count }}</strong></span>
+                      <span class="stat-chip">{{ $t('importDetail.skuCount') }} <strong>{{ storeDetailsMap[s.store_code].store?.sku_count }}</strong></span>
                     </div>
                     <!-- 型号分布矩阵 -->
                     <div class="report-section sub-section">
-                      <h4>📦 {{ $t('importDetail.modelDistribution') }} ({{ storeDetail.byModel?.length || 0 }})</h4>
+                      <h4>📦 {{ $t('importDetail.modelDistribution') }} ({{ storeDetailsMap[s.store_code].byModel?.length || 0 }})</h4>
                       <div class="matrix-table-wrap">
-                      <table v-if="storeDetail.byModel?.length > 0" class="matrix-table model-matrix">
+                      <table v-if="storeDetailsMap[s.store_code].byModel?.length > 0" class="matrix-table model-matrix">
                         <thead>
                           <tr>
                             <th>#</th>
@@ -159,8 +160,7 @@
                           </tr>
                         </thead>
                         <tbody>
-                          <template v-for="(m, mi) in storeDetail.byModel" :key="m.model">
-                          <tr :class="{ expanded: expandedModel === m.model }">
+                          <tr v-for="(m, mi) in storeDetailsMap[s.store_code].byModel" :key="m.model">
                             <td>{{ mi + 1 }}</td>
                             <td>
                               <img v-if="m.image_url" :src="m.image_url" class="model-thumb" alt="" />
@@ -170,111 +170,46 @@
                             <td class="num">{{ m.sku_count }}</td>
                             <td class="num qty-cell">{{ Number(m.qty).toLocaleString() }}</td>
                             <td class="num amount-cell">{{ m.amount ? '¥' + Number(m.amount).toLocaleString() : '-' }}</td>
-                            <td><button class="btn-xs" @click="toggleModel(m.model)">{{ expandedModel === m.model ? $t('importDetail.collapse') : $t('importDetail.matrix') }}</button></td>
+                            <td><button class="btn-xs" @click="toggleStoreModel(s.store_code, m.model)">{{ storeDetailsMap[s.store_code].expandedModel === m.model ? $t('importDetail.collapse') : $t('importDetail.matrix') }}</button></td>
                           </tr>
-                          <!-- SKU 颜色×尺码 真矩阵 -->
-                          <tr v-if="expandedModel === m.model && matrixForModel.colors.length > 0" class="expand-row">
-                            <td colspan="7">
-                              <div class="sku-matrix-wrap" :ref="el => printRefs.modelMatrix = el">
-                                <div class="section-toolbar" style="padding: 4px 0;">
-                                  <h4 style="font-size: 12px; margin: 0;">📦 {{ m.model }}</h4>
-                                  <button class="btn-xs btn-print" @click="printModelMatrix(m.model)">{{ $t('importDetail.print') }}</button>
-                                </div>
-                                <div class="sku-matrix-layout">
-                                  <!-- 左侧：型号大图 -->
-                                  <div class="model-image-cell">
-                                    <img v-if="matrixForModel.modelImage" :src="matrixForModel.modelImage" class="model-image-large" alt="" />
-                                    <div v-else class="model-image-placeholder">📦</div>
-                                    <div class="model-image-label">{{ $t('importDetail.modelImageLabel') }}</div>
-                                  </div>
-                                  <!-- 右侧：颜色×尺码矩阵 -->
-                                  <div class="sku-matrix-right">
-                                    <table class="matrix-table sku-matrix">
-                                      <thead>
-                                        <tr>
-                                          <th class="color-col">{{ $t('importDetail.colorSizeMatrix') }}</th>
-                                          <th v-for="sz in matrixForModel.sizes" :key="sz" class="num size-col">{{ sz }}</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        <tr v-for="c in matrixForModel.colors" :key="c">
-                                          <td class="color-cell">{{ c }}</td>
-                                          <td v-for="sz in matrixForModel.sizes" :key="sz" class="num cell-data">
-                                            <div v-for="item in (matrixForModel.cells[c]?.[sz] || [])" :key="item.sku" class="cell-sku">
-                                              <span class="sku-num">{{ item.sku }}</span>
-                                              <span class="sku-qty">/{{ item.qty }}PCS</span>
-                                            </div>
-                                          </td>
-                                        </tr>
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                          <tr v-if="expandedModel === m.model && matrixForModel.colors.length === 0" class="expand-row">
-                            <td colspan="7" class="empty-cell">{{ $t('importDetail.noSkuData') }}</td>
-                          </tr>
-                          </template>
                         </tbody>
                       </table>
                       </div>
-                      <div v-if="!(storeDetail.byModel?.length > 0)" class="empty-cell">{{ $t('importDetail.noModelDataMatrix') }}</div>
                     </div>
-
-                    <!-- ②门店明细 — 颜色×尺码 矩阵（学 matrixForModel：单 cell 单 SKU，不堆叠） -->
-                    <div v-if="expandedStoreDetail === s.store_code" class="report-section sub-section store-detail-section">
+                    <!-- 门店明细（颜色×尺码 matrix，进 tab 全部展开） + 旁边打印按钮 -->
+                    <div v-show="storeDetailsMap[s.store_code]?.showDetail" class="report-section sub-section store-detail-section">
                       <div class="section-toolbar">
-                        <h4>📋 {{ $t('importDetail.storeDetail') }} ({{ storeDetailMatrix.totalSkus }} SKU · {{ storeDetailMatrix.colors.length }} colors · {{ storeDetailMatrix.sizes.length }} sizes)</h4>
-                        <button class="btn-xs btn-print" @click="printStoreDetail(s.store_code, s.store_name)">{{ $t('importDetail.print') }}</button>
+                        <h4>📋 {{ $t('importDetail.storeDetail') }}（{{ s.store_name || s.store_code }} · {{ storeDetailsMap[s.store_code]?.matrix?.totalSkus || 0 }} SKU · {{ storeDetailsMap[s.store_code]?.matrix?.colors?.length || 0 }} colors · {{ storeDetailsMap[s.store_code]?.matrix?.sizes?.length || 0 }} sizes）</h4>
+                        <button class="btn-xs btn-print" @click="printStoreDetailFor(s.store_code, s.store_name)">🖨 {{ $t('importDetail.print') }}</button>
                       </div>
-                      <div v-if="storeDetailMatrix.colors.length" class="matrix-table-wrap" :ref="el => printRefs.storeDetail = el">
+                      <div v-if="storeDetailsMap[s.store_code]?.matrix?.colors?.length" class="matrix-table-wrap">
                         <table class="matrix-table color-size-matrix">
                           <thead>
                             <tr>
                               <th class="color-col">{{ $t('importDetail.colorSizeMatrix') }}</th>
-                              <th v-for="sz in storeDetailMatrix.sizes" :key="sz" class="num size-col">{{ sz }}</th>
-                              <th class="num sum-col" :title="$t('importDetail.colorTotalTip')">Σ</th>
+                              <th v-for="sz in storeDetailsMap[s.store_code]?.matrix?.sizes || []" :key="sz" class="num size-col">{{ sz }}</th>
                             </tr>
                           </thead>
                           <tbody>
-                            <tr v-for="c in storeDetailMatrix.colors" :key="c">
-                              <td class="color-cell"><img v-if="storeDetailMatrix.colorImageMap[c]" :src="storeDetailMatrix.colorImageMap[c]" class="color-thumb" /> {{ getColorDisplay({color: c}) || c }}</td>
-                              <td v-for="sz in storeDetailMatrix.sizes" :key="sz" class="num cell-data">
-                                <template v-if="(storeDetailMatrix.cells[c]?.[sz] || []).length">
-                                  <div v-for="cell in storeDetailMatrix.cells[c][sz]" :key="cell.sku" class="cell-sku" :title="cell.sku + ' / ' + cell.qty + 'PCS' + (cell.model ? ' · ' + cell.model : '')">
-                                    <span class="sku-num">{{ cell.sku }}</span>
-                                    <span class="sku-qty">/{{ cell.qty }}PCS</span>
-                                  </div>
-                                </template>
-                                <span v-else class="empty-qty">-</span>
+                            <tr v-for="c in storeDetailsMap[s.store_code]?.matrix?.colors || []" :key="c">
+                              <td class="color-cell">
+                                <img v-if="storeDetailsMap[s.store_code]?.matrix?.colorImageMap?.[c]" :src="storeDetailsMap[s.store_code].matrix.colorImageMap[c]" class="color-thumb" />
+                                {{ getColorDisplay({color: c}) || c }}
                               </td>
-                              <td class="num sum-cell">
-                                <span class="color-total">{{ storeDetailMatrix.sizes.reduce((acc, sz) => acc + (storeDetailMatrix.cells[c]?.[sz] || []).reduce((a, b) => a + (Number(b.qty) || 0), 0), 0).toLocaleString() }}</span>
+                              <td v-for="sz in storeDetailsMap[s.store_code]?.matrix?.sizes || []" :key="sz" class="num cell-data">
+                                <div v-for="cell in (storeDetailsMap[s.store_code]?.matrix?.cells?.[c]?.[sz] || [])" :key="cell.sku + (cell.image_url || '')" class="cell-sku">
+                                  <span class="sku-num">{{ cell.sku }}</span>
+                                  <span class="sku-qty">{{ cell.qty }}{{ $t('importDetail.pcs') }}</span>
+                                </div>
+                                <span v-if="!(storeDetailsMap[s.store_code]?.matrix?.cells?.[c]?.[sz] || []).length" class="empty-qty">-</span>
                               </td>
                             </tr>
                           </tbody>
-                          <tfoot>
-                            <tr class="grand-total-row">
-                              <td class="color-cell">{{ $t('importDetail.grandTotal') }}</td>
-                              <td v-for="sz in storeDetailMatrix.sizes" :key="sz" class="num cell-data">
-                                <span class="size-total">{{ storeDetailMatrix.colors.reduce((acc, c) => acc + (storeDetailMatrix.cells[c]?.[sz] || []).reduce((a, b) => a + (Number(b.qty) || 0), 0), 0).toLocaleString() }}</span>
-                              </td>
-                              <td class="num sum-cell">
-                                <span class="grand-total-value">{{ storeDetailMatrix.colors.reduce((cAcc, c) => cAcc + storeDetailMatrix.sizes.reduce((sAcc, sz) => sAcc + (storeDetailMatrix.cells[c]?.[sz] || []).reduce((a, b) => a + (Number(b.qty) || 0), 0), 0), 0).toLocaleString() }}</span>
-                              </td>
-                            </tr>
-                          </tfoot>
                         </table>
                       </div>
                       <div v-else class="empty-cell">{{ $t('importDetail.noData') }}</div>
-                      <div class="store-detail-footer">
-                        <button class="btn-xs btn-toggle-store-detail" @click="toggleStoreDetail(s.store_code)">{{ $t('importDetail.collapseDetail') }}</button>
-                      </div>
                     </div>
                   </div>
-                  <div v-else class="empty-cell">{{ $t('importDetail.noData') || 'Loading...' }}</div>
                 </td>
               </tr>
               </template>
@@ -426,7 +361,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import i18n from '@/i18n'
 import api from '@/services/api.js'
 
@@ -436,7 +371,6 @@ const recordId = window.location.hash.split('/import-detail/').pop()
 const record = ref(null)
 const items = ref([])
 const summary = ref(null)
-const storeDetail = ref(null)
 const page = ref(1)
 const pageSize = 50
 const total = ref(0)
@@ -458,9 +392,9 @@ const allStores = computed(() => {
   return [...arr].sort((a, b) => Number(b.qty || 0) - Number(a.qty || 0))
 })
 
-const expandedStore = ref(null)
-const expandedModel = ref(null)
-const expandedStoreDetail = ref(null)
+// 门店分析：每个门店一个独立 storeDetailsMap[store_code] = { store, byModel, bySku, loaded, showDetail, expandedModel }
+// 进门店分析 tab 时全部门店自动展开（一次性串行发 N 个 store 详情请求）
+const storeDetailsMap = reactive({})
 const expandedAllRecords = ref(false)
 const modelSkus = ref([])
 
@@ -468,25 +402,65 @@ const modelSkus = ref([])
 const printRefs = { allRecords: null, modelMatrix: null, storeDetail: null }
 const printSubtitle = ref('')  // 打印时附加在标题下的副标题
 
-async function toggleStore(storeCode) {
-  if (expandedStore.value === storeCode) {
-    expandedStore.value = null
-    return
-  }
-  expandedStore.value = storeCode
-  expandedModel.value = null
-  expandedStoreDetail.value = null
-  modelSkus.value = []
-  storeDetail.value = null
-  await loadStoreSummary(storeCode)
+function buildMatrixFor(detail) {
+  if (!detail || !detail.bySku) return { sizes: [], colors: [], cells: {}, colorImageMap: {}, totalSkus: 0 }
+  return buildMatrix(detail.bySku)
 }
 
-async function toggleStoreDetail(storeCode) {
-  // 必须先展开 store（否则没 storeDetail 数据）
-  if (expandedStore.value !== storeCode) {
-    await toggleStore(storeCode)
+async function loadOneStore(storeCode) {
+  if (storeDetailsMap[storeCode]?.loaded) return
+  storeDetailsMap[storeCode] = { loaded: false, showDetail: false }
+  try {
+    const res = await api.get(`/import/records/${recordId}/summary/by-store/${storeCode}`)
+    // 一次性算好 matrix 存进 entry（避免模板里反复 buildMatrixFor 触发死循环）
+    const matrix = res.bySku ? buildMatrix(res.bySku) : { sizes: [], colors: [], cells: {}, colorImageMap: {}, totalSkus: 0 }
+    storeDetailsMap[storeCode] = { ...res, matrix, loaded: true, showDetail: false, expandedModel: null }
+  } catch (e) {
+    console.error('[ImportDetail] load store', storeCode, 'error:', e)
+    storeDetailsMap[storeCode] = { loaded: true, showDetail: false, expandedModel: null, _error: true, matrix: { sizes: [], colors: [], cells: {}, colorImageMap: {}, totalSkus: 0 } }
   }
-  expandedStoreDetail.value = expandedStoreDetail.value === storeCode ? null : storeCode
+}
+
+// 全部门店一次性串行加载（数量小一次性串行简单可控；后续要并发改成 Promise.all）
+async function loadAllStoreDetails() {
+  if (!allStores.value.length) return
+  for (const s of allStores.value) {
+    await loadOneStore(s.store_code)
+  }
+}
+
+// 点"门店明细"按钮切换显示
+function toggleStoreDetail(storeCode) {
+  const entry = storeDetailsMap[storeCode]
+  if (!entry || !entry.loaded || entry._error) return
+  entry.showDetail = !entry.showDetail
+}
+
+// 每个门店里点 model 展开真实 matrix：复用原 toggleModel 逻辑（需要更新全局 modelSkus + 调用 buildMatrix）
+// 注意：每个门店的 byModel 是独立的，model 名不可跨门店，所以 expandedModel 状态只在当前 entry 内
+function toggleStoreModel(storeCode, model) {
+  const entry = storeDetailsMap[storeCode]
+  if (!entry || !entry.byModel) return
+  if (entry.expandedModel === model) {
+    entry.expandedModel = null
+    return
+  }
+  entry.expandedModel = model
+  // 复用全局 modelSkus / matrixForModel：把该门店该 model 的 SKU 列提出来
+  const target = entry.byModel.find(m => m.model === model)
+  modelSkus.value = target?.skus || []
+}
+
+// 🖨 打印门店明细 matrix（每个门店独立，标题带店名 + 颜色×尺码 SKU 矩阵）
+function printStoreDetailFor(storeCode, storeName) {
+  const entry = storeDetailsMap[storeCode]
+  if (!entry || !entry.bySku) return
+  const matrix = buildMatrix(entry.bySku)
+  if (!matrix.colors?.length) { alert('无明细数据'); return }
+  const title = `📋 门店明细 · ${storeName || storeCode}`
+  const subtitle = `导入记录 #${recordId} · ${record.value?.file_name || ''} · 门店 ${storeName || storeCode}`
+  const html = buildColorSizeTableHTML(matrix, { showSkuModel: false, qtySuffix: 'PCS', aggregateCell: true })
+  openPrintWindow(title, subtitle, html)
 }
 
 function toggleAllRecords() {
@@ -669,15 +643,8 @@ function printModelMatrix(modelName) {
   openPrintWindow(title, subtitle, html)
 }
 
-// ③ 打印 — 单门店明细矩阵
-function printStoreDetail(storeCode, storeName) {
-  const m = storeDetailMatrix.value
-  if (!m.colors?.length) { alert('无数据可打印'); return }
-  const title = '🏪 门店明细 — ' + (storeName || storeCode)
-  const subtitle = '门店 ' + storeCode + ' · 导入记录 #' + recordId + ' · ' + (record.value?.file_name || '') + ' · ' + m.totalSkus + ' SKU · ' + m.colors.length + ' colors · ' + m.sizes.length + ' sizes'
-  const html = buildColorSizeTableHTML(m, { showSkuModel: false, qtySuffix: 'PCS', aggregateCell: true })
-  openPrintWindow(title, subtitle, html)
-}
+// 单门店明细打印已用 printStoreDetailFor 替代，删除旧的单条 storeDetailMatrix 打印
+function printStoreDetail() {}
 
 // 当前展开型号的 颜色×尺码 矩阵（行=颜色，列=尺码，格=Sku编号/数量）
 const matrixForModel = computed(() => buildMatrix(modelSkus.value))
@@ -720,21 +687,8 @@ function buildMatrix(rows) {
   return { sizes, colors, cells, colorImageMap, totalSkus: arr.length }
 }
 
-// 门店明细：整张颜色×尺码 矩阵（不分 model，把所有 SKU 落到对应格子里）
-const storeDetailMatrix = computed(() => buildMatrix(storeDetail.value?.bySku))
-
 // 全记录明细：整张颜色×尺码 矩阵
 const allRecordsMatrix = computed(() => buildMatrix(items.value))
-
-function toggleModel(model) {
-  if (expandedModel.value === model) {
-    expandedModel.value = null
-    modelSkus.value = []
-  } else {
-    expandedModel.value = model
-    modelSkus.value = storeDetail.value?.bySku?.filter(s => s.model === model) || []
-  }
-}
 
 // 商品热销/滞销
 const productHot = computed(() => summary.value?.topProducts || [])
@@ -784,17 +738,10 @@ async function loadSummary() {
   try {
     const res = await api.get(`/import/records/${recordId}/summary`)
     if (res.success) summary.value = res.summary
+    // 拿到 byStore 后立即串行加载全部门店详情（全展开的核心 hook）
+    loadAllStoreDetails()
   } catch (e) {
     console.error('[ImportDetail] load summary error:', e)
-  }
-}
-
-async function loadStoreSummary(storeCode) {
-  try {
-    const res = await api.get(`/import/records/${recordId}/summary/by-store/${storeCode}`)
-    storeDetail.value = res
-  } catch (e) {
-    console.error('[ImportDetail] load store summary error:', e)
   }
 }
 
