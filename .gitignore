@@ -16,3 +16,9 @@ AGENTS.md
 main.js.bak.*
 Sidebar.vue.bak.*
 
+
+# 模块化清理备份（保留在本地防回滚，不进 Git）
+.modules-backup/
+
+# 同步脚本凭证（用户自建，600 权限，绝不进 Git）
+sync-bj-pass
