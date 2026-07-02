@@ -63,9 +63,9 @@
           <div class="store-section-header">
             <h3>🏪 {{ $t('importDetail.storeAnalysis') }}<span class="text-gray">({{ allStores.length }})</span></h3>
             <div class="store-section-actions">
-              <button class="btn-xs btn-toggle-all" @click="expandAllStoreMatrices" title="一键展开全店所有型号的 颜色×尺码 matrix">🔲 全店矩阵全部展开</button>
-              <button class="btn-xs btn-toggle-all" @click="collapseAllStoreMatrices" title="收起全店所有展开的 matrix">✕ 全店矩阵收起</button>
-              <button class="btn-xs btn-print" @click="printAllStoreMatrices" title="一次性打印所有展开的 matrix">🖨 打印所有 matrix</button>
+              <button class="btn-xs btn-toggle-all" @click="expandAllStoreMatrices" :title="$t('importDetail.titleExpandAllMatrices')">{{ $t('importDetail.expandAllMatrices') }}</button>
+              <button class="btn-xs btn-toggle-all" @click="collapseAllStoreMatrices" :title="$t('importDetail.titleCollapseAllMatrices')">{{ $t('importDetail.collapseAllMatrices') }}</button>
+              <button class="btn-xs btn-print" @click="printAllStoreMatrices" :title="$t('importDetail.titlePrintAllMatrices')">{{ $t('importDetail.printAllMatrices') }}</button>
               <button class="btn-xs btn-print" @click="printStores">{{ $t('importDetail.printStores') }}</button>
               <button class="btn-xs btn-toggle-all" @click="toggleAllRecords">
                 {{ expandedAllRecords ? $t('importDetail.collapse') : $t('importDetail.expandAllRecords') }}
@@ -173,14 +173,14 @@
                             <td class="num">{{ m.sku_count }}</td>
                             <td class="num qty-cell">{{ Number(m.qty).toLocaleString() }}</td>
                             <td class="num amount-cell">{{ m.amount ? '¥' + Number(m.amount).toLocaleString() : '-' }}</td>
-                            <td><button class="btn-xs" @click="toggleStoreModel(s.store_code, m.model)">{{ storeDetailsMap[s.store_code].expandedModel === m.model ? $t('importDetail.collapse') : $t('importDetail.matrix') }}</button></td>
+                            <td><button class="btn-xs" @click="toggleStoreModel(s.store_code, m.model)">{{ storeDetailsMap[s.store_code].expandedModels?.has(m.model) ? $t('importDetail.collapse') : $t('importDetail.matrix') }}</button></td>
                           </tr>
                         </tbody>
                       </table>
                       </div>
                     </div>
-                    <!-- 门店明细：每个型号行下方挂 matrix（学老版 085ad2ed：v-show 单 cell 单 SKU，每店独立 expandedModel） -->
-                    <tr v-for="m in storeDetailsMap[s.store_code].byModel" :key="s.store_code + '-' + m.model" v-show="storeDetailsMap[s.store_code].expandedModel === m.model" class="expand-row model-matrix-row">
+                    <!-- 门店明细：每个型号行下方挂 matrix（学老版 085ad2ed：v-show 单 cell 单 SKU，每店独立 expandedModels 多选） -->
+                    <tr v-for="m in storeDetailsMap[s.store_code].byModel" :key="s.store_code + '-' + m.model" v-show="storeDetailsMap[s.store_code].expandedModels?.has(m.model)" class="expand-row model-matrix-row">
                       <td colspan="7">
                         <div class="sku-matrix-wrap">
                           <div class="section-toolbar">
@@ -434,10 +434,10 @@ async function loadOneStore(storeCode) {
       const m = modelMap.get(r.model)
       if (m) m.skus.push(r)
     }
-    storeDetailsMap[storeCode] = { ...res, byModel, loaded: true, expandedModel: null, _matrixCache: {} }
+    storeDetailsMap[storeCode] = { ...res, byModel, loaded: true, expandedModel: null, expandedModels: new Set(), _matrixCache: {} }
   } catch (e) {
     console.error('[ImportDetail] load store', storeCode, 'error:', e)
-    storeDetailsMap[storeCode] = { loaded: true, _error: true, byModel: [], bySku: [], expandedModel: null, _matrixCache: {} }
+    storeDetailsMap[storeCode] = { loaded: true, _error: true, byModel: [], bySku: [], expandedModel: null, expandedModels: new Set(), _matrixCache: {} }
   }
 }
 
@@ -459,15 +459,18 @@ async function toggleStoreDetail(storeCode) {
   // 让该门店的 expand-row 可见（lifecycle 上一层 v-if 用 loaded 控制，这里无需再切）
 }
 
-// 每家店的 toggleStoreModel：单选（点同一型号收起，点其他型号切换）
+// 每家店的 toggleStoreModel：多选（点同一型号收起，点其他型号切换 / 全店全展开时一起展开）
 function toggleStoreModel(storeCode, model) {
   const entry = storeDetailsMap[storeCode]
   if (!entry || !entry.byModel) return
-  if (entry.expandedModel === model) {
+  if (!entry.expandedModels) entry.expandedModels = new Set()
+  if (entry.expandedModels.has(model)) {
+    entry.expandedModels.delete(model)
     entry.expandedModel = null
-    return
+  } else {
+    entry.expandedModels.add(model)
+    entry.expandedModel = model
   }
-  entry.expandedModel = model
 }
 
 // 工具：取某店某 model 的 matrix（懒计算并缓存）
@@ -481,17 +484,19 @@ function getMatrixFor(storeCode, model) {
   return entry._matrixCache[model]
 }
 
-// 全部门店一次性打开 matrix：每家店都展开该店第一个型号的 matrix
+// 全部门店一次性打开 matrix：每家店所有型号 matrix 全部展开
 function expandAllStoreMatrices() {
   let count = 0
   for (const s of allStores.value) {
     const entry = storeDetailsMap[s.store_code]
     if (!entry || !entry.byModel?.length) continue
-    const firstModel = entry.byModel[0].model
-    entry.expandedModel = firstModel
-    if (!entry._matrixCache[firstModel]) {
-      const target = entry.byModel[0]
-      entry._matrixCache[firstModel] = buildMatrix(target.skus || [])
+    entry.expandedModels = new Set(entry.byModel.map(m => m.model))
+    entry.expandedModel = entry.byModel[0]?.model || null
+    for (const m of entry.byModel) {
+      if (!entry._matrixCache[m.model]) {
+        const target = entry.byModel.find(x => x.model === m.model)
+        entry._matrixCache[m.model] = buildMatrix(target?.skus || [])
+      }
     }
     count++
   }
@@ -502,7 +507,10 @@ function expandAllStoreMatrices() {
 function collapseAllStoreMatrices() {
   for (const code in storeDetailsMap) {
     const entry = storeDetailsMap[code]
-    if (entry) entry.expandedModel = null
+    if (entry) {
+      entry.expandedModel = null
+      if (entry.expandedModels) entry.expandedModels.clear()
+    }
   }
 }
 
@@ -520,18 +528,24 @@ function printStoreDetailFor(storeCode, storeName, model) {
   openPrintWindow(title, subtitle, html)
 }
 
-// 🖨 一次性打印全部门店当前展开的 matrix（按门店顺序）
+// 🖨 一次性打印全部门店当前展开的所有型号 matrix（按门店顺序）
 function printAllStoreMatrices() {
   const sections = []
   for (const s of allStores.value) {
     const entry = storeDetailsMap[s.store_code]
-    if (!entry?.expandedModel) continue
-    const m = entry.expandedModel
-    const matrix = getMatrixFor(s.store_code, m)
-    if (!matrix.colors?.length) continue
-    const title = `${s.store_name || s.store_code} · ${m}`
-    const html = buildColorSizeTableHTML(matrix, { showSkuModel: false, qtySuffix: 'PCS', aggregateCell: true })
-    sections.push(`<div class="section"><h2>${title} <span class="meta">${matrix.colors.length} colors · ${matrix.sizes.length} sizes · ${matrix.totalSkus} SKU</span></h2>${html}</div>`)
+    if (!entry?.expandedModels || entry.expandedModels.size === 0) continue
+    const models = entry.byModel.filter(m => entry.expandedModels.has(m.model))
+    if (!models.length) continue
+    const parts = models.map(m => {
+      const matrix = getMatrixFor(s.store_code, m.model)
+      if (!matrix.colors?.length) return ''
+      const html = buildColorSizeTableHTML(matrix, { showSkuModel: false, qtySuffix: 'PCS', aggregateCell: true })
+      return `<h3>${m.model} <span class="meta">${matrix.colors.length} colors · ${matrix.sizes.length} sizes · ${matrix.totalSkus} SKU</span></h3>${html}`
+    }).join('')
+    if (parts) {
+      const title = `${s.store_name || s.store_code}`
+      sections.push(`<div class="section"><h2>${title} <span class="meta">${models.length} 型号</span></h2>${parts}</div>`)
+    }
   }
   if (!sections.length) { alert('无展开的 matrix，请先点"全店矩阵"或各店 matrix 按钮'); return }
   const title = `门店 matrix 全集 · ${record.value?.file_name || recordId} · ${new Date().toLocaleString()}`
