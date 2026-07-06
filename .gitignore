@@ -6,6 +6,9 @@ dist/
 # Test/diagnostic outputs
 dist-*/
 
+# 模块化 build 临时副本（build-for-profile.sh 会重建 modules/{1,2,3}）
+modules/[0-9]*/
+
 # Trae IDE knowledge base (含敏感凭证，不进 Git)
 .trae/
 AGENTS.md
