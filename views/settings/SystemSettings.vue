@@ -712,6 +712,7 @@ function switchTab(key) {
   if (key === 'job-levels' && jobLevels.value.length === 0) loadJobLevels()
   if (key === 'ai-config' && aiConfigs.value.length === 0) loadAiConfigs()
   if (key === 'customers') { loadCustomerStats(); loadCustomerList() }
+  if (key === 'payment') loadPaymentConfig()
 }
 
 watch([selectedLevelFilter, customerSearch], () => {
@@ -725,9 +726,37 @@ const paymentConfig = ref({
   paypal: { enabled: false, clientId: '', secret: '', environment: 'sandbox' },
 })
 
+async function loadPaymentConfig() {
+  try {
+    const res = await api.get('/system/wechat-config')
+    if (res.code === 0 && res.data) {
+      const d = res.data
+      paymentConfig.value = {
+        ...paymentConfig.value,
+        wechat: {
+          enabled: d.status === 'active',
+          appId: d.appid || '',
+          mchId: d.mchid || '',
+          // 后端 GET 会掩码 api_key 为 ********，保留用户已输入值
+          apiKey: d.api_key && d.api_key !== '********' ? d.api_key : paymentConfig.value.wechat.apiKey,
+        },
+      }
+    }
+  } catch (e) {
+    console.warn('[loadPaymentConfig]', e.message)
+  }
+}
+
 async function savePaymentConfig() {
   try {
-    const res = await api.post('/settings/payment-config', paymentConfig.value)
+    // 只保存微信（后端路由只有 wechat-config，alipay/paypal 无对应表）
+    const wechatEnabled = paymentConfig.value.wechat.enabled
+    const res = await api.post('/system/wechat-config', {
+      appid: paymentConfig.value.wechat.appId,
+      mchid: paymentConfig.value.wechat.mchId,
+      api_key: paymentConfig.value.wechat.apiKey,
+      status: wechatEnabled ? 'active' : 'inactive',
+    })
     if (res.code === 0) {
       alert(t('common.saveSuccess'))
     } else {
