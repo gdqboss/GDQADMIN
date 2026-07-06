@@ -613,7 +613,7 @@ async function loadAiConfigs() {
     const res = await api.get('/ai-config')
     if (res.code === 0) aiConfigs.value = res.data || []
     // 加载机器人名称（从第一个配置取 provider 作为名称，或从 settings 表取）
-    const botRes = await api.get('/settings')
+    const botRes = await api.get('/system/settings')
     if (botRes.code === 0) {
       botName.value = botRes.data.bot_name || ''
     }
@@ -623,7 +623,7 @@ async function loadAiConfigs() {
 async function saveBotName() {
   botNameLoading.value = true
   try {
-    await api.put('/settings', { bot_name: botName.value })
+    await api.put('/system/settings', { bot_name: botName.value })
     botNameSuccess.value = true
     setTimeout(() => botNameSuccess.value = false, 2000)
   } catch (e) { alert(e.message) }
