@@ -1,151 +1,261 @@
-/**
- * module-filter.js
- *
- * Vite 插件：按 enabledModules 过滤 dist 产物。
- *
- * 解决问题：
- *   Vite 默认会把 entry chunk 的 __vite__mapDeps 静态 import 全部子 chunks。
- *   即使目标服务器只启用 25/47 模块，entry chunk 启动时仍 import 全部，
- *   缺失任何一个 chunk 都会导致整个 app 启动失败（#app 为空）。
- *
- * 机制：
- *   1. generateBundle 阶段：扫 entry chunk，解析 __vite__mapDeps 数组，
- *      根据 enabledModules 过滤出子集，重写数组。
- *   2. closeBundle 阶段：扫 dist/assets/，删除未被引用的孤立 chunks。
- *
- * @param {string[]|null} enabledModules 启用的模块 key 列表；null = 不过滤
- */
+// 彩美特前端多服务器构建 - 模块过滤插件 (Vite 7 重写版)
+//
+// 历史 bug (Vite 6 时代版本):
+//   - MARKER1/MARKER2 匹配 Vite 6 时代的 `__vite__mapDeps(...=>{...})` 嵌入数组
+//   - Vite 7 把 __vite__mapDeps 重写为 `const __vite__mapDeps=...=>i.map(i=>d[i])`,
+//     整型 index 数组 + 集中定义在 entry, 整个 filter 逻辑不再有效
+//
+// 新设计 (Vite 7):
+//   1. 改 hook 从 renderChunk (依赖已内联 marker) 到 closeBundle (后处理已写文件)
+//   2. 从 dist/assets/index-*.js 中找出所有 `import("./X-HASH.js")` 调用
+//   3. 用 profile-config.js 的 MODULE_FILE_MAP 把 module_key (server_profiles)
+//      映射到 chunk name 前缀 (ServerProfiles), 检查是否在禁用模块
+//   4. 替换被禁 chunk 的 import 字符串为 Promise.resolve(stub), 让 webpack/vite
+//      死代码消除 + webpack chunk graph 不引用
+//   5. 删除被禁 chunk 文件本身
+//
+// 风险:
+//   - 用户访问被禁路由会看到 "模块未启用" stub (非白屏, 是可读错误)
+//   - 不会崩 SPA shell
+
 import fs from 'fs'
 import path from 'path'
 
-const MARKER1 = '__vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=['
-const MARKER2 = '])))'
+// Vite 7 解析后, dist 里会出现:
+//   - 动态 import: import("./ServerProfiles-X.js")
+//   - prefetch mapDeps 字符串数组: ["assets/X.js","assets/X.css"]
+// 两种都需要过滤
+const IMPORT_RE = /import\(\s*["']\.\/(.+?)["']\s*\)/g
+const MAPDEPS_RE = /"\s*(assets\/[A-Za-z0-9_-]+?-[A-Za-z0-9_-]{6,}\.(?:js|css))"/g
 
-export default function moduleFilterPlugin(enabledModules) {
-  if (!enabledModules || !Array.isArray(enabledModules) || enabledModules.length === 0) {
-    return { name: 'vite-plugin-module-filter-disabled' }
+// Stub - 被过滤的 dynamic import 替换成什么
+const STUB = 'Promise.resolve({default:{name:"DisabledModule",template:(()=>{const e=document.createElement("div");e.innerHTML="<div style=\\"padding:40px;text-align:center;color:#999\\">🚫 该模块未启用</div>";return e.outerHTML})()}})'
+
+// module_key → chunk-base name 前缀 (从 MODULE_FILE_MAP 推导)
+// MODULE_FILE_MAP key 是 module_key, value 是 view 路径前缀 (e.g. 'aftersale/', 'AiClassroom.vue')
+// 我们从 view 文件名去掉路径+后缀, 得到 chunk base prefix:
+//   'aftersale/'                  → 'AftersaleManage' (扫 views/aftersale/ 里的 .vue 文件)
+//   'AiClassroom.vue'             → 'AiClassroom'
+//   'inventory/'                  → 'InOutList', 'ReturnList', 'StockManage', 'Stocktake'
+//   'settings/ServerProfiles.vue' → 'ServerProfiles'
+//
+// 这个比 MODULE_ROUTE_MAP 准确 (后者手写易错)
+function deriveChunkPrefixes(moduleKey, fileMapEntries) {
+  // 单 build 模式 cwd = /root/src, views 在 cwd/views
+  // profile 模式 cwd = /root/src/modules/<id>, views 在 modules/<id>/views (被 build-for-profile.sh cp 过来)
+  let viewDir = path.resolve(process.cwd(), 'views')
+  if (!fs.existsSync(viewDir)) {
+    viewDir = path.resolve(process.cwd(), '../views')
+  }
+  if (!fs.existsSync(viewDir)) {
+    viewDir = path.resolve(process.cwd(), '../../views')
+  }
+  const prefixes = new Set()
+  for (const filePath of fileMapEntries) {
+    if (filePath.endsWith('/')) {
+      // 目录 - 扫所有 .vue 文件
+      const dir = path.join(viewDir, filePath)
+      if (fs.existsSync(dir)) {
+        fs.readdirSync(dir).forEach(f => {
+          if (f.endsWith('.vue')) {
+            const base = f.replace(/\.vue$/, '')
+            // chunks 是 base name: e.g. 'AftersaleManage.vue' → 'AftersaleManage'
+            prefixes.add(base)
+          }
+        })
+      } else {
+        console.log('[module-filter] WARN view dir not found: ' + dir)
+      }
+    } else if (filePath.endsWith('.vue')) {
+      // 单文件
+      const base = path.basename(filePath, '.vue')
+      prefixes.add(base)
+    }
+  }
+  return [...prefixes]
+}
+
+export default function moduleFilterPlugin(enabledModuleKeys, options = {}) {
+  const dryRun = !!options.dryRun
+  const distDirOverride = options.distDir || null  // profile build 用 outDir=dist-<id>
+
+  if (!enabledModuleKeys || !Array.isArray(enabledModuleKeys) || enabledModuleKeys.length === 0) {
+    return {
+      name: 'module-filter',
+      apply: 'build',
+      configResolved() {
+        console.log('[module-filter] disabled (no enabledModules)')
+      }
+    }
   }
 
-  const enabledSet = new Set(enabledModules)
-  // 必须保留的核心 chunks（不属于任何业务模块）
-  const ALWAYS_KEEP = new Set([
-    'i18n', 'index', 'wecom', 'MainLayout', 'Login', 'Dashboard',
-    'StatCard', 'StatusTag', 'Pagination', 'PageHeader',
-    'mockData', 'favicon'
-  ])
+  const enabledSet = new Set(enabledModuleKeys)
+  let chunkPrefixMap = null
+  let assetsDir = null
 
   return {
-    name: 'vite-plugin-module-filter',
+    name: 'module-filter',
     apply: 'build',
-
-    // 调试: 确认插件被加载
     configResolved(config) {
-      console.log('[module-filter] configResolved: enabledModules=' + enabledModules.length)
-    },
-
-    generateBundle(_options, bundle) {
-      // 实际 marker 是在 writeBundle 之后由 Vite 注入
-      // 我们在 closeBundle 里直接读 dist 文件
-    },
-
-    /**
-     * renderChunk: 每次 chunk 生成时调用 (after code-split, before writing)
-     * mapDeps 在 renderDynamicImport 时插入, 我们需要在 chunk.code 修改
-     */
-    renderChunk(code, chunk) {
-      const startIdx = code.indexOf(MARKER1)
-      if (startIdx === -1) return null
-
-      const arrayStart = startIdx + MARKER1.length
-      const arrayEnd = code.indexOf(MARKER2, arrayStart)
-      if (arrayEnd === -1) return null
-
-      const originalStr = code.substring(arrayStart, arrayEnd)
-
-      const originalDeps = []
-      const refRegex = new RegExp('"([^"]+)"', 'g')
-      let m
-      while ((m = refRegex.exec(originalStr)) !== null) {
-        originalDeps.push(m[1])
-      }
-
-      const keptDeps = originalDeps.filter(dep => {
-        const moduleMatch = dep.match(/^assets\/([A-Za-z0-9_-]+?)(?:-[A-Za-z0-9_-]{8,})?\.(js|css)$/)
-        if (!moduleMatch) return true
-        const moduleName = moduleMatch[1]
-        return ALWAYS_KEEP.has(moduleName) || enabledSet.has(moduleName)
-      })
-
-      const removed = originalDeps.length - keptDeps.length
-      if (removed > 0) {
-        console.log('[module-filter] ' + chunk.fileName + ': 保留 ' + keptDeps.length + ' deps, 过滤 ' + removed)
-      }
-
-      const newDepsStr = keptDeps.map(d => '"' + d + '"').join(',')
-      const newCode = code.substring(0, arrayStart) + newDepsStr + code.substring(arrayEnd)
-      return newCode
+      console.log('[module-filter] configResolved: enabledModules=' + enabledModuleKeys.length + ' = [' + enabledModuleKeys.join(',') + ']')
     },
 
     closeBundle() {
-      const distDir = path.resolve(process.cwd(), 'dist')
-      const indexHtmlPath = path.join(distDir, 'index.html')
-      if (!fs.existsSync(indexHtmlPath)) return
-
-      const indexHtml = fs.readFileSync(indexHtmlPath, 'utf-8')
-      const referenced = new Set()
-
-      // 1. 从 index.html 提取所有引用
-      const refRegex = new RegExp('["\'](/?assets/[^"\']+)["\']', 'g')
-      let m
-      while ((m = refRegex.exec(indexHtml)) !== null) {
-        referenced.add(path.basename(m[1].replace(/^\//, '')))
+      const distDir = distDirOverride
+        ? path.resolve(process.cwd(), distDirOverride)
+        : path.resolve(process.cwd(), 'dist')
+      const entryHtmlPath = path.join(distDir, 'index.html')
+      if (!fs.existsSync(entryHtmlPath)) {
+        console.log('[module-filter] no index.html, skip')
+        return
       }
 
-      // 2. 找到 entry chunk，递归提取它 import 的所有 chunks
-      const entryMatch = indexHtml.match(/<script[^>]+src="\/assets\/(index-[A-Za-z0-9_-]+\.js)"/)
-      if (entryMatch) {
-        const visited = new Set()
-        const queue = [entryMatch[1]]
-        while (queue.length > 0) {
-          const f = queue.shift()
-          if (visited.has(f)) continue
-          visited.add(f)
-          referenced.add(f)
-          const fp = path.join(distDir, 'assets', f)
-          if (!fs.existsSync(fp)) continue
-          const code = fs.readFileSync(fp, 'utf-8')
-          const importRegex = new RegExp('from\\s*["\']\\./([A-Za-z0-9_.-]+)["\']', 'g')
-          let im
-          while ((im = importRegex.exec(code)) !== null) {
-            queue.push(im[1])
-          }
-          const dynImportRegex = new RegExp('import\\s*\\(\\s*["\']\\./([A-Za-z0-9_.-]+)["\']', 'g')
-          while ((im = dynImportRegex.exec(code)) !== null) {
-            queue.push(im[1])
+      // 1. 同步加载 profile-config.js + module-key → chunk-name 前缀映射
+      let moduleFileMap, moduleRouteMap
+      try {
+        // plugin cwd 是 modules/<id>/ (profile 模式), profile-config 在 ../modules/profile-config.js
+        // 单 build 模式 cwd 是 src 根, profile-config 直接 modules/profile-config.js
+        let profileCfg = path.resolve(process.cwd(), 'modules/profile-config.js')
+        if (!fs.existsSync(profileCfg)) {
+          profileCfg = path.resolve(process.cwd(), '../modules/profile-config.js')
+        }
+        if (!fs.existsSync(profileCfg)) {
+          profileCfg = path.resolve(process.cwd(), '../../modules/profile-config.js')
+        }
+        // 用 readFile + 手动 eval (modules/profile-config.js 是 ESM 但只 export const,
+        // 我们用 regex 把它改写成 CJS module.exports.X = {…})
+        const cfgSrc = fs.readFileSync(profileCfg, 'utf8')
+        const cjsSrc = cfgSrc.replace(
+          /export\s+const\s+([A-Za-z0-9_]+)\s*=/g,
+          'module.exports.$1 ='
+        )
+        const fakeModule = { exports: {} }
+        const fn = new Function('module', 'exports', 'path', cjsSrc)
+        fn(fakeModule, fakeModule.exports, path)
+        moduleFileMap = fakeModule.exports.MODULE_FILE_MAP
+        moduleRouteMap = fakeModule.exports.MODULE_ROUTE_MAP
+        if (!moduleFileMap) throw new Error('MODULE_FILE_MAP missing after eval')
+      } catch (e) {
+        console.log('[module-filter] WARN cannot load profile-config: ' + e.message + ', filtering disabled')
+        return
+      }
+
+      // 2. 计算禁用 modules (all keys - enabled = disabled)
+      const allKeys = new Set(Object.keys(moduleFileMap))
+      const disabledKeys = new Set()
+      allKeys.forEach(k => { if (!enabledSet.has(k)) disabledKeys.add(k) })
+
+      if (disabledKeys.size === 0) {
+        console.log('[module-filter] nothing to filter')
+        return
+      }
+
+      // 3. 用 MODULE_FILE_MAP 推导每个禁用 module 的 chunk prefixes
+      const disabledPrefixes = []
+      disabledKeys.forEach(k => {
+        const prefixes = deriveChunkPrefixes(k, moduleFileMap[k] || [])
+        if (prefixes.length > 0) {
+          prefixes.forEach(prefix => disabledPrefixes.push({key: k, prefix}))
+        }
+      })
+      console.log('[module-filter] disabledModules=' + disabledKeys.size + ': ' + [...disabledKeys].join(','))
+      console.log('[module-filter] disabledPrefixes=' + disabledPrefixes.map(d => d.key + '→' + d.prefix).join(','))
+
+      // 4. 找 entry chunk
+      assetsDir = path.join(distDir, 'assets')
+      if (!fs.existsSync(assetsDir)) return
+      const entryName = fs.readFileSync(entryHtmlPath, 'utf8')
+        .match(/<script[^>]+src="\/assets\/(index-[A-Za-z0-9_-]+\.js)"/)?.[1]
+      if (!entryName) {
+        console.log('[module-filter] cannot find entry chunk in index.html')
+        return
+      }
+      const entryPath = path.join(assetsDir, entryName)
+      if (!fs.existsSync(entryPath)) return
+      let entryCode = fs.readFileSync(entryPath, 'utf8')
+
+      // 5. 扫 entry 里所有 import() 调用 + mapDeps 数组, 找出被禁的 chunks
+      let modified = 0
+      let filteredChunks = new Set()
+
+      function chunkBaseOf(chunkRef) {
+        // chunkRef like './ServerProfiles-DjYrIjON.js' or 'assets/QrcodeManage-BkgePRKI.css'
+        // Vite hash is 8 alphanumeric chars appended with '-' separator
+        // 例如: 'QrcodeManage-BkgePRKI.css' -> 'QrcodeManage'
+        // 例如: 'ServerProfiles-DjYrIjON.js' -> 'ServerProfiles'
+        const cleaned = chunkRef.replace(/^\.\//, '').replace(/^assets\//, '').replace(/\.(js|css)$/, '')
+        // 标准格式: <name>-<8 char hash>
+        const m = cleaned.match(/^(.+)-([a-zA-Z0-9_-]{8,})$/)
+        if (m) return m[1]
+        // 回退: 找最后一个 >=6 字符的 segment 作为 hash
+        const parts = cleaned.split('-')
+        for (let i = parts.length - 1; i >= 0; i--) {
+          if (parts[i].length >= 6 && /^[a-zA-Z0-9_]+$/.test(parts[i])) {
+            return parts.slice(0, i).join('-')
           }
         }
+        return cleaned
       }
 
-      // 3. 删除孤立文件
-      const assetsDir = path.join(distDir, 'assets')
-      if (!fs.existsSync(assetsDir)) return
-      const allFiles = fs.readdirSync(assetsDir)
+      function isDisabled(chunkRef) {
+        const chunkBase = chunkBaseOf(chunkRef)
+        return disabledPrefixes.find(d => chunkBase === d.prefix || chunkBase.startsWith(d.prefix))
+      }
+
+      // 5a. 替换 dynamic import() 调用
+      entryCode = entryCode.replace(IMPORT_RE, (full, chunkPath) => {
+        if (isDisabled(chunkPath)) {
+          filteredChunks.add(chunkPath)
+          modified++
+          return STUB
+        }
+        return full
+      })
+
+      // 5b. 替换 mapDeps 字符串数组里的资产引用 (前置 chunk + css)
+      const beforeMapDeps = filteredChunks.size
+      entryCode = entryCode.replace(MAPDEPS_RE, (full, assetPath) => {
+        // assetPath like 'assets/QrcodeManage-BkgePRKI.css'
+        const ref = './' + assetPath.replace(/^assets\//, '')
+        if (isDisabled(ref)) {
+          filteredChunks.add(ref)
+          return '""'  // 替换为空字符串 (保持数组长度)
+        }
+        return full
+      })
+      const mapDepsReplaced = filteredChunks.size - beforeMapDeps
+
+      if (modified === 0) {
+        console.log('[module-filter] no disabled chunks found in entry (already filtered or modules not in entry)')
+        return
+      }
+
+      // 6. 写回 entry (除非 dry-run)
+      if (!dryRun) {
+        fs.writeFileSync(entryPath, entryCode)
+      }
+      console.log('[module-filter] entry modified: ' + modified + ' imports replaced' + (dryRun ? ' [DRY RUN]' : ''))
+      console.log('[module-filter] mapDeps cleared: ' + mapDepsReplaced + ' prefetch refs' + (dryRun ? ' [DRY RUN]' : ''))
+      console.log('[module-filter] filtered chunks: ' + filteredChunks.size)
+
+      // 7. 删除孤立 chunk 文件 (同时删 .js 和 .css 同 hash)
       let removedFiles = 0
       let removedBytes = 0
-      for (const f of allFiles) {
-        if (referenced.has(f)) continue
-        const fp = path.join(assetsDir, f)
-        const stat = fs.statSync(fp)
-        if (stat.isFile()) {
-          fs.unlinkSync(fp)
-          removedFiles++
-          removedBytes += stat.size
+      for (const ref of filteredChunks) {
+        // ref like './ServerProfiles-DjYrIjON.js' 或 './ServerProfiles-X.css'
+        // 提取 base 名字 (无 ext) → 同时检查 .js + .css
+        const refBase = path.basename(ref).replace(/\.(js|css)$/, '')
+        for (const ext of ['js', 'css']) {
+          const fp = path.join(assetsDir, refBase + '.' + ext)
+          if (fs.existsSync(fp)) {
+            const stat = fs.statSync(fp)
+            if (!dryRun) fs.unlinkSync(fp)
+            removedFiles++
+            removedBytes += stat.size
+          }
         }
       }
-      if (removedFiles > 0) {
-        console.log('[module-filter] 删除孤立文件: ' + removedFiles + ' 个, ' + (removedBytes/1024).toFixed(1) + ' KB')
-        console.log('[module-filter] 保留文件: ' + referenced.size + ' 个')
-      }
+      console.log('[module-filter] removed ' + removedFiles + ' files, ' + (removedBytes / 1024).toFixed(1) + ' KB' + (dryRun ? ' [DRY RUN]' : ''))
     }
   }
 }

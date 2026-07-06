@@ -71,8 +71,8 @@ export const MODULE_ROUTE_MAP = {
     'finance/payments', 'PaymentManage'
   ],
 
-  // gift-approvals
-  'gift-approvals': ['gift-approvals', 'GiftApprovals'],
+  // gift-approvals (view is GiftApprovalList.vue, not GiftApprovals)
+  'gift-approvals': ['gift-approvals', 'GiftApprovalList'],
 
   // in-out (库存出入库)
   'in-out': ['in-out', 'InOut', 'inventory/returns', 'ReturnList'],
@@ -129,8 +129,8 @@ export const MODULE_ROUTE_MAP = {
   // stores
   stores: ['stores', 'Stores'],
 
-  // suppliers
-  suppliers: ['suppliers', 'Suppliers'],
+  // suppliers (view is SupplierList.vue, not Suppliers)
+  suppliers: ['suppliers', 'SupplierList'],
 
   // tasks
   tasks: ['tasks', 'TaskManage', 'tasks/stats', 'TaskStats'],

@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SRC_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 MODULE_DIR="$SRC_DIR/modules/$PROFILE_ID"
 DIST_DIR="$SRC_DIR/dist-$PROFILE_ID"
+DIST_DIR_BASE="dist-$PROFILE_ID"
 echo "Building profile $PROFILE_ID..."
 echo "Building router..."
 node "$SCRIPT_DIR/build-profile-router.js" "$PROFILE_ID"
@@ -53,7 +54,7 @@ import moduleFilterPlugin from '../../vite-plugins/module-filter.js'
 const enabledModules = $MODULES_STR
 
 export default defineConfig({
-  plugins: [vue(), moduleFilterPlugin(enabledModules)],
+  plugins: [vue(), moduleFilterPlugin(enabledModules, { distDir: '$DIST_DIR' })],
   resolve: { alias: { '@': resolve(__dirname) } },
   build: {
     outDir: '$DIST_DIR',
