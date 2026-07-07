@@ -26,6 +26,7 @@
 set -euo pipefail
 
 # ---- 配置 ----
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SRC_DIR="/root/src"
 DIST_DIR="$SRC_DIR/dist"
 BJ_HOST="81.70.199.64"
@@ -119,6 +120,14 @@ if ! $SKIP_BUILD; then
   cd "$SRC_DIR"
   npm run "$BUILD_SCRIPT" 2>&1 | tail -10
   ok "构建完成 ($DIST_DIR)"
+
+  # 生成 chunk manifest（verify-sync.sh 依赖这个）
+  log "生成 chunk manifest..."
+  if node "$SCRIPT_DIR/generate-chunk-manifest.mjs" 2>&1 | tail -5; then
+    ok "chunk manifest 已生成"
+  else
+    warn "chunk manifest 生成失败（verify-sync.sh 将降级运行）"
+  fi
 fi
 
 # ---- 3. 收集本地 dist 快照 ----
@@ -293,5 +302,15 @@ REMOTE_CHUNK_SIZE=$(curl -sk --max-time 10 "https://$BJ_NGINX_DOMAIN/assets/$REM
   || fail "❌ entry hash 不一致: sgp=$ENTRY bj=$REMOTE_ENTRY"
 
 ok "✅ 主页 200 + entry $REMOTE_ENTRY 200 OK ($REMOTE_CHUNK_TYPE, ${REMOTE_CHUNK_SIZE}B) + hash 一致"
+
+# 信号 6: 100% chunk 完整性验证（防止"rsync 漏文件 → 路由 404 → 白屏"）
+log "运行 100% chunk 完整性验证..."
+if REMOTE_HOST="$BJ_HOST" REMOTE_PORT="$BJ_PORT" REMOTE_USER="$BJ_USER" REMOTE_PEM="$BJ_PEM" REMOTE_DIR="$BJ_REMOTE_DIR" \
+   bash "$SCRIPT_DIR/verify-sync.sh" 2>&1 | tail -15; then
+  ok "✅ 100% chunk 同步一致（255 个文件 + 核心 5 个 + md5 全部匹配）"
+else
+  fail "❌ chunk 完整性验证失败（白屏风险），已停止。请检查同步日志 + 必要时回退 dist。"
+fi
+
 ok "同步完成 ✅"
 
