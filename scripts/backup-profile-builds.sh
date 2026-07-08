@@ -16,11 +16,13 @@ BRANCH="backup/profile-builds-$DATE"
 
 cd "$SRC_DIR"
 
-# 0. 备份前必须没 uncommitted 改动 (避免 summary 跟实际 build 不匹配)
+# 0. 如果有 uncommitted 改动, 先 stash (避免 backup branch 跑 build 时混进别人的 work)
+# 跑完再 pop
+STASHED=0
 if ! git diff --quiet HEAD 2>/dev/null || ! git diff --cached --quiet HEAD 2>/dev/null; then
-  echo "⚠️  有 uncommitted 改动, 先 commit 或 stash"
-  git status -s | head -10
-  exit 1
+  echo "⚠️  有 uncommitted 改动, stash 临时存 (跑完 pop 回来)"
+  git stash push -u -m "backup-profile-builds-$DATE-auto-stash" 2>&1 | tail -3
+  STASHED=1
 fi
 
 # 1. 临时建 backup branch
@@ -149,6 +151,13 @@ git push -u origin "$BRANCH" 2>&1 | tail -5
 echo ""
 echo "Returning to feat/online-order..."
 git checkout feat/online-order 2>&1 | tail -3
+
+# 7. pop stash (如果有)
+if [ "$STASHED" = "1" ]; then
+  echo ""
+  echo "Popping auto-stash..."
+  git stash pop 2>&1 | tail -3 || echo "⚠️  stash pop 冲突, 请手动处理: git stash list"
+fi
 
 echo ""
 echo "✅ Backup done: branch $BRANCH"
