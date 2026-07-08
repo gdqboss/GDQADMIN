@@ -234,28 +234,83 @@ export default function moduleFilterPlugin(enabledModuleKeys, options = {}) {
       if (!dryRun) {
         fs.writeFileSync(entryPath, entryCode)
       }
+      // 6.5 区分 .js 引用和 .css 引用 (避免报告数字混淆)
+      let refJsCount = 0, refCssCount = 0
+      filteredChunks.forEach(ref => {
+        if (ref.endsWith('.css')) refCssCount++
+        else refJsCount++
+      })
+
       console.log('[module-filter] entry modified: ' + modified + ' imports replaced' + (dryRun ? ' [DRY RUN]' : ''))
       console.log('[module-filter] mapDeps cleared: ' + mapDepsReplaced + ' prefetch refs' + (dryRun ? ' [DRY RUN]' : ''))
-      console.log('[module-filter] filtered chunks: ' + filteredChunks.size)
+      console.log('[module-filter] filtered refs: ' + filteredChunks.size + ' (' + refJsCount + ' js + ' + refCssCount + ' css)')
 
       // 7. 删除孤立 chunk 文件 (同时删 .js 和 .css 同 hash)
-      let removedFiles = 0
+      // 每个 ref 触发 .js + .css 两次 fs.existsSync 检查, 但只算实际删除的次数
+      let removedJsFiles = 0
+      let removedCssFiles = 0
       let removedBytes = 0
+      // 按 chunk-base 去重, 避免同一 chunk 的 .js ref 和 .css ref 重复扫描
+      const checkedBases = new Set()
       for (const ref of filteredChunks) {
         // ref like './ServerProfiles-DjYrIjON.js' 或 './ServerProfiles-X.css'
         // 提取 base 名字 (无 ext) → 同时检查 .js + .css
         const refBase = path.basename(ref).replace(/\.(js|css)$/, '')
+        if (checkedBases.has(refBase)) continue
+        checkedBases.add(refBase)
         for (const ext of ['js', 'css']) {
           const fp = path.join(assetsDir, refBase + '.' + ext)
           if (fs.existsSync(fp)) {
             const stat = fs.statSync(fp)
             if (!dryRun) fs.unlinkSync(fp)
-            removedFiles++
+            if (ext === 'js') removedJsFiles++
+            else removedCssFiles++
             removedBytes += stat.size
           }
         }
       }
-      console.log('[module-filter] removed ' + removedFiles + ' files, ' + (removedBytes / 1024).toFixed(1) + ' KB' + (dryRun ? ' [DRY RUN]' : ''))
+      const totalRemoved = removedJsFiles + removedCssFiles
+      console.log('[module-filter] removed ' + totalRemoved + ' files (' + removedJsFiles + ' js + ' + removedCssFiles + ' css), ' + (removedBytes / 1024).toFixed(1) + ' KB' + (dryRun ? ' [DRY RUN]' : ''))
+
+      // 7.5 JSON 报告 (供 verify dry-run 后做断言 / 审计 / 集成测试用)
+      // 开关: 环境变量 MODULE_FILTER_JSON_REPORT=1, 写到 distDir/.module-filter-report.json
+      if (process.env.MODULE_FILTER_JSON_REPORT === '1' || process.env.MODULE_FILTER_JSON_REPORT === 'true') {
+        const report = {
+          timestamp: new Date().toISOString(),
+          dryRun: !!dryRun,
+          profile: {
+            enabledModules: enabledModuleKeys,
+            disabledModules: [...disabledKeys],
+            disabledPrefixes: disabledPrefixes.map(d => ({key: d.key, prefix: d.prefix})),
+          },
+          entry: {
+            name: entryName,
+            importsReplaced: modified,
+            mapDepsCleared: mapDepsReplaced,
+            filteredRefs: {
+              total: filteredChunks.size,
+              js: refJsCount,
+              css: refCssCount,
+            },
+            removedFiles: {
+              total: totalRemoved,
+              js: removedJsFiles,
+              css: removedCssFiles,
+            },
+            removedBytes,
+            removedKb: +(removedBytes / 1024).toFixed(1),
+          },
+          filteredChunkList: [...new Set([...filteredChunks].map(ref => path.basename(ref)))].sort(),
+        }
+        const reportPath = path.join(distDir, '.module-filter-report.json')
+        // dry-run 也写 (默认开启, 审计最有价值; 设 =0 可关)
+        if (process.env.MODULE_FILTER_JSON_FORCE_DRY === '0' && dryRun) {
+          // 跳过
+        } else {
+          fs.writeFileSync(reportPath, JSON.stringify(report, null, 2))
+          console.log('[module-filter] JSON report: ' + reportPath)
+        }
+      }
     }
   }
 }

@@ -1,7 +1,10 @@
 #!/bin/bash
 PROFILE_ID=$1
+MODE="${2:-build}"  # build | verify (verify = dry-run，仅预览会删的 chunks)
 if [ -z "$PROFILE_ID" ]; then
-  echo "Usage: $0 <profile_id> (1=新加坡, 2=北京, 3=3号仓库)"
+  echo "Usage: $0 <profile_id> [mode]"
+  echo "  profile_id:  1=新加坡, 2=北京, 3=3号仓库"
+  echo "  mode:        build (default) | verify (dry-run module-filter)"
   exit 1
 fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -45,6 +48,14 @@ cp "$SRC_DIR/tailwind.config.js" "$MODULE_DIR/"
 if [ -d "$SRC_DIR/public" ]; then
   cp -r "$SRC_DIR/public" "$MODULE_DIR/"
 fi
+
+# 模块过滤插件 dry-run 开关
+PLUGIN_OPTS="distDir: '$DIST_DIR'"
+if [ "$MODE" = "verify" ]; then
+  PLUGIN_OPTS="$PLUGIN_OPTS, dryRun: true"
+  echo "🔍 MODE=verify: module-filter 会跑分析但不实际改写文件"
+fi
+
 cat > "$MODULE_DIR/vite.config.js" << VITEEOF
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
@@ -54,7 +65,7 @@ import moduleFilterPlugin from '../../vite-plugins/module-filter.js'
 const enabledModules = $MODULES_STR
 
 export default defineConfig({
-  plugins: [vue(), moduleFilterPlugin(enabledModules, { distDir: '$DIST_DIR' })],
+  plugins: [vue(), moduleFilterPlugin(enabledModules, { $PLUGIN_OPTS })],
   resolve: { alias: { '@': resolve(__dirname) } },
   build: {
     outDir: '$DIST_DIR',
@@ -74,8 +85,17 @@ export default defineConfig({
   }
 })
 VITEEOF
-echo "Running Vite build for profile $PROFILE_ID..."
+echo "Running Vite build for profile $PROFILE_ID (mode=$MODE)..."
 cd "$MODULE_DIR" && node ../../node_modules/vite/bin/vite.js build --emptyOutDir
 echo ""
 echo "=== Build Complete ==="
-echo "Profile $PROFILE_ID dist: $DIST_DIR ($(ls "$DIST_DIR/assets/"*.js 2>/dev/null | wc -l) chunks, $(du -sh "$DIST_DIR" | cut -f1))"
+echo "Profile $PROFILE_ID dist: $DIST_DIR"
+if [ -d "$DIST_DIR/assets" ]; then
+  echo "  chunks: $(ls "$DIST_DIR/assets/"*.js 2>/dev/null | wc -l) js + $(ls "$DIST_DIR/assets/"*.css 2>/dev/null | wc -l) css"
+  echo "  total: $(du -sh "$DIST_DIR" | cut -f1)"
+fi
+if [ "$MODE" = "verify" ]; then
+  echo ""
+  echo "🔍 verify 模式完成 — module-filter 已打印会删的 chunks。检查上方的 [module-filter] 输出。"
+  echo "   真正执行请用: $0 $PROFILE_ID build"
+fi
