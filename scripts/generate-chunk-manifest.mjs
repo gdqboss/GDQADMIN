@@ -45,8 +45,20 @@ if (!fs.existsSync(ASSETS_DIR)) {
   process.exit(1)
 }
 
-// 1. 扫所有 chunks
-const allFiles = fs.readdirSync(ASSETS_DIR).filter(f => /\.(js|css|svg|png|jpg|woff2?)$/.test(f))
+// 1. 扫所有 chunks（assets 目录 + 根目录的 favicon/logo）
+//    Vite 把 public/ 的非 js/css 资源原样拷到 dist 根（如 favicon.svg）
+//    这些也要进 manifest 验证 + 同步
+//    chunks key 保持原文件名（无 assets/ 前缀），路径在 stat/read 时按前缀决定
+const ASSET_EXTS = /\.(js|css|svg|png|jpg|woff2?)$/
+const allFiles = []
+for (const f of fs.readdirSync(ASSETS_DIR)) {
+  if (ASSET_EXTS.test(f)) allFiles.push(f)
+}
+if (fs.existsSync(DIST_DIR)) {
+  for (const f of fs.readdirSync(DIST_DIR)) {
+    if (ASSET_EXTS.test(f) && !f.endsWith('.html')) allFiles.push(f)
+  }
+}
 const jsChunks = allFiles.filter(f => f.endsWith('.js'))
 const cssChunks = allFiles.filter(f => f.endsWith('.css'))
 
@@ -67,7 +79,11 @@ const moduleMap = {}
 const chunks = {}
 
 for (const file of allFiles) {
-  const stats = fs.statSync(path.join(ASSETS_DIR, file))
+  // file 可能是 'X.js' (assets 内) 或 'favicon.svg' (dist 根)
+  // 先尝试 assets，没有再试 dist 根
+  let fullPath = path.join(ASSETS_DIR, file)
+  if (!fs.existsSync(fullPath)) fullPath = path.join(DIST_DIR, file)
+  const stats = fs.statSync(fullPath)
   const ext = file.endsWith('.js') ? 'js' : (file.endsWith('.css') ? 'css' : 'asset')
   const hashMatch = file.match(HASH_RE)
 
@@ -88,7 +104,7 @@ for (const file of allFiles) {
     module: moduleName,
     type: ext,
     isCore: coreChunks.has(file),
-    md5: crypto.createHash('md5').update(fs.readFileSync(path.join(ASSETS_DIR, file))).digest('hex')
+    md5: crypto.createHash('md5').update(fs.readFileSync(fullPath)).digest('hex')
   }
 }
 
@@ -97,7 +113,11 @@ const manifest = {
   totalChunks: allFiles.length,
   jsChunks: jsChunks.length,
   cssChunks: cssChunks.length,
-  totalSize: allFiles.reduce((sum, f) => sum + fs.statSync(path.join(ASSETS_DIR, f)).size, 0),
+  totalSize: allFiles.reduce((sum, f) => {
+    let fp = path.join(ASSETS_DIR, f)
+    if (!fs.existsSync(fp)) fp = path.join(DIST_DIR, f)
+    return sum + fs.statSync(fp).size
+  }, 0),
   coreChunks: [...coreChunks].map(c => c.startsWith('assets/') ? c.replace(/^assets\//, '') : c).sort(),
   moduleMap,
   chunks
