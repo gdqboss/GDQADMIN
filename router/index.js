@@ -4,7 +4,24 @@ import { useUserStore } from '@/stores/user'
 const MainLayout = () => import('../layouts/MainLayout.vue')
 const lazyLoad = (loader) => () => loader()
 
-const routes = [
+// ============ 横琴湾区 H5 模块 ============
+const hqh5Routes = [
+  { path: '/hqh5/demo', name: 'Hqh5Demo', component: () => import('../views/hqh5/Demo.vue'), meta: { public: true, h5: true } },
+  { path: '/hqh5/guest-home', name: 'Hqh5GuestHome', component: () => import('../views/hqh5/GuestHome.vue'), meta: { public: true, h5: true } },
+  { path: '/hqh5/login', name: 'Hqh5Login', component: () => import('../views/hqh5/Login.vue'), meta: { public: true, h5: true } },
+  { path: '/hqh5/enterprise-home', name: 'Hqh5EnterpriseHome', component: () => import('../views/hqh5/EnterpriseHome.vue'), meta: { public: true, h5: true } },
+  { path: '/hqh5/attendance-manage', name: 'Hqh5Attendance', component: () => import('../views/hqh5/AttendanceManage.vue'), meta: { public: true, h5: true } },
+  { path: '/hqh5/approval-list', name: 'Hqh5Approval', component: () => import('../views/hqh5/ApprovalList.vue'), meta: { public: true, h5: true } },
+  { path: '/hqh5/venue-booking', name: 'Hqh5Venue', component: () => import('../views/hqh5/VenueBooking.vue'), meta: { public: true, h5: true } },
+  { path: '/hqh5/butler-booking', name: 'Hqh5Butler', component: () => import('../views/hqh5/ButlerBooking.vue'), meta: { public: true, h5: true } },
+  { path: '/hqh5/enterprise-center', name: 'Hqh5Center', component: () => import('../views/hqh5/EnterpriseCenter.vue'), meta: { public: true, h5: true } },
+  { path: '/hqh5/article-publish', name: 'Hqh5Article', component: () => import('../views/hqh5/ArticlePublish.vue'), meta: { public: true, h5: true } },
+  { path: '/hqh5/notification-push', name: 'Hqh5Notification', component: () => import('../views/hqh5/NotificationPush.vue'), meta: { public: true, h5: true } },
+  { path: '/hqh5/backend-dashboard', name: 'Hqh5Dashboard', component: () => import('../views/hqh5/BackendDashboard.vue'), meta: { public: true, h5: true } },
+  { path: '/hqh5/booking-success', name: 'Hqh5BookingSuccess', component: () => import('../views/hqh5/BookingSuccess.vue'), meta: { public: true, h5: true } }
+]
+
+const routes = [].concat(hqh5Routes, [
   {
     path: '/mall',
     alias: '/mall/',
@@ -248,7 +265,7 @@ const routes = [
       { path: 'hotel/reviews', name: 'HotelReviews', component: lazyLoad(() => import('../views/hotel/ReviewList.vue')), meta: { title: '评价管理', parent: '酒店管理', permission: 'hotel:read' } },
     ],
   },
-]
+])
 
 const router = createRouter({
   history: createWebHashHistory(),
