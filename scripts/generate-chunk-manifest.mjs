@@ -35,7 +35,7 @@ import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
 
-const DIST_DIR = path.resolve('dist')
+const DIST_DIR = path.resolve(process.argv[2] || 'dist')
 const ASSETS_DIR = path.join(DIST_DIR, 'assets')
 const MANIFEST_PATH = path.join(DIST_DIR, 'chunk-manifest.json')
 const INDEX_HTML = path.join(DIST_DIR, 'index.html')

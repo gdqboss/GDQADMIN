@@ -4,14 +4,15 @@
 # 目的：杜绝"rsync 漏文件 → 用户进路由 → 404 → 白屏"
 #
 # 流程：
-#   1. 读本地 dist/chunk-manifest.json
+#   1. 读本地 chunk-manifest.json（默认 dist/，可用 DIST_DIR=dist-1 改）
 #   2. 拉远程服务器文件清单（ls assets/）
 #   3. 对比：本地有但远程缺 → 报错（具体到文件名）
 #   4. 对比：md5 不一致 → 报错（文件损坏）
 #   5. 5 个核心 chunk 任意一个缺/坏 → 直接 fail（登录页会白屏）
 #
 # 用法：
-#   bash scripts/verify-sync.sh                  # 默认验证新加坡本地（self-test）
+#   bash scripts/verify-sync.sh                  # 默认验证新加坡本地 dist/（self-test）
+#   DIST_DIR=dist-1 bash scripts/verify-sync.sh  # 验证 profile 1 build
 #   REMOTE_HOST=claw.gdqshop.cn bash scripts/verify-sync.sh   # 验证 bj
 #   REMOTE_DIR=/var/www/claw.gdqshop.cn bash scripts/verify-sync.sh
 #
@@ -25,14 +26,15 @@ set -euo pipefail
 # ---- 配置 ----
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-MANIFEST="$ROOT_DIR/dist/chunk-manifest.json"
+DIST_DIR="${DIST_DIR:-dist}"  # 默认 dist/，profile build 用 dist-1/dist-2/dist-3
+MANIFEST="$ROOT_DIR/$DIST_DIR/chunk-manifest.json"
 
 # 验证目标：默认本地 self-test，否则验证远程
 REMOTE_HOST="${REMOTE_HOST:-}"
 REMOTE_PORT="${REMOTE_PORT:-2222}"
 REMOTE_USER="${REMOTE_USER:-ubuntu}"
 REMOTE_PEM="${REMOTE_PEM:-/root/clawgdqshop.pem}"
-REMOTE_DIR="${REMOTE_DIR:-$ROOT_DIR/dist}"  # self-test 默认本地 dist
+REMOTE_DIR="${REMOTE_DIR:-$ROOT_DIR/$DIST_DIR}"  # self-test 默认本地 $DIST_DIR
 
 if [ -z "$REMOTE_HOST" ]; then
   TARGET="LOCAL (self-test)"
