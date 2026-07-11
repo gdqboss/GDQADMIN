@@ -18,8 +18,9 @@ const hqh5Routes = [
   { path: '/hqh5/article-publish', name: 'Hqh5Article', component: () => import('../views/hqh5/ArticlePublish.vue'), meta: { public: true, h5: true } },
   { path: '/hqh5/notification-push', name: 'Hqh5Notification', component: () => import('../views/hqh5/NotificationPush.vue'), meta: { public: true, h5: true } },
   { path: '/hqh5/backend-dashboard', name: 'Hqh5Dashboard', component: () => import('../views/hqh5/BackendDashboard.vue'), meta: { public: true, h5: true } },
-  { path: '/hqh5/booking-success', name: 'Hqh5BookingSuccess', component: () => import('../views/hqh5/BookingSuccess.vue'), meta: { public: true, h5: true } }
-]
+  { path: '/hqh5/booking-success', name: 'Hqh5BookingSuccess', component: () => import('../views/hqh5/BookingSuccess.vue'), meta: { public: true, h5: true } },
+  { path: '/hqh5/crm-dashboard', name: 'Hqh5Crm', component: () => import('../views/hqh5/CrmDashboard.vue'), meta: { public: true, h5: true } }
+]  
 
 const routes = [].concat(hqh5Routes, [
   {

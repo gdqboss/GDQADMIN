@@ -300,6 +300,20 @@ const menuGroups = computed(() => [
     ]
   },
   {
+    key: 'hqh5',
+    icon: 'location_city',
+    label: t('nav.hqh5Center'),
+    to: null,
+    moduleKeys: ['hqh5'],
+    children: [
+      { key: 'hqh5:read',  label: t('nav.hqh5Dashboard'),  to: '/hqh5/backend-dashboard' },
+      { key: 'hqh5:read',  label: t('nav.hqh5Approval'),   to: '/hqh5/approval-list' },
+      { key: 'hqh5:read',  label: t('nav.hqh5Crm'),        to: '/hqh5/crm-dashboard' },
+      { key: 'hqh5:write', label: t('nav.hqh5Article'),    to: '/hqh5/article-publish' },
+      { key: 'hqh5:write', label: t('nav.hqh5Notification'), to: '/hqh5/notification-push' },
+    ]
+  },
+  {
     key: 'system',
     icon: 'settings',
     label: t('nav.systemManagement'),
