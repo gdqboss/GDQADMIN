@@ -22,7 +22,15 @@ const hqh5Routes = [
   { path: '/hqh5/crm-dashboard', name: 'Hqh5Crm', component: () => import('../views/hqh5/CrmDashboard.vue'), meta: { public: true, h5: true } }
 ]  
 
-const routes = [].concat(hqh5Routes, [
+// ============ 广告物料租赁报价下单 (adOrder) ============
+// 完全模仿 minip 模式：nginx /adorder → index.html + SPA 接管
+const adorderRoutes = [
+  { path: '/adorder', name: 'AdorderClient', component: () => import('../views/rental/ClientBrowser.vue'), meta: { public: true, h5: true, title: '物料租赁询价' } },
+  { path: '/adorder/admin', name: 'AdorderAdmin', component: () => import('../views/rental/AdminBoard.vue'), meta: { public: true, h5: true, title: '租赁订单看板' } },
+  { path: '/adorder/admin/quote-templates', name: 'AdorderTemplates', component: () => import('../views/rental/AdminBoard.vue'), meta: { public: true, h5: true } },
+]
+
+const routes = [].concat(hqh5Routes, adorderRoutes, [
   {
     path: '/mall',
     alias: '/mall/',
@@ -119,6 +127,12 @@ const routes = [].concat(hqh5Routes, [
       { path: 'orders/create', name: 'OnlineOrderCreate', component: lazyLoad(() => import('../views/orders/OnlineOrderCreate.vue')), meta: { title: '新建订货单', parent: '产品预订', permission: 'preorder:create' } },
       { path: 'orders/:id', name: 'OrderDetail', component: lazyLoad(() => import('../views/orders/OrderDetail.vue')), meta: { title: '订单详情', parent: '商城', permission: 'order:read' } },
       { path: 'referral', name: 'ReferralManage', component: lazyLoad(() => import('../views/orders/ReferralManage.vue')), meta: { title: '推荐裂变', parent: '商城', permission: 'referral:read' } },
+
+      // ── 传媒物料租赁报价下单系统（核心新模块）────────────────
+      { path: 'quote', name: 'QuoteList', component: lazyLoad(() => import('../views/quote/QuoteList.vue')), meta: { title: '报价管理', parent: '传媒租赁', permission: 'quote:read' } },
+      { path: 'quote/create', name: 'QuoteCreate', component: lazyLoad(() => import('../views/quote/QuoteCreate.vue')), meta: { title: '新建报价', parent: '传媒租赁', permission: 'quote:write' } },
+      { path: 'quote/detail/:id', name: 'QuoteDetail', component: lazyLoad(() => import('../views/quote/QuoteDetail.vue')), meta: { title: '报价详情', parent: '传媒租赁', permission: 'quote:read' } },
+      { path: 'warehouse-visual', name: 'WarehouseVisual', component: lazyLoad(() => import('../views/warehouse-visual/WarehouseVisual.vue')), meta: { title: '仓库可视化', parent: '传媒租赁', permission: 'warehouse:visual' } },
 
       // ── 门店预订单（独立模块：产品预订）─────────────────────
       // 「新增订货单」复用 /orders/create 的 OnlineOrderCreate.vue（昨日已开发）
