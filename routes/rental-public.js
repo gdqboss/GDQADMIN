@@ -1,0 +1,160 @@
+/**
+ * Rental 公开端点（游客无需登录可调用）
+ *
+ * 路由：/api/rental-public/*
+ *   - GET  /products         客户端浏览设备（按 customer_type 出对应价）
+ *   - POST /inquiry          客户端提交询价（无需 token）
+ *
+ * 注意：本文件不能 import 已经在 /api/rental 后面挂 auth 的接口，
+ *      客户端入口的所有调用都走这里。
+ */
+import express from 'express'
+import { pool } from '../db/connection.js'
+
+const router = express.Router()
+
+// ============== 1. 客户端浏览设备 ==============
+router.get('/products', async (req, res, next) => {
+    try {
+        const { customer_type = 'biz', category } = req.query
+        const conds = [`p.publish_status = 'published'`, `(p.rental_status IS NULL OR p.rental_status = 'available')`]
+        const args = [customer_type]
+        if (category) { conds.push('p.category = ?'); args.push(category) }
+        const [rows] = await pool.query(
+            `SELECT p.id, p.sku, p.name, p.category, p.spec, p.unit, p.image_main, p.image_url_2, p.image_url_3,
+                    COALESCE(cpt.price, p.sale_price) AS effective_price,
+                    COALESCE(cpt.unit_day_price, p.sale_price) AS unit_day_price,
+                    COALESCE(cpt.tax_rate, 0.06) AS tax_rate,
+                    p.stock,
+                    (p.stock - COALESCE((SELECT SUM(qty) FROM rental_stock_locks WHERE product_id = p.id AND status = 'locked' AND NOT (lock_end < NOW())), 0)) AS available_qty
+             FROM products p
+             LEFT JOIN customer_pricing_tiers cpt ON cpt.product_id = p.id AND cpt.customer_type = ? AND cpt.is_active = 1
+             WHERE ${conds.join(' AND ')}
+             ORDER BY p.category, p.id
+             LIMIT 500`, args)
+        res.json({ ok: true, data: rows, customer_type })
+    } catch (e) { next(e) }
+})
+
+// ============== 2. 客户端提交询价（无需 token） ==============
+router.post('/inquiry', async (req, res, next) => {
+    const conn = await pool.getConnection()
+    try {
+        await conn.beginTransaction()
+        const {
+            customer_name, customer_phone, customer_type = 'biz',
+            activity_type, activity_time_start, activity_time_end,
+            setup_time, teardown_time, activity_location, remark,
+            items = []
+        } = req.body || {}
+
+        if (!customer_name || !customer_phone) {
+            await conn.rollback()
+            return res.status(400).json({ ok: false, error: '请填姓名和电话' })
+        }
+        if (!activity_time_start || !activity_time_end) {
+            await conn.rollback()
+            return res.status(400).json({ ok: false, error: '请填活动时间' })
+        }
+        if (!Array.isArray(items) || !items.length) {
+            await conn.rollback()
+            return res.status(400).json({ ok: false, error: '至少选 1 件物料' })
+        }
+
+        // 库存冲突检查
+        for (const it of items) {
+            if (!it.product_id) continue
+            const [stocks] = await conn.query(`SELECT stock, name FROM products WHERE id = ? AND status = 'active'`, [it.product_id])
+            if (!stocks.length) {
+                await conn.rollback()
+                return res.status(400).json({ ok: false, error: `物料 #${it.product_id} 已下架` })
+            }
+            const [locks] = await conn.query(
+                `SELECT COALESCE(SUM(qty), 0) AS locked_qty FROM rental_stock_locks
+                 WHERE product_id = ? AND status = 'locked'
+                   AND NOT (lock_end < ? OR lock_start > ?)`,
+                [it.product_id, activity_time_start, activity_time_end]
+            )
+            const available = Number(stocks[0].stock || 0) - Number(locks[0].locked_qty || 0)
+            if (available < Number(it.qty || 1)) {
+                await conn.rollback()
+                return res.status(409).json({ ok: false, error: `物料「${stocks[0].name}」库存不足（剩余 ${available} 件）` })
+            }
+        }
+
+        const orderNo = 'INQ' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + Math.floor(Math.random() * 9999).toString().padStart(4, '0')
+        let subtotal = 0
+        for (const it of items) {
+            const days = Number(it.days || 1)
+            const qty = Number(it.qty || 1)
+            let unitPrice = Number(it.unit_price || 0)
+            if (!unitPrice && it.product_id) {
+                const [tier] = await conn.query(
+                    `SELECT price, unit_day_price FROM customer_pricing_tiers WHERE product_id = ? AND customer_type = ? AND is_active = 1`,
+                    [it.product_id, customer_type]
+                )
+                if (tier[0]) unitPrice = Number(tier[0].unit_day_price || tier[0].price || 0)
+                if (!unitPrice) {
+                    const [p] = await conn.query(`SELECT sale_price FROM products WHERE id = ?`, [it.product_id])
+                    unitPrice = Number(p[0]?.sale_price || 0)
+                }
+            }
+            subtotal += +(unitPrice * qty * days).toFixed(2)
+        }
+
+        const [r] = await conn.query(
+            `INSERT INTO quote_orders
+             (order_no, customer_name, customer_type, customer_phone,
+              activity_type, activity_time_start, activity_time_end,
+              setup_time, teardown_time, activity_location, remark,
+              subtotal, pre_tax_total, status, template_type)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_approval', ?)`,
+            [orderNo, customer_name, customer_type, customer_phone,
+             activity_type || null, activity_time_start, activity_time_end,
+             setup_time || null, teardown_time || null, activity_location || null, remark || null,
+             subtotal, subtotal, customer_type]
+        )
+        const quoteId = r.insertId
+
+        for (let i = 0; i < items.length; i++) {
+            const it = items[i]
+            const days = Number(it.days || 1)
+            const qty = Number(it.qty || 1)
+            let unitPrice = Number(it.unit_price || 0)
+            if (!unitPrice && it.product_id) {
+                const [tier] = await conn.query(
+                    `SELECT price, unit_day_price FROM customer_pricing_tiers WHERE product_id = ? AND customer_type = ? AND is_active = 1`,
+                    [it.product_id, customer_type]
+                )
+                if (tier[0]) unitPrice = Number(tier[0].unit_day_price || tier[0].price || 0)
+                if (!unitPrice) {
+                    const [p] = await conn.query(`SELECT sale_price FROM products WHERE id = ?`, [it.product_id])
+                    unitPrice = Number(p[0]?.sale_price || 0)
+                }
+            }
+            const lineSub = +(unitPrice * qty * days).toFixed(2)
+            await conn.query(
+                `INSERT INTO quote_items (quote_id, product_id, product_sku, product_name, category, item_type,
+                 qty, days, unit_price, unit_day_price, subtotal, sort_order)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [quoteId, it.product_id || null, it.product_sku || null, it.product_name || '物料', it.category || null,
+                 it.item_type || 'equipment', qty, days, unitPrice, it.unit_day_price || null, lineSub, i]
+            )
+        }
+
+        await conn.query(
+            `INSERT INTO quote_audit_logs (quote_id, action, diff_summary, ip_address) VALUES (?, 'created', '小程序客户询价下单(公开端点)', ?)`,
+            [quoteId, req.ip]
+        )
+
+        await conn.commit()
+        res.json({ ok: true, data: { id: quoteId, order_no: orderNo, subtotal } })
+    } catch (e) {
+        await conn.rollback()
+        next(e)
+    } finally {
+        conn.release()
+    }
+})
+
+export default router

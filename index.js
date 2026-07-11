@@ -84,6 +84,7 @@ import rbacMenuRoutes from './routes/rbac/menus.js'
 import rbacRoleRoutes from './routes/rbac/roles.js'
 import rbacUserRoleRoutes from './routes/rbac/userRoles.js'
 import serverProfilesRoutes from './routes/server-profiles.js'
+import serverEndpointsRoutes from './routes/server-endpoints.js'
 import collageRoutes from './routes/collage.js'
 import restaurantRoutes from './routes/restaurant.js'
 import hotelRoutes from './routes/hotel.js'
@@ -101,6 +102,9 @@ import seckillRoutes from './routes/seckill.js'
 import chatRoutes from './routes/chat.js'
 import smartStudioRoutes from './routes/smart-studio.js'
 import onlineOrdersRoutes from './routes/online-orders.js'
+import quoteRoutes from './routes/quote.js'
+import rentalRoutes from './routes/rental.js'
+import rentalPublicRoutes from './routes/rental-public.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -196,6 +200,8 @@ app.use('/api/ai-class', auth, aiClassRoutes)
 app.use('/api/admin/schema', auth, adminSchemaRoutes)
 app.use('/api/kb', auth, kbRoutes)
 app.use('/api/scan', scanRoutes)
+// Rental 公开端点（游客可访问）—— 必须放在 inventory 的 /api catch-all 之前
+app.use('/api/rental-public', rentalPublicRoutes)
 
 // Public referral QR endpoint (no auth) — must be before prefix router
 app.get('/api/referral/qr/:token', async (req, res, next) => {
@@ -431,17 +437,29 @@ app.get('/api/public-settings', async (req, res, next) => {
       if (spRow) profileId = spRow.id
     }
     data.modules = []
+    data.endpoints = []
     data.languages = ['zh', 'en']
     if (profileId) {
       const [modRows] = await pool.query('SELECT module_key FROM server_modules WHERE server_profile_id = ?', [profileId])
       data.modules = modRows.map(r => r.module_key)
-      const [[spRow]] = await pool.query('SELECT language FROM server_profiles WHERE id = ?', [profileId])
+      const [[spRow]] = await pool.query('SELECT language, site_name_zh, site_name_en FROM server_profiles WHERE id = ?', [profileId])
       if (spRow && spRow.language) {
         try {
           const langRaw = spRow.language.trim()
           data.languages = langRaw.startsWith('[') ? JSON.parse(langRaw) : langRaw.split(',').map(l => l.trim())
         } catch {}
       }
+      // 🔧 用 server_profiles 的 site_name 覆盖 settings 的（行业模板可自定义）
+      if (spRow && (spRow.site_name_zh || spRow.site_name_en)) {
+        data.site_name = spRow.site_name_zh || data.site_name || '智能商业系统'
+        data.site_name_en = spRow.site_name_en || data.site_name_en || 'SmartBiz'
+      }
+      // Load endpoints for this server profile
+      try {
+        const [epRows] = await pool.query('SELECT id, endpoint_type, label, url, is_primary, env, sort_order, description FROM server_endpoints WHERE server_profile_id = ? AND is_active = 1 ORDER BY sort_order ASC, id ASC', [profileId])
+        data.endpoints = epRows.map(r => ({ id: r.id, type: r.endpoint_type, label: r.label, url: r.url, is_primary: !!r.is_primary, env: r.env, sort_order: r.sort_order, description: r.description || '' }))
+        console.log('[public-settings] profileId:', profileId, 'endpoints:', data.endpoints.length)
+      } catch (e) { console.error('[public-settings] endpoints error:', e.message) }
     }
 
     res.json({ code: 0, data })
@@ -500,7 +518,12 @@ app.use('/api/rbac/menus', auth, apiLimiter, rbacMenuRoutes)
 app.use('/api/rbac/roles', auth, apiLimiter, rbacRoleRoutes)
 app.use('/api/rbac/users', auth, apiLimiter, rbacUserRoleRoutes)
 app.use('/api/server-profiles', auth, apiLimiter, requireRole('admin'), serverProfilesRoutes)
+app.use('/api/server-endpoints', auth, apiLimiter, requireRole('admin'), serverEndpointsRoutes)
 app.use('/api', auth, apiLimiter, inventoryRoutes)
+app.use('/api/quote', auth, apiLimiter, quoteRoutes)
+app.use('/api/rental', auth, apiLimiter, rentalRoutes)
+
+// rentalPublicRoutes 已在 inventory catch-all 之前挂载（见上面的位置）
 
 app.use(errorHandler)
 
