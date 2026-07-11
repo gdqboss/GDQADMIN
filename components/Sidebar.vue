@@ -380,8 +380,8 @@ const filteredGroups = computed(() => {
         .filter(child => {
           // 权限过滤：admin 永远过；非 admin 走 userStore.canAccess
           if (!canAccess(child.key)) return false
-          // 子菜单 moduleKey 过滤：设了但当前服务器没启用 → 隐藏（非 admin + 没加载到 modules 也按未启用处理）
-          if (!isAdmin && child.moduleKey && !enabledSet.has(child.moduleKey)) return false
+          // 子菜单 moduleKey 过滤：设了但当前服务器没启用 → 隐藏（admin 永远过）
+          if (child.moduleKey && !isAdmin && !enabledSet.has(child.moduleKey)) return false
           return true
         })
         .map(child => ({ ...child }))

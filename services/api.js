@@ -88,6 +88,15 @@ export const serverProfileApi = {
   removeModule(profileId, moduleKey) { return api.delete(`/server-profiles/${profileId}/modules/${moduleKey}`) },
 }
 
+// 服务器端点（连接地址）API
+export const serverEndpointApi = {
+  listByProfile(profileId) { return api.get(`/server-endpoints?profile_id=${profileId}`) },
+  get(id) { return api.get(`/server-endpoints/${id}`) },
+  create(data) { return api.post('/server-endpoints', data) },
+  update(id, data) { return api.put(`/server-endpoints/${id}`, data) },
+  remove(id) { return api.delete(`/server-endpoints/${id}`) },
+}
+
 // 菜单配置 API
 export const menuApi = {
   getMenuConfig(role = ROLES.ADMIN) {
@@ -98,5 +107,27 @@ export const menuApi = {
   },
   updateMenuConfig(selections) {
     return api.put('/settings/menu-config', { selections })
-  }
+  },
+  // ─── 模块化铁律：字典 + 孤儿 + 同步 ───
+  getOrphans() {
+    return api.get('/settings/menu-modules/orphans')
+  },
+  mergeOrphans(keys = null) {
+    return api.post('/settings/menu-modules/merge-orphans', keys ? { keys } : {})
+  },
+  syncStatic(modules, dryRun = false) {
+    return api.post('/settings/menu-modules/sync-static', { modules, dryRun })
+  },
+  createModule(data) {
+    return api.post('/settings/menu-modules', data)
+  },
+  updateModule(key, data) {
+    return api.put(`/settings/menu-modules/${key}`, data)
+  },
+  deleteModule(key) {
+    return api.delete(`/settings/menu-modules/${key}`)
+  },
+  upgradeCategory(key, category) {
+    return api.post('/settings/menu-modules/upgrade-category', { key, category })
+  },
 }
