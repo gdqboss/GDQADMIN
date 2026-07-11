@@ -7,9 +7,9 @@ const systemSettings = reactive({
   locale: 'zh',
   languages: ['zh', 'en'],
   bot_name: '美特',
-  site_name: '彩美特',
-  system_name_en: 'TRAVELMATE',
+  site_name: '彩美特管理系统',
   site_name_en: 'TRAVELMATE',
+  system_name_en: 'TRAVELMATE',
   // 当前服务器启用的模块列表（来自 public-settings.data.modules）
   modules: [],
 })

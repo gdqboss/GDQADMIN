@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 import moduleFilterPlugin from './vite-plugins/module-filter.js'
+import injectSiteTitlePlugin from './vite-plugins/inject-site-title.js'
 
 /**
  * Vite 配置
@@ -28,7 +29,8 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       vue(),
-      moduleFilterPlugin(enabledModules)
+      moduleFilterPlugin(enabledModules),
+      injectSiteTitlePlugin()
     ],
     resolve: {
       alias: {
