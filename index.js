@@ -24,6 +24,7 @@ import inventoryRoutes from './routes/inventory.js'
 import alertRoutes from './routes/alerts.js'
 import approvalRoutes from './routes/approvals.js'
 import dashboardRoutes from './routes/dashboard.js'
+import homeRoutes from './routes/home.js'
 import qrcodeRoutes from './routes/qrcode.js'
 import oaRoutes from './routes/oa.js'
 import reportRoutes from './routes/reports.js'
@@ -414,6 +415,7 @@ app.use('/api/warehouses', auth, apiLimiter, warehouseRoutes)
 app.use('/api/stock-alerts', auth, apiLimiter, alertRoutes)
 app.use('/api/approvals', auth, apiLimiter, approvalRoutes)
 app.use('/api/dashboard', auth, apiLimiter, dashboardRoutes)
+app.use('/api/home', auth, apiLimiter, homeRoutes)
 app.use('/api/bi', auth, apiLimiter, biRoutes)
 app.use('/api/excel-report', auth, apiLimiter, excelReportRoutes)
 app.use('/api/orders', auth, apiLimiter, ordersRoutes)
