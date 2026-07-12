@@ -6,9 +6,13 @@ import express from 'express'
 import { pool } from '../db/connection.js'
 import { auth } from '../middleware/auth.js'
 import { requirePermission, PERMISSIONS as P } from '../middleware/rbac.js'
+import laborAiUploadRoutes from './labor-ai-upload.js'
 
 const router = express.Router()
 router.use(auth)
+
+// 嵌套挂载上传子路由(2026-07-13)→ /api/labor-ai/upload, /api/labor-ai/upload/list, /api/labor-ai/upload/:id
+router.use('/', laborAiUploadRoutes)
 
 // ============================================================
 // GET /api/labor-ai/health — L4 agent 健康检查

@@ -7,9 +7,34 @@
  *   - 询价单查询/取消
  */
 import express from 'express'
+import jwt from 'jsonwebtoken'
 import { pool } from '../db/connection.js'
 
 const router = express.Router()
+
+// 软解析 token（不强制登录，匿名也可提交询价）
+function softAuthUserId(req) {
+  try {
+    const h = req.headers.authorization
+    if (!h || !h.startsWith('Bearer ')) return null
+    const decoded = jwt.verify(h.split(' ')[1], process.env.JWT_SECRET)
+    console.log('[softAuthUserId] decoded:', JSON.stringify(decoded))
+    return decoded?.id || null
+  } catch (e) {
+    console.log('[softAuthUserId ERR]', e.message)
+    return null
+  }
+}
+
+// 拿用户角色（用于审计 created_by_role）
+async function getUserRoleForAudit(conn, userId) {
+  try {
+    const [rows] = await conn.query('SELECT role, user_type FROM users WHERE id = ?', [userId])
+    if (!rows.length) return 'unknown'
+    const u = rows[0]
+    return u.user_type === 'customer' ? `customer:${u.role}` : u.role
+  } catch { return 'unknown' }
+}
 
 // ============== 1. 询价下单（小程序客户可调） ==============
 router.post('/inquiry', async (req, res, next) => {
@@ -22,6 +47,10 @@ router.post('/inquiry', async (req, res, next) => {
             setup_time, teardown_time, activity_location, remark,
             items = []
         } = req.body || {}
+
+        // 已登录用户自动 bind user_id 到报价单（关键：从 token 解 user_id）
+        const loggedInUserId = softAuthUserId(req)
+        console.log('[rental/inquiry DEBUG] loggedInUserId:', loggedInUserId, 'authHeader:', (req.headers.authorization || '').slice(0, 40))
 
         if (!customer_name || !customer_phone) { await conn.rollback(); return res.status(400).json({ ok: false, error: '请填姓名和电话' }) }
         if (!activity_time_start || !activity_time_end) { await conn.rollback(); return res.status(400).json({ ok: false, error: '请填活动时间' }) }
@@ -67,16 +96,17 @@ router.post('/inquiry', async (req, res, next) => {
         }
 
         const [r] = await conn.query(
-            `INSERT INTO quote_orders
-             (order_no, customer_name, customer_type, customer_phone,
-              activity_type, activity_time_start, activity_time_end,
-              setup_time, teardown_time, activity_location, remark,
-              subtotal, pre_tax_total, status, template_type)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_approval', ?)`,
-            [orderNo, customer_name, customer_type, customer_phone,
-             activity_type || null, activity_time_start, activity_time_end,
-             setup_time || null, teardown_time || null, activity_location || null, remark || null,
-             subtotal, subtotal, customer_type]
+                    `INSERT INTO quote_orders
+                     (order_no, customer_id, customer_name, customer_type, customer_phone,
+                      activity_type, activity_time_start, activity_time_end,
+                      setup_time, teardown_time, activity_location, remark,
+                      subtotal, pre_tax_total, status, template_type, created_by, created_by_role)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_approval', ?, ?, ?)`,
+                    [orderNo, loggedInUserId, customer_name, customer_type, customer_phone,
+                     activity_type || null, activity_time_start, activity_time_end,
+                     setup_time || null, teardown_time || null, activity_location || null, remark || null,
+                     subtotal, subtotal, customer_type,
+                     loggedInUserId, loggedInUserId ? (await getUserRoleForAudit(conn, loggedInUserId)) : 'guest']
         )
         const quoteId = r.insertId
 
@@ -623,6 +653,32 @@ router.post('/:id/cancel', async (req, res, next) => {
             )
         } finally { conn.release() }
         res.json({ ok: true })
+    } catch (e) { next(e) }
+})
+
+// 仓库日志(留痕查询)
+router.get('/inv-log/:product_id', async (req, res, next) => {
+    try {
+        const pid = parseInt(req.params.product_id)
+        const [rows] = await pool.query(
+            `SELECT id, product_id, action, before_value, after_value, diff_summary, operator_name, created_at
+             FROM rental_stock_inventory_logs
+             WHERE product_id = ?
+             ORDER BY id DESC LIMIT 50`, [pid])
+        res.json({ ok: true, data: { logs: rows } })
+    } catch (e) { next(e) }
+})
+
+// 状态变更日志(留痕查询)
+router.get('/status-log/:quote_id', async (req, res, next) => {
+    try {
+        const qid = parseInt(req.params.quote_id)
+        const [rows] = await pool.query(
+            `SELECT id, quote_id, action, from_status, to_status, diff_summary, operator_name, created_at
+             FROM rental_status_logs
+             WHERE quote_id = ?
+             ORDER BY id DESC LIMIT 50`, [qid])
+        res.json({ ok: true, data: { logs: rows } })
     } catch (e) { next(e) }
 })
 

@@ -482,49 +482,53 @@ onMounted(() => {
       </div>
 
       <el-table :data="profiles" v-loading="loading" stripe class="w-full">
-        <el-table-column :label="$t('serverProfiles.colName')" prop="name" min-width="120" />
-        <el-table-column :label="$t('serverProfiles.colIp')" prop="ip" min-width="140">
-          <template #default="{ row }">
-            <span class="font-mono text-sm">{{ row.ip }}:{{ row.ssh_port || 22 }}</span>
+        <el-table-column :label="$t('serverProfiles.colName')" min-width="120">
+          <template #default="scope">
+            <span>{{ scope?.row?.name || '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column :label="$t('serverProfiles.colEnv')" prop="env" width="100">
-          <template #default="{ row }">
-            <el-tag :type="getEnvTagType(row.env)" size="small">{{ getEnvLabel(row.env) }}</el-tag>
+        <el-table-column :label="$t('serverProfiles.colIp')" min-width="140">
+          <template #default="scope">
+            <span class="font-mono text-sm">{{ scope?.row?.ip || '-' }}:{{ scope?.row?.ssh_port || 22 }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column :label="$t('serverProfiles.colEnv')" width="100">
+          <template #default="scope">
+            <el-tag :type="getEnvTagType(scope?.row?.env)" size="small">{{ getEnvLabel(scope?.row?.env) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column :label="$t('serverProfiles.colIndustry')" width="90">
-          <template #default="{ row }">
-            <span class="text-sm">{{ getIndustryLabel(row.industry) }}</span>
+          <template #default="scope">
+            <span class="text-sm">{{ getIndustryLabel(scope?.row?.industry) }}</span>
           </template>
         </el-table-column>
         <el-table-column :label="$t('serverProfiles.colModules')" width="90">
-          <template #default="{ row }">
-            <span class="text-blue-600 font-medium">{{ getModuleCount(row.modules) }}</span> / {{ availableModules.length }}
+          <template #default="scope">
+            <span class="text-blue-600 font-medium">{{ getModuleCount(scope?.row?.modules) }}</span> / {{ availableModules.length }}
           </template>
         </el-table-column>
         <el-table-column :label="$t('serverProfiles.colLang')" min-width="120">
-          <template #default="{ row }">
-            <span class="text-sm text-gray-700">{{ displayLanguages(row.language) }}</span>
+          <template #default="scope">
+            <span class="text-sm text-gray-700">{{ displayLanguages(scope?.row?.language) }}</span>
           </template>
         </el-table-column>
-        <el-table-column :label="$t('serverProfiles.colCurrency')" prop="currency" width="80">
-          <template #default="{ row }">
-            <span v-if="row.currency" class="px-1.5 py-0.5 bg-gray-100 rounded text-xs font-mono">{{ row.currency }}</span>
+        <el-table-column :label="$t('serverProfiles.colCurrency')" width="80">
+          <template #default="scope">
+            <span v-if="scope?.row?.currency" class="px-1.5 py-0.5 bg-gray-100 rounded text-xs font-mono">{{ scope.row.currency }}</span>
             <span v-else class="text-gray-400">-</span>
           </template>
         </el-table-column>
-        <el-table-column :label="$t('serverProfiles.colSiteZh')" prop="site_name_zh" width="110">
-          <template #default="{ row }">
-            <span class="text-sm">{{ row.site_name_zh || '-' }}</span>
+        <el-table-column :label="$t('serverProfiles.colSiteZh')" width="110">
+          <template #default="scope">
+            <span class="text-sm">{{ scope?.row?.site_name_zh || '-' }}</span>
           </template>
         </el-table-column>
         <el-table-column :label="$t('common.actions')" width="200" fixed="right">
-          <template #default="{ row }">
+          <template #default="scope">
             <div class="flex gap-2">
-              <button @click="openEdit(row)" class="text-blue-600 hover:text-blue-800 text-sm">{{ $t('common.edit') }}</button>
-              <button @click="handleSync(row)" class="text-green-600 hover:text-green-800 text-sm">{{ $t('serverProfiles.sync') }}</button>
-              <button @click="handleDelete(row)" class="text-red-500 hover:text-red-700 text-sm">{{ $t('common.delete') }}</button>
+              <button @click="openEdit(scope?.row)" class="text-blue-600 hover:text-blue-800 text-sm">{{ $t('common.edit') }}</button>
+              <button @click="handleSync(scope?.row)" class="text-green-600 hover:text-green-800 text-sm">{{ $t('serverProfiles.sync') }}</button>
+              <button @click="handleDelete(scope?.row)" class="text-red-500 hover:text-red-700 text-sm">{{ $t('common.delete') }}</button>
             </div>
           </template>
         </el-table-column>

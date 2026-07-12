@@ -1,0 +1,849 @@
+import express from 'express';
+import { pool } from '../db/connection.js';
+import { auth } from '../middleware/auth.js';
+
+const router = express.Router();
+
+// All routes require authentication
+router.use(auth);
+
+// ==================== Template Management ====================
+
+// GET /api/work-logs/templates - Get all templates
+router.get('/templates', async (req, res, next) => {
+  try {
+    const { status } = req.query;
+
+    let sql = 'SELECT * FROM work_log_templates WHERE 1=1';
+    const params = [];
+
+    if (status) {
+      sql += ' AND status = ?';
+      params.push(status);
+    }
+
+    sql += ' ORDER BY is_default DESC, created_at DESC';
+
+    const [templates] = await pool.query(sql, params);
+
+    res.json({
+      code: 0,
+      data: templates,
+      message: 'ok'
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Validate template fields structure
+function validateTemplateFields(fields) {
+  if (!Array.isArray(fields)) return false
+
+  const validTypes = [
+    'text', 'number', 'date', 'time', 'time_range', 'datetime',
+    'textarea', 'select', 'checkbox', 'radio',
+    'location', 'image', 'participants', 'rating'
+  ]
+
+  for (const field of fields) {
+    if (!field.label || !field.type) return false
+    if (!validTypes.includes(field.type)) return false
+
+    // select/radio/checkbox must have options
+    if (['select', 'radio', 'checkbox'].includes(field.type)) {
+      if (field.options && !Array.isArray(field.options)) return false
+    }
+
+    // Validate optional feature flags
+    if (field.enableLocation !== undefined && typeof field.enableLocation !== 'boolean') return false
+    if (field.enableImages !== undefined && typeof field.enableImages !== 'boolean') return false
+    if (field.enableParticipants !== undefined && typeof field.enableParticipants !== 'boolean') return false
+  }
+
+  return true
+}
+
+// POST /api/work-logs/templates - Create template (admin only)
+router.post('/templates', async (req, res, next) => {
+  try {
+    // Check admin permission
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        code: 403,
+        message: 'Admin permission required'
+      });
+    }
+
+    const { name, fields, is_default = false, status = 'active', log_type = 'work', description = '' } = req.body;
+
+    if (!name || !fields) {
+      return res.status(400).json({
+        code: 400,
+        message: 'Name and fields are required'
+      });
+    }
+
+    if (!validateTemplateFields(fields)) {
+      return res.status(400).json({
+        code: 400,
+        message: 'Invalid fields structure'
+      });
+    }
+
+    const [result] = await pool.query(
+      `INSERT INTO work_log_templates (name, creator_id, fields, is_default, status, log_type, description)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [name, req.user.id, JSON.stringify(fields), is_default, status, log_type, description]
+    );
+
+    res.json({
+      code: 0,
+      data: { id: result.insertId },
+      message: 'Template created successfully'
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/work-logs/templates/:id - Update template (admin only)
+router.put('/templates/:id', async (req, res, next) => {
+  try {
+    // Check admin permission
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        code: 403,
+        message: 'Admin permission required'
+      });
+    }
+
+    const { id } = req.params;
+    const { name, fields, is_default, status, log_type, description } = req.body;
+
+    const updates = [];
+    const params = [];
+
+    if (name !== undefined) {
+      updates.push('name = ?');
+      params.push(name);
+    }
+    if (fields !== undefined) {
+      if (!validateTemplateFields(fields)) {
+        return res.status(400).json({
+          code: 400,
+          message: 'Invalid fields structure'
+        });
+      }
+      updates.push('fields = ?');
+      params.push(JSON.stringify(fields));
+    }
+    if (is_default !== undefined) {
+      updates.push('is_default = ?');
+      params.push(is_default);
+    }
+    if (status !== undefined) {
+      updates.push('status = ?');
+      params.push(status);
+    }
+    if (log_type !== undefined) {
+      updates.push('log_type = ?');
+      params.push(log_type);
+    }
+    if (description !== undefined) {
+      updates.push('description = ?');
+      params.push(description);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({
+        code: 400,
+        message: 'No fields to update'
+      });
+    }
+
+    params.push(id);
+
+    const [result] = await pool.query(
+      `UPDATE work_log_templates SET ${updates.join(', ')} WHERE id = ?`,
+      params
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        code: 404,
+        message: 'Template not found'
+      });
+    }
+
+    res.json({
+      code: 0,
+      message: 'Template updated successfully'
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/work-logs/templates/:id - Delete template (admin only)
+router.delete('/templates/:id', async (req, res, next) => {
+  try {
+    // Check admin permission
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        code: 403,
+        message: 'Admin permission required'
+      });
+    }
+
+    const { id } = req.params;
+
+    const [result] = await pool.query(
+      'DELETE FROM work_log_templates WHERE id = ?',
+      [id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        code: 404,
+        message: 'Template not found'
+      });
+    }
+
+    res.json({
+      code: 0,
+      message: 'Template deleted successfully'
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/work-logs/templates/init-defaults - Initialize preset templates (admin only)
+router.post('/templates/init-defaults', async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ code: 403, message: 'Admin permission required' })
+    }
+
+    const defaults = [
+      {
+        name: '日报模板',
+        log_type: 'work',
+        description: '每日工作汇报',
+        fields: [
+          { name: 'title', label: '标题', type: 'text', required: true },
+          { name: 'submit_date', label: '日期', type: 'date', required: true },
+          { name: 'today_work', label: '今日工作内容', type: 'textarea', required: true },
+          { name: 'tomorrow_plan', label: '明日计划', type: 'textarea', required: false },
+          { name: 'participants', label: '参与人', type: 'participants', required: false }
+        ]
+      },
+      {
+        name: '周报模板',
+        log_type: 'work',
+        description: '每周工作总结',
+        fields: [
+          { name: 'title', label: '标题', type: 'text', required: true },
+          { name: 'week_summary', label: '本周工作总结', type: 'textarea', required: true },
+          { name: 'next_week_plan', label: '下周计划', type: 'textarea', required: true },
+          { name: 'completion', label: '完成度', type: 'rating', maxRating: 5, required: false },
+          { name: 'participants', label: '参与人', type: 'participants', required: false }
+        ]
+      },
+      {
+        name: '拜访记录模板',
+        log_type: 'work',
+        description: '客户拜访记录',
+        fields: [
+          { name: 'customer', label: '客户名称', type: 'text', required: true },
+          { name: 'visit_time', label: '拜访时间', type: 'time_range', required: true },
+          { name: 'location', label: '拜访地点', type: 'location', required: false },
+          { name: 'content', label: '拜访内容', type: 'textarea', required: true },
+          { name: 'photos', label: '现场拍照', type: 'image', maxCount: 9, required: false },
+          { name: 'participants', label: '参与人', type: 'participants', required: false }
+        ]
+      }
+    ]
+
+    let created = 0
+    for (const tpl of defaults) {
+      // 检查是否已存在同名模板
+      const [[existing]] = await pool.query(
+        'SELECT id FROM work_log_templates WHERE name = ?', [tpl.name]
+      )
+      if (!existing) {
+        await pool.query(
+          `INSERT INTO work_log_templates (name, creator_id, fields, is_default, status, log_type, description)
+           VALUES (?, ?, ?, 1, 'active', ?, ?)`,
+          [tpl.name, req.user.id, JSON.stringify(tpl.fields), tpl.log_type, tpl.description]
+        )
+        created++
+      }
+    }
+
+    res.json({ code: 0, data: { created }, message: `${created} default templates created` })
+  } catch (err) { next(err) }
+})
+
+// ==================== Work Logs ====================
+
+// POST /api/work-logs - Submit work log
+router.post('/', async (req, res, next) => {
+  try {
+    const { template_id, content, recipients, attachments, status = 'submitted', location, gps_lat, gps_lng, participants, date } = req.body;
+
+    if (!template_id || !content) {
+      return res.status(400).json({
+        code: 400,
+        message: 'Template ID and content are required'
+      });
+    }
+
+    // Verify template exists
+    const [templates] = await pool.query(
+      'SELECT id FROM work_log_templates WHERE id = ?',
+      [template_id]
+    );
+
+    if (templates.length === 0) {
+      return res.status(404).json({
+        code: 404,
+        message: 'Template not found'
+      });
+    }
+
+    const [result] = await pool.query(
+      `INSERT INTO work_logs (user_id, template_id, date, content, recipients, attachments, status, location, gps_lat, gps_lng, participants)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.user.id,
+        template_id,
+        date || new Date().toISOString().split('T')[0],
+        JSON.stringify(content),
+        JSON.stringify(recipients || []),
+        JSON.stringify(attachments || []),
+        status,
+        location || null,
+        gps_lat || null,
+        gps_lng || null,
+        JSON.stringify(participants || [])
+      ]
+    );
+
+    res.json({
+      code: 0,
+      data: { id: result.insertId },
+      message: 'Work log created successfully'
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/work-logs - Get work logs
+router.get('/', async (req, res, next) => {
+  try {
+    const {
+      type = 'mine',
+      status,
+      date_from,
+      date_to,
+      page = 1,
+      limit = 20
+    } = req.query;
+
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    let sql = `
+      SELECT
+        wl.*,
+        u.name as creator_name,
+        wlt.name as template_name
+      FROM work_logs wl
+      LEFT JOIN users u ON wl.user_id = u.id
+      LEFT JOIN work_log_templates wlt ON wl.template_id = wlt.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    // Filter by type
+    if (type === 'mine') {
+      sql += ' AND wl.user_id = ?';
+      params.push(req.user.id);
+    } else if (type === 'received') {
+      sql += ' AND JSON_CONTAINS(wl.recipients, ?)';
+      params.push(JSON.stringify(req.user.id));
+    }
+
+    // Filter by status
+    if (status) {
+      sql += ' AND wl.status = ?';
+      params.push(status);
+    }
+
+    // Filter by date range
+    if (date_from) {
+      sql += ' AND DATE(wl.created_at) >= ?';
+      params.push(date_from);
+    }
+    if (date_to) {
+      sql += ' AND DATE(wl.created_at) <= ?';
+      params.push(date_to);
+    }
+
+    // Get total count
+    const countSql = sql.replace(
+      /SELECT .+ FROM/,
+      'SELECT COUNT(*) as total FROM'
+    );
+    const [countResult] = await pool.query(countSql, params);
+    const total = countResult[0].total;
+
+    // Get paginated results
+    sql += ' ORDER BY wl.created_at DESC LIMIT ? OFFSET ?';
+    params.push(parseInt(limit), offset);
+
+    const [logs] = await pool.query(sql, params);
+
+    function safeParse(str, defaultVal = {}) {
+  if (!str) return defaultVal;
+  try {
+    return typeof str === 'object' ? str : JSON.parse(str);
+  } catch (e) {
+    return defaultVal;
+  }
+}
+
+//
+// Parse JSON fields
+    const parsedLogs = logs.map(log => ({
+      ...log,
+      content: safeParse(log.content),
+      recipients: safeParse(log.recipients),
+      attachments: safeParse(log.attachments)
+    }));
+
+    res.json({
+      code: 0,
+      data: {
+        logs: parsedLogs,
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit)
+      },
+      message: 'ok'
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/work-logs/:id - Get log detail
+router.get('/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const [logs] = await pool.query(
+      `SELECT
+        wl.*,
+        u.name as creator_name,
+        wlt.name as template_name,
+        wlt.fields as template_fields
+      FROM work_logs wl
+      LEFT JOIN users u ON wl.user_id = u.id
+      LEFT JOIN work_log_templates wlt ON wl.template_id = wlt.id
+      WHERE wl.id = ?`,
+      [id]
+    );
+
+    if (logs.length === 0) {
+      return res.status(404).json({
+        code: 404,
+        message: 'Work log not found'
+      });
+    }
+
+    const log = logs[0];
+
+    // Check permission: creator or recipient
+    const recipients = safeParse(log.recipients);
+    if (log.user_id !== req.user.id && !recipients.includes(req.user.id)) {
+      return res.status(403).json({
+        code: 403,
+        message: 'Access denied'
+      });
+    }
+
+    function safeParse(str, defaultVal = {}) {
+  if (!str) return defaultVal;
+  try {
+    return typeof str === 'object' ? str : JSON.parse(str);
+  } catch (e) {
+    return defaultVal;
+  }
+}
+
+//
+// Parse JSON fields
+    log.content = safeParse(log.content);
+    log.recipients = recipients;
+    log.attachments = safeParse(log.attachments);
+    log.participants = safeParse(log.participants || '[]');
+    log.template_fields = safeParse(log.template_fields);
+
+    // Get participant names
+    if (log.participants.length > 0) {
+      const [participantUsers] = await pool.query(
+        `SELECT id, name FROM users WHERE id IN (?)`,
+        [log.participants]
+      );
+      log.participant_names = participantUsers.map(u => u.name);
+    } else {
+      log.participant_names = [];
+    }
+
+    res.json({
+      code: 0,
+      data: log,
+      message: 'ok'
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/work-logs/:id - Update log (only draft logs, only by creator)
+router.put('/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { content, recipients, attachments, status } = req.body;
+
+    // Check if log exists and is owned by user
+    const [logs] = await pool.query(
+      'SELECT user_id, status FROM work_logs WHERE id = ?',
+      [id]
+    );
+
+    if (logs.length === 0) {
+      return res.status(404).json({
+        code: 404,
+        message: 'Work log not found'
+      });
+    }
+
+    const log = logs[0];
+
+    if (log.user_id !== req.user.id) {
+      return res.status(403).json({
+        code: 403,
+        message: 'Only creator can update work log'
+      });
+    }
+
+    if (log.status !== 'draft') {
+      return res.status(400).json({
+        code: 400,
+        message: 'Only draft logs can be updated'
+      });
+    }
+
+    const updates = [];
+    const params = [];
+
+    if (content !== undefined) {
+      updates.push('content = ?');
+      params.push(JSON.stringify(content));
+    }
+    if (recipients !== undefined) {
+      updates.push('recipients = ?');
+      params.push(JSON.stringify(recipients));
+    }
+    if (attachments !== undefined) {
+      updates.push('attachments = ?');
+      params.push(JSON.stringify(attachments));
+    }
+    if (status !== undefined) {
+      updates.push('status = ?');
+      params.push(status);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({
+        code: 400,
+        message: 'No fields to update'
+      });
+    }
+
+    params.push(id);
+
+    await pool.query(
+      `UPDATE work_logs SET ${updates.join(', ')} WHERE id = ?`,
+      params
+    );
+
+    res.json({
+      code: 0,
+      message: 'Work log updated successfully'
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/work-logs/:id - Delete log (only by creator)
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Check if log exists and is owned by user
+    const [logs] = await pool.query(
+      'SELECT user_id FROM work_logs WHERE id = ?',
+      [id]
+    );
+
+    if (logs.length === 0) {
+      return res.status(404).json({
+        code: 404,
+        message: 'Work log not found'
+      });
+    }
+
+    if (logs[0].user_id !== req.user.id) {
+      return res.status(403).json({
+        code: 403,
+        message: 'Only creator can delete work log'
+      });
+    }
+
+    await pool.query('DELETE FROM work_logs WHERE id = ?', [id]);
+
+    res.json({
+      code: 0,
+      message: 'Work log deleted successfully'
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ==================== Interactions ====================
+
+// POST /api/work-logs/:id/read - Mark as read
+router.post('/:id/read', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Check if log exists and user is recipient
+    const [logs] = await pool.query(
+      'SELECT recipients FROM work_logs WHERE id = ?',
+      [id]
+    );
+
+    if (logs.length === 0) {
+      return res.status(404).json({
+        code: 404,
+        message: 'Work log not found'
+      });
+    }
+
+    const recipients = safeParse(logs[0].recipients);
+    if (!recipients.includes(req.user.id)) {
+      return res.status(403).json({
+        code: 403,
+        message: 'Only recipients can mark as read'
+      });
+    }
+
+    // Check if already marked as read
+    const [existing] = await pool.query(
+      'SELECT id FROM work_log_interactions WHERE work_log_id = ? AND user_id = ? AND type = ?',
+      [id, req.user.id, 'read']
+    );
+
+    if (existing.length > 0) {
+      return res.json({
+        code: 0,
+        message: 'Already marked as read'
+      });
+    }
+
+    await pool.query(
+      'INSERT INTO work_log_interactions (work_log_id, user_id, type) VALUES (?, ?, ?)',
+      [id, req.user.id, 'read']
+    );
+
+    res.json({
+      code: 0,
+      message: 'Marked as read'
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/work-logs/:id/comment - Add comment
+router.post('/:id/comment', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { content } = req.body;
+
+    if (!content) {
+      return res.status(400).json({
+        code: 400,
+        message: 'Content is required'
+      });
+    }
+
+    // Check if log exists and user has access
+    const [logs] = await pool.query(
+      'SELECT user_id, recipients FROM work_logs WHERE id = ?',
+      [id]
+    );
+
+    if (logs.length === 0) {
+      return res.status(404).json({
+        code: 404,
+        message: 'Work log not found'
+      });
+    }
+
+    const log = logs[0];
+    const recipients = safeParse(log.recipients);
+
+    if (log.user_id !== req.user.id && !recipients.includes(req.user.id)) {
+      return res.status(403).json({
+        code: 403,
+        message: 'Access denied'
+      });
+    }
+
+    const [result] = await pool.query(
+      'INSERT INTO work_log_interactions (work_log_id, user_id, type, content) VALUES (?, ?, ?, ?)',
+      [id, req.user.id, 'comment', content]
+    );
+
+    res.json({
+      code: 0,
+      data: { id: result.insertId },
+      message: 'Comment added successfully'
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/work-logs/:id/like - Like/unlike toggle
+router.post('/:id/like', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Check if log exists and user has access
+    const [logs] = await pool.query(
+      'SELECT user_id, recipients FROM work_logs WHERE id = ?',
+      [id]
+    );
+
+    if (logs.length === 0) {
+      return res.status(404).json({
+        code: 404,
+        message: 'Work log not found'
+      });
+    }
+
+    const log = logs[0];
+    const recipients = safeParse(log.recipients);
+
+    if (log.user_id !== req.user.id && !recipients.includes(req.user.id)) {
+      return res.status(403).json({
+        code: 403,
+        message: 'Access denied'
+      });
+    }
+
+    // Check if already liked
+    const [existing] = await pool.query(
+      'SELECT id FROM work_log_interactions WHERE work_log_id = ? AND user_id = ? AND type = ?',
+      [id, req.user.id, 'like']
+    );
+
+    if (existing.length > 0) {
+      // Unlike
+      await pool.query(
+        'DELETE FROM work_log_interactions WHERE id = ?',
+        [existing[0].id]
+      );
+
+      return res.json({
+        code: 0,
+        data: { liked: false },
+        message: 'Unliked'
+      });
+    } else {
+      // Like
+      await pool.query(
+        'INSERT INTO work_log_interactions (work_log_id, user_id, type) VALUES (?, ?, ?)',
+        [id, req.user.id, 'like']
+      );
+
+      return res.json({
+        code: 0,
+        data: { liked: true },
+        message: 'Liked'
+      });
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/work-logs/:id/interactions - Get all interactions for a log
+router.get('/:id/interactions', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Check if log exists and user has access
+    const [logs] = await pool.query(
+      'SELECT user_id, recipients FROM work_logs WHERE id = ?',
+      [id]
+    );
+
+    if (logs.length === 0) {
+      return res.status(404).json({
+        code: 404,
+        message: 'Work log not found'
+      });
+    }
+
+    const log = logs[0];
+    const recipients = safeParse(log.recipients);
+
+    if (log.user_id !== req.user.id && !recipients.includes(req.user.id)) {
+      return res.status(403).json({
+        code: 403,
+        message: 'Access denied'
+      });
+    }
+
+    const [interactions] = await pool.query(
+      `SELECT
+        wli.*,
+        u.name
+      FROM work_log_interactions wli
+      LEFT JOIN users u ON wli.user_id = u.id
+      WHERE wli.work_log_id = ?
+      ORDER BY wli.created_at ASC`,
+      [id]
+    );
+
+    res.json({
+      code: 0,
+      data: interactions,
+      message: 'ok'
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+export default router;

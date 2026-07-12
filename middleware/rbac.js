@@ -46,6 +46,31 @@ const PERMISSIONS = {
   OA_READ: 'oa:read',
   OA_WRITE: 'oa:write',
 
+  // === Labor / SmartBiz 模块 (2026-07-12 新增) ===
+  // 工地 (jobsites)
+  JOBSITE_READ: 'jobsite:read',
+  JOBSITE_WRITE: 'jobsite:write',
+  JOBSITE_DELETE: 'jobsite:delete',
+  // 工人档案 (worker_profiles)
+  WORKER_READ: 'worker:read',
+  WORKER_WRITE: 'worker:write',
+  WORKER_DELETE: 'worker:delete',
+  // 派工 (labor_dispatch)
+  DISPATCH_READ: 'dispatch:read',
+  DISPATCH_WRITE: 'dispatch:write',
+  // 评价 (labor_evaluations)
+  EVAL_READ: 'eval:read',
+  EVAL_WRITE: 'eval:write',
+  // HR 录入 (labor-hr)
+  HR_READ: 'hr:read',
+  HR_WRITE: 'hr:write',
+  // LISA 智能体
+  LABOR_AI_CHAT: 'labor-ai:chat',
+  // AI 上传文件/图片/CAD(2026-07-13)
+  AI_UPLOAD: 'ai:upload',
+  // 首页工作台
+  DASHBOARD_VIEW: 'dashboard:view',
+
   // 用户管理
   USERS_READ: 'user:read',
   USERS_WRITE: 'user:write',
