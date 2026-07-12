@@ -58,6 +58,17 @@ import ordersRoutes from './routes/orders.js'
 import reportsRoutes from './routes/reports.js'
 import bossChatRoutes from './routes/boss-chat.js'
 import aiClassRoutes from './routes/ai-class.js'
+import aiKnowledgeDomainsRoutes from './routes/ai-knowledge-domains.js'
+import laborAiAgentRoutes from './routes/labor-ai-agent.js'
+import laborAiRoutes from './routes/labor-ai.js'
+import {
+  workerRouter as laborWorkerRouter,
+  jobsiteRouter as laborJobsiteRouter,
+  dispatchRouter as laborDispatchRouter,
+  evalRouter as laborEvalRouter,
+} from './routes/labor-worker.js'
+import laborHrRoutes from './routes/labor-hr.js'
+import laborAppealsRoutes from './routes/labor-appeals.js'
 import adminSchemaRoutes from './routes/admin-schema.js'
 import aiConfigRoutes from './routes/ai-config.js'
 import kbRoutes from './routes/kb.js'
@@ -105,6 +116,7 @@ import onlineOrdersRoutes from './routes/online-orders.js'
 import quoteRoutes from './routes/quote.js'
 import rentalRoutes from './routes/rental.js'
 import rentalPublicRoutes from './routes/rental-public.js'
+import sidebarRoutes from './routes/sidebar.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -197,6 +209,9 @@ app.use('/api/openclaw', openclawRoutes)
 app.use('/api/boss', auth, bossChatRoutes)
 app.use('/api/ai-config', auth, aiConfigRoutes)
 app.use('/api/ai-class', auth, aiClassRoutes)
+app.use('/api/labor-ai-agent', auth, laborAiAgentRoutes)
+app.use('/api/labor-ai', auth, apiLimiter, laborAiRoutes)
+app.use('/api/ai-domains', auth, aiKnowledgeDomainsRoutes)
 app.use('/api/admin/schema', auth, adminSchemaRoutes)
 app.use('/api/kb', auth, kbRoutes)
 app.use('/api/scan', scanRoutes)
@@ -517,11 +532,18 @@ app.use('/api/rbac/permissions', auth, apiLimiter, rbacPermissionRoutes)
 app.use('/api/rbac/menus', auth, apiLimiter, rbacMenuRoutes)
 app.use('/api/rbac/roles', auth, apiLimiter, rbacRoleRoutes)
 app.use('/api/rbac/users', auth, apiLimiter, rbacUserRoleRoutes)
+app.use('/api/labor-worker', auth, apiLimiter, laborWorkerRouter)
+app.use('/api/labor-jobsites', auth, apiLimiter, laborJobsiteRouter)
+app.use('/api/labor-dispatch', auth, apiLimiter, laborDispatchRouter)
+app.use('/api/labor-evaluations', auth, apiLimiter, laborEvalRouter)
+app.use('/api/labor-hr', auth, apiLimiter, laborHrRoutes)
+app.use('/api/labor-appeals', auth, apiLimiter, laborAppealsRoutes)
 app.use('/api/server-profiles', auth, apiLimiter, requireRole('admin'), serverProfilesRoutes)
 app.use('/api/server-endpoints', auth, apiLimiter, requireRole('admin'), serverEndpointsRoutes)
 app.use('/api', auth, apiLimiter, inventoryRoutes)
 app.use('/api/quote', auth, apiLimiter, quoteRoutes)
 app.use('/api/rental', auth, apiLimiter, rentalRoutes)
+app.use('/api/sidebar', sidebarRoutes)
 
 // rentalPublicRoutes 已在 inventory catch-all 之前挂载（见上面的位置）
 
