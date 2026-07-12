@@ -30,7 +30,52 @@ const adorderRoutes = [
   { path: '/adorder/admin/quote-templates', name: 'AdorderTemplates', component: () => import('../views/rental/AdminBoard.vue'), meta: { public: true, h5: true } },
 ]
 
-const routes = [].concat(hqh5Routes, adorderRoutes, [
+// ============ 小程序端 (Minip) - 企业/财务/HR/OA/营销/我的 ============
+// 完全模仿 adorder 模式：nginx /minip → index.html + SPA 接管
+// 所有页面内部已 import <MinipLayout> 包裹，无需嵌套路由
+const minipRoutes = [
+  { path: '/minip/login', name: 'MinipLogin', component: () => import('../views/minip/MeLogin.vue'), meta: { public: true, h5: true, title: '小程序登录' } },
+  { path: '/minip', name: 'MinipEnterprise', component: () => import('../views/minip/EnterpriseHome.vue'), meta: { public: true, h5: true, title: '企业服务' } },
+  // 财务
+  { path: '/minip/finance', name: 'MinipFinance', component: () => import('../views/minip/Finance.vue'), meta: { public: true, h5: true, title: '财务中心' } },
+  { path: '/minip/finance/expense', name: 'MinipFinanceExpense', component: () => import('../views/minip/FinanceExpense.vue'), meta: { public: true, h5: true } },
+  { path: '/minip/finance/receipt', name: 'MinipFinanceReceipt', component: () => import('../views/minip/FinanceReceipt.vue'), meta: { public: true, h5: true } },
+  { path: '/minip/finance/wallet', name: 'MinipFinanceWallet', component: () => import('../views/minip/FinanceWallet.vue'), meta: { public: true, h5: true } },
+  { path: '/minip/finance/invoice', name: 'MinipFinanceInvoice', component: () => import('../views/minip/FinanceInvoice.vue'), meta: { public: true, h5: true } },
+  // HR
+  { path: '/minip/hr', name: 'MinipHr', component: () => import('../views/minip/Hr.vue'), meta: { public: true, h5: true, title: '人力中心' } },
+  { path: '/minip/hr/attendance', name: 'MinipHrAttendance', component: () => import('../views/minip/HrAttendance.vue'), meta: { public: true, h5: true } },
+  { path: '/minip/hr/directory', name: 'MinipHrDirectory', component: () => import('../views/minip/HrDirectory.vue'), meta: { public: true, h5: true } },
+  { path: '/minip/hr/leave', name: 'MinipHrLeave', component: () => import('../views/minip/HrLeave.vue'), meta: { public: true, h5: true } },
+  { path: '/minip/hr/salary', name: 'MinipHrSalary', component: () => import('../views/minip/HrSalary.vue'), meta: { public: true, h5: true } },
+  // OA
+  { path: '/minip/oa', name: 'MinipOa', component: () => import('../views/minip/Oa.vue'), meta: { public: true, h5: true, title: 'OA 办公' } },
+  { path: '/minip/oa/approval', name: 'MinipOaApproval', component: () => import('../views/minip/OaApproval.vue'), meta: { public: true, h5: true } },
+  { path: '/minip/oa/meeting', name: 'MinipOaMeeting', component: () => import('../views/minip/OaMeeting.vue'), meta: { public: true, h5: true } },
+  { path: '/minip/oa/schedule', name: 'MinipOaSchedule', component: () => import('../views/minip/OaSchedule.vue'), meta: { public: true, h5: true } },
+  { path: '/minip/oa/workflow', name: 'MinipOaWorkflow', component: () => import('../views/minip/OaWorkflow.vue'), meta: { public: true, h5: true } },
+  // 营销
+  { path: '/minip/marketing', name: 'MinipMarketing', component: () => import('../views/minip/Marketing.vue'), meta: { public: true, h5: true, title: '营销中心' } },
+  { path: '/minip/marketing/activity', name: 'MinipMarketingActivity', component: () => import('../views/minip/MarketingActivity.vue'), meta: { public: true, h5: true } },
+  { path: '/minip/marketing/coupon', name: 'MinipMarketingCoupon', component: () => import('../views/minip/MarketingCoupon.vue'), meta: { public: true, h5: true } },
+  { path: '/minip/marketing/member', name: 'MinipMarketingMember', component: () => import('../views/minip/MarketingMember.vue'), meta: { public: true, h5: true } },
+  { path: '/minip/marketing/referral', name: 'MinipMarketingReferral', component: () => import('../views/minip/MarketingReferral.vue'), meta: { public: true, h5: true } },
+  // 我的
+  { path: '/minip/me', name: 'MinipMe', component: () => import('../views/minip/Me.vue'), meta: { public: true, h5: true, title: '个人中心' } },
+  { path: '/minip/me/address', name: 'MinipMeAddress', component: () => import('../views/minip/MeAddress.vue'), meta: { public: true, h5: true } },
+  { path: '/minip/me/coupons', name: 'MinipMeCoupons', component: () => import('../views/minip/MeCoupons.vue'), meta: { public: true, h5: true } },
+  { path: '/minip/me/favorites', name: 'MinipMeFavorites', component: () => import('../views/minip/MeFavorites.vue'), meta: { public: true, h5: true } },
+  { path: '/minip/me/orders', name: 'MinipMeOrders', component: () => import('../views/minip/MeOrders.vue'), meta: { public: true, h5: true } },
+  { path: '/minip/me/points', name: 'MinipMePoints', component: () => import('../views/minip/MePoints.vue'), meta: { public: true, h5: true } },
+  { path: '/minip/me/profile', name: 'MinipMeProfile', component: () => import('../views/minip/MeProfile.vue'), meta: { public: true, h5: true } },
+  { path: '/minip/me/reviews', name: 'MinipMeReviews', component: () => import('../views/minip/MeReviews.vue'), meta: { public: true, h5: true } },
+  { path: '/minip/me/wallet', name: 'MinipMeWallet', component: () => import('../views/minip/MeWallet.vue'), meta: { public: true, h5: true } },
+  // 其他
+  { path: '/minip/about', name: 'MinipAbout', component: () => import('../views/minip/MiscAbout.vue'), meta: { public: true, h5: true, title: '关于' } },
+  { path: '/minip/feedback', name: 'MinipFeedback', component: () => import('../views/minip/MiscFeedback.vue'), meta: { public: true, h5: true, title: '反馈' } },
+]
+
+const routes = [].concat(hqh5Routes, adorderRoutes, minipRoutes, [
   {
     path: '/mall',
     alias: '/mall/',
@@ -129,6 +174,12 @@ const routes = [].concat(hqh5Routes, adorderRoutes, [
       { path: 'referral', name: 'ReferralManage', component: lazyLoad(() => import('../views/orders/ReferralManage.vue')), meta: { title: '推荐裂变', parent: '商城', permission: 'referral:read' } },
 
       // ── 传媒物料租赁报价下单系统（核心新模块）────────────────
+      { path: 'rental', name: 'RentalWorkspace', component: lazyLoad(() => import('../views/rental/RentalWorkspace.vue')), meta: { title: '传媒租赁', icon: 'construction', permission: 'quote:read' } },
+      { path: 'rental/products',  name: 'RentalProducts',  component: lazyLoad(() => import('../views/rental/ProductsTab.vue')),  meta: { title: '广告物料', parent: '传媒租赁', permission: 'product:write' } },
+      { path: 'rental/quotes',    name: 'RentalQuotes',    component: lazyLoad(() => import('../views/rental/QuotesTab.vue')),    meta: { title: '报价管理', parent: '传媒租赁', permission: 'quote:read' } },
+      { path: 'rental/orders',    name: 'RentalOrders',    component: lazyLoad(() => import('../views/rental/OrdersTab.vue')),    meta: { title: '我的订单', parent: '传媒租赁', permission: 'quote:read' } },
+      { path: 'rental/inout',     name: 'RentalInOut',     component: lazyLoad(() => import('../views/rental/InOutTab.vue')),     meta: { title: '出入库',   parent: '传媒租赁', permission: 'inventory:write' } },
+      { path: 'rental/dashboard', name: 'RentalDashboard', component: lazyLoad(() => import('../views/rental/DashboardTab.vue')), meta: { title: '库存看板', parent: '传媒租赁', permission: 'warehouse:visual' } },
       { path: 'quote', name: 'QuoteList', component: lazyLoad(() => import('../views/quote/QuoteList.vue')), meta: { title: '报价管理', parent: '传媒租赁', permission: 'quote:read' } },
       { path: 'quote/create', name: 'QuoteCreate', component: lazyLoad(() => import('../views/quote/QuoteCreate.vue')), meta: { title: '新建报价', parent: '传媒租赁', permission: 'quote:write' } },
       { path: 'quote/detail/:id', name: 'QuoteDetail', component: lazyLoad(() => import('../views/quote/QuoteDetail.vue')), meta: { title: '报价详情', parent: '传媒租赁', permission: 'quote:read' } },
