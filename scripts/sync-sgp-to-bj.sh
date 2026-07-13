@@ -217,15 +217,17 @@ EXP_OUTPUT=$(expect "$EXP_SCRIPT" "$BACKUP_NAME" "$BJ_PEM" "$BJ_PORT" "$BJ_HOST"
 rm -f "$EXP_SCRIPT"
 if echo "$EXP_OUTPUT" | grep -q "BACKUP_OK"; then
   ok "bj dist 远程备份完成: $BACKUP_NAME"
-  scp -i "$BJ_PEM" -P $BJ_PORT -o StrictHostKeyChecking=no -q \
-    "$BJ_USER@$BJ_HOST:~/$BACKUP_NAME" "/tmp/$BACKUP_NAME" 2>&1 | head -3
+  # scp 在大文件（15MB+）有 silent stuck 风险（实测 255K 卡死），改用 rsync 支持 timeout + partial
+  rsync -av --partial --timeout=60 \
+    -e "ssh -i $BJ_PEM -p $BJ_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=30" \
+    "$BJ_USER@$BJ_HOST:~/$BACKUP_NAME" "/tmp/$BACKUP_NAME" 2>&1 | tail -5
   if [ ! -f "/tmp/$BACKUP_NAME" ]; then
-    fail "scp 回拉失败（备份仍在 bj ~/）"
+    fail "rsync 回拉失败（备份仍在 bj ~/）"
   fi
   # size 校验：dist 当前 9-15MB，最低阈值 1MB（防 0 字节静默失败）
   BACKUP_SIZE=$(stat -c%s "/tmp/$BACKUP_NAME" 2>/dev/null || echo 0)
   if [ "$BACKUP_SIZE" -lt 1048576 ]; then
-    fail "❌ 备份文件仅 $BACKUP_SIZE 字节（<1MB），tar 阶段疑似失败。删除 0 字节 backup 后中止同步。"
+    fail "❌ 备份文件仅 $BACKUP_SIZE 字节（<1MB），tar 阶段疑似失败 / rsync 卡死。删除 0 字节 backup 后中止同步。"
   fi
   ok "备份拉到 sgp: /tmp/$BACKUP_NAME ($(du -sh "/tmp/$BACKUP_NAME" | cut -f1))"
 else
