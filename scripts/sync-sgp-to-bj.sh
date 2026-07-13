@@ -18,6 +18,7 @@
 #   bash scripts/sync-sgp-to-bj.sh              # dry-run（默认安全），走 profile 1 (sgp 全集)
 #   bash scripts/sync-sgp-to-bj.sh --push       # 实际推送 (profile 1)
 #   bash scripts/sync-sgp-to-bj.sh --push --skip-build
+#   bash scripts/sync-sgp-to-bj.sh --push --skip-backup  # 跳过备份（应急/反复推送场景）
 #   bash scripts/sync-sgp-to-bj.sh --verify
 #   bash scripts/sync-sgp-to-bj.sh --profile=2  # 推 bj 专属 profile dist-2 (模块化)
 #   bash scripts/sync-sgp-to-bj.sh --profile=2 --push --skip-build
@@ -52,6 +53,7 @@ fail() { echo -e "${RED}[fail]${NC} $*"; exit 1; }
 # ---- 参数解析 ----
 PUSH=false
 SKIP_BUILD=false
+SKIP_BACKUP=false
 VERIFY_ONLY=false
 # Phase 1 新增: profile 概念。默认 1 (sgp 全集) 保持向后兼容
 PROFILE=1
@@ -60,6 +62,7 @@ for arg in "$@"; do
   case $arg in
     --push) PUSH=true ;;
     --skip-build) SKIP_BUILD=true ;;
+    --skip-backup) SKIP_BACKUP=true ;;
     --verify) VERIFY_ONLY=true ;;
     --profile=*)
       PROFILE="${arg#--profile=}"
@@ -178,13 +181,15 @@ fi
 [ "$(stat -c '%a' "$BJ_PASS_FILE")" = "600" ] || fail "密码文件权限不是 600: $(stat -c '%a' "$BJ_PASS_FILE") (chmod 600 $BJ_PASS_FILE)"
 BJ_SUDO_PASS=$(cat "$BJ_PASS_FILE")
 
-# ---- 6. 实际推送：先备份，再两阶段 rsync ----
+# ---- 6. 实际推送：先备份（可选），再两阶段 rsync ----
 
-# 6a. 备份 bj 当前 dist 到 sgp /tmp
-#  生成独立 expect 脚本避免 heredoc 方括号转义问题
-log "备份 bj 当前 dist → /tmp/bj-dist-backup-*.tar.gz..."
-BACKUP_NAME="bj-dist-backup-$(date +%Y%m%d_%H%M%S).tar.gz"
-EXP_SCRIPT=$(mktemp -t sync-backup-XXXXXX.exp)
+# 6a. 备份 bj 当前 dist（默认开，可用 --skip-backup 跳过：网络慢/纯 dev 推送场景）
+if $SKIP_BACKUP; then
+  warn "跳过 backup 阶段（--skip-backup），rollback 责任自负"
+else
+  log "备份 bj 当前 dist → /tmp/bj-dist-backup-*.tar.gz..."
+  BACKUP_NAME="bj-dist-backup-$(date +%Y%m%d_%H%M%S).tar.gz"
+  EXP_SCRIPT=$(mktemp -t sync-backup-XXXXXX.exp)
 cat > "$EXP_SCRIPT" <<'EXP_HEREDOC'
 #!/usr/bin/expect -f
 set timeout 120
@@ -233,6 +238,7 @@ if echo "$EXP_OUTPUT" | grep -q "BACKUP_OK"; then
 else
   fail "❌ 远程备份失败（expect 未输出 BACKUP_OK）。tar 阶段未完成，删除半成品后中止同步，避免覆盖无备份的目标服务器。EXP_OUTPUT: $(echo "$EXP_OUTPUT" | tail -5)"
 fi
+fi  # 关闭 SKIP_BACKUP 外层 if
 
 # 6b. 阶段 1：rsync 到 ubuntu 家目录 ~/dist-staging/（ubuntu 可写）
 log "阶段 1：rsync 本地 dist → bj:~/dist-staging/ ..."
