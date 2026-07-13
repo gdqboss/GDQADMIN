@@ -19,8 +19,8 @@
 #   bash scripts/sync-sgp-to-bj.sh --push       # 实际推送 (profile 1)
 #   bash scripts/sync-sgp-to-bj.sh --push --skip-build
 #   bash scripts/sync-sgp-to-bj.sh --verify
-#   bash scripts/sync-sgp-to-bj.sh --profile 2  # 推 bj 专属 profile dist-2 (模块化)
-#   bash scripts/sync-sgp-to-bj.sh --profile 2 --push --skip-build
+#   bash scripts/sync-sgp-to-bj.sh --profile=2  # 推 bj 专属 profile dist-2 (模块化)
+#   bash scripts/sync-sgp-to-bj.sh --profile=2 --push --skip-build
 #   bash scripts/sync-sgp-to-bj.sh --build-script build:custom  # 自定义 build 命令
 
 set -euo pipefail
