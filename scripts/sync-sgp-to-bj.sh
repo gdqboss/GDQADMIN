@@ -187,7 +187,7 @@ BACKUP_NAME="bj-dist-backup-$(date +%Y%m%d_%H%M%S).tar.gz"
 EXP_SCRIPT=$(mktemp -t sync-backup-XXXXXX.exp)
 cat > "$EXP_SCRIPT" <<'EXP_HEREDOC'
 #!/usr/bin/expect -f
-set timeout 30
+set timeout 120
 set backup_name [lindex $argv 0]
 set bj_pem [lindex $argv 1]
 set bj_port [lindex $argv 2]
@@ -219,13 +219,17 @@ if echo "$EXP_OUTPUT" | grep -q "BACKUP_OK"; then
   ok "bj dist 远程备份完成: $BACKUP_NAME"
   scp -i "$BJ_PEM" -P $BJ_PORT -o StrictHostKeyChecking=no -q \
     "$BJ_USER@$BJ_HOST:~/$BACKUP_NAME" "/tmp/$BACKUP_NAME" 2>&1 | head -3
-  if [ -f "/tmp/$BACKUP_NAME" ]; then
-    ok "备份拉到 sgp: /tmp/$BACKUP_NAME ($(du -sh "/tmp/$BACKUP_NAME" | cut -f1))"
-  else
-    warn "scp 回拉失败（备份仍在 bj）"
+  if [ ! -f "/tmp/$BACKUP_NAME" ]; then
+    fail "scp 回拉失败（备份仍在 bj ~/）"
   fi
+  # size 校验：dist 当前 9-15MB，最低阈值 1MB（防 0 字节静默失败）
+  BACKUP_SIZE=$(stat -c%s "/tmp/$BACKUP_NAME" 2>/dev/null || echo 0)
+  if [ "$BACKUP_SIZE" -lt 1048576 ]; then
+    fail "❌ 备份文件仅 $BACKUP_SIZE 字节（<1MB），tar 阶段疑似失败。删除 0 字节 backup 后中止同步。"
+  fi
+  ok "备份拉到 sgp: /tmp/$BACKUP_NAME ($(du -sh "/tmp/$BACKUP_NAME" | cut -f1))"
 else
-  warn "备份失败（继续推送）: $(echo "$EXP_OUTPUT" | tail -3)"
+  fail "❌ 远程备份失败（expect 未输出 BACKUP_OK）。tar 阶段未完成，删除半成品后中止同步，避免覆盖无备份的目标服务器。EXP_OUTPUT: $(echo "$EXP_OUTPUT" | tail -5)"
 fi
 
 # 6b. 阶段 1：rsync 到 ubuntu 家目录 ~/dist-staging/（ubuntu 可写）
@@ -313,4 +317,11 @@ else
 fi
 
 ok "同步完成 ✅"
+
+# ---- 8. 清理：保留最近 3 个 backup tar.gz，删更老的（防 /tmp 累积） ----
+log "清理旧 backup（保留最近 3 个）..."
+ls -t /tmp/bj-dist-backup-*.tar.gz 2>/dev/null | tail -n +4 | while read -r old; do
+  rm -f "$old"
+  ok "已删除旧 backup: $old"
+done
 
