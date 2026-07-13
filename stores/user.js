@@ -50,14 +50,28 @@ export const useUserStore = defineStore('user', () => {
   const userRole = computed(() => user.value?.role || '')
   const userPermissions = computed(() => user.value?.permissions || null)
 
-  // 统一权限检查：传入权限标识符（如 'product:write'），返回是否有权限
+  // 统一权限检查：传入权限标识符（如 'products:delete'），返回是否有权限
   // admin 角色天然拥有所有权限
+  // 容错：DB 历史脏数据存在多种权限 key 风格（'products:delete' / 'products_delete' / 'product:delete'），
+  //       用同一个 normalize 函数把所有写法映射到一个内部 key，匹配任何一种即视为通过。
+  function _normalizePermKey(k) {
+    if (!k || typeof k !== 'string') return ''
+    // 1. 全部小写
+    let s = k.toLowerCase().trim()
+    // 2. 冒号/下划线 都视为分隔符
+    s = s.replace(/_/g, ':')
+    // 3. 单复数统一：product → products, inventory 已经是 inventory
+    //    仅对纯 product(s) 域做这步，避免影响其它无意义替换
+    s = s.replace(/\bproduct:/g, 'products:')
+    return s
+  }
   function canAccess(permKey) {
     if (!permKey) return true
     if (userRole.value === ROLES.ADMIN) return true
     const perms = userPermissions.value
     if (!perms || !Array.isArray(perms)) return false
-    return perms.includes(permKey)
+    const target = _normalizePermKey(permKey)
+    return perms.some(p => _normalizePermKey(p) === target)
   }
 
   async function login(phone, password) {
