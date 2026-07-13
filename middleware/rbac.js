@@ -42,6 +42,16 @@ const PERMISSIONS = {
   // 财务
   FINANCE_READ: 'finance:read',
 
+  // === 2026-08-12 多租户配置 (banner/theme/translation) ===
+  BANNERS_READ: 'banners:read',
+  BANNERS_WRITE: 'banners:write',
+  BANNERS_DELETE: 'banners:delete',
+  THEME_READ: 'theme:read',
+  THEME_WRITE: 'theme:write',
+  TRANSLATIONS_READ: 'translations:read',
+  TRANSLATIONS_WRITE: 'translations:write',
+  TRANSLATIONS_DELETE: 'translations:delete',
+
   // OA办公
   OA_READ: 'oa:read',
   OA_WRITE: 'oa:write',

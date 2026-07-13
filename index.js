@@ -28,6 +28,9 @@ import homeRoutes from './routes/home.js'
 import qrcodeRoutes from './routes/qrcode.js'
 import oaRoutes from './routes/oa.js'
 import reportRoutes from './routes/reports.js'
+import bannersRoutes from './routes/banners.js'
+import themeRoutes from './routes/theme.js'
+import translationsRoutes from './routes/translations.js'
 import wecomRoutes from './routes/wecom.js'
 import settingsRoutes from './routes/settings.js'
 import systemRoutes from './routes/system.js'
@@ -82,6 +85,7 @@ import feedbackRoutes from './routes/feedback.js'
 import returnsRoutes from './routes/returns.js'
 import logInteractionsRoutes from './routes/log-interactions.js'
 import tasksRoutes from './routes/tasks.js'
+import minipRoutes from './routes/minip.js'
 import responsibilitiesRoutes from './routes/responsibilities.js'
 import giftApprovalRoutes from './routes/gift-approvals.js'
 import preorderRoutes from './routes/preorder.js'
@@ -218,6 +222,10 @@ app.use('/api/kb', auth, kbRoutes)
 app.use('/api/scan', scanRoutes)
 // Rental 公开端点（游客可访问）—— 必须放在 inventory 的 /api catch-all 之前
 app.use('/api/rental-public', rentalPublicRoutes)
+// 2026-08-12 多租户配置 (banner/theme/translation)
+app.use('/api/banners', bannersRoutes)
+app.use('/api/theme', themeRoutes)
+app.use('/api/translations', translationsRoutes)
 
 // Public referral QR endpoint (no auth) — must be before prefix router
 app.get('/api/referral/qr/:token', async (req, res, next) => {
@@ -526,6 +534,7 @@ app.use('/api/feedback', feedbackRoutes) // Mixed auth (some public, some protec
 // 注释原因: returns.js 路由字段与 return_records 表结构不匹配，导致补货 500
 // inventory.js L406 app.use('/api', inventoryRoutes) 内的 /returns 路由接管
 app.use('/api/tasks', auth, apiLimiter, tasksRoutes)
+app.use('/api/minip', apiLimiter, minipRoutes)
 app.use('/api/wallet', auth, apiLimiter, walletRoutes)
 app.use('/api/invite', auth, apiLimiter, inviteRoutes)
 app.use('/api/member-level', auth, apiLimiter, memberLevelRoutes)

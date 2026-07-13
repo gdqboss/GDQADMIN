@@ -63,12 +63,45 @@
 
 ---
 
-## 四、模块化铁律
+## 模块化铁律
 
 1. 改 A 不影响 B (波哥最强诉求)
 2. JXY 需求在原模块开发 — 现有路由优先复用, 不另写
 3. 功能相同的模块统一通用 — 多个 count/聚合 用同一接口, 不造 N 个并行查询
 4. 现有日志/财务/考勤/任务 模块要复用 — 可以改造, 不能另起灶
+
+### 零硬编码铁律（2026-08-12 波哥原话"未来可能还有其它模块和前端，所以这些都不要硬编"）
+
+详见 skill: `zero-hardcode-modular-architecture`. 核心 4 条:
+1. **模块清单 = 自动发现**（扫 views/ 不写死 PROFILE_MODULES）
+2. **前端类型 = 多入口自动注册**（apps/ 目录扫描,不硬编 vite.config）
+3. **模块路由 = 单点声明**（views/<m>/_meta.js 一处声明,不分散 3 处）
+4. **前端/服务器关系 = DB 表**（server_profiles.frontend_type,代码不分支）
+
+加新模块: 只动 4 处 — views/ + routes/ + rbac_permissions + server_modules（**禁止碰 profile-config.js**）
+加新前端: 只动 3 处 — apps/ + server_profiles + nginx（**禁止碰 vite.config.js**）
+
+### 主图 / 轮播图 / 跳转铁律（2026-08-12 波哥原话"还有主图、轮播图、附带的点击跳转等"）
+
+详见 skill: `banner-carousel-cms`. 核心 4 条:
+1. **统一后端** = 单 `routes/banners.js`（禁 portal/mall/hqh5/wxmp 4 套重复 API）
+2. **统一表** = banners 表（禁 settings JSON 散落）
+3. **统一组件** = `<UiBanner position="home_top">`（禁每个 view 写一份轮播）
+4. **统一跳转** = link_type 枚举（internal/external/product/category/article/activity/minip/wechat/phone）
+
+加新轮播位: 只动 2 处 — 后端 banners.position 加新值 + 前端 `<UiBanner position="新位置">`（**禁止重写组件**）
+
+### 多租户隔离 + 客户自管铁律（2026-08-12 波哥原话"这些内容可以独立存在客户服务器中,在数据库里读取,而且在客户的后端可以由管理员自己修改"）
+
+详见 skill: `multi-tenant-client-self-manage`. 核心 5 条:
+1. **数据物理隔离** — 所有配置表 (banners/theme/translations/...) 必须有 server_profile_id
+2. **配置存 DB** — 不存 .js / .vue / .json 文件
+3. **客户后台 = 必须有配置入口** — BannerManage / ThemeConfig / ModulesManage / LanguageManage 后台 UI
+4. **代码只有 1 套** — 不 fork 客户项目
+5. **customer_admin vs super_admin** — 客户管理员只能动自己数据,super_admin 才能跨客户
+
+部署新客户 = server_profiles 加 1 行 + 客户表数据勾选 = 完事,代码 0 改动
+每个可配置项都必须有客户可改的后台 UI（不是改代码）
 
 ---
 
@@ -96,3 +129,57 @@ profile 5 SmartBiz   (100.64.122.98, wecom.gdqshop.cn/labor/) — 13 modules
 
 任何改动必须先 `mysql SELECT * FROM server_modules WHERE server_profile_id = ?`
 确认目标 profile 已勾选, 再动手.
+
+---
+
+## 七、开发日志规范 (2026-07-13 立, AI 必读)
+
+**铁律**: **所有后端开发活动必须记录**到 `/root/src/docs/DEV_LOG.md` (与前端共用同一文件).
+
+### 何时写日志 (后端特定)
+
+| 触发动作 | 是否写日志 |
+|---|---|
+| 新增 / 修改 route (`/root/server/routes/*.js`) | ✅ 必须 |
+| 修改 middleware (`/root/server/middleware/*.js`) | ✅ 必须 |
+| 修改 `index.js` (mount 新路由) | ✅ 必须 |
+| MySQL `rbac_permissions` / `server_modules` INSERT | ✅ 必须 |
+| 后端 `AGENTS.md` 改动 | ✅ 必须 |
+| 跑 `pm2 restart gdq-server` | ✅ 必须 (写明何时重启 + 原因) |
+| **仅 read / grep** | ❌ 不写 |
+
+### 后端日志格式 (在通用模板基础上加)
+
+```markdown
+## [YYYY-MM-DD HH:MM] <一句话标题>
+
+**操作人**: agent / 波哥
+**影响 profile**: 1 / 2 / 3 / 4 / 5
+**commit**: <hash>
+
+### 改动文件
+- `routes/labor-xxx.js` — 新增 / 修改说明
+- `middleware/rbac.js` — 加 PERMISSIONS 常量说明
+
+### MySQL 改动
+- `INSERT INTO rbac_permissions ...` (附 SQL)
+- `INSERT INTO server_modules ...` (附 SQL)
+
+### 重启验证
+- `pm2 restart gdq-server`
+- `curl http://localhost:3200/api/xxx` 返回 200
+
+### 影响范围
+- 哪些前端模块需要重新编译
+- 是否需要 sync 到 profile 2/3/4/5
+```
+
+### 命名约定补充
+
+- module_key 路径用**短横线** (例 `labor-ai-agent`), 不用下划线 (错例: `labor_ai_agent`)
+- 后端 route 文件名 = module_key + `.js` (例 `labor-ai-agent.js`)
+- 例外: 聚合多个 router 的文件可以多 export (例 `labor-worker.js` 4 个 router)
+
+---
+
+> **本节与 `/root/src/AGENTS.md` 第 "📝 开发日志规范" 段并列, 前后端共用 `/root/src/docs/DEV_LOG.md`**
