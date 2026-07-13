@@ -25,3 +25,8 @@ Sidebar.vue.bak.*
 
 # 同步脚本凭证（用户自建，600 权限，绝不进 Git）
 sync-bj-pass
+# PEM key + 所有密码文件（防误 commit）
+*.pem
+*.pass
+*sync-bj-pass*
+*sync-bj.env
