@@ -4,7 +4,11 @@ import App from './App.vue'
 import router from './router'
 import i18n from './i18n'
 import { loadSystemSettings } from './stores/system.js'
+import { applyThemeFromServer } from './utils/apply-theme.js'
 import 'material-symbols/outlined.css'
+
+// 0.6 铁律：CSS 变量主题必须先于 app 创建 (在 mount 前注入 <html>)
+import './styles/theme.css'
 
 // ElementPlus 按需引入（仅项目实际用到的 51 个组件 + 4 个核心 css）
 // 完整列表见 /root/src/i18n/../EP_USAGE.md
@@ -157,11 +161,15 @@ const savedLocale = localStorage.getItem('caimeite_locale') || 'zh'
 
 // 包装成 Promise：loadSystemSettings 内部已 try/catch 不抛错，这里捕获任意异常兜底
 function ensureSystemSettings() {
-  return loadSystemSettings(savedLocale).catch((e) => {
-    console.warn('[main] loadSystemSettings failed:', e)
-    // 5 秒后重试一次
-    setTimeout(() => loadSystemSettings(savedLocale).catch(() => {}), 5000)
-  })
+  return Promise.all([
+    loadSystemSettings(savedLocale).catch((e) => {
+      console.warn('[main] loadSystemSettings failed:', e)
+      // 5 秒后重试一次
+      setTimeout(() => loadSystemSettings(savedLocale).catch(() => {}), 5000)
+    }),
+    // 0.6 铁律：启动时同步拉主题（必须在 mount 前完成）
+    applyThemeFromServer().catch((e) => console.warn('[main] applyTheme failed:', e)),
+  ])
 }
 
 // 全局 Vue 错误处理：静默处理，不弹 alert

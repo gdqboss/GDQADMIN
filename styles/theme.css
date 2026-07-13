@@ -1,0 +1,145 @@
+/* theme.css — CSS 变量主题表 (0.6 铁律)
+ * 严禁 .vue 文件直接写 color: #xxxxxx;
+ * 所有颜色 / 字号 / 圆角走 var(--ui-*)
+ * 主题色由后端 /api/theme 接口返回 → main.js 注入 <html style>
+ */
+
+:root,
+[data-theme='light'] {
+  /* 主色 */
+  --ui-primary: #d97706;          /* 彩美特琥珀 */
+  --ui-primary-hover: #b45309;
+  --ui-primary-active: #92400e;
+  --ui-primary-light: #fef3c7;
+
+  /* 辅助色 */
+  --ui-secondary: #0f172a;        /* 深石板 */
+  --ui-secondary-light: #475569;
+  --ui-accent: #0ea5e9;           /* 亮蓝点缀 */
+
+  /* 状态色 */
+  --ui-success: #10b981;
+  --ui-success-light: #d1fae5;
+  --ui-warning: #f59e0b;
+  --ui-warning-light: #fef3c7;
+  --ui-danger: #ef4444;
+  --ui-danger-light: #fee2e2;
+  --ui-info: #3b82f6;
+  --ui-info-light: #dbeafe;
+
+  /* 文字 */
+  --ui-text: #1f2937;
+  --ui-text-secondary: #4b5563;
+  --ui-text-placeholder: #9ca3af;
+  --ui-text-disabled: #d1d5db;
+
+  /* 背景 */
+  --ui-bg: #ffffff;
+  --ui-bg-page: #f8fafc;
+  --ui-bg-card: #ffffff;
+  --ui-bg-hover: #f3f4f6;
+  --ui-bg-mask: rgba(0, 0, 0, 0.5);
+
+  /* 边框 */
+  --ui-border: #e5e7eb;
+  --ui-border-light: #f3f4f6;
+  --ui-border-dark: #d1d5db;
+
+  /* 圆角 */
+  --ui-radius-sm: 4px;
+  --ui-radius: 8px;
+  --ui-radius-lg: 12px;
+  --ui-radius-xl: 16px;
+
+  /* 阴影 */
+  --ui-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --ui-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --ui-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+
+  /* 字号 */
+  --ui-font-xs: 12px;
+  --ui-font-sm: 13px;
+  --ui-font-base: 14px;
+  --ui-font-lg: 16px;
+  --ui-font-xl: 18px;
+  --ui-font-2xl: 22px;
+  --ui-font-3xl: 28px;
+
+  /* 间距 */
+  --ui-space-xs: 4px;
+  --ui-space-sm: 8px;
+  --ui-space: 16px;
+  --ui-space-lg: 24px;
+  --ui-space-xl: 32px;
+
+  /* ElementPlus 兼容 (用 var 覆盖 EP 的 hardcoded 色) */
+  --el-color-primary: var(--ui-primary);
+  --el-color-primary-light-3: var(--ui-primary-light);
+  --el-color-primary-light-5: var(--ui-primary-light);
+  --el-color-primary-light-7: var(--ui-primary-light);
+  --el-color-primary-light-8: var(--ui-primary-light);
+  --el-color-primary-light-9: var(--ui-primary-light);
+  --el-color-primary-dark-2: var(--ui-primary-active);
+  --el-color-success: var(--ui-success);
+  --el-color-warning: var(--ui-warning);
+  --el-color-danger: var(--ui-danger);
+  --el-color-info: var(--ui-info);
+  --el-bg-color: var(--ui-bg);
+  --el-bg-color-page: var(--ui-bg-page);
+  --el-text-color-primary: var(--ui-text);
+  --el-text-color-regular: var(--ui-text-secondary);
+  --el-text-color-placeholder: var(--ui-text-placeholder);
+  --el-border-color: var(--ui-border);
+  --el-border-color-light: var(--ui-border-light);
+  --el-fill-color-light: var(--ui-bg-hover);
+  --el-border-radius-base: var(--ui-radius);
+}
+
+[data-theme='dark'] {
+  --ui-primary: #fbbf24;
+  --ui-primary-hover: #f59e0b;
+  --ui-primary-active: #d97706;
+  --ui-primary-light: #422006;
+
+  --ui-secondary: #e2e8f0;
+  --ui-secondary-light: #94a3b8;
+
+  --ui-success: #34d399;
+  --ui-success-light: #064e3b;
+  --ui-warning: #fbbf24;
+  --ui-warning-light: #422006;
+  --ui-danger: #f87171;
+  --ui-danger-light: #450a0a;
+  --ui-info: #60a5fa;
+  --ui-info-light: #1e3a8a;
+
+  --ui-text: #f1f5f9;
+  --ui-text-secondary: #cbd5e1;
+  --ui-text-placeholder: #94a3b8;
+  --ui-text-disabled: #475569;
+
+  --ui-bg: #0f172a;
+  --ui-bg-page: #020617;
+  --ui-bg-card: #1e293b;
+  --ui-bg-hover: #334155;
+  --ui-bg-mask: rgba(0, 0, 0, 0.7);
+
+  --ui-border: #334155;
+  --ui-border-light: #1e293b;
+  --ui-border-dark: #475569;
+
+  --ui-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --ui-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --ui-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+/* 全局 box-sizing 统一 */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* 全局文字用变量 */
+html, body {
+  font-size: var(--ui-font-base);
+  color: var(--ui-text);
+  background: var(--ui-bg-page);
+  font-family: var(--ui-font-family, -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif);
+}
