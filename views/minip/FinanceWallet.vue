@@ -34,6 +34,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/api/request'
+import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const balance = ref(0)
@@ -55,12 +56,9 @@ onMounted(async () => {
   try {
     const r = await api.get('/finance/wallet/transactions?limit=20')
     if (r.code === 0) transactions.value = r.data || []
-  } catch {
-    transactions.value = [
-      { id: 1, title: '充值', time: '07-10 14:30', amount: 10000, type: 'in' },
-      { id: 2, title: '报销支出', time: '07-09 09:12', amount: 1280, type: 'out' },
-      { id: 3, title: '订单收款', time: '07-08 18:45', amount: 5600, type: 'in' }
-    ]
+  } catch (e) {
+    ElMessage.error('加载失败,请稍后重试')
+    transactions.value = []
   }
 })
 </script>

@@ -26,6 +26,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/api/request'
+import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
@@ -49,11 +50,9 @@ async function load() {
   try {
     const r = await api.get(`/orders?status=${filter.value}&limit=50`)
     if (r.code === 0) list.value = r.data || []
-  } catch {
-    list.value = [
-      { id: 1, order_no: 'SO-2031', product_name: '新加坡肉骨茶礼盒', quantity: 2, amount: 268, status: 'shipped', created_at: '2026-07-10' },
-      { id: 2, order_no: 'SO-2030', product_name: '马来西亚白咖啡', quantity: 5, amount: 195, status: 'completed', created_at: '2026-07-08' }
-    ]
+  } catch (e) {
+    ElMessage.error('加载失败,请稍后重试')
+    list.value = []
   }
 }
 

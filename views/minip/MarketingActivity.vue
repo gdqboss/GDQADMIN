@@ -29,6 +29,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/api/request'
+import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
@@ -48,12 +49,9 @@ async function load() {
   try {
     const r = await api.get(`/marketing/campaigns?status=${filter.value}&limit=50`)
     if (r.code === 0) list.value = r.data || []
-  } catch {
-    list.value = [
-      { id: 1, icon: '🎉', title: '夏日满减', start_date: '07-01', end_date: '07-31', status: 'active', participants: 320, conversions: 56, revenue: 12800, description: '满 200 减 30，全场参与' },
-      { id: 2, icon: '🛍️', title: '拼团 3 人成团', start_date: '07-05', end_date: '08-05', status: 'active', participants: 145, conversions: 32, revenue: 5800, description: '邀请好友拼团享低价' },
-      { id: 3, icon: '⏰', title: '限时秒杀', start_date: '07-15', end_date: '07-15', status: 'pending', participants: 0, conversions: 0, revenue: 0, description: '每日 20:00 准时开抢' }
-    ]
+  } catch (e) {
+    ElMessage.error('加载失败,请稍后重试')
+    list.value = []
   }
 }
 

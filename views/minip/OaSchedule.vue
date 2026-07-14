@@ -30,6 +30,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/api/request'
+import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const weekOffset = ref(0)
@@ -72,12 +73,9 @@ onMounted(async () => {
   try {
     const r = await api.get('/oa/employees?limit=10')
     if (r.code === 0) employees.value = r.data || []
-  } catch {
-    employees.value = [
-      { id: 1, name: '小李' },
-      { id: 2, name: '王芳' },
-      { id: 3, name: '老张' }
-    ]
+  } catch (e) {
+    ElMessage.error('加载失败,请稍后重试')
+    weekDays.value = []
   }
   await load()
 })

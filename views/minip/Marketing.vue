@@ -56,6 +56,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/api/request'
+import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const stats = ref({ campaigns: 0, coupons: 0, revenue: 0 })
@@ -65,12 +66,9 @@ onMounted(async () => {
   try {
     const r = await api.get('/marketing/campaigns?status=active&limit=10')
     if (r.code === 0) campaigns.value = r.data || []
-  } catch {
-    campaigns.value = [
-      { id: 1, icon: '🎉', title: '夏日满减', start_date: '07-01', end_date: '07-31', status: '进行中', participants: 320, conversions: 56, revenue: 12800 },
-      { id: 2, icon: '🛍️', title: '拼团 3 人成团', start_date: '07-05', end_date: '08-05', status: '进行中', participants: 145, conversions: 32, revenue: 5800 }
-    ]
-    stats.value = { campaigns: 2, coupons: 8, revenue: 18600 }
+  } catch (e) {
+    ElMessage.error('加载失败,请稍后重试')
+    campaigns.value = []
   }
 })
 </script>

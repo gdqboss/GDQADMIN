@@ -28,6 +28,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/api/request'
+import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const points = ref(0)
@@ -40,13 +41,9 @@ onMounted(async () => {
       points.value = r.data?.balance || 0
       history.value = r.data?.history || []
     }
-  } catch {
-    points.value = 2380
-    history.value = [
-      { id: 1, title: '购物奖励', date: '2026-07-10', amount: 56, type: 'in' },
-      { id: 2, title: '兑换商品', date: '2026-07-08', amount: 200, type: 'out' },
-      { id: 3, title: '签到奖励', date: '2026-07-07', amount: 10, type: 'in' }
-    ]
+  } catch (e) {
+    ElMessage.error('加载失败,请稍后重试')
+    history.value = []
   }
 })
 </script>

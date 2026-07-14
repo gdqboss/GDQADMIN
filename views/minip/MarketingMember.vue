@@ -27,6 +27,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/api/request'
+import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
@@ -44,12 +45,9 @@ onMounted(async () => {
   try {
     const r = await api.get('/marketing/members?limit=50')
     if (r.code === 0) list.value = r.data || []
-  } catch {
-    list.value = [
-      { id: 1, name: '张三', phone: '13800138001', level: '钻石', points: 12580 },
-      { id: 2, name: '李四', phone: '13800138002', level: '铂金', points: 5680 },
-      { id: 3, name: '王五', phone: '13800138003', level: '黄金', points: 2300 }
-    ]
+  } catch (e) {
+    ElMessage.error('加载失败,请稍后重试')
+    list.value = []
   }
 })
 </script>

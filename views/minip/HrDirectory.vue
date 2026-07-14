@@ -22,6 +22,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/api/request'
+import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
@@ -35,12 +36,9 @@ async function load() {
   try {
     const r = await api.get(`/oa/employees?q=${encodeURIComponent(kw.value)}&limit=50`)
     if (r.code === 0) list.value = r.data || []
-  } catch {
-    list.value = [
-      { id: 1, name: '江清波', department: '管理层', position: '总经理', phone: '18676970008', status: 'active' },
-      { id: 2, name: '小李', department: '销售部', position: '销售经理', phone: '13800138001', status: 'active' },
-      { id: 3, name: '王芳', department: '财务部', position: '会计', phone: '13800138002', status: 'active' }
-    ]
+  } catch (e) {
+    ElMessage.error('加载失败,请稍后重试')
+    list.value = []
   }
 }
 

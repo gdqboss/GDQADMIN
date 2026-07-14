@@ -26,6 +26,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import api from '@/api/request'
+import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const workflows = ref([])
@@ -35,13 +36,9 @@ onMounted(async () => {
   try {
     const r = await api.get('/oa/workflows')
     if (r.code === 0) workflows.value = r.data || []
-  } catch {
-    workflows.value = [
-      { id: 1, icon: '💰', name: '财务报销', steps: 3, instances: 28 },
-      { id: 2, icon: '🏖️', name: '请假申请', steps: 2, instances: 45 },
-      { id: 3, icon: '🛒', name: '采购审批', steps: 4, instances: 12 },
-      { id: 4, icon: '📦', name: '调拨申请', steps: 3, instances: 8 }
-    ]
+  } catch (e) {
+    ElMessage.error('加载失败,请稍后重试')
+    workflows.value = []
   }
 })
 </script>

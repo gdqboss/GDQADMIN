@@ -27,6 +27,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/api/request'
+import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
@@ -36,15 +37,9 @@ onMounted(async () => {
   try {
     const r = await api.get('/marketing/referral?limit=20')
     if (r.code === 0) list.value = r.data || []
-  } catch {
-    list.value = [
-      { id: 1, name: '张三', orders: 56, conversion: 32, commission: 1680 },
-      { id: 2, name: '李四', orders: 42, conversion: 28, commission: 1260 },
-      { id: 3, name: '王五', orders: 38, conversion: 25, commission: 1140 },
-      { id: 4, name: '赵六', orders: 28, conversion: 18, commission: 840 },
-      { id: 5, name: '钱七', orders: 15, conversion: 12, commission: 450 }
-    ]
-    stats.value = { agents: 32, orders: 326, commission: 9780 }
+  } catch (e) {
+    ElMessage.error('加载失败,请稍后重试')
+    list.value = []
   }
 })
 </script>

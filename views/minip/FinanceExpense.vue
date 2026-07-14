@@ -34,12 +34,14 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import api from '@/api/request'
 import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
 const summary = ref({ expense: 0, pending: 0 })
 const filter = ref('all')
+const loading = ref(false)
 const filters = [
   { v: 'all', l: '全部' },
   { v: 'pending', l: '待审批' },
@@ -55,16 +57,20 @@ function statusLabel(s) {
 }
 
 async function load() {
+  loading.value = true
   try {
     const r = await api.get(`/finance/expenses?status=${filter.value}&limit=50`)
-    if (r.code === 0) list.value = r.data || []
-  } catch {
-    // 模拟数据 fallback
-    list.value = [
-      { id: 1, category: '差旅', amount: 1280, description: '客户拜访 - 广州市', date: '2026-07-10', status: 'pending' },
-      { id: 2, category: '办公', amount: 458, description: '打印耗材采购', date: '2026-07-09', status: 'approved' },
-      { id: 3, category: '招待', amount: 850, description: '客户答谢晚宴', date: '2026-07-08', status: 'approved' }
-    ]
+    if (r.code === 0) {
+      list.value = r.data || []
+    } else {
+      ElMessage.error(r.message || '加载失败')
+      list.value = []
+    }
+  } catch (e) {
+    ElMessage.error('网络错误,请稍后重试')
+    list.value = []
+  } finally {
+    loading.value = false
   }
 }
 

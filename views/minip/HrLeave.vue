@@ -39,6 +39,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/api/request'
+import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const balance = ref({ annual: 5, sick: 3, personal: 2 })
@@ -81,11 +82,9 @@ onMounted(async () => {
       list.value = r.data || []
       if (r.data?.balance) balance.value = r.data.balance
     }
-  } catch {
-    list.value = [
-      { id: 1, type: 'annual', days: 3, start_date: '2026-07-15', end_date: '2026-07-17', reason: '家庭旅游', status: 'approved' },
-      { id: 2, type: 'sick', days: 1, start_date: '2026-06-20', end_date: '2026-06-20', reason: '感冒发烧', status: 'approved' }
-    ]
+  } catch (e) {
+    ElMessage.error('加载失败,请稍后重试')
+    list.value = []
   }
 })
 </script>

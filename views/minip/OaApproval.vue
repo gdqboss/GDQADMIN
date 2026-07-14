@@ -29,6 +29,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/api/request'
+import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
@@ -58,12 +59,9 @@ async function load() {
   try {
     const r = await api.get(`/oa/approvals?status=${filter.value}&limit=50`)
     if (r.code === 0) list.value = r.data || []
-  } catch {
-    list.value = [
-      { id: 1, type: '报销', title: '出差广州交通费', applicant: '小李', amount: 1280, created_at: '2026-07-10 14:30', status: 'pending' },
-      { id: 2, type: '请假', title: '年假 3 天', applicant: '王芳', created_at: '2026-07-10 11:20', status: 'pending' },
-      { id: 3, type: '采购', title: '办公耗材采购', applicant: '老张', amount: 5600, created_at: '2026-07-09 16:00', status: 'approved' }
-    ]
+  } catch (e) {
+    ElMessage.error('加载失败,请稍后重试')
+    list.value = []
   }
 }
 

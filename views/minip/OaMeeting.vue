@@ -29,6 +29,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/api/request'
+import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
@@ -45,13 +46,9 @@ onMounted(async () => {
       list.value = r.data || []
       stats.value.total = list.value.length
     }
-  } catch {
-    list.value = [
-      { id: 1, title: 'Q3 运营复盘', room: '大会议室', date: '07-11', time: '14:00-16:00', attendees: 8 },
-      { id: 2, title: '财务月度会议', room: '财务室', date: '07-12', time: '10:00-11:00', attendees: 4 },
-      { id: 3, title: '产品需求评审', room: '小会议室', date: '07-12', time: '15:30-17:00', attendees: 5 }
-    ]
-    stats.value = { today: 1, upcoming: 2, total: 12 }
+  } catch (e) {
+    ElMessage.error('加载失败,请稍后重试')
+    list.value = []
   }
 })
 </script>

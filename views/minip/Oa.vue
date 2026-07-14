@@ -49,6 +49,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/api/request'
+import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const stats = ref({ pending: 0, completed: 0, overdue: 0 })
@@ -74,13 +75,9 @@ onMounted(async () => {
       todos.value = r.data || []
       stats.value.pending = todos.value.length
     }
-  } catch {
-    todos.value = [
-      { id: 1, title: '出差报销 ¥1,280', applicant: '小李', time: '5分钟前' },
-      { id: 2, title: '请假申请 3 天', applicant: '王芳', time: '20分钟前' },
-      { id: 3, title: '采购申请 ¥5,600', applicant: '老张', time: '1小时前' }
-    ]
-    stats.value = { pending: 3, completed: 28, overdue: 1 }
+  } catch (e) {
+    ElMessage.error('加载失败,请稍后重试')
+    todos.value = []
   }
 })
 </script>

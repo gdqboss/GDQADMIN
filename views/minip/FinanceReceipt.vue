@@ -23,6 +23,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/api/request'
+import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
@@ -36,11 +37,9 @@ onMounted(async () => {
   try {
     const r = await api.get('/finance/receipts?limit=50')
     if (r.code === 0) list.value = r.data || []
-  } catch {
-    list.value = [
-      { id: 1, customer: '广州百货', invoice_no: 'INV-2031', amount: 5600, date: '2026-07-10' },
-      { id: 2, customer: '深圳连锁', invoice_no: 'INV-2030', amount: 12800, date: '2026-07-08' }
-    ]
+  } catch (e) {
+    ElMessage.error('加载失败,请稍后重试')
+    list.value = []
   }
   try {
     const r = await api.get('/finance/accounts-receivable?range=month')

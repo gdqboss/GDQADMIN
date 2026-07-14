@@ -26,6 +26,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/api/request'
+import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const period = ref('2026-07')
@@ -46,13 +47,9 @@ onMounted(async () => {
       list.value = r.data?.list || []
       summary.value = r.data?.summary || summary.value
     }
-  } catch {
-    list.value = [
-      { id: 1, name: '江清波', position: '总经理', gross: 20000, deduct: 1500, net: 18500, status: 'paid' },
-      { id: 2, name: '小李', position: '销售经理', gross: 8000, deduct: 800, net: 7200, status: 'paid' },
-      { id: 3, name: '王芳', position: '会计', gross: 6500, deduct: 600, net: 5900, status: 'pending' }
-    ]
-    summary.value = { gross: 34500, deduct: 2900, net: 31600 }
+  } catch (e) {
+    ElMessage.error('加载失败,请稍后重试')
+    list.value = []
   }
 })
 </script>

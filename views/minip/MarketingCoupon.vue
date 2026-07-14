@@ -32,6 +32,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/api/request'
+import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
@@ -41,13 +42,9 @@ onMounted(async () => {
   try {
     const r = await api.get('/marketing/coupons?limit=50')
     if (r.code === 0) list.value = r.data || []
-  } catch {
-    list.value = [
-      { id: 1, name: '新人礼券', amount: 30, min_amount: 100, start_date: '07-01', end_date: '07-31', issued: 200, total: 500 },
-      { id: 2, name: '满减优惠', amount: 50, min_amount: 200, start_date: '07-10', end_date: '07-20', issued: 80, total: 200 },
-      { id: 3, name: '会员专享', amount: 20, min_amount: 50, start_date: '07-05', end_date: '08-05', issued: 150, total: 1000 }
-    ]
-    stats.value = { issued: 430, used: 96, rate: 22 }
+  } catch (e) {
+    ElMessage.error('加载失败,请稍后重试')
+    list.value = []
   }
 })
 </script>
