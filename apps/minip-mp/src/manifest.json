@@ -18,6 +18,19 @@
       "urlCheck": false,
       "minified": true
     },
-    "usingComponents": {}
+    "usingComponents": {},
+    "permission": {
+      "scope.userLocation": {
+        "desc": "用于考勤打卡定位"
+      }
+    }
+  },
+  "app-plus": {
+    "usingComponents": {},
+    "splashscreen": {
+      "alwaysShowBeforeRender": true,
+      "waiting": true,
+      "autoclose": true
+    }
   }
 }

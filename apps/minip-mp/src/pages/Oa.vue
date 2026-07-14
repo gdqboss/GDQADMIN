@@ -48,8 +48,9 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+
+const loading = ref(false)
 import api from '@/utils/api'
-import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const stats = ref({ pending: 0, completed: 0, overdue: 0 })
@@ -70,6 +71,7 @@ async function reject(t) {
 
 onMounted(async () => {
   try {
+    loading.value = true
     const r = await api.get('/oa/approvals/pending?limit=20')
     if (r.code === 0) {
       todos.value = r.data || []
@@ -78,6 +80,9 @@ onMounted(async () => {
   } catch (e) {
     uni.showToast({ title: '加载失败,请稍后重试', icon: 'none' })
     todos.value = []
+  }
+  finally {
+    loading.value = false
   }
 })
 </script>

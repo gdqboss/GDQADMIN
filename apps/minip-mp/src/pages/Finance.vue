@@ -35,7 +35,7 @@
     <!-- 报表 -->
     <div class="section-title">财务报表</div>
     <div class="report-list">
-      <div v-for="r in reports" :key="r.path" class="report-row" @click="$router.push(r.path)">
+      <div v-for="r in reports" :key="r.path" class="report-row" @click="uni.navigateTo({ url: r.path })">
         <span class="report-icon">{{ r.icon }}</span>
         <span class="report-name">{{ r.name }}</span>
         <span class="report-arrow">›</span>
@@ -46,6 +46,8 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+
+const loading = ref(false)
 import api from '@/utils/api'
 import MinipLayout from './MinipLayout.vue'
 
@@ -65,6 +67,7 @@ function formatMoney(v) {
 
 onMounted(async () => {
   try {
+    loading.value = true
     const r = await api.get('/finance/wallet')
     if (r.code === 0) balance.value = r.data?.balance || 0
   } catch {}
@@ -78,6 +81,9 @@ onMounted(async () => {
       }
     }
   } catch {}
+  finally {
+    loading.value = false
+  }
 })
 </script>
 

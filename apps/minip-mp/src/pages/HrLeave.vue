@@ -31,15 +31,16 @@
         <div class="leave-days">{{ l.days }} 天</div>
         <div class="leave-reason">{{ l.reason }}</div>
       </div>
-      <div v-if="!list.length && !loading" class="empty">暂无申请记录</div>
+      <div v-if="!list.length" class="empty">暂无申请记录</div>
     </div>
   </MinipLayout>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
+
+const loading = ref(false)
 import api from '@/utils/api'
-import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const balance = ref({ annual: 5, sick: 3, personal: 2 })
@@ -77,6 +78,7 @@ function showApply() {
 
 onMounted(async () => {
   try {
+    loading.value = true
     const r = await api.get('/oa/leave?limit=50')
     if (r.code === 0) {
       list.value = r.data || []
@@ -85,6 +87,9 @@ onMounted(async () => {
   } catch (e) {
     uni.showToast({ title: '加载失败,请稍后重试', icon: 'none' })
     list.value = []
+  }
+  finally {
+    loading.value = false
   }
 })
 </script>

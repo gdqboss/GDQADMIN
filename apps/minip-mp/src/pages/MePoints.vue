@@ -27,8 +27,9 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+
+const loading = ref(false)
 import api from '@/utils/api'
-import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const points = ref(0)
@@ -36,6 +37,7 @@ const history = ref([])
 
 onMounted(async () => {
   try {
+    loading.value = true
     const r = await api.get('/members/me/points')
     if (r.code === 0) {
       points.value = r.data?.balance || 0
@@ -44,6 +46,9 @@ onMounted(async () => {
   } catch (e) {
     uni.showToast({ title: '加载失败,请稍后重试', icon: 'none' })
     history.value = []
+  }
+  finally {
+    loading.value = false
   }
 })
 </script>

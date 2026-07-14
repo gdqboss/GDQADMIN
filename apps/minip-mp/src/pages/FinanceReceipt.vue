@@ -15,15 +15,16 @@
         </div>
         <div class="r-amount">¥{{ formatMoney(item.amount) }}</div>
       </div>
-      <div v-if="!list.length && !loading" class="empty">暂无收款记录</div>
+      <div v-if="!list.length" class="empty">暂无收款记录</div>
     </div>
   </MinipLayout>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
+
+const loading = ref(false)
 import api from '@/utils/api'
-import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
@@ -35,6 +36,7 @@ function formatMoney(v) {
 
 onMounted(async () => {
   try {
+    loading.value = true
     const r = await api.get('/finance/receipts?limit=50')
     if (r.code === 0) list.value = r.data || []
   } catch (e) {
@@ -50,6 +52,9 @@ onMounted(async () => {
       }
     }
   } catch {}
+  finally {
+    loading.value = false
+  }
 })
 </script>
 

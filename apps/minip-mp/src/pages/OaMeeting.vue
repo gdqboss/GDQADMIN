@@ -21,26 +21,28 @@
           <div class="meet-attendees">👥 {{ m.attendees }} 人</div>
         </div>
       </div>
-      <div v-if="!list.length && !loading" class="empty">暂无会议</div>
+      <div v-if="!list.length" class="empty">暂无会议</div>
     </div>
   </MinipLayout>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
+
+const loading = ref(false)
 import api from '@/utils/api'
-import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
 const stats = ref({ today: 0, upcoming: 0, total: 0 })
 
 function newMeeting() {
-  uni.showModal({ content: '会议室预约功能开发中', showCancel: false })
+  alert('会议室预约功能开发中')
 }
 
 onMounted(async () => {
   try {
+    loading.value = true
     const r = await api.get('/oa/meetings?limit=20')
     if (r.code === 0) {
       list.value = r.data || []
@@ -49,6 +51,9 @@ onMounted(async () => {
   } catch (e) {
     uni.showToast({ title: '加载失败,请稍后重试', icon: 'none' })
     list.value = []
+  }
+  finally {
+    loading.value = false
   }
 })
 </script>

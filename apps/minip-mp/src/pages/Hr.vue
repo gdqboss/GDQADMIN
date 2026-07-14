@@ -43,6 +43,8 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+
+const loading = ref(false)
 import api from '@/utils/api'
 import MinipLayout from './MinipLayout.vue'
 
@@ -56,6 +58,7 @@ const departments = ref([
 
 onMounted(async () => {
   try {
+    loading.value = true
     const r = await api.get('/oa/employees?limit=1')
     if (r.code === 0) stats.value.total = r.data?.total || 0
   } catch {}
@@ -63,6 +66,9 @@ onMounted(async () => {
     const r = await api.get('/oa/attendance/today')
     if (r.code === 0) stats.value.attendance = r.data?.count || 0
   } catch {}
+  finally {
+    loading.value = false
+  }
 })
 </script>
 

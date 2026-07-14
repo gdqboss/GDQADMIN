@@ -19,15 +19,16 @@
         </div>
         <div class="agent-commission">¥{{ a.commission }}</div>
       </div>
-      <div v-if="!list.length && !loading" class="empty">暂无分销员</div>
+      <div v-if="!list.length" class="empty">暂无分销员</div>
     </div>
   </MinipLayout>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
+
+const loading = ref(false)
 import api from '@/utils/api'
-import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
@@ -35,11 +36,15 @@ const stats = ref({ agents: 0, orders: 0, commission: 0 })
 
 onMounted(async () => {
   try {
+    loading.value = true
     const r = await api.get('/marketing/referral?limit=20')
     if (r.code === 0) list.value = r.data || []
   } catch (e) {
     uni.showToast({ title: '加载失败,请稍后重试', icon: 'none' })
     list.value = []
+  }
+  finally {
+    loading.value = false
   }
 })
 </script>

@@ -25,7 +25,6 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { ElMessage } from 'element-plus'
 import api from '@/utils/api'
 import MinipLayout from './MinipLayout.vue'
 

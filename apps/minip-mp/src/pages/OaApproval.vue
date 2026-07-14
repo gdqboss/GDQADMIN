@@ -21,7 +21,7 @@
           <button class="btn-no" @click="act(a, 'reject')">驳回</button>
         </div>
       </div>
-      <div v-if="!list.length && !loading" class="empty">暂无审批</div>
+      <div v-if="!list.length" class="empty">暂无审批</div>
     </div>
   </MinipLayout>
 </template>
@@ -29,7 +29,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/utils/api'
-import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
@@ -66,6 +65,8 @@ async function load() {
 }
 
 onMounted(() => load())
+
+const loading = ref(false)
 </script>
 
 <style scoped>

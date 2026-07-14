@@ -55,8 +55,9 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+
+const loading = ref(false)
 import api from '@/utils/api'
-import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const stats = ref({ campaigns: 0, coupons: 0, revenue: 0 })
@@ -64,11 +65,15 @@ const campaigns = ref([])
 
 onMounted(async () => {
   try {
+    loading.value = true
     const r = await api.get('/marketing/campaigns?status=active&limit=10')
     if (r.code === 0) campaigns.value = r.data || []
   } catch (e) {
     uni.showToast({ title: '加载失败,请稍后重试', icon: 'none' })
     campaigns.value = []
+  }
+  finally {
+    loading.value = false
   }
 })
 </script>

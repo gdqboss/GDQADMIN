@@ -19,15 +19,16 @@
         <span class="m-level" :style="{background: levelColor(m.level)}">{{ m.level }}</span>
         <div class="m-points">{{ m.points }} 分</div>
       </div>
-      <div v-if="!list.length && !loading" class="empty">暂无会员</div>
+      <div v-if="!list.length" class="empty">暂无会员</div>
     </div>
   </MinipLayout>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
+
+const loading = ref(false)
 import api from '@/utils/api'
-import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
@@ -43,11 +44,15 @@ function levelColor(lv) {
 
 onMounted(async () => {
   try {
+    loading.value = true
     const r = await api.get('/marketing/members?limit=50')
     if (r.code === 0) list.value = r.data || []
   } catch (e) {
     uni.showToast({ title: '加载失败,请稍后重试', icon: 'none' })
     list.value = []
+  }
+  finally {
+    loading.value = false
   }
 })
 </script>

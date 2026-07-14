@@ -29,8 +29,9 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+
+const loading = ref(false)
 import api from '@/utils/api'
-import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const weekOffset = ref(0)
@@ -71,11 +72,15 @@ function getShiftCode(empId, date) {
 onMounted(async () => {
   buildWeek()
   try {
+    loading.value = true
     const r = await api.get('/oa/employees?limit=10')
     if (r.code === 0) employees.value = r.data || []
   } catch (e) {
     uni.showToast({ title: '加载失败,请稍后重试', icon: 'none' })
     weekDays.value = []
+  }
+  finally {
+    loading.value = false
   }
   await load()
 })

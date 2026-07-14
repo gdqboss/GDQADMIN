@@ -18,15 +18,16 @@
         <div class="sal-amount">¥{{ formatMoney(s.net) }}</div>
         <div class="sal-meta">{{ s.position }} · 已{{ s.status === 'paid' ? '发放' : '待审' }}</div>
       </div>
-      <div v-if="!list.length && !loading" class="empty">暂无薪资数据</div>
+      <div v-if="!list.length" class="empty">暂无薪资数据</div>
     </div>
   </MinipLayout>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
+
+const loading = ref(false)
 import api from '@/utils/api'
-import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const period = ref('2026-07')
@@ -37,11 +38,12 @@ function formatMoney(v) {
   return Number(v || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 function showDetail(s) {
-  uni.showModal({ content: `${s.name}\n应发: ¥${formatMoney(s.gross, showCancel: false })}\n扣款: ¥${formatMoney(s.deduct)}\n实发: ¥${formatMoney(s.net)}`)
+  alert(`${s.name}\n应发: ¥${formatMoney(s.gross)}\n扣款: ¥${formatMoney(s.deduct)}\n实发: ¥${formatMoney(s.net)}`)
 }
 
 onMounted(async () => {
   try {
+    loading.value = true
     const r = await api.get(`/oa/salary?period=${period.value}&limit=50`)
     if (r.code === 0) {
       list.value = r.data?.list || []
@@ -50,6 +52,9 @@ onMounted(async () => {
   } catch (e) {
     uni.showToast({ title: '加载失败,请稍后重试', icon: 'none' })
     list.value = []
+  }
+  finally {
+    loading.value = false
   }
 })
 </script>

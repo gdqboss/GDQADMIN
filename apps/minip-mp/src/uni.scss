@@ -1,5 +1,62 @@
-/* 主题色 (与 H5 一致) */
-$uni-color-primary: #6366f1;
+/**
+ * uni.scss - 全局 SCSS 变量
+ *
+ * 包含 uni-app 内置主题色（编译时会被替换）+ 项目自定义色
+ * 改这里 = 全局生效
+ */
+
+/* ──── uni-app 内置（与 H5 主色对齐） ──── */
+
+/* 主题色 */
+$uni-color-primary: #6366f1;        /* indigo-500，与 H5 一致 */
 $uni-color-success: #10b981;
 $uni-color-warning: #f59e0b;
-$uni-color-error: #ef4444;
+$uni-color-error:   #ef4444;
+
+/* 文字 */
+$uni-text-color:        #1f2329;
+$uni-text-color-grey:   #6b7280;
+$uni-text-color-placeholder: #9ca3af;
+$uni-text-color-inverse: #ffffff;
+
+/* 背景 */
+$uni-bg-color:        #ffffff;
+$uni-bg-color-grey:   #f5f6f8;
+$uni-bg-color-hover:  #f1f5f9;
+$uni-bg-color-mask:   rgba(0, 0, 0, 0.4);
+
+/* 边框 */
+$uni-border-color: #e5e7eb;
+
+/* 字号 */
+$uni-font-size-sm:   24rpx;  /* 12px */
+$uni-font-size-base: 28rpx;  /* 14px */
+$uni-font-size-lg:   32rpx;  /* 16px */
+
+/* 圆角 */
+$uni-border-radius-sm:   4rpx;
+$uni-border-radius-base: 6rpx;
+$uni-border-radius-lg:   12rpx;
+$uni-border-radius-circle: 50%;
+
+/* 间距 */
+$uni-spacing-row-sm:  10rpx;
+$uni-spacing-row-base: 20rpx;
+$uni-spacing-row-lg:  30rpx;
+
+$uni-spacing-col-sm:  8rpx;
+$uni-spacing-col-base: 16rpx;
+$uni-spacing-col-lg:  24rpx;
+
+/* ──── 项目自定义 ──── */
+
+$brand-color:        #6366f1;
+$brand-color-hover:  #4f46e5;
+$brand-bg:           #eef2ff;
+
+/* navbar */
+$navbar-height: 44px;
+$tabbar-height: 50px;
+
+/* 安全区 (iPhone X+) */
+$safe-bottom: env(safe-area-inset-bottom);

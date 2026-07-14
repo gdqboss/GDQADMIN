@@ -24,7 +24,7 @@
         :key="t.to"
         :to="t.to"
         class="minip-tab-item"
-        :class="{ active: $route.path === t.to || $route.path.startsWith(t.to + '/') }"
+        :class="{ active: getCurrentPages().slice(-1)[0].route || '' === t.to || getCurrentPages().slice(-1)[0].route || ''.startsWith(t.to + '/') }"
       >
         <span class="minip-tab-icon">{{ t.icon }}</span>
         <span class="minip-tab-label">{{ t.label }}</span>

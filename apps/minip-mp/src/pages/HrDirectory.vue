@@ -14,7 +14,7 @@
         </div>
         <span class="emp-status" :class="e.status">{{ statusLabel(e.status) }}</span>
       </div>
-      <div v-if="!list.length && !loading" class="empty">无匹配员工</div>
+      <div v-if="!list.length" class="empty">无匹配员工</div>
     </div>
   </MinipLayout>
 </template>
@@ -22,7 +22,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/utils/api'
-import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
@@ -43,6 +42,8 @@ async function load() {
 }
 
 onMounted(() => load())
+
+const loading = ref(false)
 </script>
 
 <style scoped>

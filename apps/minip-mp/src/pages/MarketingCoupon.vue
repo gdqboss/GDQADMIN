@@ -6,7 +6,7 @@
       <div><span>核销率</span><strong>{{ stats.rate }}%</strong></div>
     </div>
 
-    <button class="new-btn" @click="uni.showModal({ content: '创建优惠券功能开发中', showCancel: false })">+ 创建优惠券</button>
+    <button class="new-btn" @click="alert('创建优惠券功能开发中')">+ 创建优惠券</button>
 
     <div class="section-title">优惠券列表</div>
     <div class="coupon-list">
@@ -24,15 +24,16 @@
           <div class="cp-stock">已发放 {{ c.issued }}/{{ c.total }}</div>
         </div>
       </div>
-      <div v-if="!list.length && !loading" class="empty">暂无优惠券</div>
+      <div v-if="!list.length" class="empty">暂无优惠券</div>
     </div>
   </MinipLayout>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
+
+const loading = ref(false)
 import api from '@/utils/api'
-import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
@@ -40,11 +41,15 @@ const stats = ref({ issued: 0, used: 0, rate: 0 })
 
 onMounted(async () => {
   try {
+    loading.value = true
     const r = await api.get('/marketing/coupons?limit=50')
     if (r.code === 0) list.value = r.data || []
   } catch (e) {
     uni.showToast({ title: '加载失败,请稍后重试', icon: 'none' })
     list.value = []
+  }
+  finally {
+    loading.value = false
   }
 })
 </script>

@@ -14,7 +14,7 @@
         <div class="invoice-row"><span>金额</span><strong>¥{{ formatMoney(inv.amount) }}</strong></div>
         <div class="invoice-row"><span>开票日期</span><strong>{{ inv.date }}</strong></div>
       </div>
-      <div v-if="!list.length && !loading" class="empty">暂无发票</div>
+      <div v-if="!list.length" class="empty">暂无发票</div>
     </div>
   </MinipLayout>
 </template>
@@ -22,7 +22,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/utils/api'
-import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
@@ -52,6 +51,8 @@ async function load() {
 }
 
 onMounted(() => load())
+
+const loading = ref(false)
 </script>
 
 <style scoped>

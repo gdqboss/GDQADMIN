@@ -73,6 +73,8 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+
+const loading = ref(false)
 import api from '@/utils/api'
 import { useRouter } from 'vue-router'
 import MinipLayout from './MinipLayout.vue'
@@ -93,12 +95,16 @@ async function logout() {
 
 onMounted(async () => {
   try {
+    loading.value = true
     const r = await api.get('/users/me')
     if (r.code === 0 && r.data) {
       user.value = { ...user.value, ...r.data }
       user.value.avatar = (r.data.name || '?').charAt(0).toUpperCase() || '👤'
     }
   } catch {}
+  finally {
+    loading.value = false
+  }
 })
 </script>
 

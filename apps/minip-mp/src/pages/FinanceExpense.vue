@@ -36,7 +36,6 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
 import api from '@/utils/api'
 import MinipLayout from './MinipLayout.vue'
 
@@ -70,7 +69,6 @@ async function load() {
     }
   } catch (e) {
     uni.showToast({ title: '网络错误,请稍后重试', icon: 'none' })
-    list.value = []
   } finally {
     loading.value = false
   }
