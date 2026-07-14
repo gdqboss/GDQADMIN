@@ -200,3 +200,23 @@ Finance 系 5 / Hr 系 5 / Marketing 系 5 / Me 系 7 / Oa 系 5 / EnterpriseHom
 - b) P3 caimeite-mall = 另一个 uni-app 表现层（0 后端工作量，待启动）
 - c) 修 bj SSH 后再推 module 同步
 
+
+## [2026-07-14 15:14] minip H5 100% 完善 + 真接 API 全修
+
+**操作人**: agent
+**commit**: eef727a5 (pushed to feat/online-order)
+
+### 改动文件 (7)
+- views/minip/MeLogin.vue — 重写为真接 /api/auth/sms-code + /api/auth/phone-login, 删 demo 假数据 + 校验 + 倒计时
+- views/minip/FinanceInvoice.vue / HrDirectory.vue / MarketingActivity.vue / MeOrders.vue — loading 移到顶部声明 + finally
+- views/minip/HrAttendance.vue — 修 punch() catch 假成功 + 删除硬编码 history fallback + 加 loading UI
+- views/minip/OaApproval.vue — act() 不再吞 error + 成功 ElMessage + 加 loading UI
+
+### 实测
+- 34/34 vue syntax OK
+- npm run build 0 error (dist 11M)
+- nginx dev 实测:
+  - /minip/login 200 ✅ (SPA fallback)
+  - /minip/me 200 ✅
+  - /api/auth/me 200 ✅
+  - /api/minip/modules 200 ✅
