@@ -5,45 +5,70 @@
     </div>
 
     <div class="cp-list">
-
       <div v-if="loading" class="empty">加载中…</div>
-      <div v-for="c in list" :key="c.id" class="cp-card">
+      <div v-for="c in filteredList" :key="c.id" class="cp-card">
         <div class="cp-left">
           <span class="cp-cur">¥</span>
           <span class="cp-num">{{ c.amount }}</span>
         </div>
         <div class="cp-right">
           <div class="cp-name">{{ c.name }}</div>
-          <div class="cp-cond">满 ¥{{ c.min_amount }} 可用</div>
-          <div class="cp-date">{{ c.end_date }} 到期</div>
+          <div class="cp-cond">满 ¥{{ c.threshold }} 可用</div>
+          <div class="cp-date">{{ (c.expire_at || '').slice(0, 10) }} 到期</div>
         </div>
         <button class="cp-use" @click="useCoupon(c)">立即使用</button>
       </div>
-      <div v-if="!list.length && !loading" class="empty">暂无优惠券</div>
+      <div v-if="!loading && !filteredList.length" class="empty">暂无优惠券</div>
     </div>
   </MinipLayout>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, computed } from 'vue'
+import { ElMessage } from 'element-plus'
+import api from '@/utils/api'
 import MinipLayout from './MinipLayout.vue'
 
 const filter = ref('unused')
-const loading = ref(false)
 const tabs = [
   { v: 'unused', l: '未使用' },
   { v: 'used', l: '已使用' },
   { v: 'expired', l: '已过期' }
 ]
 
-const list = ref([
-  { id: 1, name: '新人礼券', amount: 30, min_amount: 100, end_date: '2026-07-31' },
-  { id: 2, name: '满减优惠', amount: 50, min_amount: 200, end_date: '2026-07-20' },
-  { id: 3, name: '会员专享', amount: 20, min_amount: 50, end_date: '2026-08-05' }
-])
+const loading = ref(false)
+const list = ref([])
+
+const filteredList = computed(() => {
+  const now = Date.now()
+  return list.value.filter(c => {
+    const end = c.expire_at ? new Date(c.expire_at).getTime() : 0
+    if (filter.value === 'unused') return c.status === 'unused' && end > now
+    if (filter.value === 'used') return c.status === 'used'
+    if (filter.value === 'expired') return c.status === 'used' || end <= now
+    return true
+  })
+})
+
+onMounted(async () => {
+  loading.value = true
+  try {
+    const r = await api.get('/minip/enterprise/coupons')
+    if (r.code === 0 && r.data) {
+      list.value = r.data.list || []
+    } else {
+      uni.showToast({ title: r.message || '加载失败', icon: 'none' })
+    }
+  } catch (e) {
+    uni.showToast({ title: '优惠券加载失败,请稍后重试', icon: 'none' })
+    list.value = []
+  } finally {
+    loading.value = false
+  }
+})
 
 function useCoupon(c) {
-  uni.showModal({ content: `使用优惠券：${c.name}`, showCancel: false })
+  uni.showToast({ title: `使用优惠券：${c.name} ¥${c.amount}`, icon: 'none' })
 }
 </script>
 
