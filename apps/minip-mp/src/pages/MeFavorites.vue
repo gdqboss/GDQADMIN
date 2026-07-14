@@ -1,0 +1,7 @@
+<template><MinipLayout title="我的收藏" :canBack="true"><div class="grid"><div v-for="p in list" :key="p.id" class="card" @click="uni.showModal({ content: p.name, showCancel: false })"><div class="thumb">{{ p.emoji }}</div><div class="info"><div class="name">{{ p.name }}</div><div class="price">¥{{ p.price }}</div></div></div><div v-if="!list.length && !loading" class="empty">暂无收藏</div></div></MinipLayout></template>
+<script setup>import { ref, onMounted } from 'vue'; import api from '@/utils/api'
+import { ElMessage } from 'element-plus'; import MinipLayout from './MinipLayout.vue'; const list = ref([]); onMounted(async () => { try { const r = await api.get('/mall/favorites?limit=50'); if (r.code === 0) list.value = r.data || [] } catch (e) {
+    uni.showToast({ title: '加载失败,请稍后重试', icon: 'none' })
+    list.value = []
+  } }); </script>
+<style scoped>.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .card { background: #fff; border-radius: 10px; overflow: hidden; } .thumb { font-size: 56px; text-align: center; padding: 16px 0; background: linear-gradient(135deg, #fef3c7, #fde68a); } .info { padding: 8px; } .name { font-size: 13px; color: #1f2329; font-weight: 500; } .price { font-size: 14px; color: #ec4899; font-weight: 700; margin-top: 4px; } .empty { grid-column: 1/-1; text-align: center; padding: 40px 0; color: #9ca3af; font-size: 13px; }</style>

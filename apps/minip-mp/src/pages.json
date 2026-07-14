@@ -1,0 +1,246 @@
+{
+  "easycom": {
+    "autoscan": true,
+    "custom": {}
+  },
+  "pages": [
+    {
+      "path": "pages/EnterpriseHome",
+      "style": {
+        "navigationBarTitleText": "企业服务",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/Finance",
+      "style": {
+        "navigationBarTitleText": "财务中心",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/FinanceExpense",
+      "style": {
+        "navigationBarTitleText": "财务支出",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/FinanceInvoice",
+      "style": {
+        "navigationBarTitleText": "发票管理",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/FinanceReceipt",
+      "style": {
+        "navigationBarTitleText": "财务收款",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/FinanceWallet",
+      "style": {
+        "navigationBarTitleText": "钱包",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/Hr",
+      "style": {
+        "navigationBarTitleText": "人力中心",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/HrAttendance",
+      "style": {
+        "navigationBarTitleText": "考勤打卡",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/HrDirectory",
+      "style": {
+        "navigationBarTitleText": "员工名册",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/HrLeave",
+      "style": {
+        "navigationBarTitleText": "请假申请",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/HrSalary",
+      "style": {
+        "navigationBarTitleText": "薪酬管理",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/Marketing",
+      "style": {
+        "navigationBarTitleText": "营销中心",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/MarketingActivity",
+      "style": {
+        "navigationBarTitleText": "营销活动",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/MarketingCoupon",
+      "style": {
+        "navigationBarTitleText": "优惠券",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/MarketingMember",
+      "style": {
+        "navigationBarTitleText": "会员管理",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/MarketingReferral",
+      "style": {
+        "navigationBarTitleText": "分销管理",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/Me",
+      "style": {
+        "navigationBarTitleText": "个人中心",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/MeAddress",
+      "style": {
+        "navigationBarTitleText": "收货地址",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/MeCoupons",
+      "style": {
+        "navigationBarTitleText": "我的优惠券",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/MeFavorites",
+      "style": {
+        "navigationBarTitleText": "我的收藏",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/MeLogin",
+      "style": {
+        "navigationBarTitleText": "MeLogin",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/MeOrders",
+      "style": {
+        "navigationBarTitleText": "我的订单",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/MePoints",
+      "style": {
+        "navigationBarTitleText": "我的积分",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/MeProfile",
+      "style": {
+        "navigationBarTitleText": "个人资料",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/MeReviews",
+      "style": {
+        "navigationBarTitleText": "我的评价",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/MeWallet",
+      "style": {
+        "navigationBarTitleText": "我的钱包",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/MinipLayout",
+      "style": {
+        "navigationBarTitleText": "MinipLayout",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/MiscAbout",
+      "style": {
+        "navigationBarTitleText": "关于",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/MiscFeedback",
+      "style": {
+        "navigationBarTitleText": "意见反馈",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/Oa",
+      "style": {
+        "navigationBarTitleText": "OA 中心",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/OaApproval",
+      "style": {
+        "navigationBarTitleText": "审批列表",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/OaMeeting",
+      "style": {
+        "navigationBarTitleText": "会议管理",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/OaSchedule",
+      "style": {
+        "navigationBarTitleText": "排班管理",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/OaWorkflow",
+      "style": {
+        "navigationBarTitleText": "流程设计",
+        "enablePullDownRefresh": false
+      }
+    }
+  ]
+}

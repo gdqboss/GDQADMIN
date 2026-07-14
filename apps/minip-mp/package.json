@@ -1,0 +1,14 @@
+{
+  "name": "caimeite-minip-mp",
+  "version": "0.1.0",
+  "description": "彩美特微信小程序 - uni-app 同源（H5 .vue 单一事实源）",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build:h5": "echo 'H5 由 /root/src/ 全量 build 统一产出，无需单独 build'",
+    "build:mp-weixin": "echo 'TODO: 需 uni-app 编译器'",
+    "sync": "node scripts/sync-h5-source.mjs",
+    "dev:inspect": "node scripts/inspect.mjs"
+  },
+  "dependencies": {}
+}
