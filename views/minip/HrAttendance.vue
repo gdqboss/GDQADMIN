@@ -97,6 +97,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (timer) clearInterval(timer)
 })
+
+const loading = ref(false)
 </script>
 
 <style scoped>

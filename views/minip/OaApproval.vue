@@ -66,6 +66,8 @@ async function load() {
 }
 
 onMounted(() => load())
+
+const loading = ref(false)
 </script>
 
 <style scoped>

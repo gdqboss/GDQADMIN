@@ -22,6 +22,8 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+
+const loading = ref(false)
 import api from '@/api/request'
 import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
@@ -35,6 +37,7 @@ function formatMoney(v) {
 
 onMounted(async () => {
   try {
+    loading.value = true
     const r = await api.get('/finance/receipts?limit=50')
     if (r.code === 0) list.value = r.data || []
   } catch (e) {
@@ -50,6 +53,9 @@ onMounted(async () => {
       }
     }
   } catch {}
+  finally {
+    loading.value = false
+  }
 })
 </script>
 

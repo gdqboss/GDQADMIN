@@ -25,6 +25,8 @@
 </template>
 <script setup>
 import { ref, onMounted } from 'vue'
+
+const loading = ref(false)
 import api from '@/api/request'
 import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
@@ -36,6 +38,7 @@ function formatMoney(v) {
 }
 onMounted(async () => {
   try {
+    loading.value = true
     const r = await api.get('/h5/wallet')
     if (r.code === 0) {
       balance.value = r.data?.balance || 0
@@ -51,6 +54,9 @@ onMounted(async () => {
   } catch (e) {
     ElMessage.error('加载失败,请稍后重试')
     bills.value = []
+  }
+  finally {
+    loading.value = false
   }
 })
 </script>

@@ -70,7 +70,6 @@ async function load() {
     }
   } catch (e) {
     ElMessage.error('网络错误,请稍后重试')
-    list.value = []
   } finally {
     loading.value = false
   }

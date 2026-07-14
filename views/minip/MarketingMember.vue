@@ -26,6 +26,8 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+
+const loading = ref(false)
 import api from '@/api/request'
 import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
@@ -43,11 +45,15 @@ function levelColor(lv) {
 
 onMounted(async () => {
   try {
+    loading.value = true
     const r = await api.get('/marketing/members?limit=50')
     if (r.code === 0) list.value = r.data || []
   } catch (e) {
     ElMessage.error('加载失败,请稍后重试')
     list.value = []
+  }
+  finally {
+    loading.value = false
   }
 })
 </script>

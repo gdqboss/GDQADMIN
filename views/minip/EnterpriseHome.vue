@@ -57,6 +57,8 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+
+const loading = ref(false)
 import api from '@/api/request'
 import MinipLayout from './MinipLayout.vue'
 
@@ -70,6 +72,7 @@ const todos = ref([
 
 onMounted(async () => {
   try {
+    loading.value = true
     const r = await api.get('/approvals?status=pending&limit=5')
     if (r.code === 0) stats.value.pendingApprovals = r.data?.length || 0
   } catch {}
@@ -81,6 +84,9 @@ onMounted(async () => {
     const r = await api.get('/orders?status=pending&limit=1')
     if (r.code === 0) stats.value.openOrders = r.data?.length || 0
   } catch {}
+  finally {
+    loading.value = false
+  }
 })
 </script>
 

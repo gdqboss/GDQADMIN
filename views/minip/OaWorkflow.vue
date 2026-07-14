@@ -25,6 +25,8 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+
+const loading = ref(false)
 import api from '@/api/request'
 import { ElMessage } from 'element-plus'
 import MinipLayout from './MinipLayout.vue'
@@ -34,11 +36,15 @@ const totalInstances = computed(() => workflows.value.reduce((s, w) => s + (w.in
 
 onMounted(async () => {
   try {
+    loading.value = true
     const r = await api.get('/oa/workflows')
     if (r.code === 0) workflows.value = r.data || []
   } catch (e) {
     ElMessage.error('加载失败,请稍后重试')
     workflows.value = []
+  }
+  finally {
+    loading.value = false
   }
 })
 </script>
