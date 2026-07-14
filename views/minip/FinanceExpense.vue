@@ -16,6 +16,8 @@
     </div>
 
     <div class="expense-list">
+
+      <div v-if="loading" class="empty">加载中…</div>
       <div v-for="item in list" :key="item.id" class="expense-card">
         <div class="expense-top">
           <span class="expense-cat">{{ item.category }}</span>
@@ -27,7 +29,7 @@
           <span class="status-tag" :class="item.status">{{ statusLabel(item.status) }}</span>
         </div>
       </div>
-      <div v-if="!list.length" class="empty">暂无支出记录</div>
+      <div v-if="!list.length && !loading" class="empty">暂无支出记录</div>
     </div>
   </MinipLayout>
 </template>
