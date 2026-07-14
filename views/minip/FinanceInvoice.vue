@@ -4,6 +4,8 @@
       <button v-for="f in filters" :key="f.v" :class="{on: filter===f.v}" @click="filter=f.v;load()">{{ f.l }}</button>
     </div>
 
+    <div v-if="loading" class="loading-tip">加载中...</div>
+
     <div class="invoice-list">
       <div v-for="inv in list" :key="inv.id" class="invoice-card">
         <div class="invoice-head">
@@ -27,6 +29,7 @@ import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
 const filter = ref('all')
+const loading = ref(false)
 const filters = [
   { v: 'all', l: '全部' },
   { v: 'pending', l: '待开' },
@@ -42,18 +45,19 @@ function statusLabel(s) {
 }
 
 async function load() {
+  loading.value = true
   try {
     const r = await api.get(`/finance/invoices?status=${filter.value}&limit=50`)
     if (r.code === 0) list.value = r.data || []
   } catch (e) {
     ElMessage.error('加载失败,请稍后重试')
     list.value = []
+  } finally {
+    loading.value = false
   }
 }
 
 onMounted(() => load())
-
-const loading = ref(false)
 </script>
 
 <style scoped>

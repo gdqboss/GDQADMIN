@@ -1,5 +1,7 @@
 <template>
   <MinipLayout title="营销活动" :canBack="true">
+    <div v-if="loading" class="loading-tip">加载中...</div>
+
     <div class="filter-bar">
       <button v-for="f in filters" :key="f.v" :class="{on:filter===f.v}" @click="filter=f.v;load()">{{ f.l }}</button>
     </div>
@@ -34,6 +36,7 @@ import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
 const filter = ref('all')
+const loading = ref(false)
 const filters = [
   { v: 'all', l: '全部' },
   { v: 'active', l: '进行中' },
@@ -46,18 +49,19 @@ function statusLabel(s) {
 }
 
 async function load() {
+  loading.value = true
   try {
     const r = await api.get(`/marketing/campaigns?status=${filter.value}&limit=50`)
     if (r.code === 0) list.value = r.data || []
   } catch (e) {
     ElMessage.error('加载失败,请稍后重试')
     list.value = []
+  } finally {
+    loading.value = false
   }
 }
 
 onMounted(() => load())
-
-const loading = ref(false)
 </script>
 
 <style scoped>

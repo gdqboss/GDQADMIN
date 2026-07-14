@@ -1,5 +1,7 @@
 <template>
   <MinipLayout title="员工名册" :canBack="true">
+    <div v-if="loading" class="loading-tip">加载中...</div>
+
     <div class="search-bar">
       <input v-model="kw" @input="load" placeholder="搜索姓名/手机号" />
     </div>
@@ -27,24 +29,26 @@ import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
 const kw = ref('')
+const loading = ref(false)
 
 function statusLabel(s) {
   return { active: '在职', leave: '休假', inactive: '离职' }[s] || '在职'
 }
 
 async function load() {
+  loading.value = true
   try {
     const r = await api.get(`/oa/employees?q=${encodeURIComponent(kw.value)}&limit=50`)
     if (r.code === 0) list.value = r.data || []
   } catch (e) {
     ElMessage.error('加载失败,请稍后重试')
     list.value = []
+  } finally {
+    loading.value = false
   }
 }
 
 onMounted(() => load())
-
-const loading = ref(false)
 </script>
 
 <style scoped>

@@ -1,6 +1,8 @@
 <template>
   <MinipLayout title="考勤打卡" :canBack="true">
     <!-- 打卡卡片 -->
+    <div v-if="loading" class="loading-tip">加载中...</div>
+
     <div class="punch-card">
       <div class="punch-time">{{ currentTime }}</div>
       <div class="punch-date">{{ currentDate }}</div>
@@ -62,9 +64,12 @@ async function punch() {
     const r = await api.post('/oa/attendance/punch', { type: 'in' })
     if (r.code === 0) {
       todayPunched.value = true
+      ElMessage.success('打卡成功')
+    } else {
+      ElMessage.error(r.message || '打卡失败')
     }
-  } catch {
-    todayPunched.value = true
+  } catch (err) {
+    ElMessage.error(err?.response?.data?.message || err?.message || '网络异常,打卡失败')
   } finally {
     punching.value = false
   }
@@ -73,32 +78,26 @@ async function punch() {
 onMounted(() => {
   tick()
   timer = setInterval(tick, 30000)
-  try {
-    api.get('/oa/attendance/today').then(r => {
-      if (r.code === 0) {
-        stats.value = r.data || stats.value
-        todayPunched.value = !!r.data?.punched
-      }
-    }).catch(() => {})
-  } catch {}
-  try {
-    api.get('/oa/attendance/history?limit=10').then(r => {
-      if (r.code === 0) history.value = r.data || []
-    }).catch(() => {
-      history.value = [
-        { id: 1, date: '07-10', in_time: '08:55', in_status: 'ok', out_time: '18:30', out_status: 'ok' },
-        { id: 2, date: '07-09', in_time: '09:12', in_status: 'late', out_time: '18:05', out_status: 'ok' },
-        { id: 3, date: '07-08', in_time: '08:48', in_status: 'ok', out_time: '18:00', out_status: 'ok' }
-      ]
-    })
-  } catch {}
+  api.get('/oa/attendance/today').then(r => {
+    if (r.code === 0) {
+      stats.value = r.data || stats.value
+      todayPunched.value = !!r.data?.punched
+    }
+  }).catch((err) => {
+    console.error('load today attendance failed:', err)
+  })
+  api.get('/oa/attendance/history?limit=10').then(r => {
+    if (r.code === 0) history.value = r.data || []
+  }).catch((err) => {
+    console.error('load history failed:', err)
+    history.value = []
+    ElMessage.error('打卡记录加载失败')
+  })
 })
 
 onBeforeUnmount(() => {
   if (timer) clearInterval(timer)
 })
-
-const loading = ref(false)
 </script>
 
 <style scoped>

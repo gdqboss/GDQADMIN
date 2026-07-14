@@ -1,5 +1,7 @@
 <template>
   <MinipLayout title="审批列表" :canBack="true">
+    <div v-if="loading" class="loading-tip">加载中...</div>
+
     <div class="filter-bar">
       <button v-for="f in filters" :key="f.v" :class="{on: filter===f.v}" @click="filter=f.v;load()">{{ f.l }}</button>
     </div>
@@ -34,6 +36,7 @@ import MinipLayout from './MinipLayout.vue'
 
 const list = ref([])
 const filter = ref('pending')
+const loading = ref(false)
 const filters = [
   { v: 'pending', l: '待审' },
   { v: 'approved', l: '已通过' },
@@ -50,24 +53,32 @@ function statusLabel(s) {
 
 async function act(a, action) {
   try {
-    await api.post(`/oa/approvals/${a.id}/${action}`)
-  } catch {}
-  list.value = list.value.filter(x => x.id !== a.id)
+    const r = await api.post(`/oa/approvals/${a.id}/${action}`)
+    if (r.code === 0) {
+      ElMessage.success(action === 'approve' ? '已通过' : '已驳回')
+      list.value = list.value.filter(x => x.id !== a.id)
+    } else {
+      ElMessage.error(r.message || '操作失败')
+    }
+  } catch (err) {
+    ElMessage.error(err?.response?.data?.message || err?.message || '操作失败')
+  }
 }
 
 async function load() {
+  loading.value = true
   try {
     const r = await api.get(`/oa/approvals?status=${filter.value}&limit=50`)
     if (r.code === 0) list.value = r.data || []
   } catch (e) {
     ElMessage.error('加载失败,请稍后重试')
     list.value = []
+  } finally {
+    loading.value = false
   }
 }
 
 onMounted(() => load())
-
-const loading = ref(false)
 </script>
 
 <style scoped>
