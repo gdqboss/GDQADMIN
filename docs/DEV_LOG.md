@@ -163,3 +163,40 @@ ai-upload, article, attendance, banners, cashier, collage, coupon, diypage, edu,
 ### 已知尾
 - 没 commit (sync_profile_modules.py 是工具, 不入业务 repo, 已落到 .hermes/scripts/)
 - AGENTS.md 数据过时 (54 → 63), 待波哥拍板要不要更新
+## [2026-07-14 13:14] P1 minip loading 态 修复 + P2 JXY 全景文件输出
+
+**操作人**: agent
+**影响 profile**: 1
+
+### P1 做了什么
+
+- v3 脚本 bug：5 个 view 注入错误 → 修了（见下）
+- `npm run build`：239 chunks / 11M / **0 error**
+- `/minip/` 实测：**200 OK**
+- commit `9153e085` push 远端 `feat/online-order`
+
+#### v3 脚本 bug 详情
+
+| Bug | 影响 | 修复 |
+|---|---|---|
+| `try { loading.value = true const r` 单行粘死 | 5 个 view: MeAddress/MeFavorites/MeReviews/MeProfile/MiscFeedback | 加换行 + 把 `const loading = ref(false)` 从 try 内提到外层 |
+| `const loading = ref(false)` 被插到 try 内 | 2 个 view: MeProfile/MiscFeedback | 提回外层（紧跟最后一个 `ref()` 声明后） |
+
+**自验**: 29 view 全部 `node --check` 通过
+
+#### 加了 loading 态的 25 个 view
+
+Finance 系 5 / Hr 系 5 / Marketing 系 5 / Me 系 7 / Oa 系 5 / EnterpriseHome / MiscFeedback  → 共 29 (FinanceExpense 之前 v2 已加)
+
+### P2 输出
+
+- 文件 `/root/.hermes/cron/output/hermes_to_jxy.md` (5KB)
+- 内容：SGP 5 前端项目状态 + minip 完善进度 + minip-mp 暂停原因 + 6 项技术决策
+- cron `hermes_to_jxy_poll` 每分钟自动推
+
+### P3 选项（待波哥拍板）
+
+- a) 申请小程序 appid 继续 minip-mp 编译（被 appid + 编译器卡住）
+- b) P3 caimeite-mall = 另一个 uni-app 表现层（0 后端工作量，待启动）
+- c) 修 bj SSH 后再推 module 同步
+
