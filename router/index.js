@@ -292,6 +292,11 @@ const routes = [].concat(hqh5Routes, adorderRoutes, minipRoutes, [
       { path: 'settings/job-responsibilities', name: 'JobResponsibilities', component: lazyLoad(() => import('../views/settings/JobResponsibilities.vue')), meta: { title: '职位权责管理', permission: 'permission:read' } },
       { path: 'settings/responsibilities', name: 'ResponsibilityManage', component: lazyLoad(() => import('../views/settings/ResponsibilityManage.vue')), meta: { title: '权责管理', permission: 'permission:read' } },
       { path: 'settings/server-profiles', name: 'ServerProfiles', component: lazyLoad(() => import('../views/settings/ServerProfiles.vue')), meta: { title: '目标服务器管理', permission: 'system:config' } },
+      // minip 小程序后台管理 (banner + modules + activities + applications)
+      { path: 'settings/minip-banners', name: 'MinipBannerManage', component: lazyLoad(() => import('../views/settings/BannerManage.vue')), meta: { title: '小程序轮播图管理', permission: 'banners:write' } },
+      { path: 'settings/minip-modules', name: 'MinipModuleManage', component: lazyLoad(() => import('../views/settings/MinipModuleManage.vue')), meta: { title: '小程序业务模块管理', moduleKey: 'minip' } },
+      { path: 'settings/minip-activities', name: 'MinipActivityManage', component: lazyLoad(() => import('../views/settings/MinipActivityManage.vue')), meta: { title: '小程序活动管理', moduleKey: 'minip' } },
+      { path: 'settings/minip-applications', name: 'MinipApplicationReview', component: lazyLoad(() => import('../views/settings/MinipApplicationReview.vue')), meta: { title: '入会申请审核', moduleKey: 'minip' } },
 
       // ── 财务 ────────────────────────────────────────────────
       { path: 'finance', name: 'FinanceOverview', component: lazyLoad(() => import('../views/finance-simple/FinanceOverview.vue')), meta: { title: '财务总览', parent: '财务管理', permission: 'finance:read' } },

@@ -314,6 +314,19 @@ const menuGroups = computed(() => [
     ]
   },
   {
+    key: 'minip',
+    icon: 'smartphone',
+    label: '小程序管理',
+    to: null,
+    moduleKeys: ['minip', 'banners'],
+    children: [
+      { key: 'banners:write', label: '小程序轮播图',   to: '/settings/minip-banners' },
+      { key: 'minip:write',   label: '小程序业务模块', to: '/settings/minip-modules',  moduleKey: 'minip' },
+      { key: 'minip:write',   label: '小程序活动',     to: '/settings/minip-activities', moduleKey: 'minip' },
+      { key: 'minip:write',   label: '入会申请审核',   to: '/settings/minip-applications', moduleKey: 'minip' },
+    ]
+  },
+  {
     key: 'system',
     icon: 'settings',
     label: t('nav.systemManagement'),
