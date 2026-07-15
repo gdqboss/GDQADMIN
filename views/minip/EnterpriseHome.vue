@@ -77,11 +77,11 @@ onMounted(async () => {
     if (r.code === 0) stats.value.pendingApprovals = r.data?.length || 0
   } catch {}
   try {
-    const r = await api.get('/oa/attendance/today')
+    const r = await api.get('/minip/enterprise/attendance?type=today')
     if (r.code === 0) stats.value.todayAttendance = r.data?.count || 0
   } catch {}
   try {
-    const r = await api.get('/orders?status=pending&limit=1')
+    const r = await api.get('/mall/orders?status=pending&limit=1')
     if (r.code === 0) stats.value.openOrders = r.data?.length || 0
   } catch {}
   finally {

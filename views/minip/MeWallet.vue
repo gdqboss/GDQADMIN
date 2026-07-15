@@ -39,7 +39,7 @@ function formatMoney(v) {
 onMounted(async () => {
   try {
     loading.value = true
-    const r = await api.get('/h5/wallet')
+    const r = await api.get('/minip/enterprise/wallet')
     if (r.code === 0) {
       balance.value = r.data?.balance || 0
       points.value = r.data?.points || 0
@@ -49,7 +49,7 @@ onMounted(async () => {
     points.value = 2380
   }
   try {
-    const r = await api.get('/h5/wallet/bills?limit=20')
+    const r = await api.get('/minip/enterprise/wallet/bills?limit=20')
     if (r.code === 0) bills.value = r.data || []
   } catch (e) {
     ElMessage.error('加载失败,请稍后重试')

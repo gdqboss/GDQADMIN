@@ -67,7 +67,7 @@ const campaigns = ref([])
 onMounted(async () => {
   try {
     loading.value = true
-    const r = await api.get('/marketing/campaigns?status=active&limit=10')
+    const r = await api.get('/minip/enterprise/expenses?status=active&limit=10')
     if (r.code === 0) campaigns.value = r.data || []
   } catch (e) {
     ElMessage.error('加载失败,请稍后重试')

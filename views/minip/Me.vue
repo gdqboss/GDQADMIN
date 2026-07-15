@@ -96,7 +96,7 @@ async function logout() {
 onMounted(async () => {
   try {
     loading.value = true
-    const r = await api.get('/users/me')
+    const r = await api.get('/auth/me')
     if (r.code === 0 && r.data) {
       user.value = { ...user.value, ...r.data }
       user.value.avatar = (r.data.name || '?').charAt(0).toUpperCase() || '👤'

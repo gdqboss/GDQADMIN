@@ -73,7 +73,7 @@ async function reject(t) {
 onMounted(async () => {
   try {
     loading.value = true
-    const r = await api.get('/oa/approvals/pending?limit=20')
+    const r = await api.get('/minip/enterprise/approvals?type=pending&limit=20')
     if (r.code === 0) {
       todos.value = r.data || []
       stats.value.pending = todos.value.length

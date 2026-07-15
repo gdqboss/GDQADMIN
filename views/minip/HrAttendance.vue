@@ -61,7 +61,7 @@ async function punch() {
   if (todayPunched.value || punching.value) return
   punching.value = true
   try {
-    const r = await api.post('/oa/attendance/punch', { type: 'in' })
+    const r = await api.post('/minip/enterprise/attendance/punch', { type: 'in' })
     if (r.code === 0) {
       todayPunched.value = true
       ElMessage.success('打卡成功')
@@ -78,7 +78,7 @@ async function punch() {
 onMounted(() => {
   tick()
   timer = setInterval(tick, 30000)
-  api.get('/oa/attendance/today').then(r => {
+  api.get('/minip/enterprise/attendance?type=today').then(r => {
     if (r.code === 0) {
       stats.value = r.data || stats.value
       todayPunched.value = !!r.data?.punched
@@ -86,7 +86,7 @@ onMounted(() => {
   }).catch((err) => {
     console.error('load today attendance failed:', err)
   })
-  api.get('/oa/attendance/history?limit=10').then(r => {
+  api.get('/minip/enterprise/attendance?limit=10').then(r => {
     if (r.code === 0) history.value = r.data || []
   }).catch((err) => {
     console.error('load history failed:', err)

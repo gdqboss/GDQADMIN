@@ -44,7 +44,7 @@ function newMeeting() {
 onMounted(async () => {
   try {
     loading.value = true
-    const r = await api.get('/oa/meetings?limit=20')
+    const r = await api.get('/minip/office/work-logs?limit=20')
     if (r.code === 0) {
       list.value = r.data || []
       stats.value.total = list.value.length

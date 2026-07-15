@@ -44,6 +44,22 @@ api.interceptors.request.use(config => {
   if (locale === 'en' && !config.url.includes('lang=')) {
     config.url += (config.url.includes('?') ? '&' : '?') + 'lang=en'
   }
+  // Auto-inject user_id for mall/orders/addresses etc. that require it
+  // (后端 mall 路由无 auth 中间件，必须显式传 user_id)
+  const userStr = localStorage.getItem('caimeite_user')
+  if (userStr && userStr !== 'null' && userStr !== 'undefined' && config.url) {
+    const needsUserId = /\/api\/(mall|h5)\//.test(config.url) || config.url.startsWith('/mall/') || config.url.startsWith('/h5/')
+    const hasUserId = config.url.includes('user_id=') || (config.params && config.params.user_id)
+    if (needsUserId && !hasUserId) {
+      try {
+        const u = JSON.parse(userStr)
+        if (u && (u.id || u.user_id)) {
+          const uid = u.id || u.user_id
+          config.params = { ...(config.params || {}), user_id: uid }
+        }
+      } catch {}
+    }
+  }
   return config
 })
 

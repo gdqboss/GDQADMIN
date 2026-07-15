@@ -4,7 +4,7 @@
 const loading = ref(false)
 import { ElMessage } from 'element-plus'; import MinipLayout from './MinipLayout.vue'; const list = ref([]); onMounted(async () => { try {
     loading.value = true
-  const r = await api.get('/h5/addresses'); if (r.code === 0) list.value = r.data || [] } catch (e) {
+  const r = await api.get('/mall/addresses'); if (r.code === 0) list.value = r.data || [] } catch (e) {
     ElMessage.error('加载失败,请稍后重试')
     list.value = []
   }

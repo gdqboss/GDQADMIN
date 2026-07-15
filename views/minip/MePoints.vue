@@ -39,7 +39,7 @@ const history = ref([])
 onMounted(async () => {
   try {
     loading.value = true
-    const r = await api.get('/members/me/points')
+    const r = await api.get('/minip/enterprise/wallet')
     if (r.code === 0) {
       points.value = r.data?.balance || 0
       history.value = r.data?.history || []

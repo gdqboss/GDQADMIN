@@ -38,14 +38,14 @@ function formatMoney(v) {
 onMounted(async () => {
   try {
     loading.value = true
-    const r = await api.get('/finance/receipts?limit=50')
+    const r = await api.get('/finance-simple/receipts?limit=50')
     if (r.code === 0) list.value = r.data || []
   } catch (e) {
     ElMessage.error('加载失败,请稍后重试')
     list.value = []
   }
   try {
-    const r = await api.get('/finance/accounts-receivable?range=month')
+    const r = await api.get('/finance-simple/accounts-receivable?range=month')
     if (r.code === 0) {
       summary.value = {
         received: r.data?.received || 0,

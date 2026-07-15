@@ -43,7 +43,7 @@ const stats = ref({ issued: 0, used: 0, rate: 0 })
 onMounted(async () => {
   try {
     loading.value = true
-    const r = await api.get('/marketing/coupons?limit=50')
+    const r = await api.get('/minip/enterprise/coupons?limit=50')
     if (r.code === 0) list.value = r.data || []
   } catch (e) {
     ElMessage.error('加载失败,请稍后重试')

@@ -38,7 +38,7 @@ const stats = ref({ agents: 0, orders: 0, commission: 0 })
 onMounted(async () => {
   try {
     loading.value = true
-    const r = await api.get('/marketing/referral?limit=20')
+    const r = await api.get('/minip/enterprise/approvals?limit=20')
     if (r.code === 0) list.value = r.data || []
   } catch (e) {
     ElMessage.error('加载失败,请稍后重试')

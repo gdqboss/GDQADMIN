@@ -50,14 +50,14 @@ function formatMoney(v) {
 onMounted(async () => {
   try {
     loading.value = true
-    const r = await api.get('/finance/wallet')
+    const r = await api.get('/minip/enterprise/wallet')
     if (r.code === 0) {
       balance.value = r.data?.balance || 0
       frozen.value = r.data?.frozen || 0
     }
   } catch {}
   try {
-    const r = await api.get('/finance/wallet/transactions?limit=20')
+    const r = await api.get('/minip/enterprise/wallet/transactions?limit=20')
     if (r.code === 0) transactions.value = r.data || []
   } catch (e) {
     ElMessage.error('加载失败,请稍后重试')

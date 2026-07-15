@@ -52,7 +52,7 @@ function statusLabel(s) {
 async function load() {
   loading.value = true
   try {
-    const r = await api.get(`/orders?status=${filter.value}&limit=50`)
+    const r = await api.get(`/mall/orders?status=${filter.value}&limit=50`)
     if (r.code === 0) list.value = r.data || []
   } catch (e) {
     ElMessage.error('加载失败,请稍后重试')

@@ -63,7 +63,7 @@ onMounted(async () => {
     if (r.code === 0) stats.value.total = r.data?.total || 0
   } catch {}
   try {
-    const r = await api.get('/oa/attendance/today')
+    const r = await api.get('/minip/enterprise/attendance?type=today')
     if (r.code === 0) stats.value.attendance = r.data?.count || 0
   } catch {}
   finally {

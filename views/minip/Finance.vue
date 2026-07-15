@@ -68,11 +68,11 @@ function formatMoney(v) {
 onMounted(async () => {
   try {
     loading.value = true
-    const r = await api.get('/finance/wallet')
+    const r = await api.get('/minip/enterprise/wallet')
     if (r.code === 0) balance.value = r.data?.balance || 0
   } catch {}
   try {
-    const r = await api.get('/finance/overview?range=month')
+    const r = await api.get('/finance-simple/overview?range=month')
     if (r.code === 0 && r.data) {
       monthly.value = {
         income: r.data.income || 0,

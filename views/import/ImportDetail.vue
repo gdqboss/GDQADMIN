@@ -534,15 +534,23 @@ function collapseAllStoreDetails() {
 // 🖨 整店 matrix 打印：每家店一个 section（含该店当前展开的型号 matrix）
 function printStoreDetailFor(storeCode, storeName, model) {
   const entry = storeDetailsMap[storeCode]
-  // 如果传了 model 直接用；否则用 entry.expandedModel
-  const m = model || entry?.expandedModel
-  if (!m) { alert('无展开的 matrix，请先点型号行的 matrix 按钮'); return }
-  const matrix = getMatrixFor(storeCode, m)
-  if (!matrix.colors?.length) { alert('该型号无 SKU 数据'); return }
-  const title = `📋 整店明细 · ${storeName || storeCode} · ${m}`
-  const subtitle = `导入记录 #${recordId} · ${record.value?.file_name || ''} · 门店 ${storeName || storeCode}`
-  const html = buildColorSizeTableHTML(matrix, { showSkuModel: false, qtySuffix: 'PCS', aggregateCell: true })
-  openPrintWindow(title, subtitle, html)
+  if (!entry || !entry.byModel?.length) { alert('该门店无明细数据'); return }
+
+  // ✅ A 方案：consolidate all the same designs — 合并该店所有 model 的 SKU 到一张颜色×尺码大表
+  const allSkus = entry.byModel.flatMap(m => m.skus || [])
+  if (!allSkus.length) { alert('该门店无 SKU 数据'); return }
+  const matrix = buildMatrix(allSkus)
+  if (!matrix.colors?.length) { alert('该门店无矩阵数据'); return }
+
+  // 透传 model 参数（兼容页面按钮调用）但打印按"整店"语义渲染
+  const modelLabel = model || (entry.byModel?.length === 1 ? entry.byModel[0].model : 'consolidated')
+  const designCount = entry.byModel.length
+  const title = `📋 门店明细 · ${storeName || storeCode}` + (designCount === 1 ? ` · ${entry.byModel[0].model}` : ` · ${designCount} designs consolidated`)
+  const subtitle = `导入记录 #${recordId} · ${record.value?.file_name || ''} · 门店 ${storeName || storeCode} · ${designCount} designs · ${matrix.colors.length} colors · ${matrix.sizes.length} sizes · ${matrix.totalSkus} SKU`
+  // ✅ showTotals: true → 表头加"合计"列 + 每行颜色合计 + tfoot 整店总销量
+  const { html, grandTotal } = buildColorSizeTableHTML(matrix, { showSkuModel: false, qtySuffix: 'PCS', aggregateCell: true, showTotals: true })
+  const enrichedSubtitle = subtitle + ` · <strong style="color:#d97706">总销量 ${grandTotal.toLocaleString()} PCS</strong>`
+  openPrintWindow(title, enrichedSubtitle, html)
 }
 
 // 🖨 一次性打印全部门店当前展开的所有型号 matrix（按门店顺序）
@@ -556,7 +564,7 @@ function printAllStoreMatrices() {
     const parts = models.map(m => {
       const matrix = getMatrixFor(s.store_code, m.model)
       if (!matrix.colors?.length) return ''
-      const html = buildColorSizeTableHTML(matrix, { showSkuModel: false, qtySuffix: 'PCS', aggregateCell: true })
+      const { html } = buildColorSizeTableHTML(matrix, { showSkuModel: false, qtySuffix: 'PCS', aggregateCell: true })
       return `<h3>${m.model} <span class="meta">${matrix.colors.length} colors · ${matrix.sizes.length} sizes · ${matrix.totalSkus} SKU</span></h3>${html}`
     }).join('')
     if (parts) {
@@ -674,6 +682,9 @@ function openPrintWindow(title, subtitle, tableHTML, extraCSS) {
     '.sku-qty{font-size:10px;color:#388e3c;font-weight:600}' +
     '.empty-qty{color:#bbb;font-size:11px}' +
     '.color-thumb{width:16px;height:16px;object-fit:cover;border-radius:2px;vertical-align:middle;margin-right:4px}' +
+    '.color-total{background:#fff7e6;text-align:center;font-weight:700;color:#d97706}' +
+    '.color-total-cell{background:#fff7e6;text-align:right;font-weight:700;color:#d97706;min-width:60px}' +
+    'tfoot td{background:#fef3c7;border-top:2px solid #d97706}' +
     '@page{size:A4 landscape;margin:1cm}' +
     (extraCSS || '')
 
@@ -690,13 +701,17 @@ function openPrintWindow(title, subtitle, tableHTML, extraCSS) {
 
 function buildColorSizeTableHTML(matrix, options = {}) {
   // matrix = { sizes, colors, cells, colorImageMap, totalSkus }
-  const { showSkuModel = true, qtySuffix = '件', aggregateCell = false } = options
-  if (!matrix.colors?.length) return '<div style="color:#999;text-align:center;padding:24px">无数据</div>'
+  const { showSkuModel = true, qtySuffix = '件', aggregateCell = false, showTotals = false } = options
+  if (!matrix.colors?.length) return { html: '<div style="color:#999;text-align:center;padding:24px">无数据</div>', grandTotal: 0, colorTotals: {} }
 
   // 表头
   let html = '<table><thead><tr><th class="color-cell">颜色 \\ 尺码</th>'
   for (const sz of matrix.sizes) html += '<th class="size-col">' + sz + '</th>'
+  if (showTotals) html += '<th class="color-total">合计</th>'
   html += '</tr></thead><tbody>'
+
+  let grandTotal = 0
+  const colorTotals = {}
 
   for (const c of matrix.colors) {
     html += '<tr><td class="color-cell">'
@@ -704,31 +719,45 @@ function buildColorSizeTableHTML(matrix, options = {}) {
     if (img) html += '<img class="color-thumb" src="' + img + '"/> '
     html += c + '</td>'
 
+    let rowTotal = 0
     for (const sz of matrix.sizes) {
       const cellItems = matrix.cells[c]?.[sz] || []
       html += '<td class="cell-data">'
       if (cellItems.length === 0) {
         html += '<span class="empty-qty">-</span>'
       } else if (aggregateCell) {
-        // 单 cell 单 SKU + 数量合计
+        // 单 cell 单 SKU + 数量合计（design 合并模式：同色同尺码多 SKU 摞一起）
         const first = cellItems[0]
         const totalQty = cellItems.reduce((a, b) => a + (Number(b.qty) || 0), 0)
         const title = cellItems.map(x => x.sku + '/' + x.qty).join(', ')
         html += '<div class="cell-sku" title="' + title + '"><span class="sku-num">' + first.sku + '</span><span class="sku-qty">/' + totalQty + qtySuffix + '</span></div>'
+        rowTotal += totalQty
       } else {
         // 堆叠每个 SKU
         for (const item of cellItems) {
           html += '<div class="cell-sku"><span class="sku-num">' + item.sku + '</span>'
           if (showSkuModel && item.model) html += '<span class="sku-model">' + (item.model || '').slice(0, 8) + '</span>'
           html += '<span class="sku-qty">' + item.qty + qtySuffix + '</span></div>'
+          rowTotal += Number(item.qty) || 0
         }
       }
       html += '</td>'
     }
+    if (showTotals) html += '<td class="cell-data num color-total-cell"><strong>' + rowTotal.toLocaleString() + '</strong></td>'
+    colorTotals[c] = rowTotal
+    grandTotal += rowTotal
     html += '</tr>'
   }
-  html += '</tbody></table>'
-  return html
+  // 表尾：整店总销量
+  if (showTotals) {
+    html += '</tbody><tfoot><tr><td class="color-cell"><strong>合计</strong></td>'
+    html += '<td colspan="' + matrix.sizes.length + '" class="cell-data"><strong>共 ' + matrix.colors.length + ' 个颜色 × ' + matrix.sizes.length + ' 个尺码 · ' + matrix.totalSkus + ' SKU</strong></td>'
+    html += '<td class="cell-data num color-total-cell"><strong>' + grandTotal.toLocaleString() + ' PCS</strong></td></tr></tfoot>'
+  } else {
+    html += '</tbody>'
+  }
+  html += '</table>'
+  return { html, grandTotal, colorTotals }
 }
 
 // ① 打印 — 展开全记录明细
@@ -737,7 +766,7 @@ function printMatrix(_key) {
   if (!m.colors?.length) { alert('无数据可打印'); return }
   const title = '📋 展开全记录明细 — 颜色×尺码矩阵'
   const subtitle = '导入记录 #' + recordId + ' · ' + (record.value?.file_name || '') + ' · ' + m.totalSkus + ' SKU · ' + m.colors.length + ' colors · ' + m.sizes.length + ' sizes'
-  const html = buildColorSizeTableHTML(m, { showSkuModel: true, qtySuffix: '件', aggregateCell: false })
+  const { html } = buildColorSizeTableHTML(m, { showSkuModel: true, qtySuffix: '件', aggregateCell: false })
   openPrintWindow(title, subtitle, html)
 }
 
@@ -750,7 +779,7 @@ function printModelMatrix(modelName) {
   if (!m.colors?.length) { alert('无数据可打印'); return }
   const title = '📦 型号 ' + modelName + ' — 颜色×尺码矩阵'
   const subtitle = '导入记录 #' + recordId + ' · ' + (record.value?.file_name || '') + ' · ' + m.totalSkus + ' SKU · ' + m.colors.length + ' colors · ' + m.sizes.length + ' sizes'
-  const html = buildColorSizeTableHTML(m, { showSkuModel: false, qtySuffix: 'PCS', aggregateCell: true })
+  const { html } = buildColorSizeTableHTML(m, { showSkuModel: false, qtySuffix: 'PCS', aggregateCell: true })
   openPrintWindow(title, subtitle, html)
 }
 

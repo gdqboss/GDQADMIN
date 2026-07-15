@@ -1,9 +1,9 @@
 <template><MinipLayout title="意见反馈" :canBack="true"><div class="form"><label>反馈类型</label><select v-model="form.type"><option>功能建议</option><option>问题反馈</option><option>投诉</option><option>其他</option></select><label>标题</label><input v-model="form.title" placeholder="简要描述" /><label>详细说明</label><textarea v-model="form.content" rows="6" placeholder="请详细描述您的问题或建议..."></textarea><label>联系方式（选填）</label><input v-model="form.contact" placeholder="手机号或邮箱" /><button class="submit" :disabled="!form.title || !form.content" @click="submit">提交反馈</button></div><div class="history"><div class="htitle">历史反馈</div><div v-for="f in history" :key="f.id" class="hrow"><div class="hhead"><span class="htype">{{ f.type }}</span><span class="hdate">{{ f.date }}</span><span class="hstatus" :class="f.status">{{ statusLabel(f.status) }}</span></div><div class="hbody">{{ f.title }}</div></div></div></MinipLayout></template>
 <script setup>import { ref, onMounted } from 'vue'; import api from '@/api/request'; import { ElMessage } from 'element-plus'; import MinipLayout from './MinipLayout.vue'; const form = ref({ type: '功能建议', title: '', content: '', contact: '' }); const history = ref([])
-const loading = ref(false); function statusLabel(s) { return { pending: '待处理', processing: '处理中', resolved: '已解决' }[s] || s; } async function submit() { try { await api.post('/logs/feedback', form.value); ElMessage.success('提交成功') } catch { ElMessage.success('提交成功（演示模式）') } form.value = { type: '功能建议', title: '', content: '', contact: '' } } onMounted(async () => { try {
+const loading = ref(false); function statusLabel(s) { return { pending: '待处理', processing: '处理中', resolved: '已解决' }[s] || s; } async function submit() { try { await api.post('/feedback', form.value); ElMessage.success('提交成功') } catch { ElMessage.success('提交成功（演示模式）') } form.value = { type: '功能建议', title: '', content: '', contact: '' } } onMounted(async () => { try {
 
   loading.value = true
-  const r = await api.get('/logs/feedback/my?limit=10'); if (r.code === 0) history.value = r.data || [] } catch (e) {
+  const r = await api.get('/feedback?my=1&limit=10'); if (r.code === 0) history.value = r.data || [] } catch (e) {
     ElMessage.error('加载失败,请稍后重试')
     history.value = []
   }
