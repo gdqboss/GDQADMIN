@@ -355,4 +355,47 @@ router.post('/menu-modules/upgrade-category', auth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── 通用模块设置（visibility 等可配置项）─────────────────
+
+// GET /api/settings/module/:key - 获取某个模块设置（公开，登录用户都可见）
+router.get('/module/:key', auth, async (req, res, next) => {
+  try {
+    const { key } = req.params;
+    const [rows] = await pool.query('SELECT value FROM settings WHERE `key` = ?', [key]);
+    if (rows.length === 0) return res.json({ code: 0, data: { key, value: null } });
+    res.json({ code: 0, data: { key, value: rows[0].value } });
+  } catch (err) { next(err); }
+});
+
+// GET /api/settings/modules?prefix=xxx - 批量按前缀获取（前端初始化用）
+router.get('/modules', auth, async (req, res, next) => {
+  try {
+    const { prefix } = req.query;
+    let sql = 'SELECT `key`, value FROM settings';
+    const params = [];
+    if (prefix) {
+      sql += ' WHERE `key` LIKE ?';
+      params.push(prefix + '%');
+    }
+    const [rows] = await pool.query(sql, params);
+    res.json({ code: 0, data: rows });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/settings/module/:key - 更新某个模块设置（admin only）
+router.put('/module/:key', auth, async (req, res, next) => {
+  try {
+    if (req.user.role !== ROLES.ADMIN) return res.status(403).json({ code: 403, message: '需 admin 权限' });
+    const { key } = req.params;
+    const { value } = req.body || {};
+    if (value === undefined) return res.status(400).json({ code: 400, message: 'value 必填' });
+
+    await pool.query(
+      'INSERT INTO settings (`key`, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value=VALUES(value)',
+      [key, String(value)]
+    );
+    res.json({ code: 0, message: '已更新', data: { key, value } });
+  } catch (err) { next(err); }
+});
+
 export default router;

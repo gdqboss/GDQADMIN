@@ -439,7 +439,11 @@ app.use('/api/retail-records', auth, apiLimiter, retailRoutes)
 app.use('/api/gift-approvals', auth, apiLimiter, giftApprovalRoutes)
 app.use('/api/aftersales', auth, apiLimiter, aftersalesRoutes)
 app.use('/api/wecom', auth, apiLimiter, wecomRoutes)
-app.use('/api/settings', auth, apiLimiter, requireRole('admin'), settingsRoutes)
+// menu-* 路由保持 admin only
+app.use('/api/settings/menu-config', auth, apiLimiter, requireRole('admin'), settingsRoutes)
+app.use('/api/settings/menu-modules', auth, apiLimiter, requireRole('admin'), settingsRoutes)
+// 其他 settings 路由（module-* 等普通用户可读）走宽松链路
+app.use('/api/settings', auth, apiLimiter, settingsRoutes)
 // 公开系统设置（无需登录）
 app.get('/api/public-settings', async (req, res, next) => {
   try {
@@ -454,10 +458,16 @@ app.get('/api/public-settings', async (req, res, next) => {
     data.bot_name = data.bot_name || '美特'
 
     // Load modules + languages from server_profiles
+    // 优先顺序: 1) URL query ?server_profile_id=N (多租户/独立站切换) 2) settings.server_profile_id 3) SERVER_IP 兜底 4) null
     let profileId = null
-    if (data.server_profile_id) {
+    if (req.query.server_profile_id) {
+      profileId = parseInt(req.query.server_profile_id)
+      if (isNaN(profileId) || profileId <= 0) profileId = null
+    }
+    if (!profileId && data.server_profile_id) {
       profileId = parseInt(data.server_profile_id)
-    } else {
+    }
+    if (!profileId) {
       const [[spRow]] = await pool.query('SELECT id FROM server_profiles WHERE ip = ? LIMIT 1', [process.env.SERVER_IP || ''])
       if (spRow) profileId = spRow.id
     }
@@ -479,6 +489,15 @@ app.get('/api/public-settings', async (req, res, next) => {
         data.site_name = spRow.site_name_zh || data.site_name || '智能商业系统'
         data.site_name_en = spRow.site_name_en || data.site_name_en || 'SmartBiz'
       }
+      // 返回完整 profile 信息（site_logo/domain/industry/currency 等）给前端做主题切换
+      const [[profileRow]] = await pool.query(
+        `SELECT id, name, ip, domain, site_logo, site_name_zh, site_name_en, language, currency, industry, env, manager
+         FROM server_profiles WHERE id = ?`,
+        [profileId]
+      )
+      if (profileRow) data.profile = profileRow
+      // 记录最终使用的 profile_id
+      data.server_profile_id = String(profileId)
       // Load endpoints for this server profile
       try {
         const [epRows] = await pool.query('SELECT id, endpoint_type, label, url, is_primary, env, sort_order, description FROM server_endpoints WHERE server_profile_id = ? AND is_active = 1 ORDER BY sort_order ASC, id ASC', [profileId])
