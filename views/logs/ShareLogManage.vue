@@ -3,6 +3,7 @@ import { ref, onMounted, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../../components/PageHeader.vue'
 import Pagination from '../../components/Pagination.vue'
+import ReaderAvatars from '../../components/ReaderAvatars.vue'
 import api from '../../services/api.js'
 
 const { t } = useI18n()
@@ -215,6 +216,18 @@ function getChannelChartColor(channel) {
   }
   return colors[channel] || '#6b7280'
 }
+
+// 钉钉式已阅：弹窗显示完整名单
+const showReaderDetailModal = ref(false)
+const readerDetailList = ref([])
+function handleReaderDetail({ readers }) {
+  readerDetailList.value = readers || []
+  showReaderDetailModal.value = true
+}
+function formatReadTime(t) {
+  if (!t) return ''
+  return new Date(t).toLocaleString('zh-CN')
+}
 </script>
 
 <template>
@@ -393,6 +406,7 @@ function getChannelChartColor(channel) {
               <th class="px-4 py-3 font-medium text-right">{{ $t('sharelog.views') }}</th>
               <th class="px-4 py-3 font-medium text-right">{{ $t('sharelog.conversions') }}</th>
               <th class="px-4 py-3 font-medium text-right">{{ $t('sharelog.conversionRate') }}</th>
+              <th class="px-4 py-3 font-medium">已阅</th>
               <th class="px-4 py-3 font-medium text-right">{{ $t('common.action') }}</th>
             </tr>
           </thead>
@@ -429,6 +443,14 @@ function getChannelChartColor(channel) {
                 ]">
                   {{ calculateConversionRate(r.views, r.conversions) }}
                 </span>
+              </td>
+              <td class="px-4 py-3" @click.stop>
+                <ReaderAvatars
+                  log-type="share_log"
+                  :log-id="r.id"
+                  size="sm"
+                  @open-detail="handleReaderDetail"
+                />
               </td>
               <td class="px-4 py-3 text-right">
                 <button @click.stop="openDetail(r)" class="text-primary hover:text-primary-hover text-xs font-medium">
@@ -538,6 +560,42 @@ function getChannelChartColor(channel) {
             <button @click="closeDetail" class="px-4 py-2 bg-gray-100 text-text-primary rounded-lg text-sm font-medium hover:bg-gray-200">
               {{ $t('common.close') }}
             </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+  <!-- Readers Detail Modal (钉钉式已阅名单) -->
+    <Teleport to="body">
+      <div v-if="showReaderDetailModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" @click="showReaderDetailModal = false"></div>
+        <div class="relative w-full max-w-sm bg-white rounded-lg shadow-xl max-h-[70vh] overflow-hidden flex flex-col">
+          <div class="px-4 py-3 border-b flex items-center justify-between">
+            <h3 class="font-medium flex items-center gap-2">
+              <span class="material-symbols-outlined text-primary">visibility</span>
+              已阅人员 ({{ readerDetailList.length }})
+            </h3>
+            <button @click="showReaderDetailModal = false" class="text-text-secondary hover:text-text-primary">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          <div class="overflow-y-auto p-2 flex-1">
+            <div v-if="readerDetailList.length === 0" class="text-center text-text-secondary py-8 text-sm">
+              暂无已阅人员
+            </div>
+            <div
+              v-for="reader in readerDetailList"
+              :key="reader.user_id"
+              class="flex items-center gap-3 px-2 py-2 hover:bg-gray-50 rounded-lg"
+            >
+              <div class="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium overflow-hidden">
+                <img v-if="reader.avatar" :src="(reader.avatar.startsWith('http') ? reader.avatar : (api.defaults.baseURL || '') + reader.avatar)" :alt="reader.name" class="w-full h-full object-cover" />
+                <span v-else>{{ reader.name?.charAt(0) || '?' }}</span>
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium text-text-primary truncate">{{ reader.name }}</div>
+                <div class="text-xs text-text-tertiary">{{ formatReadTime(reader.read_at) }}</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

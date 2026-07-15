@@ -3,6 +3,7 @@ import { ref, onMounted, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUserStore } from '../../stores/user.js'
 import PageHeader from '../../components/PageHeader.vue'
+import ReaderAvatars from '../../components/ReaderAvatars.vue'
 import StatusTag from '../../components/StatusTag.vue'
 import Pagination from '../../components/Pagination.vue'
 import api from '../../services/api.js'
@@ -247,6 +248,18 @@ const statusConfig = computed(() => ({
   processing: { type: 'warning', label: t('logs.processingStatus') },
   resolved: { type: 'success', label: t('logs.resolvedStatus') }
 }))
+
+// 钉钉式已阅：弹窗显示完整名单
+const showReaderDetailModal = ref(false)
+const readerDetailList = ref([])
+function handleReaderDetail({ readers }) {
+  readerDetailList.value = readers || []
+  showReaderDetailModal.value = true
+}
+function formatReadTime(t) {
+  if (!t) return ''
+  return new Date(t).toLocaleString('zh-CN')
+}
 </script>
 
 <template>
@@ -315,15 +328,16 @@ const statusConfig = computed(() => ({
               <th class="px-4 py-3 font-medium">{{ $t('logs.submitterCol') }}</th>
               <th class="px-4 py-3 font-medium text-center">{{ $t('logs.statusCol') }}</th>
               <th class="px-4 py-3 font-medium">{{ $t('logs.assigneeCol') }}</th>
+              <th class="px-4 py-3 font-medium">已阅</th>
               <th class="px-4 py-3 font-medium text-right">{{ $t('logs.actionCol') }}</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
             <tr v-if="loading">
-              <td colspan="7" class="px-4 py-8 text-center text-text-secondary text-sm">{{ $t('common.loading') }}</td>
+              <td colspan="8" class="px-4 py-8 text-center text-text-secondary text-sm">{{ $t('common.loading') }}</td>
             </tr>
             <tr v-else-if="records.length === 0">
-              <td colspan="7" class="px-4 py-8 text-center text-text-secondary text-sm">{{ $t('logs.noFeedbackRecords') }}</td>
+              <td colspan="8" class="px-4 py-8 text-center text-text-secondary text-sm">{{ $t('logs.noFeedbackRecords') }}</td>
             </tr>
             <tr v-for="r in records" :key="r.id" class="hover:bg-gray-50 transition-colors cursor-pointer" @click="openDetail(r)">
               <td class="px-4 py-3 text-xs text-text-secondary whitespace-nowrap">{{ formatTime(r.created_at) }}</td>
@@ -350,6 +364,14 @@ const statusConfig = computed(() => ({
                 />
               </td>
               <td class="px-4 py-3 text-text-secondary text-sm">{{ r.assigned_to_name || $t('logs.notAssigned') }}</td>
+              <td class="px-4 py-3" @click.stop>
+                <ReaderAvatars
+                  log-type="feedback"
+                  :log-id="r.id"
+                  size="sm"
+                  @open-detail="handleReaderDetail"
+                />
+              </td>
               <td class="px-4 py-3 text-right">
                 <button @click.stop="openDetail(r)" class="text-primary hover:text-primary-hover text-xs font-medium">{{ $t('logs.viewBtn') }}</button>
               </td>

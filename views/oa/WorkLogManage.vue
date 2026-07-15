@@ -34,10 +34,17 @@
           </span>
         </div>
         <div class="text-sm text-gray-500 line-clamp-2 mb-2">{{ getLogSummary(log) }}</div>
-        <div class="flex items-center justify-between text-xs text-gray-400">
+        <div class="flex items-center justify-between text-xs text-gray-400 mb-2">
           <span>{{ formatDate(log.date) || log.created_at?.slice(0, 16) }}</span>
           <span v-if="log.template_name" class="bg-blue-50 text-blue-600 px-2 py-0.5 rounded">{{ log.template_name }}</span>
         </div>
+        <!-- 已阅头像（钉钉式） -->
+        <ReaderAvatars
+          log-type="work_log"
+          :log-id="log.id"
+          size="sm"
+          @open-detail="handleReaderDetail"
+        />
       </div>
 
       <!-- 加载更多 -->
@@ -228,6 +235,28 @@
         </div>
       </div>
     </div>
+  <!-- 已阅名单弹窗 -->
+    <div v-if="showReadersModal" class="fixed inset-0 bg-black/50 z-[70] flex items-end sm:items-center justify-center" @click.self="showReadersModal = false">
+      <div class="bg-white rounded-t-2xl sm:rounded-xl w-full sm:max-w-md max-h-[70vh] overflow-y-auto">
+        <div class="sticky top-0 bg-white border-b px-4 py-3 flex justify-between items-center z-10">
+          <h3 class="font-bold text-sm">已阅名单（{{ readersList.length }} 人）</h3>
+          <button type="button" @click="showReadersModal = false" class="text-gray-400">✕</button>
+        </div>
+        <div class="p-4 space-y-2">
+          <div v-if="readersList.length === 0" class="text-center py-8 text-gray-400 text-sm">暂无已阅</div>
+          <div v-for="r in readersList" :key="r.user_id" class="flex items-center gap-3 py-2 border-b border-gray-50">
+            <div :class="['w-9 h-9 rounded-full flex items-center justify-center text-white font-medium overflow-hidden', avatarColor(r.user_id)]">
+              <img v-if="r.avatar" :src="avatarUrl(r.avatar)" class="w-full h-full object-cover" />
+              <span v-else>{{ (r.name || '?').charAt(0) }}</span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm text-gray-800">{{ r.name }}</div>
+              <div class="text-xs text-gray-400">{{ new Date(r.read_at).toLocaleString('zh-CN') }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -236,6 +265,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUserStore } from '../../stores/user'
 import api from '../../services/api'
+import ReaderAvatars from '../../components/ReaderAvatars.vue'
+import axios from 'axios'
 
 const { t, locale } = useI18n()
 const userStore = useUserStore()
@@ -266,6 +297,31 @@ const formContent = ref({})
 const showParticipantModal = ref(false)
 const availableUsers = ref([])
 const tempParticipants = ref([])
+
+// ─── 已阅名单 ───
+const showReadersModal = ref(false)
+const readersList = ref([])
+
+function handleReaderDetail({ readers }) {
+  readersList.value = readers || []
+  showReadersModal.value = true
+}
+
+function avatarUrl(avatar) {
+  if (!avatar) return ''
+  if (avatar.startsWith('http') || avatar.startsWith('//')) return avatar
+  const base = axios.defaults.baseURL || ''
+  return base + avatar
+}
+
+function avatarColor(userId) {
+  const colors = [
+    'bg-pink-500', 'bg-purple-500', 'bg-indigo-500', 'bg-blue-500',
+    'bg-cyan-500', 'bg-teal-500', 'bg-green-500', 'bg-yellow-500',
+    'bg-orange-500', 'bg-red-500',
+  ]
+  return colors[Math.abs(userId || 0) % colors.length]
+}
 
 // ─── 当前模板字段 ───
 const currentFields = computed(() => {

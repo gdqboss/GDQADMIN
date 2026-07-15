@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useUserStore } from '../../stores/user.js'
 import PageHeader from '../../components/PageHeader.vue'
 import Pagination from '../../components/Pagination.vue'
+import ReaderAvatars from '../../components/ReaderAvatars.vue'
 import api from '../../services/api.js'
 import { ROLES } from '../../constants/roles.js'
 
@@ -83,6 +84,28 @@ function canEditDelete(logId) {
   const log = logs.value.find(l => l.id === logId)
   return isAdmin.value || (log && log.user_id === userStore.userInfo?.id)
 }
+
+// 标题：{userName}的{logType} — 例：江清波的工作日志
+const logTypeLabelMap = { work: '工作日志', visit: '拜访日志', share: '分享日志', feedback: '投诉建议' }
+const headerTitle = computed(() => {
+  if (activeTab.value === 'templates') return t('logs.logTemplates')
+  const logType = logTypeLabelMap[currentLogType.value] || t('logs.workLogType')
+  // "我的" tab 用当前用户姓名；"收到的/全部" tab 用第一条 log 的 user_name（列表为空时退回类型名）
+  if (activeTab.value === 'my') {
+    const name = userStore.userInfo?.name || ''
+    return name ? `${name}的${logType}` : logType
+  }
+  if (activeTab.value === 'received' || activeTab.value === 'all') {
+    const firstName = logs.value?.[0]?.user_name || logs.value?.[0]?.name
+    return firstName ? `${firstName}的${logType}` : logType
+  }
+  return logType
+})
+
+const headerSubtitle = computed(() => {
+  if (activeTab.value === 'templates') return t('logs.manageTemplates')
+  return t('logs.logsAndFeedback')
+})
 
 // Template Edit
 const showTemplateDialog = ref(false)
@@ -687,13 +710,27 @@ async function initDefaultTemplates() {
     console.error('Init default templates failed:', e)
   }
 }
+
+// 钉钉式已阅：弹窗显示完整名单
+const showReaderDetailModal = ref(false)
+const readerDetailList = ref([])
+const readerDetailLogType = ref('')
+function handleReaderDetail({ logType, logId, readers }) {
+  readerDetailLogType.value = logType
+  readerDetailList.value = readers || []
+  showReaderDetailModal.value = true
+}
+function formatReadTime(t) {
+  if (!t) return ''
+  return new Date(t).toLocaleString('zh-CN')
+}
 </script>
 
 <template>
   <div>
     <PageHeader
-      :title="activeTab === 'templates' ? $t('logs.logTemplates') : $t('logs.workLogType')"
-      :subtitle="activeTab === 'templates' ? $t('logs.manageTemplates') : $t('logs.logsAndFeedback')"
+      :title="headerTitle"
+      :subtitle="headerSubtitle"
     />
 
     <!-- Tab Buttons -->
@@ -859,6 +896,15 @@ async function initDefaultTemplates() {
               <span class="material-symbols-outlined text-base">chat_bubble_outline</span>
               <span>{{ getLogInteraction(log.id).comments.length }}</span>
             </button>
+            <!-- Reader avatars (钉钉式已阅) -->
+            <div class="ml-auto">
+              <ReaderAvatars
+                log-type="work_log"
+                :log-id="log.id"
+                size="sm"
+                @open-detail="handleReaderDetail"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -1128,6 +1174,40 @@ async function initDefaultTemplates() {
           >
             {{ $t('common.close') }}
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Readers Detail Modal (钉钉式已阅名单) -->
+    <div v-if="showReaderDetailModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" @click.self="showReaderDetailModal = false">
+      <div class="bg-white rounded-xl max-w-sm w-full max-h-[70vh] overflow-hidden flex flex-col">
+        <div class="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
+          <h3 class="font-medium flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary">visibility</span>
+            已阅人员 ({{ readerDetailList.length }})
+          </h3>
+          <button @click="showReaderDetailModal = false" class="text-gray-400 hover:text-gray-600">
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>
+        <div class="overflow-y-auto p-2 flex-1">
+          <div v-if="readerDetailList.length === 0" class="text-center text-gray-400 py-8 text-sm">
+            暂无已阅人员
+          </div>
+          <div
+            v-for="reader in readerDetailList"
+            :key="reader.user_id"
+            class="flex items-center gap-3 px-2 py-2 hover:bg-gray-50 rounded-lg"
+          >
+            <div class="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-medium overflow-hidden">
+              <img v-if="reader.avatar" :src="(reader.avatar.startsWith('http') ? reader.avatar : (api.defaults.baseURL || '') + reader.avatar)" :alt="reader.name" class="w-full h-full object-cover" />
+              <span v-else>{{ reader.name?.charAt(0) || '?' }}</span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-text-primary truncate">{{ reader.name }}</div>
+              <div class="text-xs text-text-tertiary">{{ formatReadTime(reader.read_at) }}</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
