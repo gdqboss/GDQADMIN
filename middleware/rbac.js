@@ -80,6 +80,9 @@ const PERMISSIONS = {
   AI_UPLOAD: 'ai:upload',
   // 首页工作台
   DASHBOARD_VIEW: 'dashboard:view',
+  DASHBOARD_STATS: 'dashboard:stats',
+  DASHBOARD_SCAN: 'dashboard:scan',
+  DASHBOARD_WAREHOUSE_SUMMARY: 'dashboard:warehouse_summary',
 
   // 用户管理
   USERS_READ: 'user:read',

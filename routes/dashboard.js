@@ -1,10 +1,12 @@
 import { Router } from 'express'
 import { pool } from '../db/connection.js'
 import cache from '../utils/cache.js'
+import { requirePermission } from '../middleware/rbac.js'
+import { PERMISSIONS } from '../middleware/rbac.js'
 
 const router = Router()
 
-router.get('/stats', async (req, res, next) => {
+router.get('/stats', requirePermission(PERMISSIONS.DASHBOARD_STATS), async (req, res, next) => {
   // 尝试从缓存获取
   const cacheKey = 'dashboard:stats'
   const cached = await cache.get(cacheKey)

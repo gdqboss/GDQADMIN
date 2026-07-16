@@ -475,7 +475,10 @@ router.get('/', async (req, res, next) => {
       ...log,
       content: safeParse(log.content),
       recipients: safeParse(log.recipients),
-      attachments: safeParse(log.attachments)
+      attachments: safeParse(log.attachments),
+      // 兜底：JOIN 不到时用 user_id 当显示名（修 2026-07-16 "看不出谁写的"）
+      creator_name: log.creator_name || `用户#${log.user_id}`,
+      creator_department: log.creator_department || ''
     }));
 
     res.json({
