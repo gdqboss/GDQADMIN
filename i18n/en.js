@@ -413,6 +413,7 @@ export default {
     endDateLabel: 'End Date',
     noLogs: 'No logs',
     logPrefix: 'Log #',
+    unknownAuthor: 'Unknown author',
     logDetail: 'Log Detail',
     typeLabel: 'Type',
     titleLabel: 'Title',

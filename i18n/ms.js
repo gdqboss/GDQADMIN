@@ -400,6 +400,7 @@ export default {
         endDateLabel: 'Tarikh Tamat',
         noLogs: 'No logs',
         logPrefix: 'Log #',
+        unknownAuthor: 'Penulis tidak diketahui',
         logDetail: 'Butiran Log',
         typeLabel: 'Jenis',
         titleLabel: 'Tajuk',

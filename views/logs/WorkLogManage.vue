@@ -96,7 +96,7 @@ const headerTitle = computed(() => {
     return name ? `${name}的${logType}` : logType
   }
   if (activeTab.value === 'received' || activeTab.value === 'all') {
-    const firstName = logs.value?.[0]?.user_name || logs.value?.[0]?.name
+    const firstName = logs.value?.[0]?.creator_name || logs.value?.[0]?.user_name || logs.value?.[0]?.name
     return firstName ? `${firstName}的${logType}` : logType
   }
   return logType
@@ -167,10 +167,12 @@ function getAvatarInitial(name) {
 async function fetchLogs() {
   loading.value = true
   try {
-    const params = { 
-      page: currentPage.value, 
+    // activeTab 用 'my' / 'received' / 'all' / 'templates'，后端期望 'mine' / 'received' / 'all'
+    const tabToBackend = { my: 'mine', received: 'received', all: 'all' }
+    const params = {
+      page: currentPage.value,
       size: pageSize,
-      type: activeTab.value,
+      type: tabToBackend[activeTab.value] || activeTab.value,
       log_type: currentLogType.value
     }
     // "all" tab shows all logs regardless of date filter
@@ -834,7 +836,17 @@ function formatReadTime(t) {
           class="bg-white rounded-lg border border-gray-100 shadow-card p-4 cursor-pointer hover:shadow-md transition-shadow"
         >
           <div class="flex justify-between items-start mb-2">
-            <div class="flex-1">
+            <div class="flex-1 min-w-0">
+              <!-- 作者行：头像 + 姓名 + 部门（修 2026-07-16 之前看不出是谁写的） -->
+              <div class="flex items-center gap-2 mb-1.5">
+                <div :class="[getAvatarColor(log.creator_name || $t('logs.logPrefix') + log.id), 'w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-medium shrink-0']">
+                  {{ getAvatarInitial(log.creator_name || '?') }}
+                </div>
+                <div class="min-w-0">
+                  <span class="text-sm font-medium text-gray-800 truncate">{{ log.creator_name || log.user_name || t('logs.unknownAuthor') }}</span>
+                  <span v-if="log.creator_department" class="text-xs text-text-secondary ml-1.5">· {{ log.creator_department }}</span>
+                </div>
+              </div>
               <h3 class="font-medium text-text-primary">{{ log.content?.title || log.title || $t('logs.logPrefix') + log.id }}</h3>
               <p class="text-xs text-text-secondary mt-1">{{ formatDate(log.submit_date || log.date) }}</p>
             </div>

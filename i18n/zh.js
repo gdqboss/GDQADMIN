@@ -478,6 +478,7 @@ export default {
     endDateLabel: '结束日期',
     noLogs: '暂无日志',
     logPrefix: '日志 #',
+    unknownAuthor: '未知作者',
     logDetail: '日志详情',
     typeLabel: '类型',
     titleLabel: '标题',
