@@ -109,56 +109,111 @@ router.get('/', async (req, res, next) => {
 })
 
 // POST /api/users
+//
+// Bug 修复记录（2026-07-17）：PUT 改成白名单之后，POST 必须同步对齐
+// 否则新建员工的 25+ 字段又会被静默丢弃（同样的 bug，这次反向）
 router.post('/', async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
     await conn.beginTransaction()
 
-    const { name, email, password, role, department, permissions, phone, supplier_id, supplier_ids, dealer_ids, store_ids, supervisor_id } = req.body
+    const {
+      name, email, password, role, department, department_id, permissions, phone,
+      employee_code, job_level_id, is_internal, hire_date, id_card,
+      can_oa_checkin, avatar, life_photos,
+      customer_store_id, customer_type, customer_parent_id,
+      member_level, member_label, points,
+      auth_type, supplier_id, supplier_ids, dealer_ids, store_ids,
+      supervisor_id, responsibility_id,
+      require_attendance, require_worklog
+    } = req.body || {}
+
     if (!name || !phone || !password) {
       return res.status(400).json({ code: 400, message: '姓名、手机号、密码必填' })
     }
-    if (!/^1[3-9]\d{9}$/.test(phone)) {
+    if (!/^1[3-9]\d{9}$/.test(String(phone))) {
       return res.status(400).json({ code: 400, message: '手机号格式不正确' })
     }
+    if (String(password).length < 6) {
+      return res.status(400).json({ code: 400, message: '密码至少 6 位' })
+    }
+    if (email !== undefined && email !== null && email !== '' &&
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
+      return res.status(400).json({ code: 400, message: '邮箱格式不正确' })
+    }
+    if (id_card !== undefined && id_card !== null && id_card !== '' &&
+        !/^\d{17}[\dXx]$/.test(String(id_card))) {
+      return res.status(400).json({ code: 400, message: '身份证号格式不正确' })
+    }
+    if (hire_date !== undefined && hire_date !== null && hire_date !== '') {
+      const d = new Date(hire_date)
+      if (isNaN(d.getTime()) || d.getTime() > Date.now()) {
+        return res.status(400).json({ code: 400, message: '入职日期格式不正确或晚于今天' })
+      }
+    }
+
     const [existing] = await conn.query('SELECT id FROM users WHERE phone = ?', [phone])
     if (existing.length) {
       return res.status(400).json({ code: 400, message: '该手机号已被注册' })
     }
+
     const hash = await bcrypt.hash(password, 10)
     const perms = role === 'custom' && Array.isArray(permissions) ? JSON.stringify(permissions) : null
     const autoEmail = email || `${phone}@gdqshop.cn`
+
     const [result] = await conn.query(
-      'INSERT INTO users (name, email, password, role, department, permissions, phone, supplier_id, supervisor_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, autoEmail, hash, role || ROLES.OPERATOR, department || '', perms, phone, supplier_id || null, supervisor_id || null]
+      `INSERT INTO users
+       (name, email, password, role, phone,
+        employee_code, job_level_id, is_internal, hire_date, id_card,
+        can_oa_checkin, avatar, life_photos,
+        customer_store_id, customer_type, customer_parent_id,
+        member_level, member_label, points,
+        auth_type, supplier_id, supervisor_id, responsibility_id,
+        require_attendance, require_worklog,
+        permissions)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        name, autoEmail, hash, role || ROLES.OPERATOR, phone,
+        employee_code || null, job_level_id || null, is_internal ? 1 : 0,
+        hire_date || null, id_card || null,
+        can_oa_checkin ? 1 : 0, avatar || null, life_photos ? JSON.stringify(life_photos) : null,
+        customer_store_id || null, customer_type || null, customer_parent_id || null,
+        member_level || 1, member_label || null, points || 0,
+        auth_type || 'phone', supplier_id || null, supervisor_id || null, responsibility_id || null,
+        require_attendance ? 1 : 0, require_worklog ? 1 : 0,
+        perms
+      ]
     )
 
     const userId = result.insertId
 
-    // Handle multi-supplier associations
+    // 处理 department：department_id 优先（写部门外键），否则用 department 字符串（兼容老数据）
+    if (department_id !== undefined) {
+      await conn.query('UPDATE users SET department_id = ? WHERE id = ?', [department_id || null, userId])
+    } else if (department !== undefined && department !== null && department !== '') {
+      await conn.query('UPDATE users SET department = ? WHERE id = ?', [department, userId])
+    }
+
+    // 多对多关联
     if (Array.isArray(supplier_ids) && supplier_ids.length > 0) {
-      const values = supplier_ids.map(sid => [userId, sid])
+      const insValues = supplier_ids.map(sid => [userId, sid])
       await conn.query(
         'INSERT INTO user_suppliers (user_id, supplier_id) VALUES ? ON DUPLICATE KEY UPDATE user_id = user_id',
-        [values]
+        [insValues]
       )
     }
-
-    // Handle multi-dealer associations
     if (Array.isArray(dealer_ids) && dealer_ids.length > 0) {
-      const values = dealer_ids.map(did => [userId, did])
+      const insValues = dealer_ids.map(did => [userId, did])
       await conn.query(
         'INSERT INTO user_dealers (user_id, dealer_id) VALUES ? ON DUPLICATE KEY UPDATE user_id = user_id',
-        [values]
+        [insValues]
       )
     }
-
-    // Handle multi-store associations
     if (Array.isArray(store_ids) && store_ids.length > 0) {
-      const values = store_ids.map(sid => [userId, sid])
+      const insValues = store_ids.map(sid => [userId, sid])
       await conn.query(
         'INSERT INTO user_stores (user_id, store_id) VALUES ? ON DUPLICATE KEY UPDATE user_id = user_id',
-        [values]
+        [insValues]
       )
     }
 
@@ -220,40 +275,143 @@ router.get('/subordinates', async (req, res, next) => {
 })
 
 // PUT /api/users/:id
+//
+// Bug 修复记录（2026-07-17）：
+// 1. department_id 被错写到 department 列（导致 UPDATE 含两个 `department = ?`，缺一）
+// 2. email / job_level_id / employee_code / is_internal / hire_date / id_card /
+//    can_oa_checkin / avatar / customer_store_id / customer_type / member_level /
+//    member_label / points / life_photos 等字段被静默丢弃 → 200 假成功
+// 3. permissions 在 role 切到非 custom 时被强制 NULL，会清空之前 custom 配置
+// 4. 无字段格式校验（phone / email / id_card / hire_date 都能传垃圾）
+//
+// 字段白名单（与 GET /api/users 返回对齐 + 预留高频扩展字段）；
+// 不在白名单的字段直接忽略，避免静默成功。
 router.put('/:id', async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
     await conn.beginTransaction()
 
     const id = parseInt(req.params.id)
-    const { name, role, department, department_id, status, permissions, password, phone, supplier_id, supplier_ids, dealer_ids, store_ids, supervisor_id, responsibility_id, require_attendance, require_worklog } = req.body
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({ code: 400, message: '无效的用户 ID' })
+    }
+
+    // ── 1. 字段白名单解构（只接受这 30+ 个字段，其他直接忽略，杜绝静默成功） ──
+    const {
+      name, role, department, department_id, status, permissions, password, phone,
+      email, employee_code, job_level_id, is_internal, hire_date, id_card,
+      can_oa_checkin, avatar, life_photos,
+      customer_store_id, customer_type, customer_parent_id,
+      member_level, member_label, points,
+      auth_type, supplier_id, supplier_ids, dealer_ids, store_ids,
+      supervisor_id, responsibility_id,
+      require_attendance, require_worklog
+    } = req.body || {}
 
     if (status === 'disabled' && id === req.user.id) {
       return res.status(400).json({ code: 400, message: '不能禁用自己的账号' })
     }
 
-    const updates = []
-    const values = []
-    if (name !== undefined)          { updates.push('name = ?');            values.push(name) }
-    if (role !== undefined)          { updates.push('role = ?');            values.push(role) }
-    if (department_id !== undefined) { updates.push('department = ?');       values.push(department_id) }
-    if (department !== undefined)    { updates.push('department = ?');       values.push(department) }
-    if (status !== undefined)        { updates.push('status = ?');          values.push(status) }
-    if (phone !== undefined)         { updates.push('phone = ?');           values.push(phone) }
-    if (supplier_id !== undefined)  { updates.push('supplier_id = ?');      values.push(supplier_id || null) }
-    if (supervisor_id !== undefined){ updates.push('supervisor_id = ?');   values.push(supervisor_id || null) }
-    if (responsibility_id !== undefined) { updates.push('responsibility_id = ?'); values.push(responsibility_id || null) }
-    if (require_attendance !== undefined) { updates.push('require_attendance = ?'); values.push(require_attendance ? 1 : 0) }
-    if (require_worklog !== undefined)    { updates.push('require_worklog = ?');    values.push(require_worklog ? 1 : 0) }
-
-    if (role === 'custom' && Array.isArray(permissions)) {
-      updates.push('permissions = ?')
-      values.push(JSON.stringify(permissions))
-    } else if (role !== undefined && role !== 'custom') {
-      updates.push('permissions = NULL')
+    // ── 2. 输入校验（防垃圾数据进库） ──
+    if (phone !== undefined) {
+      if (!/^1[3-9]\d{9}$/.test(String(phone))) {
+        return res.status(400).json({ code: 400, message: '手机号格式不正确（11位，1[3-9]开头）' })
+      }
+      const [dup] = await conn.query('SELECT id FROM users WHERE phone = ? AND id <> ?', [phone, id])
+      if (dup.length) {
+        return res.status(400).json({ code: 400, message: '该手机号已被其他用户使用' })
+      }
+    }
+    if (email !== undefined && email !== null && email !== '') {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
+        return res.status(400).json({ code: 400, message: '邮箱格式不正确' })
+      }
+      const [dup] = await conn.query('SELECT id FROM users WHERE email = ? AND id <> ?', [email, id])
+      if (dup.length) {
+        return res.status(400).json({ code: 400, message: '该邮箱已被其他用户使用' })
+      }
+    }
+    if (id_card !== undefined && id_card !== null && id_card !== '') {
+      if (!/^\d{17}[\dXx]$/.test(String(id_card))) {
+        return res.status(400).json({ code: 400, message: '身份证号格式不正确（18位，最后一位可为 X/x）' })
+      }
+    }
+    if (hire_date !== undefined && hire_date !== null && hire_date !== '') {
+      const d = new Date(hire_date)
+      if (isNaN(d.getTime())) return res.status(400).json({ code: 400, message: '入职日期格式不正确' })
+      if (d.getTime() > Date.now()) return res.status(400).json({ code: 400, message: '入职日期不能晚于今天' })
+    }
+    if (status !== undefined && !['pending', 'active', 'rejected', 'disabled'].includes(status)) {
+      return res.status(400).json({ code: 400, message: '用户状态值不合法' })
+    }
+    if (customer_type !== undefined && customer_type !== null && !['gov', 'biz', 'peer', 'normal'].includes(customer_type)) {
+      return res.status(400).json({ code: 400, message: '顾客类型不合法' })
+    }
+    if (member_level !== undefined && member_level !== null && (!Number.isInteger(Number(member_level)) || Number(member_level) < 1 || Number(member_level) > 99)) {
+      return res.status(400).json({ code: 400, message: '会员等级必须在 1-99 之间' })
     }
 
+    // ── 3. 字段映射 → 白名单 UPDATE ──
+    //
+    // 关键修复：department_id 写到 department_id 列（不再错写到 department）
+    //           department（名字/字符串）仅用于向前兼容老数据，不与 id 共存
+    const updates = []
+    const values = []
+
+    // 标量字段
+    const scalarMap = {
+      name, role, status, phone, email,
+      employee_code, hire_date, id_card, avatar, life_photos,
+      customer_type, customer_parent_id, member_label,
+      auth_type,
+    }
+    for (const [col, val] of Object.entries(scalarMap)) {
+      if (val !== undefined) {
+        updates.push(`${col} = ?`)
+        values.push(val === '' ? null : val)
+      }
+    }
+
+    // ── department 处理：department_id 优先，写到 department_id 列；department 字符串（兼容）写到 department 列 ──
+    if (department_id !== undefined) {
+      const v = department_id === '' ? null : department_id
+      updates.push('department_id = ?')
+      values.push(v)
+    }
+    if (department !== undefined && department_id === undefined) {
+      // 仅在没传 department_id 时才写 department 字符串列（兼容老调用）
+      updates.push('department = ?')
+      values.push(department === '' ? null : department)
+    }
+
+    // 整数 / 布尔 字段（明确 1/0，禁止 null）
+    if (job_level_id !== undefined)        { updates.push('job_level_id = ?');        values.push(job_level_id === '' || job_level_id === null ? null : Number(job_level_id)) }
+    if (is_internal !== undefined)         { updates.push('is_internal = ?');         values.push(is_internal ? 1 : 0) }
+    if (can_oa_checkin !== undefined)      { updates.push('can_oa_checkin = ?');      values.push(can_oa_checkin ? 1 : 0) }
+    if (require_attendance !== undefined)  { updates.push('require_attendance = ?');  values.push(require_attendance ? 1 : 0) }
+    if (require_worklog !== undefined)     { updates.push('require_worklog = ?');     values.push(require_worklog ? 1 : 0) }
+
+    // NULLable 外键
+    if (supplier_id !== undefined)         { updates.push('supplier_id = ?');         values.push(supplier_id || null) }
+    if (supervisor_id !== undefined)       { updates.push('supervisor_id = ?');       values.push(supervisor_id || null) }
+    if (responsibility_id !== undefined)   { updates.push('responsibility_id = ?');   values.push(responsibility_id || null) }
+    if (customer_store_id !== undefined)   { updates.push('customer_store_id = ?');   values.push(customer_store_id || null) }
+
+    // 数值字段
+    if (member_level !== undefined)        { updates.push('member_level = ?');        values.push(member_level === '' || member_level === null ? null : Number(member_level)) }
+    if (points !== undefined)              { updates.push('points = ?');              values.push(points === '' || points === null ? null : Number(points)) }
+
+    // ── permissions：只明确传了才改；其它情况不动（不强制 NULL） ──
+    if (Array.isArray(permissions)) {
+      updates.push('permissions = ?')
+      values.push(JSON.stringify(permissions))
+    }
+
+    // 密码（独立 hash 路径）
     if (password) {
+      if (String(password).length < 6) {
+        return res.status(400).json({ code: 400, message: '密码至少 6 位' })
+      }
       const hash = await bcrypt.hash(password, 10)
       updates.push('password = ?')
       values.push(hash)
@@ -264,41 +422,34 @@ router.put('/:id', async (req, res, next) => {
       await conn.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, values)
     }
 
-    // Handle multi-supplier associations
+    // ── 4. 多对多关联表（与原行为一致） ──
     if (Array.isArray(supplier_ids)) {
-      // Delete existing associations
       await conn.query('DELETE FROM user_suppliers WHERE user_id = ?', [id])
-
-      // Insert new associations
       if (supplier_ids.length > 0) {
-        const values = supplier_ids.map(sid => [id, sid])
+        const insValues = supplier_ids.map(sid => [id, sid])
         await conn.query(
           'INSERT INTO user_suppliers (user_id, supplier_id) VALUES ? ON DUPLICATE KEY UPDATE user_id = user_id',
-          [values]
+          [insValues]
         )
       }
     }
-
-    // Handle multi-dealer associations
     if (Array.isArray(dealer_ids)) {
       await conn.query('DELETE FROM user_dealers WHERE user_id = ?', [id])
       if (dealer_ids.length > 0) {
-        const values = dealer_ids.map(did => [id, did])
+        const insValues = dealer_ids.map(did => [id, did])
         await conn.query(
           'INSERT INTO user_dealers (user_id, dealer_id) VALUES ? ON DUPLICATE KEY UPDATE user_id = user_id',
-          [values]
+          [insValues]
         )
       }
     }
-
-    // Handle multi-store associations
     if (Array.isArray(store_ids)) {
       await conn.query('DELETE FROM user_stores WHERE user_id = ?', [id])
       if (store_ids.length > 0) {
-        const values = store_ids.map(sid => [id, sid])
+        const insValues = store_ids.map(sid => [id, sid])
         await conn.query(
           'INSERT INTO user_stores (user_id, store_id) VALUES ? ON DUPLICATE KEY UPDATE user_id = user_id',
-          [values]
+          [insValues]
         )
       }
     }
