@@ -145,8 +145,12 @@ const routes = [].concat(hqh5Routes, adorderRoutes, minipRoutes, [
     path: '/',
     component: MainLayout,
     children: [
-      // ── 核心模块 ────────────────────────────────────────────
-      { path: '', name: 'Dashboard', component: lazyLoad(() => import('../views/Dashboard.vue')), meta: { title: '工作台', icon: 'dashboard', permission: 'dashboard:view' } },
+          // ── 核心模块 ───────────────────────────────────────────
+      // 修 2026-07-17 "member 用户进不去工作台/快捷操作不显示" — Dashboard 是容器页,
+      // 内部 quickActions 已经按 permission 过滤("无权限不显示"),
+      // 不要在路由层再拦一道,否则 member/shopkeeper 等角色会被踢到别的页,
+      // 即使他们勾了 quick-action-* 也看不到任何按钮(违反"有显示即可操作"原则)
+      { path: '', name: 'Dashboard', component: lazyLoad(() => import('../views/Dashboard.vue')), meta: { title: '工作台', icon: 'dashboard' } },
 
       // 商品
       { path: 'products', name: 'Products', component: lazyLoad(() => import('../views/products/ProductList.vue')), meta: { title: '商品管理', parent: '库存管理', permission: 'product:write' } },

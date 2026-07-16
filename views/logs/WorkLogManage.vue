@@ -185,6 +185,9 @@ async function fetchLogs() {
     if (res.code === 0) {
       logs.value = res.data.logs || res.data.list || res.data || []
       total.value = res.data.total || logs.value.length
+      // 列表显示真实点赞数：批量拉每个 log 的 interactions
+      // (修 2026-07-16 BJ "点赞永远是 0" bug)
+      await Promise.all(logs.value.map(log => fetchInteractions(log.id)))
     }
   } finally {
     loading.value = false
@@ -217,7 +220,7 @@ watch([filterDateStart, filterDateEnd], () => {
 })
 watch(currentPage, fetchLogs)
 watch(activeTab, () => {
-  if (activeTab.value === 'my' || activeTab.value === 'received') {
+  if (activeTab.value === 'my' || activeTab.value === 'received' || activeTab.value === 'all') {
     fetchLogs()
   } else if (activeTab.value === 'templates') {
     fetchTemplates()
@@ -407,6 +410,25 @@ async function fetchInteractions(logId) {
 }
 
 function getLogInteraction(logId) {
+  // 优先读 SQL 已 JOIN 的字段（修 2026-07-16 BJ "点赞永远是 0" — 后端列表 SQL 加 4 个 subquery 一次查全）
+  const log = logs.value.find(l => l.id === logId) || {}
+  if (log.like_count !== undefined) {
+    // 修 2026-07-17 BJ "评论回复不见了" — SQL JOIN 路径不会带 comments 数组,
+    // 必须从 interactionsMap(列表 fetchInteractions 拉过的) 补回,否则弹窗永远空
+    const cached = interactionsMap.value[logId] || []
+    const cachedComments = cached.filter(i => i.type === 'comment')
+    return {
+      liked: !!log.liked_by_me,
+      disliked: !!log.disliked_by_me,
+      forwarded: false, // forward 不算"我是否转过",留详情查
+      comments: cachedComments,
+      likeCount: log.like_count || 0,
+      dislikeCount: log.dislike_count || 0,
+      forwardCount: log.forward_count || 0,
+      commentCount: log.comment_count || cachedComments.length || 0
+    }
+  }
+  // 兜底：详情弹窗打开后的实时数据
   const list = interactionsMap.value[logId] || []
   const uid = userStore.userInfo?.id
   return {
