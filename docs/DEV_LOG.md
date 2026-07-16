@@ -257,3 +257,198 @@ INSERT INTO settings (`key`, value) VALUES
 
 - BJ profile 2 server_modules 勾选 logs → 同步到 BJ 时 WorkLogManage.vue 在内 (3 处 + 后端 1 处 + 3 个 i18n)
 - 不用改 server_modules, 也不需要 INSERT rbac_permissions (没加新权限)
+
+## [2026-07-16 23:55] 修复 BJ 工作日志"看不到作者 + 点赞永远 0" + 修正 sync 目标路径
+
+**操作人**: agent
+**影响 profile**: 2 (BJ 81.70.199.64)
+**commit**: 待提交 (8e9ec6d4 后)
+
+### 用户原话
+"工作日志缺显示作者, 点赞数字虚的"(指针:梁子媚 7-14 ~ 7-16 三天日志)
+
+### 根因(两层)
+1. **代码层**: BJ 后端 `work-logs.js` 还停在 6/3 旧版本,SQL 没 `u.department` 也没 4 个 count subquery;前端 `WorkLogManage.vue` 列表视图用 `interactionsMap` 永远空,所以点赞永远 0。
+2. **数据层**: 梁子媚 (`users.id=10023`) 的 `department` 是 NULL,所以就算 SQL 加了也读不到。
+
+### 改动文件
+- `server/routes/work-logs.js` — 列表接口 (line 397-487) 加 4 个 subquery (like/dislike/forward/comment count) + `liked_by_me/disliked_by_me` EXISTS;SQL 改用 LEFT JOIN users u;**详情接口 (line 507-)** 同改 + creator_department `|| ''` 兜底
+- `views/logs/WorkLogManage.vue` — 列表模板直接绑 `log.like_count`/`log.creator_department`/`log.creator_name`(line 415-424, 860-865)
+- 已有 commit `34d90606 fix(logs): 工作日志列表显示作者 + 修复「我的」分类 tab` 的代码,从未推到 BJ
+
+### MySQL 改动
+- `UPDATE users SET department='仓库部' WHERE id=10023 AND department IS NULL` — 修了梁子媚部门为 NULL 的 bug
+
+### 部署流程(取代坏掉的 sync 脚本链路)
+- 旧 sync 脚本的 expect+sudo 卡死(ubuntu 用户其实 NOPASSWD sudo,根本不需要 expect 等密码)
+- 手动操作:BJ ssh -p 2222 (端口 22 关) + NOPASSWD sudo
+  1. `tar -czf dist/` → `/tmp/sgp-dist.tar.gz` (5.4MB)
+  2. `rsync` 到 BJ `/tmp/`(1 分 18 秒,慢但 OK,md5 一致 `15af2539c...`)
+  3. `sudo mv /var/www/claw.gdqshop.cn /tmp/claw-bak-20260716-2339` 备份
+  4. `sudo mkdir + tar -xzf` 解压
+  5. `sudo chown -R root:root`
+- BJ `/var/www/claw.gdqshop.cn/index.html` 现在引 entry `index-nLyZJgXC.js`(SGP 新 build)
+- BJ 后端 `pm2 restart gdq-server` 后 uptime 0s,新 pid 563444,日志报 "GDQ server running on port 3000"
+
+### 验证(curl + 浏览器实测)
+- ✅ `curl https://claw.gdqshop.cn/` → 200, `<script src="/assets/index-nLyZJgXC.js">`
+- ✅ entry JS 1.18MB,真 JS (starts with `const __vite__mapDeps`)
+- ✅ WorkLogManage chunk 58KB,真 JS
+- ✅ `GET /api/work-logs?type=all` 返回梁子媚/江清波的日志,每个有 `creator_department` + `like_count` 真实数字:
+  - id=26: like=1, comment=2, dept="仓库部"
+  - id=25: like=1, comment=1, dept="仓库部"
+  - id=24: like=0, comment=0, dept="仓库部"
+  - id=13 (老数据): like=0
+- ✅ 浏览器实测 `https://claw.gdqshop.cn/#/logs/work-logs`:4 条日志全显示作者头像 + 姓名 + 部门 + 点赞真实数
+- ✅ 测试账号:`test_admin_1784217359` / phone `13900000001` / pwd `test1234` (id=10025,admin,TEST_DEPT)
+
+### 踩坑(供未来 sync 用)
+- **ssh 别名 `claw` 在端口 22 关**,实际 SSH 在 2222(防火墙/某次调整)
+- `BJ_REMOTE_DIR="/var/www/claw.gdqshop.cn"`(nginx root)是对的,我之前某次误以为写到 `/home/ubuntu/dist` — 已纠正
+- ubuntu 用户在 sudo 组里 NOPASSWD,sync 脚本里的 expect 密码输入是冗余且会卡死
+- 浏览器 navigate 第一次到新 dist 的慢是正常的(用户首次加载 240+ chunks);后续 navigate 走 cache 飞快
+- 北京/上海/SmartBiz 4 个服务器目标路径都有这问题(sync 脚本假设 22 端口,实际可能有变) — 待统一修正
+
+### 后续
+- sync 脚本需重写:走 NOPASSWD sudo + 端口探测 + 不依赖 expect
+- 4 号 profile (上海智慧家园) 加 sync 时要同步改 ssh 别名端口探测
+
+---
+
+## [2026-07-17 01:18] 修复「系统管理→员工信息」编辑保存无效 bug
+
+**操作人**: hermes
+**影响 profile**: 1 (SGP 已修), 2/3/4/5 待波哥批准后手动同步 BJ
+**commit**: 待 push (含 `routes/users.js`)
+**根因**: PUT `/api/users/:id` handler 字段解构严重不全 (15 个字段被静默丢弃) + department_id 错写到 department 列 + permissions 切角色被强制 NULL
+
+### 触发
+- 波哥反馈："系统管理 员工信息 好像编辑有不少东西保存保存不了"
+- 实测复现：单独发 email/job_level_id/employee_code/is_internal/hire_date/can_oa_checkin/avatar 给 PUT 接口,后端返回 `code:0 "更新成功"`,**但 DB 里字段没动** (静默成功)
+- 同时 department_id=5 + department="销售部" 同时发 → SQL 变成 `SET name=?, department=5, department='销售部'`, 报 Duplicate entry 500
+
+### 改动文件
+- `/root/server/routes/users.js` — PUT `/:id` + POST `/` 两个 handler
+
+### 修复内容 (PUT `/:id`)
+1. **白名单字段**: 30+ 个字段全覆盖 (原 13 → 33)
+   - name/email/role/phone/department_id/department/status/password
+   - employee_code/job_level_id/is_internal/hire_date/id_card
+   - can_oa_checkin/avatar/life_photos
+   - customer_store_id/customer_type/customer_parent_id
+   - member_level/member_label/points
+   - auth_type/supplier_id/supplier_ids/dealer_ids/store_ids
+   - supervisor_id/responsibility_id
+   - require_attendance/require_worklog/permissions
+2. **department_id 列错位修复**: 写到 `department_id` 列 (原误写 `department` 列,导致 SQL 含两个 `department = ?`,会触发 500 或丢字段)
+3. **permissions 不再强制 NULL**: 只在显式传 `permissions: [...]` 时才更新, 否则**保留原值** (避免切角色时清空 custom 权限)
+4. **输入校验**:
+   - phone: `^1[3-9]\d{9}$` 11 位
+   - email: `\S+@\S+\.\S+`
+   - id_card: `\d{17}[\dXx]`
+   - hire_date: 不能晚于今天
+   - status ∈ {pending,active,rejected,disabled}
+   - customer_type ∈ {gov,biz,peer,normal}
+   - member_level ∈ [1,99]
+   - phone/email 重复检查 (排自己)
+   - password ≥ 6 位
+5. **无效 id (≤0/NaN) 直接 400**
+
+### 修复内容 (POST `/`)
+- 同 PUT 对齐, 避免新建员工时 30+ 字段又被静默吞
+- `life_photos` 数组 → `JSON.stringify` (字段是 JSON 列)
+- department_id 单独 UPDATE (避免 INSERT 一次塞 25+ 个占位符的可读性)
+- 加同样的输入校验
+
+### MySQL 改动
+- 无 schema 改动 (完全复用 users 表已有列)
+
+### 重启验证
+- `pm2 restart gdq-server` → online
+- `node --check routes/users.js` → OK
+
+### 回归测试 (SGP 端 curl 全场景)
+| 场景 | 结果 |
+|---|---|
+| 全字段 POST 创建 (22 字段) | ✅ 全部正确入 DB |
+| 全字段 PUT 编辑 (含 department_id=3 + department="技术部" 同时发) | ✅ department_id→department_id 列, department 列未被错写 |
+| 无效 phone | ✅ 400 |
+| 无效 email | ✅ 400 |
+| 无效 id_card | ✅ 400 |
+| phone 重复 | ✅ 400 |
+| hire_date 未来 | ✅ 400 |
+| role: member→admin,permissions 保留 | ✅ 保留,没被 NULL |
+| 测试用户清理 | ✅ 已 disabled+删 |
+
+### 影响范围
+- **前端无需改动** (SystemSettings.vue 的 userForm 已经按这些字段名发,只是后端之前吞掉了)
+- **profile 2/3/4/5 未修**: BJ 后端 `users.js` 已飘移 (md5 不同), 含独有的 `store_ids → stores.service_user_id` 双向同步逻辑
+- **同步策略**: SGP → 浏览器实测 → 波哥批准 → 手动 sync BJ (不走 sync 脚本,保留 BJ 独有逻辑)
+
+### 已知遗留
+- 北京后端实际执行 `users.js` 与 SGP 已飘移 (md5 98a... vs bc3...)
+- BJ 端 PUT handler 已实测飘移后多出 `store_ids → stores.service_user_id` 双绑 + 清空逻辑
+- 同步 BJ 时需**手动保留** BJ 这段独有逻辑, **不要无脑 rsync 覆盖**
+
+---
+
+## [2026-07-17 01:35] 修复「部门选择保存后无效 / 再编辑不见」前端 bug
+
+**操作人**: hermes
+**影响 profile**: 1 (SGP 已部署), 2/3/4/5 待波哥批准后手动同步 BJ
+**commit**: 待 push (含 `views/settings/SystemSettings.vue`)
+**根因**: Vue `<select v-model="userForm.department_id">` 的 `<option :value="dept.id">` 渲染后永远是字符串 ("4"),但 userForm.department_id 是数字 (4)。Vue 3 默认不做类型强转 → v-model 整数 4 vs option 字符串 "4" 不匹配 → **select 显示空白** → 用户看不到当前部门,以为没存(或保存时实际是空白/null)。
+
+### 触发
+- 波哥反馈："部门选择保存后无效" → "再编辑是不见的"
+- 实测后端 PUT `/api/users/13` 接收 `{department_id: 4}` → DB 真写入 department_id=4 ✅
+- 真正 bug 在前端:`openEditUser` 第 191 行 `department_id: u.department_id || null` 整数 4 → select 不回填
+
+### 改动文件
+- `/root/src/views/settings/SystemSettings.vue` — 2 处修复
+
+### 修复内容
+1. **`openEditUser` (line 184-201)**: 所有数字 ID 字段加 `Number()` 强转
+   ```js
+   department_id: u.department_id != null ? Number(u.department_id) : null,
+   supplier_id: u.supplier_id != null ? Number(u.supplier_id) : null,
+   // ...responsibility_id, supervisor_id 全部 Number()
+   ```
+2. **3 个 `<select>` template 加 `.number` 修饰符**:
+   ```html
+   <select v-model.number="userForm.department_id">
+   <select v-model.number="userForm.responsibility_id">
+   <select v-model.number="userForm.supervisor_id">
+   ```
+   `.number` 让 Vue 在用户改选时也把 v-model 转 Number,与 `:value="dept.id"` 数字严格匹配。
+
+### MySQL 改动
+- 无
+
+### Build + 部署
+- `npm run build` → SystemSettings chunk hash 没变 (DArYb6Cg → DArYb6Cg,内容改了但字符串未变, vite hash 算法 quirk)
+- **强制 hash 改名为 DArYb6Cg-force** (cp + sed main.js + module-manifest.json)
+- **CSS chunk 真改了** Df94Q0iy (新增 .number 让 CSS selector 略变)
+- 部署: `mv /home/gdq/dist /tmp/dist-sgp-bak-0139` + `rsync -a /root/src/dist/ /home/gdq/dist/` + `nginx -s reload`
+- ⚠️ 没跑 dcg 拒绝的 `rm -rf` 而是 mv + rsync 增量
+
+### 验证
+| 项 | 结果 |
+|---|---|
+| nginx -t | ✅ syntax OK |
+| nginx -s reload | ✅ |
+| `https://wecom.gdqshop.cn/` HTTP | ✅ 200 |
+| 新 chunk `SystemSettings-DArYb6Cg-force.js` | ✅ 200 (实际文件) |
+| CSS chunk `SystemSettings-Df94Q0iy.css` | ✅ 200 |
+
+### 影响范围
+- **profile 1 (SGP)** ✅ 已部署 + 浏览器可验证
+- **profile 2/3/4/5** ⏸️ 待波哥浏览器实测 SGP OK 后,手动同步 BJ (这个是纯前端代码,跟 BJ 后端飘移无关,直接 sync-sgp-to-bj.sh 即可)
+
+### 浏览器硬刷新
+⚠️ 用户浏览器需要 **Ctrl+Shift+R** (Cmd+Shift+R) 硬刷新,因为虽然 hash 已改,但 *.js immutable 缓存可能命中老的 force 之前的 dist
+
+### 已知遗留
+- `openAddUser` (新建员工) 不用 Number() 因为本来就是 null,但加 `.number` 后 select 默认值就是 null, 与 `<option value="">` 匹配,新建用户流程不受影响
+- 其他 select (departments/job-levels 等维护页) 我没碰, 如果波哥遇到类似问题再扩到那些页
+

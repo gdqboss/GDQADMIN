@@ -188,14 +188,17 @@ function openEditUser(u) {
     phone: u.phone || '',
     password: '',
     role: u.role,
-    department_id: u.department_id || null,
+    // Bug 修复（2026-07-17）：<select v-model> 的 <option :value="dept.id"> 渲染后 value 是字符串，
+    // 但 u.department_id 是数字（MySQL INT）。直接赋值会导致 select 不回填（看到空白 = 以为没存）。
+    // 配套 template 用 v-model.number，初始化也转 Number，保证双向类型一致。
+    department_id: u.department_id != null ? Number(u.department_id) : null,
     permissions: Array.isArray(u.permissions) ? [...u.permissions] : [],
-    supplier_id: u.supplier_id || null,
-    supplier_ids: Array.isArray(u.suppliers) ? u.suppliers.map(s => s.id) : [],
-    dealer_ids: Array.isArray(u.dealers) ? u.dealers.map(d => d.id) : [],
-    store_ids: Array.isArray(u.stores) ? u.stores.map(s => s.id) : [],
-    supervisor_id: u.supervisor_id || null,
-    responsibility_id: u.responsibility_id || null, require_attendance: u.require_attendance === 1, require_worklog: u.require_worklog === 1
+    supplier_id: u.supplier_id != null ? Number(u.supplier_id) : null,
+    supplier_ids: Array.isArray(u.suppliers) ? u.suppliers.map(s => Number(s.id)) : [],
+    dealer_ids: Array.isArray(u.dealers) ? u.dealers.map(d => Number(d.id)) : [],
+    store_ids: Array.isArray(u.stores) ? u.stores.map(s => Number(s.id)) : [],
+    supervisor_id: u.supervisor_id != null ? Number(u.supervisor_id) : null,
+    responsibility_id: u.responsibility_id != null ? Number(u.responsibility_id) : null, require_attendance: u.require_attendance === 1, require_worklog: u.require_worklog === 1
   }
   userError.value = ''
   showUserModal.value = true
@@ -1966,7 +1969,7 @@ async function deleteUser(user) {
             </div>
             <div>
               <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('settings.department') }}</label>
-              <select v-model="userForm.department_id" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+              <select v-model.number="userForm.department_id" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
                 <option value="">{{ $t('settings.selectDept') }}</option>
                 <option v-for="dept in departments" :key="dept.id" :value="dept.id">{{ dept.name }}</option>
               </select>
@@ -1974,7 +1977,7 @@ async function deleteUser(user) {
           </div>
           <div>
             <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('settings.jobResponsibility') }}</label>
-            <select v-model="userForm.responsibility_id" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+            <select v-model.number="userForm.responsibility_id" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
               <option value="">{{ $t('settings.selectResponsibility') }}</option>
               <option v-for="resp in responsibilities" :key="resp.id" :value="resp.id">{{ resp.title }}</option>
             </select>
@@ -2037,7 +2040,7 @@ async function deleteUser(user) {
           </div>
           <div>
             <label class="block text-sm font-medium text-text-primary mb-1">{{ $t('settings.supervisor') }}</label>
-            <select v-model="userForm.supervisor_id" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+            <select v-model.number="userForm.supervisor_id" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
               <option :value="null">{{ $t('settings.noSupervisor') }}</option>
               <option v-for="u in users.filter(user => user.id !== editingUser?.id)" :key="u.id" :value="u.id">
                 {{ u.name }} ({{ u.phone }})
