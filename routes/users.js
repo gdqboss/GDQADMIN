@@ -359,9 +359,11 @@ router.put('/:id', async (req, res, next) => {
     const values = []
 
     // 标量字段
+    //
+    // 注意: life_photos 是 JSON 列, 数组需 JSON.stringify (单独处理, 不能进 scalarMap)
     const scalarMap = {
       name, role, status, phone, email,
-      employee_code, hire_date, id_card, avatar, life_photos,
+      employee_code, hire_date, id_card, avatar,
       customer_type, customer_parent_id, member_label,
       auth_type,
     }
@@ -370,6 +372,11 @@ router.put('/:id', async (req, res, next) => {
         updates.push(`${col} = ?`)
         values.push(val === '' ? null : val)
       }
+    }
+    // life_photos 数组特殊处理 (JSON 列) - 否则 SQL 语法错 (MySQL JSON 列不接受字符串化的数组)
+    if (life_photos !== undefined) {
+      updates.push('life_photos = ?')
+      values.push(life_photos ? JSON.stringify(life_photos) : null)
     }
 
     // ── department 处理：department_id 优先，写到 department_id 列；department 字符串（兼容）写到 department 列 ──
