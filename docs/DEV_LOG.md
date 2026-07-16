@@ -1,3 +1,115 @@
+## [2026-07-16 22:30] 操作日志铁律 v1 — 解决"日志不知道是谁写的"
+
+**操作人**: 波哥/hermes
+**影响 profile**: 全部 (1/2/3/4/5)
+**commit**: 见末尾待 push
+**需求**: 波哥原话 "我今天要求了很久的一个问题，你没给我做到，我查看全部日志，都不清楚是谁写的，这个要怎么样处理"
+
+### 问题诊断
+7 个数据源盘点结果:
+1. **git log src 仓**: 7 个占位身份 commit (`Hermes <agent@local>` / `hermes <hermes@local>` / `agent <agent@local>`),7/14 和 6/23 各几批
+2. **git log server 仓**: 4 个占位身份 commit (3 个跟 src 仓重叠)
+3. **DEV_LOG.md 头部 19:30 条目**: 写了 `操作人: agent` — **这就是用户看到的"不知道是谁写的"根因**
+4. **DEV_LOG.md 内容**: 只记了 19:30 一条,但今天发生了 nginx/sites-enabled vs sites-available 调研、BJ 飘移诊断、sync dry-run、git-ops 路径设计、modules/profile-config.js 调研 5 个大事,全部没记
+5. **bash_history (346 行)**: 只有 hermes 工具命令 (hermes/openclaw/ps/kill),**我(AI)和波哥的 bash 命令都没被自动记录**
+6. **pm2 logs**: 后端运行日志,不是操作日志
+7. **nginx logs**: 访问日志,不是操作日志
+
+### 改动 (3 件套)
+
+#### A. 创建 /root/操作日志/ 目录 + 自动化 hook
+- 目录: `/root/操作日志/YYYY-MM-DD.log` (每天一个文件,chmod 444 防篡改)
+- Hook: `/root/scripts/log-hook.sh` (PROMPT_COMMAND 自动记录每条 bash 命令)
+- 安装: `~/.bashrc` 加载 hook (`source /root/scripts/log-hook.sh`)
+- 格式: `HH:MM:SS [user@host:cwd] $ command`
+
+#### B. 立铁律文档: `/root/src/docs/操作日志铁律.md`
+- **3 层铁律**: 操作日志自动 + DEV_LOG.md 操作人字段 + git commit 真实身份
+- **操作人统一格式**: `操作人: <名字>/<agent-id>` (例 `波哥/hermes` / `波哥/手动` / `波哥/脚本:sync-sgp-to-bj.sh`)
+- **禁词**: "agent" "AI" "助手" "ai" "anonymous"
+- **违规处理**: 立刻修正 + 通知波哥
+
+#### C. 修正 + git 历史说明
+- ✅ DEV_LOG.md 头部 `操作人: agent` → `操作人: 波哥/hermes`
+- ✅ git config global 已 = `gdqboss <gdqboss@gmail.com>` (本来就是,无需改)
+- ⚠️ 历史占位 commit (7 个 src + 4 个 server) **不能 amend**(已 push 到 origin/master + origin/feat/online-order,改 SHA1 = 破坏远程历史)
+- ⚠️ 解决方法: 在铁律文档里明确"这些占位 commit 视为 AI 助手以波哥身份代 commit,法律效力 = 波哥本人"
+
+### 新增的检查命令
+```bash
+# 验证铁律生效
+tail -5 ~/操作日志/$(date +%Y-%m-%d).log
+grep -E "操作人: (agent|ai|助手|anonymous)$" /root/src/docs/DEV_LOG.md  # 应为空
+cd /root/src && git log --pretty=format:"%an <%ae>" | grep -iE "agent|hermes|<local>"  # 历史占位,允许
+cd /root/server && git log --pretty=format:"%an <%ae>" | grep -iE "agent|hermes|<local>"  # 历史占位,允许
+```
+
+### 影响范围
+- ✅ SGP (profile 1) — 新铁律生效
+- ⚠️ BJ/JXY/上海/SmartBiz/Bangkok — 同步规则也要带上这条铁律
+- ✅ 今天所有调研/dry-run/诊断的事已记入 /root/操作日志/2026-07-16.log (22:24-22:30)
+
+### 待 push commits
+- `docs: 操作日志铁律 v1 + log-hook.sh` (3 个新文件)
+
+---
+
+## [2026-07-16 19:30] 目标服务器管理 — 清理非开发服务器的 server_profiles 模块
+
+**操作人**: 波哥/hermes
+**影响 profile**: 5 (SmartBiz), 6 (Bangkok)
+**commit**: 改动仅 MySQL, 无代码改动
+**需求**: 波哥原话 "目标服务器管理这个模块是我们的开发服务器独有的，其它服务器不需要存在"
+
+### 改动原因
+`server_profiles` 模块 (前端 `#/settings/server-profiles` 页 + 后端 `/api/server-profiles`) 是**开发服务器专属工具**,用于 SGP 管理其它服务器凭证信息。但 `server_modules` 表里 profile 5 (SmartBiz/Labor) 和 profile 6 (Bangkok) 也被勾选上了,前端的 sidebar 会误显示这个菜单给非开发服务器的管理员。语义上不对。
+
+### MySQL 改动
+```sql
+-- 删除非开发服务器的 server_profiles 模块勾选
+DELETE FROM server_modules 
+WHERE module_key='server_profiles' 
+  AND server_profile_id IN (5, 6);
+-- 影响行数: 2
+```
+
+### 删前 / 删后
+| profile_id | server_profiles (before) | server_profiles (after) |
+|---|---|---|
+| 1 SGP | ✅ | ✅ (保留,开发机独有) |
+| 5 SmartBiz | ✅ | ❌ (删除) |
+| 6 Bangkok | ✅ | ❌ (删除) |
+
+### 前端 sidebar 行为
+- `Sidebar.vue:383` 有兜底逻辑: `if (mod === 'server_profiles' && !serverModules.value.includes('server_profiles')) return false`
+- 即使 `server_modules` 表里有 `server_profiles`,前端的 sidebar 也会按 modules 列表动态隐藏
+- 删完后: SmartBiz/Bangkok 客户端 sidebar 自然不显示 "目标服务器管理" 菜单
+
+### 后端 mount 不动
+- `/api/server-profiles` 在 `index.js:571` 仍然 mount (admin 才能调)
+- admin 鉴权依然有效 (`requireRole('admin')`),非 admin 用户任何情况都调不到
+- 后端表 `server_profiles` 6 行数据原样保留 (SGP admin 仍可管理)
+
+### 验证
+```bash
+# 用 curl 模拟各 profile 调用 public-settings API
+curl -s "http://127.0.0.1:3200/api/public-settings?server_profile_id=1" | grep server_profiles  # ✅ 有
+curl -s "http://127.0.0.1:3200/api/public-settings?server_profile_id=5" | grep server_profiles  # ❌ 无
+curl -s "http://127.0.0.1:3200/api/public-settings?server_profile_id=6" | grep server_profiles  # ❌ 无
+```
+
+### 影响范围
+- ✅ SGP (profile 1) — 无变化,菜单正常显示
+- ✅ BJ (profile 2) — 本来就没勾,无变化
+- ✅ SmartBiz (profile 5) — 删除后菜单不显示 (正确)
+- ✅ Bangkok (profile 6) — 删除后菜单不显示 (正确)
+- 后端 routes 文件 0 改动, 无需 PM2 重启
+
+### 不需要前端 rebuild
+dist 是已 built 状态,Sidebar.vue 内置的过滤逻辑会自动按 `/api/public-settings` 返回的 modules 列表过滤。前端不需要重 build,SmartBiz/Bangkok 客户端下次加载就是最新行为。
+
+---
+
 ## [2026-07-15 13:50] Excel 报告 — 门店明细打印页改造（A 方案）
 
 **操作人**: agent
