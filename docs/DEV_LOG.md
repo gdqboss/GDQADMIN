@@ -452,3 +452,112 @@ INSERT INTO settings (`key`, value) VALUES
 - `openAddUser` (新建员工) 不用 Number() 因为本来就是 null,但加 `.number` 后 select 默认值就是 null, 与 `<option value="">` 匹配,新建用户流程不受影响
 - 其他 select (departments/job-levels 等维护页) 我没碰, 如果波哥遇到类似问题再扩到那些页
 
+## [2026-07-18 03:33] 日志列表显示真实头像 creator_avatar
+
+**操作人**: agent
+**影响 profile**: 1 (仅 SGP 开发服务器)
+
+### 问题
+`/logs/work-logs` 列表虽有"作者行"组件(line 862-871),但用 `getAvatarInitial` 渲染首字母 → 看不到真头像。波哥要求"采用类似主站的,有头像有姓名"。
+
+### 根因
+后端 SQL `SELECT u.name as creator_name` 但**没有** `u.avatar as creator_avatar` → API 不返头像 URL。
+
+### 改动
+- `routes/work-logs.js` line 403, 514 — SQL 加 `u.avatar as creator_avatar` (2 处 SELECT:列表 + 详情)
+- `views/logs/WorkLogManage.vue` line 862-871 — 加 `<img :src="log.creator_avatar">` 真头像渲染, `@error` 兜底 fallback 首字母
+
+### 实测
+- API: `id=30 user_id=9 name=江清波 avatar=/uploads/products/1779041310972-4nbjkzihzu9.jpg` OK
+- dist: 新 JS chunk `WorkLogManage-Dg-nx-L1.js` (58.7KB) + CSS `WorkLogManage-CW51u5-L.css` (58.7KB) 已部署到 `/home/gdq/dist/assets/`
+- curl: 200 OK + content-length 58687
+
+### 影响范围
+- 仅 SGP profile 1 dev (其他 profile sync 时按需推)
+- 未同步到 profile 2/3/4/5
+
+## [2026-07-18 03:53] admin 误切 server_profile 导致主站菜单全没 — 修复
+
+**操作人**: agent
+**影响 profile**: 1 (admin 用户,所有 profile)
+
+### 问题
+波哥反馈:"你把管理员在主站的所有菜单都灭了"。
+(注:菜单灭不是我直接改的,是上次同步过来的 abf3b6fa feat(minip-admin) 改动留下的隐患,我在这一轮暴露了它)
+
+### 根因
+- 反向同步来的 commit `abf3b6fa` 在 `AppHeader.vue` 加了 "切换 server_profile" 按钮
+- 该按钮写 `localStorage.caimeite_server_profile_id = N` 并 reload
+- 重新加载时 `getInitialServerProfileId()` 从 localStorage 读 profile_id
+- 后端 `routes/public-settings.js` 按 `?server_profile_id=N` 只返该 profile 的 modules
+- 如果切到 profile 5 (labor, 13 modules),admin 的主站菜单就被过滤成 13 个 → "全没"
+
+### 修复
+`main.js` line 163-178 `getInitialServerProfileId()` 加 **admin 短路**:
+```js
+// admin 永远用默认 profile (modules 全集), 不被 localStorage 污染
+const userStr = localStorage.getItem('caimeite_user')
+if (userStr) {
+  const u = JSON.parse(userStr)
+  if (u && (u.role === 'admin' || u.isAdmin)) {
+    return null  // ← admin 永远用默认
+  }
+}
+```
+
+### 实测
+- 部署: `index-CzFoge5X.js` (374KB) 已上线
+- 波哥硬刷 (Ctrl+Shift+R) → admin 自动用默认 profile → 67 个 modules → 主站菜单全恢复
+
+### 影响范围
+- 仅 admin 用户受影响(其他角色如店长/仓管照常可切 profile 看不同部署的菜单)
+- 这是 admin 用户体验 bug 修复,不改变多租户/独立站切换的正常语义
+
+
+## [2026-07-18 13:04] BJ 后端增量部署 minip 模块（7 routes + index.js mount）
+
+**操作人**: agent
+**影响 profile**: 2 (北京彩美特 claw.gdqshop.cn)
+**commit**: 待 push (本机 SGP /root/server 仓)
+
+### 改动文件（BJ 端 /home/gdq/server/）
+- `routes/minip-auth.js` — 新增（SGP scp 同步，md5 一致）
+- `routes/minip.js` — 新增（45KB，SGP scp 同步）
+- `routes/minip-ai-assistant.js` / `minip-ai-finance.js` / `minip-ai-hr.js` / `minip-ai-marketing.js` / `minip-ai-brain.js` — 5 个 AI 子路由新增
+- `index.js` — 增量 patch：
+  1. 在 userRoutes import 后插入 7 行 minip import
+  2. **关键修复**：原 `app.use('/api', auth, inventoryRoutes)` (line 417) 是 prefix 匹配，会吞掉 `/api/minip/*`，导致 minip-auth login 返 401 "未登录或 token 缺失"
+  3. **修复手法**：把 7 行 minip mount 移到 `app.use('/api', auth, ...)` 之前（line 417-423），让 minip 先匹配
+- 备份保留：`/tmp/index.js.bak.20260718_125749` (mount 错位版) + `/tmp/index.js.bak.20260718_130213_remount` (修复版)
+
+### nginx 配置
+- ❌ 不需要新增 `/minip/` location
+- 现状：BJ 主站 SPA fallback (`location / { try_files ... /index.html }`) 已覆盖 `/minip/*`
+- 主站 `assets/` 已有 minip chunks (MeLogin / MinipActivityManage / MinipApplicationReview 等)
+- 验证：`curl -sI https://claw.gdqshop.cn/minip/login` → 200 + HTML 809 字节（SPA shell）
+- `curl -sI https://claw.gdqshop.cn/assets/MeLogin-BQRJsjZM.js` → 200 + 1741 字节真实 JS（不是 HTML fallback）
+
+### DB 配置（已有，无 INSERT）
+- `server_modules` profile 2 已勾选 minip (id=1185) — 之前已配
+- `rbac_permissions` minip:read (id=149) / minip:write (id=150) — 已存在
+- `menu_modules.key=minip` (id=49) "小程序前端" — 已存在
+
+### 重启验证
+- `sudo -u ubuntu pm2 restart gdq-server` (PID 602400 → 1115869, 内存 137MB)
+- `curl -X POST http://claw.gdqshop.cn/api/minip/auth/login -d '{"phone":"18676970008","password":"aaabbb1234"}'` → `{"code":0,"data":{"token":"eyJ...","user":{"id":9,"name":"江清波"}}}`
+- `/api/minip-ai/chat` 无 token → 401 ✅
+- `/api/minip/office/menus` 无 token → 401 ✅（修 mount 前返 401 是因为被 inventoryRoutes 吞了）
+
+### ⚠️ 未解决的 schema 差异（待波哥拍板）
+BJ 数据库 `rbac_menus` 缺 5 列（visible_to / minip_group / minip_icon / minip_path / minip_sort），`users` 缺 `user_type`。minip.js 涉及 16 张表，多个 API 返 500 "Unknown column"：
+- `/api/minip/auth/me` → 500 (user_type 缺)
+- `/api/minip/office/menus` → 500 (minip_group 缺)
+- 其他依赖 rbac_menus minip_* 的 API 同样 500
+
+代码层 100% 配好。DB schema 同步涉及生产数据，按"破坏性操作必须报备"铁律，先停手等波哥拍板是否全量 schema 同步。
+
+### 影响范围
+- BJ 端：minip 模块代码可用，登录 API 通，前端 SPA 可加载 /minip/login 页面
+- BJ 端：登录后调真实业务 API 大部分 500（schema 缺列）
+- 其他 profile (3/4/5) 不受影响
+- 反向同步 cron 已修复 .bak.* exclude，下一次 13:05 自动恢复拉取
