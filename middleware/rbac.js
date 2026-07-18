@@ -11,6 +11,14 @@ const PERMISSIONS = {
   WAREHOUSES_READ: 'warehouse:read',
   WAREHOUSES_WRITE: 'warehouse:write',
   WAREHOUSES_DELETE: 'warehouse:delete',
+  AUTO_OPS_READ: 'auto-ops:read',
+  AUTO_OPS_WRITE: 'auto-ops:write',
+  AUTO_OPS_DELETE: 'auto-ops:delete',
+
+  // AI 监督系统（labor + minip 跨模块智能化管理）
+  AI_SUPERVISION_READ: 'ai_supervision:read',
+  AI_SUPERVISION_WRITE: 'ai_supervision:write',
+  AI_SUPERVISION_DELETE: 'ai_supervision:delete',
 
   // 库存相关
   INVENTORY_READ: 'inventory:read',
@@ -46,6 +54,12 @@ const PERMISSIONS = {
   BANNERS_READ: 'banners:read',
   BANNERS_WRITE: 'banners:write',
   BANNERS_DELETE: 'banners:delete',
+
+  // 智慧工作室 (smart-studio) - 私聊模块,只在新加坡 profile 1 启用
+  SMART_STUDIO_READ:   'smart-studio:read',
+  SMART_STUDIO_WRITE:  'smart-studio:write',
+  SMART_STUDIO_DELETE: 'smart-studio:delete',
+
   THEME_READ: 'theme:read',
   THEME_WRITE: 'theme:write',
   TRANSLATIONS_READ: 'translations:read',
@@ -78,6 +92,10 @@ const PERMISSIONS = {
   LABOR_AI_CHAT: 'labor-ai:chat',
   // AI 上传文件/图片/CAD(2026-07-13)
   AI_UPLOAD: 'ai:upload',
+  // AI 助手（横琴湾迁移 2026-07-18, 原 /root/backend/src/services/ai/assistant.js）
+  AI_ASSISTANT_READ: 'ai-assistant:read',
+  AI_ASSISTANT_WRITE: 'ai-assistant:write',
+  AI_ASSISTANT_DELETE: 'ai-assistant:delete',
   // 首页工作台
   DASHBOARD_VIEW: 'dashboard:view',
   DASHBOARD_STATS: 'dashboard:stats',

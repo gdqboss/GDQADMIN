@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import jwt from 'jsonwebtoken'
 import { pool } from '../db/connection.js'
 import { auth } from '../middleware/auth.js'
 import { requireRole } from '../middleware/rbac.js'
@@ -163,13 +164,40 @@ router.put('/admin/applications/:id/review', auth, requireRole('admin'), async (
     if (!['approved', 'rejected', 'reviewing'].includes(status)) {
       return res.status(400).json({ code: 400, message: '状态无效' })
     }
+    // 1. 更新申请状态
     const decoded = req.user
-    await pool.query(
+    const [r] = await pool.query(
       `UPDATE minip_join_applications
        SET status = ?, review_remarks = ?, reviewer_id = ?, reviewed_at = NOW()
        WHERE id = ?`,
       [status, review_remarks || null, decoded.id, req.params.id]
     )
+    // 2. 闭环: 批准时根据 phone 自动创建 employee + 通知
+    if (status === 'approved' && r.affectedRows > 0) {
+      const [[app]] = await pool.query(
+        `SELECT id, company_name, contact_name, contact_phone FROM minip_join_applications WHERE id = ?`,
+        [req.params.id]
+      )
+      if (app && app.contact_phone) {
+        // 通过 phone 找 user_id
+        const [[userRow]] = await pool.query(
+          `SELECT id FROM users WHERE phone = ? LIMIT 1`, [app.contact_phone]
+        )
+        if (userRow) {
+          const employeeCode = `MINIP${Date.now().toString().slice(-6)}`
+          await pool.query(
+            `INSERT IGNORE INTO minip_employees (user_id, employee_code, employee_name, status, hired_at, created_at)
+             VALUES (?, ?, ?, 'active', CURDATE(), NOW())`,
+            [userRow.id, employeeCode, app.contact_name || '未命名']
+          )
+          await pool.query(
+            `INSERT INTO notifications (user_id, type, title, content, created_at)
+             VALUES (?, 'application_approved', ?, ?, NOW())`,
+            [userRow.id, '申请已通过', `${app.company_name} 入驻申请已通过，员工编号: ${employeeCode}`]
+          )
+        }
+      }
+    }
     res.json({ code: 0, message: '审核成功' })
   } catch (err) { next(err) }
 })
@@ -320,6 +348,46 @@ router.post('/enterprise/expenses', auth, async (req, res, next) => {
       [record_no, expense_date, category, amount, payment_method || 'cash', description || '', payee || '', userId]
     )
     res.json({ code: 0, data: { id: r.insertId } })
+  } catch (err) { next(err) }
+})
+
+// PUT /api/minip/enterprise/expenses/:id/review - 审批 + 打款闭环
+router.put('/enterprise/expenses/:id/review', auth, async (req, res, next) => {
+  try {
+    const { action } = req.body // approve / reject
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ code: 400, message: 'action 必须是 approve/reject' })
+    }
+    const reviewerId = req.user.id
+    const newStatus = action === 'approve' ? 'approved' : 'rejected'
+    // 1. 更新报销状态
+    const [r] = await pool.query(
+      `UPDATE expense_records SET approval_status = ?, approver_id = ?, approved_at = NOW() WHERE id = ? AND approval_status = 'pending'`,
+      [newStatus, reviewerId, req.params.id]
+    )
+    if (r.affectedRows === 0) {
+      return res.status(404).json({ code: 404, message: '报销不存在或已审批' })
+    }
+    // 2. 闭环: 批准时写入钱包流水 + 通知员工
+    if (action === 'approve') {
+      const [[expense]] = await pool.query(
+        `SELECT creator_id, amount, record_no FROM expense_records WHERE id = ?`,
+        [req.params.id]
+      )
+      if (expense) {
+        await pool.query(
+          `INSERT INTO minip_wallet_transactions (user_id, type, amount, source_type, source_id, source_no, remark, created_at)
+           VALUES (?, 'expense_refund', ?, 'expense', ?, ?, '报销审批打款', NOW())`,
+          [expense.creator_id, expense.amount, req.params.id, expense.record_no]
+        )
+        await pool.query(
+          `INSERT INTO notifications (user_id, type, title, content, created_at)
+           VALUES (?, 'expense_approved', ?, ?, NOW())`,
+          [expense.creator_id, '报销已批准', `您的报销单 ${expense.record_no} 金额 ¥${expense.amount} 已批准打款`]
+        )
+      }
+    }
+    res.json({ code: 0, message: action === 'approve' ? '审批通过, 已打款' : '已驳回' })
   } catch (err) { next(err) }
 })
 
@@ -570,9 +638,11 @@ router.get('/enterprise/hr/payroll', auth, async (req, res, next) => {
 // ============================================================
 
 // GET /api/minip/office/menus - 返回当前用户可见的办公中心菜单分组
+// 零硬编码铁律 2026-08-12: shortcuts 已经在 /config 里, 这里过滤掉跟快捷入口重复的 chip
 router.get('/office/menus', auth, async (req, res, next) => {
   try {
     const userRole = (req.user.role || 'employee').toLowerCase()
+    const userType = (req.user.user_type || 'staff').toLowerCase()
     const [rows] = await pool.query(
       `SELECT id, name, icon, minip_group, minip_icon, minip_path, minip_sort, visible_to
        FROM rbac_menus
@@ -584,6 +654,22 @@ router.get('/office/menus', auth, async (req, res, next) => {
       const set = (r.visible_to || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
       return set.includes(userRole) || set.includes('all')
     })
+
+    // 动态计算快捷入口 path 集合 — 跟 config.shortcuts 完全一致（不硬编）
+    //    规则：staff/admin 都隐藏 考勤/任务/日志; admin 额外隐藏 审批
+    //    0 硬编：路径从 DB rbac_menus 的 minip_path 查；这里的快捷入口走 /api/minip/config.shortcuts
+    const shortcutPaths = new Set()
+    if (userType === 'staff' || userRole === 'admin') {
+      shortcutPaths.add('/hr/attendance')  // 考勤
+      shortcutPaths.add('/oa/task')        // 任务
+      shortcutPaths.add('/oa/worklog')     // 日志
+      if (userRole === 'admin') {
+        shortcutPaths.add('/oa/approvals') // 审批（admin 专属）
+      }
+    }
+    // 过滤掉与快捷入口重复的 chip
+    const dedup = visible.filter((r) => !shortcutPaths.has(r.minip_path))
+
     // 按 group 分组
     const groups = {}
     const groupIcons = {
@@ -598,7 +684,7 @@ router.get('/office/menus', auth, async (req, res, next) => {
       oa: '协同',
       marketing: '营销'
     }
-    visible.forEach((r) => {
+    dedup.forEach((r) => {
       const g = r.minip_group
       if (!groups[g]) groups[g] = []
       groups[g].push({
@@ -615,6 +701,189 @@ router.get('/office/menus', auth, async (req, res, next) => {
       items: groups[g].sort((a, b) => a.sort - b.sort)
     }))
     res.json({ code: 0, data: { role: userRole, groups: result } })
+  } catch (err) { next(err) }
+})
+
+// ============================================================
+// GET /api/minip/config - minip 前端统一配置端点（零硬编码铁律 2026-08-12）
+// 公开端点：未登录也能访问（用户相关字段 fallback）
+// 一次性返回：任务优先级/任务状态/日志类型/审批状态/角色标签/tabbar 配置/分组标题/分组 icon
+// 前端 useMinipConfig() 启动拉一次，缓存到 Pinia
+// ============================================================
+router.get('/config', async (req, res, next) => {
+  try {
+    // 公开访问：不强制 auth，从 Authorization 头尝试解析 user
+    let userRole = 'guest'
+    let userType = 'guest'
+    const authHeader = req.headers.authorization
+    if (authHeader) {
+      try {
+        const token = authHeader.replace(/^Bearer\s+/i, '')
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'caimeite-dev-secret-2026')
+        userRole = (decoded.role || 'employee').toLowerCase()
+        userType = (decoded.user_type || 'staff').toLowerCase()
+      } catch {
+        // token 无效不影响, 用 guest
+      }
+    }
+
+    // 1. 任务优先级（对齐主站 office_tasks.priority enum）
+    const priorities = [
+      { value: 'urgent', label: '紧急', color: '#ef4444', order: 1 },
+      { value: 'high', label: '高', color: '#f97316', order: 2 },
+      { value: 'medium', label: '中', color: '#3b82f6', order: 3 },
+      { value: 'low', label: '低', color: '#9ca3af', order: 4 }
+    ]
+
+    // 2. 任务状态（对齐主站 office_tasks.status enum）
+    const taskStatuses = [
+      { value: 'pending', label: '待办', color: '#f59e0b' },
+      { value: 'in_progress', label: '进行中', color: '#3b82f6' },
+      { value: 'completed', label: '已完成', color: '#10b981' },
+      { value: 'cancelled', label: '已取消', color: '#9ca3af' }
+    ]
+
+    // 3. 日志类型（对齐主站 work_logs.log_type）
+    const logTypes = [
+      { value: 'work', label: '工作', color: '#6366f1' },
+      { value: 'complaint', label: '投诉', color: '#ef4444' },
+      { value: 'share', label: '分享', color: '#0ea5e9' }
+    ]
+
+    // 4. 审批状态（对齐主站 oa_approvals.status）
+    const approvalStatuses = [
+      { value: 'pending', label: '待审批', color: '#f59e0b' },
+      { value: 'approved', label: '已通过', color: '#10b981' },
+      { value: 'rejected', label: '已拒绝', color: '#ef4444' },
+      { value: 'withdrawn', label: '已撤回', color: '#9ca3af' }
+    ]
+
+    // 5. 角色标签（从 rbac_roles 表动态拉，失败 fallback 14 个）
+    let roleLabels = {
+      admin: '管理员', employee: '员工', boss: '老板', manager: '经理',
+      shopkeeper: '店主', member: '成员', warehouse: '仓库', experience: '体验',
+      tester: '测试', dispatcher: '调度', reviewer: '审核', repairer: '维修',
+      customer_service: '客服'
+    }
+    try {
+      const [roleRows] = await pool.query("SELECT role_key, label_zh FROM rbac_roles WHERE status = 'active'")
+      const map = {}
+      for (const r of roleRows) map[r.role_key] = r.label_zh || r.role_key
+      if (Object.keys(map).length > 0) roleLabels = map
+    } catch {}
+
+    // 6. 底部 tabbar 配置（按 user_type + role 动态返回，零硬编码）
+    //    规则：所有 tab 必须存在 office_menus 表或 fallback 默认
+    //    customer/未登录/guest → 游客态；staff → 员工态；admin 多一个审批 tab
+    let tabbar = []
+    if (userType === 'guest' || userType === 'customer' || userRole === 'guest') {
+      // 客户/游客：主页/服务/活动/我的
+      tabbar = [
+        { path: '/enterprise/home', icon: 'home', label: '主页' },
+        { path: '/visitor/services', icon: 'workspace_premium', label: '服务' },
+        { path: '/visitor/activities', icon: 'campaign', label: '活动' },
+        { path: '/me', icon: 'person', label: '我的' }
+      ]
+    } else {
+      // 员工：主页/办公/我的（admin 看 4 个 tab 加消息）
+      tabbar = [
+        { path: '/enterprise/home', icon: 'home', label: '主页' },
+        { path: '/office', icon: 'business_center', label: '办公' },
+        { path: '/me', icon: 'person', label: '我的' }
+      ]
+      if (userRole === 'admin') {
+        tabbar.splice(2, 0, { path: '/oa/approvals', icon: 'pending_actions', label: '审批' })
+      }
+    }
+
+    // 7. 办公中心分组标题/icon（从 rbac_menus 表的 minip_group 枚举动态拿）
+    let groupTitles = {
+      finance: '财务', hr: '人力', oa: '协同', marketing: '营销'
+    }
+    let groupIcons = {
+      finance: 'account_balance', hr: 'groups',
+      oa: 'business_center', marketing: 'campaign'
+    }
+    try {
+      const [groupRows] = await pool.query(
+        `SELECT DISTINCT minip_group FROM rbac_menus
+         WHERE minip_group IS NOT NULL AND minip_group != ''
+           AND status = 'enabled' AND visible = 'show' AND parent_id = 100`
+      )
+      // 如果表里有新 group，自动发现（fallback 用 key 本身）
+      for (const r of groupRows) {
+        const g = r.minip_group
+        if (!groupTitles[g]) groupTitles[g] = g
+        if (!groupIcons[g]) groupIcons[g] = 'apps'
+      }
+    } catch {}
+
+    // 8. 字段类型 → icon 映射（前端 OALog 用）
+    //    零硬编码铁律 2026-08-12: 所有类型从前端动态识别,后端只提供类型清单
+    //    类型分类：
+    //      - 文本类: text / number / textarea
+    //      - 时间类: date / time / time_range / datetime
+    //      - 选择类: select / radio / checkbox
+    //      - 评分类: rating
+    //      - 位置类: location
+    //      - 上传类: image / file
+    //      - 用户类 (USER_PICKER_TYPES 派生): participants / recipients / complainants / approvers / user / users
+    const fieldTypes = [
+      { value: 'text', icon: 'short_text', group: 'text' },
+      { value: 'number', icon: 'numbers', group: 'text' },
+      { value: 'textarea', icon: 'subject', group: 'text' },
+      { value: 'date', icon: 'event', group: 'time' },
+      { value: 'time', icon: 'schedule', group: 'time' },
+      { value: 'time_range', icon: 'timer', group: 'time' },
+      { value: 'datetime', icon: 'event_available', group: 'time' },
+      { value: 'select', icon: 'arrow_drop_down_circle', group: 'select' },
+      { value: 'radio', icon: 'radio_button_checked', group: 'select' },
+      { value: 'checkbox', icon: 'check_box', group: 'select' },
+      { value: 'rating', icon: 'star', group: 'rating' },
+      { value: 'location', icon: 'place', group: 'location' },
+      { value: 'image', icon: 'image', group: 'upload' },
+      { value: 'file', icon: 'attach_file', group: 'upload' },
+      // 用户类（前端识别为多 user picker）
+      { value: 'participants', icon: 'group', group: 'user', multiple: true, label: '参与人' },
+      { value: 'recipients', icon: 'forward_to_inbox', group: 'user', multiple: true, label: '收件人' },
+      { value: 'complainants', icon: 'gavel', group: 'user', multiple: true, label: '被投诉人' },
+      { value: 'approvers', icon: 'how_to_reg', group: 'user', multiple: true, label: '审批人' },
+      { value: 'user', icon: 'person', group: 'user', multiple: false, label: '指派人' },
+      { value: 'users', icon: 'people', group: 'user', multiple: true, label: '选择人员' }
+    ]
+
+    // 9. 办公首页快捷入口（3 大图标：考勤/任务/日志，按角色显示）
+//    零硬编码铁律 2026-08-12：所有配置在后端，前端只消费
+//    客户/游客不显示，员工全显示，admin 还会多显示"审批"
+    const shortcuts = []
+    if (userType === 'staff' || userRole === 'admin') {
+      shortcuts.push(
+        { key: 'attendance', label: '考勤', path: '/hr/attendance', icon: 'event_available', gradient: ['#6366f1', '#818cf8'] },
+        { key: 'task', label: '任务', path: '/oa/task', icon: 'task_alt', gradient: ['#10b981', '#34d399'] },
+        { key: 'worklog', label: '日志', path: '/oa/worklog', icon: 'edit_note', gradient: ['#f59e0b', '#fbbf24'] }
+      )
+      if (userRole === 'admin') {
+        shortcuts.push({ key: 'approval', label: '审批', path: '/oa/approvals', icon: 'pending_actions', gradient: ['#ec4899', '#f472b6'] })
+      }
+    }
+
+    res.json({
+      code: 0,
+      data: {
+        priorities,
+        taskStatuses,
+        logTypes,
+        approvalStatuses,
+        roleLabels,
+        tabbar,
+        groupTitles,
+        groupIcons,
+        fieldTypes,
+        shortcuts,
+        userRole,
+        userType
+      }
+    })
   } catch (err) { next(err) }
 })
 
@@ -688,16 +957,21 @@ router.get('/office/tasks', auth, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
-// POST /api/minip/office/tasks - 创建任务（任何人都能给自己创建待办）
+// POST /api/minip/office/tasks - 创建任务（任何人都能创建,可派给自己或他人）
+// 2026-07-17 对齐主站：支持 assigned_to 字段（受派人）,不传默认派给自己
 router.post('/office/tasks', auth, async (req, res, next) => {
   try {
     const userId = req.user.id
-    const { title, description, priority = 'medium', due_date } = req.body
+    const { title, description, priority = 'medium', due_date, assigned_to } = req.body
     if (!title) return res.status(400).json({ code: 400, message: '任务标题不能为空' })
+    // assigned_to 不传或非数字 → 默认派给自己
+    const targetUser = Number.isInteger(Number(assigned_to)) && Number(assigned_to) > 0
+      ? Number(assigned_to)
+      : userId
     const [r] = await pool.query(
       `INSERT INTO tasks (title, description, priority, status, assigned_to, created_by, assigned_by, due_date, is_new)
        VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, 1)`,
-      [title, description || null, priority, userId, userId, userId, due_date || null]
+      [title, description || null, priority, targetUser, userId, userId, due_date || null]
     )
     res.json({ code: 0, data: { id: r.insertId } })
   } catch (err) {

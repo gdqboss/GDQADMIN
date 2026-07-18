@@ -13,6 +13,7 @@ import { errorHandler } from './middleware/errorHandler.js'
 import { langMiddleware } from './middleware/translate.js'
 import { globalLimiter, scanLimiter, apiLimiter } from './middleware/rateLimit.js'
 import { requireRole } from './middleware/rbac.js'
+import { checkPreviousCrash, installCrashCapture } from './crash-detect.js'
 import { verifySignature, decryptMessage, extractXmlField } from './services/wecom-crypto.js'
 import { startCronJobs } from './cron.js'
 import { startFinanceReminderJobs } from './jobs/finance-reminders.js'
@@ -39,6 +40,7 @@ import supplierRoutes from './routes/suppliers.js'
 import dealerRoutes from './routes/dealers.js'
 import storeRoutes from './routes/stores.js'
 import mallRoutes from './routes/mall.cjs'
+import minipAuthRoutes from './routes/minip-auth.js'
 import userRoutes from './routes/users.js'
 import categoryRoutes from './routes/categories.js'
 import uploadRoutes from './routes/upload.js'
@@ -48,6 +50,7 @@ import h5Routes from './routes/h5.js'
 import wxmpRoutes from './routes/wxmp.js'
 import retailRoutes from './routes/retail.js'
 import aftersalesRoutes from './routes/aftersales.js'
+import aiAssistantRoutes from './routes/ai-assistant.js'
 import scanRoutes from './routes/scan.js'
 import referralRoutes from './routes/referral.js'
 import eduRoutes from './routes/edu.js'
@@ -62,8 +65,17 @@ import ordersRoutes from './routes/orders.js'
 import reportsRoutes from './routes/reports.js'
 import bossChatRoutes from './routes/boss-chat.js'
 import aiClassRoutes from './routes/ai-class.js'
+import aiClassReactRoutes from './routes/ai-class-react.js'
 import aiKnowledgeDomainsRoutes from './routes/ai-knowledge-domains.js'
 import laborAiAgentRoutes from './routes/labor-ai-agent.js'
+import laborAiSupervisorRoutes from './routes/labor-ai-supervisor.js'
+import healthRoutes from './routes/health.js'
+import autoOpsRoutes from './routes/auto-ops.js'
+import minipAiAssistantRoutes from './routes/minip-ai-assistant.js'
+import minipAiFinanceRoutes from './routes/minip-ai-finance.js'
+import minipAiHrRoutes from './routes/minip-ai-hr.js'
+import minipAiMarketingRoutes from './routes/minip-ai-marketing.js'
+import minipAiBrainRoutes from './routes/minip-ai-brain.js'
 import laborAiRoutes from './routes/labor-ai.js'
 import {
   workerRouter as laborWorkerRouter,
@@ -209,14 +221,25 @@ app.use(langMiddleware)
 
 // Public routes
 app.use('/api/auth', authRoutes)
+app.use('/api/minip/auth', minipAuthRoutes)  // minip 独立登录口（不与主站 /api/auth 共享 token）
 app.use('/api/preorder', auth, preorderRoutes)
 app.use('/api/openclaw', openclawRoutes)
 app.use('/api/boss', auth, bossChatRoutes)
 app.use('/api/ai-config', auth, aiConfigRoutes)
 app.use('/api/ai-class', auth, aiClassRoutes)
+app.use('/api/ai-class', auth, aiClassReactRoutes)
 app.use('/api/labor-ai-agent', auth, laborAiAgentRoutes)
+app.use('/api/labor-ai-supervisor', auth, laborAiSupervisorRoutes)
+app.use('/api/system-health', auth, healthRoutes)
+app.use('/api/auto-ops', auth, autoOpsRoutes)
+app.use('/api/minip-ai', auth, minipAiAssistantRoutes)
+app.use('/api/minip-ai', auth, minipAiFinanceRoutes)
+app.use('/api/minip-ai', auth, minipAiHrRoutes)
+app.use('/api/minip-ai', auth, minipAiMarketingRoutes)
+app.use('/api/minip-ai', auth, minipAiBrainRoutes)
 app.use('/api/labor-ai', auth, apiLimiter, laborAiRoutes)
 app.use('/api/ai-domains', auth, aiKnowledgeDomainsRoutes)
+app.use('/api/ai-assistant', auth, aiAssistantRoutes)
 app.use('/api/admin/schema', auth, adminSchemaRoutes)
 app.use('/api/kb', auth, kbRoutes)
 app.use('/api/scan', scanRoutes)
@@ -578,6 +601,13 @@ app.use('/api/sidebar', sidebarRoutes)
 // rentalPublicRoutes 已在 inventory catch-all 之前挂载（见上面的位置）
 
 app.use(errorHandler)
+
+// 学自 xai-org/grok-build xai-crash-handler:
+//   1) 启动第一件事 = 检查上次 crash
+//   2) 然后注册 capture handler 捕获本次启动期间的 uncaughtException/unhandledRejection
+// 学 grok 顺序: checkPrevioursCrash() first, install() second
+checkPreviousCrash()
+installCrashCapture({ app_version: process.env.SERVER_APP_VERSION || 'dev-local' })
 
 const PORT = process.env.PORT || 3000
 const server = app.listen(PORT, () => {
