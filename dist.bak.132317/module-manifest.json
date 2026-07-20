@@ -1,0 +1,217 @@
+{
+  "generated": "2026-07-11T16:49:32.419Z",
+  "build": "DaJRNfnb",
+  "modules": {
+    "finance": [
+      "AccountsPayable-CFGrBr9d.js",
+      "AccountsReceivable-s_BoGi7d.js",
+      "CashFlow-D915Hrx8.js",
+      "ExpenseManage-Bp3QEJXD.js",
+      "FinanceOverview-CLw_f15S.js",
+      "FinanceReminders-BAIFC-n3.js",
+      "FundAccounts-BPIGnR3d.js",
+      "InvoiceManage-DiB9Ns-E.js",
+      "InvoiceStatistics-DFruxYFm.js",
+      "PaymentManage-CpqwzKkA.js",
+      "ProfitAnalysis-DuuGCVwQ.js",
+      "PurchaseCosts-m5y1Xy9C.js",
+      "ReceiptManage-CyN05S3R.js",
+      "ReminderSettings-B2z_X8up.js"
+    ],
+    "aftersale": [
+      "AftersaleManage-C5ZEV9Kb.js"
+    ],
+    "ai-classroom": [
+      "AiAutomation-1eVxSyhH.js",
+      "AiClassroom-CxpUMFzo.js"
+    ],
+    "oa": [
+      "ApprovalCreate-h2rxvyf-.js",
+      "ApprovalDetail--FfF_5c_.js",
+      "ApprovalList-Cl06jrdZ.js",
+      "ApprovalList-DxmBmIEx.js",
+      "ApprovalManage-Doxj4tGj.js",
+      "ApprovalSettings-EvkQjdT8.js",
+      "ReviewList-Bt-KOGUu.js"
+    ],
+    "article": [
+      "ArticleDetail-BgS_7v3e.js",
+      "ArticleList-BKEMU-Gc.js"
+    ],
+    "attendance": [
+      "AttendanceManage-CgK6APce.js",
+      "AttendanceManage-ztjXt-b9.js",
+      "AttendanceRuleManage-DGJjEyGW.js",
+      "AttendanceSummary-BVZJELwL.js",
+      "LeaveManage-o4JCA7n0.js",
+      "ScheduleCalendar-CwT8dA4U.js",
+      "ShiftManage-DeX4UHby.js"
+    ],
+    "logistics": [
+      "ChannelLogistics-BM38NuH3.js",
+      "ExpressList-CNSeQ4NY.js"
+    ],
+    "mall": [
+      "Checkout-UZ0_7Qy3.js",
+      "MallCart-Bozad0wf.js",
+      "MallCategory-JhdiKSNY.js",
+      "MallHome-oGqe0dDt.js",
+      "MallLogin-De1PRcE7.js",
+      "MallRegister-CJYhjdaL.js",
+      "ProductDetail-B0l5QdlX.js"
+    ],
+    "collage": [
+      "CollageDashboard-d5mBnngb.js",
+      "CollageOrderList-BBweYomi.js",
+      "CollageProductList-LyXaqvzM.js"
+    ],
+    "coupon": [
+      "CouponList-BZAM32-w.js",
+      "CouponManage-5qfpcrtD.js"
+    ],
+    "dealers": [
+      "CustomerStatement-Ctdz7GV2.js",
+      "DealerList-BNwD1-Bu.js"
+    ],
+    "dashboard": [
+      "Dashboard-B5rY2tft.js",
+      "Dashboard-BM-I5x91.js"
+    ],
+    "restaurant": [
+      "DineOrderList-nrHQ3TYM.js",
+      "DishManage-X26OROr9.js",
+      "QueueManage-fpVfwliM.js",
+      "ReservationManage-BSXHaatj.js",
+      "RestaurantDashboard-D0GHzQsX.js",
+      "TableManage-FoL-AdlY.js",
+      "TakeoutOrderList-DTTSdOYX.js"
+    ],
+    "users": [
+      "EmployeeDirectory-DpDmHjYC.js",
+      "H5UserManage-C075E4Jo.js",
+      "UserManagement-phZOxNkq.js",
+      "UserProfile-yOxYgfiR.js"
+    ],
+    "excel-analyzer": [
+      "ExcelAnalyzer-horOBrl6.js",
+      "ExcelReportManage-BJT9FKba.js",
+      "ImportDetail-BgFcAtL1.js",
+      "ImportDetailMulti-BJlDOdGI.js",
+      "ImportRecords-DRlD528h.js"
+    ],
+    "logs": [
+      "FeedbackManage-C7ZeX01o.js",
+      "ShareLogManage-DXF105TO.js",
+      "VisitLogManage-1P0kfN5d.js",
+      "WorkLogManage-pioNyyYJ.js"
+    ],
+    "gift-approvals": [
+      "GiftApprovalList-B6-twNuD.js"
+    ],
+    "hotel": [
+      "HotelDashboard-D3I4trLu.js",
+      "HotelOrderDetail-33Wb-tOw.js",
+      "HotelOrderList-CuCnUIWB.js",
+      "RoomTypeList-DgU_L3UR.js"
+    ],
+    "in-out": [
+      "InOutList-P2F9PeRD.js"
+    ],
+    "job-responsibilities": [
+      "JobResponsibilities-CB8YHrqj.js",
+      "MyResponsibility-BT9N3UYa.js",
+      "ResponsibilityManage-CVMjp_Ox.js"
+    ],
+    "kefu": [
+      "KefuChat-DHqyW6LF.js"
+    ],
+    "auth": [
+      "Login-BejL43i9.js",
+      "Login-Bzub51Qg.js"
+    ],
+    "_layout": [
+      "MainLayout-BHq1B9pZ.js"
+    ],
+    "orders": [
+      "OrderDetail-BHlhmQeb.js",
+      "OrderList-DKJB9Nuc.js",
+      "OrderList-DUsstY8g.js"
+    ],
+    "_shared": [
+      "PageHeader-BTVrnWSp.js",
+      "Pagination-DpOFfBg3.js",
+      "StatCard-CIar0d7v.js"
+    ],
+    "products": [
+      "ProductList-Co8nBt5y.js"
+    ],
+    "qrcode": [
+      "QrcodeManage-Deor124P.js"
+    ],
+    "referral": [
+      "ReferralManage-Cj33b6S7.js"
+    ],
+    "reports": [
+      "ReportCenter-Brb4IW4w.js",
+      "StoreSalesReport-lzRUQjy8.js"
+    ],
+    "retail": [
+      "RetailRecords-BWtIqUFg.js"
+    ],
+    "returns": [
+      "ReturnList-BW-2AXKQ.js"
+    ],
+    "roles": [
+      "RoleManage-Df51_GZn.js"
+    ],
+    "score_shop": [
+      "ScoreOrderDetail-B-8m74mb.js",
+      "ScoreOrderList-GeLrKDeJ.js",
+      "ScoreOrderManage-CTF5pUtG.js",
+      "ScoreProductDetail-CHT43Eka.js",
+      "ScoreProductManage-9q9e1H6d.js",
+      "ScoreShopHome-BVvh2CJv.js"
+    ],
+    "server_profiles": [
+      "ServerProfiles-B5EO29j7.js"
+    ],
+    "alerts": [
+      "StockAlerts-uE_cnSPz.js"
+    ],
+    "stores": [
+      "StoreList-Oc9loc9X.js"
+    ],
+    "suppliers": [
+      "SupplierList-DFSTN_w7.js",
+      "SupplierStatement-CwUoNehJ.js"
+    ],
+    "settings": [
+      "SystemSettings-D0IeOpCT.js"
+    ],
+    "tasks": [
+      "TaskManage-BUcCURUr.js",
+      "TaskStats-BGmrDFcu.js"
+    ],
+    "transfer": [
+      "TransferCreate-BSTuaIdT.js",
+      "TransferDetail-CP8jItDS.js",
+      "TransferList-BwljXcCL.js"
+    ],
+    "warehouses": [
+      "WarehouseDetail-C0QFKiyt.js",
+      "WarehouseList-ByPZ0js8.js"
+    ],
+    "yuyue": [
+      "YuyueDetail-i7b7PWkS.js",
+      "YuyueList-DOv7EMny.js"
+    ]
+  },
+  "shared": [
+    "i18n-cGpaqGUJ.js",
+    "index-D73O-AVP.js",
+    "index-DaJRNfnb.js",
+    "index-Dd5FuJ_x.js",
+    "index-Y81vMbgn.js",
+    "xlsx-D_0l8YDs.js"
+  ]
+}

@@ -129,6 +129,7 @@ import payRoutes from './routes/pay.js'
 import seckillRoutes from './routes/seckill.js'
 import chatRoutes from './routes/chat.js'
 import smartStudioRoutes from './routes/smart-studio.js'
+import imRoutes from './routes/im.js'
 import onlineOrdersRoutes from './routes/online-orders.js'
 import quoteRoutes from './routes/quote.js'
 import rentalRoutes from './routes/rental.js'
@@ -470,9 +471,9 @@ app.use('/api/settings', auth, apiLimiter, settingsRoutes)
 // 公开系统设置（无需登录）
 app.get('/api/public-settings', async (req, res, next) => {
   try {
-    const locale = req.query.locale || 'zh'
+    const reqLocale = req.query.locale || null
     const [rows] = await pool.query("SELECT `key`, value FROM settings")
-    const data = { locale }
+    const data = { locale: reqLocale }
     for (const row of rows) {
       data[row.key] = row.value
     }
@@ -529,6 +530,19 @@ app.get('/api/public-settings', async (req, res, next) => {
       } catch (e) { console.error('[public-settings] endpoints error:', e.message) }
     }
 
+    // 2026-07-21 zh-HK: 根据 profile.languages 决定默认 locale
+    if (Array.isArray(data.languages) && data.languages.length > 0) {
+      if (!data.locale) {
+        data.locale = data.languages[0]  // HK profile 默认 zh-HK
+      } else if (!data.languages.includes(data.locale)) {
+        // 指定的 locale 不在 profile 支持列表, fallback 到第一个
+        data.locale = data.languages[0]
+      }
+    }
+    if (!data.locale) {
+      data.locale = 'zh'
+    }
+
     res.json({ code: 0, data })
   } catch (err) { next(err) }
 })
@@ -566,6 +580,7 @@ app.use('/api/log-interactions', auth, apiLimiter, logInteractionsRoutes)
 app.use('/api/order-aggregator', apiLimiter, orderAggregatorRoutes)
 app.use('/api/chat', chatRoutes) // 已废弃，保留路由占位
 app.use('/api/smart-studio', smartStudioRoutes)
+app.use('/api/im', imRoutes)
 app.use('/api/visit-logs', auth, apiLimiter, visitLogsRoutes)
 app.use('/api/share-logs', shareLogsRoutes) // Mixed auth (some public, some protected)
 app.use('/api/feedback', feedbackRoutes) // Mixed auth (some public, some protected)

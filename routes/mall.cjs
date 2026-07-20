@@ -410,7 +410,7 @@ router.get('/coupons', async (req, res, next) => {
     const offset = (page - 1) * size
 
     let sql = `
-      SELECT c.*, ucl.id as user_coupon_id, ucl.used_at, ucl.order_id
+      SELECT c.*, ucl.id as user_coupon_id, ucl.used_at, ucl.used_order_id as order_id
       FROM coupons c
       LEFT JOIN user_coupons ucl ON c.id = ucl.coupon_id AND ucl.user_id = ?
     `
@@ -430,10 +430,11 @@ router.get('/coupons', async (req, res, next) => {
     params.push(Number(size), Number(offset))
 
     const [rows] = await pool.query(sql, params)
-    const [[{ cnt }]] = await pool.query(
-      `SELECT COUNT(*) as cnt FROM coupons c ${sql.split('ORDER BY')[1].replace(/LIMIT.*OFFSET.*/i, '')}`,
-      countParams
-    )
+    // count 用 where + 同样的 join，但不重复 join 也不需要 ORDER BY
+    const whereMatch = sql.match(/WHERE[^]*?(?= ORDER BY|$)/i)
+    const whereSql = whereMatch ? whereMatch[0] : ''
+    const countSql = `SELECT COUNT(*) as cnt FROM coupons c LEFT JOIN user_coupons ucl ON c.id = ucl.coupon_id AND ucl.user_id = ? ${whereSql.replace(/^WHERE/i, 'AND')}`
+    const [[{ cnt }]] = await pool.query(countSql, countParams)
 
     res.json({ list: rows, total: cnt, page: Number(page), size: Number(size) })
   } catch (err) { next(err) }
@@ -509,9 +510,9 @@ router.get('/user-coupons', async (req, res, next) => {
     }
 
     const [rows] = await pool.query(`
-      SELECT uc.id as user_coupon_id, uc.used_at, uc.order_id,
-             c.id as coupon_id, c.name, c.type, c.discount_amount,
-             c.min_amount, c.start_time, c.end_time, c.stock
+      SELECT uc.id as user_coupon_id, uc.used_at, uc.used_order_id as order_id,
+             c.id as coupon_id, c.name, c.type, c.money as discount_amount,
+             c.min_price as min_amount, c.start_time, c.end_time, c.stock
       FROM user_coupons uc
       JOIN coupons c ON uc.coupon_id = c.id
       ${where}
@@ -674,17 +675,17 @@ router.get('/orders', async (req, res, next) => {
 
     const [rows] = await pool.query(`
       SELECT o.id, o.order_no, o.total_amount, o.freight_amount, o.discount_amount,
-             o.pay_amount, o.pay_type, o.status, o.remark,
-             o.member_name as receiver_name, o.member_phone as receiver_phone, '' as receiver_address,
-             o.paid_at, o.shipped_at, o.completed_at, o.created_at
-      FROM orders o
+             o.pay_amount, o.user_name as receiver_name, o.user_phone as receiver_phone,
+             o.receiver_address, o.remark, o.status, o.pay_time as paid_at,
+             o.ship_time as shipped_at, o.receive_time as completed_at, o.created_at
+      FROM mall_orders o
       ${where}
       ORDER BY o.created_at DESC
       LIMIT ? OFFSET ?
     `, [...params, Number(size), Number(offset)])
 
     const [[{ cnt }]] = await pool.query(
-      `SELECT COUNT(*) as cnt FROM orders o ${where}`, params
+      `SELECT COUNT(*) as cnt FROM mall_orders o ${where}`, params
     )
 
     // 加载每个订单的商品

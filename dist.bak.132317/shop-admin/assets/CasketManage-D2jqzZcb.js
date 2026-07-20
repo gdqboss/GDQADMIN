@@ -1,0 +1,1 @@
+import{d as t}from"./index-DaJRNfnb.js";import{o as s,f as a,j as o}from"./i18n-cGpaqGUJ.js";import"./scan-D7Ty9SHv.js";const r={},n={class:"p-6"};function c(f,e){return s(),a("div",n,[...e[0]||(e[0]=[o("h1",{class:"text-xl"},"CasketManage (TBD)",-1)])])}const l=t(r,[["render",c]]);export{l as default};

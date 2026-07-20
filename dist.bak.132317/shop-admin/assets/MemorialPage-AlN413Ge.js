@@ -1,0 +1,1 @@
+import{d as o}from"./index-DaJRNfnb.js";import{o as t,f as r,j as s}from"./i18n-cGpaqGUJ.js";import"./scan-D7Ty9SHv.js";const a={},c={class:"p-6"};function n(i,e){return t(),r("div",c,[...e[0]||(e[0]=[s("h1",{class:"text-xl"},"MemorialPage (TBD)",-1)])])}const _=o(a,[["render",n]]);export{_ as default};

@@ -1,0 +1,1 @@
+import{d as e}from"./index-DaJRNfnb.js";import{o as t,f as a,j as n}from"./i18n-cGpaqGUJ.js";import"./scan-D7Ty9SHv.js";const s={},r={class:"p-6"};function c(i,o){return t(),a("div",r,[...o[0]||(o[0]=[n("h1",{class:"text-xl"},"DonationManage (TBD)",-1)])])}const l=e(s,[["render",c]]);export{l as default};

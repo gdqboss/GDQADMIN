@@ -155,7 +155,7 @@ router.get('/', auth, async (req, res) => {
         hu.phone as h5_user_phone,
         p.name as product_name,
         p.image_main as product_image,
-        q.qr_code as qrcode_code
+        q.code as qrcode_code
       FROM share_logs sl
       LEFT JOIN users u ON sl.user_id = u.id
       LEFT JOIN h5_users hu ON sl.h5_user_id = hu.id
@@ -201,7 +201,7 @@ router.get('/:id', auth, async (req, res) => {
         p.name as product_name,
         p.image_main as product_image,
         p.description as product_description,
-        q.qr_code as qrcode_code,
+        q.code as qrcode_code,
         q.status as qrcode_status
       FROM share_logs sl
       LEFT JOIN users u ON sl.user_id = u.id

@@ -1,0 +1,1 @@
+import{d as s}from"./index-DaJRNfnb.js";import{o as e,f as t,j as r}from"./i18n-cGpaqGUJ.js";import"./scan-D7Ty9SHv.js";const a={},c={class:"p-6"};function n(d,o){return e(),t("div",c,[...o[0]||(o[0]=[r("h1",{class:"text-xl"},"Dashboard (TBD)",-1)])])}const l=s(a,[["render",n]]);export{l as default};

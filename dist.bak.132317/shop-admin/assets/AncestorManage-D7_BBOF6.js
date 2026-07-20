@@ -1,0 +1,1 @@
+import{d as t}from"./index-DaJRNfnb.js";import{o,f as s,j as r}from"./i18n-cGpaqGUJ.js";import"./scan-D7Ty9SHv.js";const a={},n={class:"p-6"};function c(f,e){return o(),s("div",n,[...e[0]||(e[0]=[r("h1",{class:"text-xl"},"AncestorManage (TBD)",-1)])])}const l=t(a,[["render",c]]);export{l as default};

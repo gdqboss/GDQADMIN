@@ -1,0 +1,1 @@
+import{d as o}from"./index-DaJRNfnb.js";import{o as t,f as s,j as a}from"./i18n-cGpaqGUJ.js";import"./scan-D7Ty9SHv.js";const n={},r={class:"p-6"};function c(f,e){return t(),s("div",r,[...e[0]||(e[0]=[a("h1",{class:"text-xl"},"MonkManage (TBD)",-1)])])}const l=o(n,[["render",c]]);export{l as default};

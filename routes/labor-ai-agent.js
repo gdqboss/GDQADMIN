@@ -616,6 +616,7 @@ async function handleChat(req, res, next) {
       }
     })
   } catch (e) {
+    console.error('[chat-debug] error:', e?.message, e?.stack?.split('\n').slice(0, 5).join(' | '))
     if (e.message?.includes('LLM') || e.message?.includes('未配置')) {
       return res.status(503).json({ code: 503, message: e.message })
     }

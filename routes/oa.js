@@ -587,7 +587,7 @@ router.post('/work-logs', async (req, res, next) => {
   try {
     const userId = req.user.id
     const { template_id, content, recipients, date, submit_date,
-            location, gps_lat, gps_lng, participants, attachments } = req.body
+            location, gps_lat, gps_lng, participants, attachments, images } = req.body
 
     if (!date) {
       return res.status(400).json({ code: 400, message: '日期必填' })
@@ -597,6 +597,9 @@ router.post('/work-logs', async (req, res, next) => {
     if (isNaN(logDate.getTime())) {
       return res.status(400).json({ code: 400, message: '日期格式错误' })
     }
+
+    // 2026-07-19 minip 修复: 兼容前端可能传 images 或 attachments,统一存 attachments 列
+    const finalAttachments = Array.isArray(attachments) ? attachments : (Array.isArray(images) ? images : null)
 
     const [result] = await pool.query(
       `INSERT INTO work_logs
@@ -614,7 +617,7 @@ router.post('/work-logs', async (req, res, next) => {
         gps_lat || null,
         gps_lng || null,
         participants ? JSON.stringify(participants) : null,
-        attachments ? JSON.stringify(attachments) : null
+        finalAttachments ? JSON.stringify(finalAttachments) : null
       ]
     )
 
@@ -627,11 +630,12 @@ router.post('/work-logs', async (req, res, next) => {
 // GET /api/oa/work-logs - Query logs (my logs / received logs / subordinate logs)
 router.get('/work-logs', async (req, res, next) => {
   try {
-    const { type, user_id, date, start_date, end_date } = req.query
+    const { type, user_id, date, start_date, end_date, keyword, log_type, status } = req.query
     const { page, size } = parsePagination(req.query)
     const currentUserId = req.user.id
 
-    let sql = `SELECT w.*, u.name as user_name, u.department, u.department_id, d.name as department_name, t.name as template_name FROM work_logs w LEFT JOIN users u ON w.user_id = u.id LEFT JOIN departments d ON u.department_id = d.id LEFT JOIN work_log_templates t ON w.template_id = t.id WHERE 1=1`
+    // 2026-07-19 minip 头像/姓名修复: 同时返 user_name/user_avatar(兼容老前端) 和 creator_name/creator_avatar(主站规范)
+    let sql = `SELECT w.*, u.name as user_name, u.avatar as user_avatar, u.name as creator_name, u.avatar as creator_avatar, u.department, u.department_id, d.name as department_name, t.name as template_name, r.name as reviewer_name FROM work_logs w LEFT JOIN users u ON w.user_id = u.id LEFT JOIN departments d ON u.department_id = d.id LEFT JOIN work_log_templates t ON w.template_id = t.id LEFT JOIN users r ON w.reviewer_id = r.id WHERE 1=1`
     const params = []
 
     if (type === 'received') {
@@ -720,6 +724,24 @@ router.get('/work-logs', async (req, res, next) => {
       params.push(end_date)
     }
 
+    // 2026-07-17 minip admin 需求: type=all 时支持 keyword/log_type/status 筛选
+    if (type === 'all') {
+      if (log_type) {
+        sql += ' AND w.log_type = ?'
+        params.push(log_type)
+      }
+      if (status) {
+        sql += ' AND w.status = ?'
+        params.push(status)
+      }
+      if (keyword) {
+        // 搜提交人姓名/部门/日志内容(title/today_work)
+        const kw = `%${keyword}%`
+        sql += ' AND (u.name LIKE ? OR u.department LIKE ? OR d.name LIKE ? OR w.content LIKE ?)'
+        params.push(kw, kw, kw, kw)
+      }
+    }
+
     // Build count query
     const countSql = sql.replace(/SELECT w\.\*, u\.name as user_name.*?FROM/, 'SELECT COUNT(*) as total FROM')
     const countResult = await pool.query(countSql, params)
@@ -786,7 +808,26 @@ router.get('/work-logs', async (req, res, next) => {
     }))
 
 
-    res.json({ code: 0, data: { list: rows, total, page, size }, message: 'ok' })
+    // 2026-07-19 minip 头像/姓名修复: 用 parsedRows(解析 JSON) + images[] 数组(前端要用)
+    const finalRows = parsedRows.map(row => {
+      // 兼容三种来源: 1) attachments 列(数组), 2) content.images 数组(string/object 混合), 3) content.image(单张 string)
+      const contentImgs = (row.content && Array.isArray(row.content.images)) ? row.content.images : []
+      const contentSingleImg = (row.content && typeof row.content.image === 'string') ? [row.content.image] : []
+      const attachImgs = Array.isArray(row.attachments) ? row.attachments : []
+      const rawImgs = attachImgs.length > 0 ? attachImgs : (contentImgs.length > 0 ? contentImgs : contentSingleImg)
+      // 规范化: 统一成 [{url, name}] 格式
+      const normImgs = rawImgs.map(img => {
+        if (typeof img === 'string') return { url: img, name: '' }
+        return { url: img.url || img.path || '', name: img.name || '' }
+      }).filter(i => i.url)
+      return {
+        ...row,
+        images: normImgs,
+        image_url: normImgs.length > 0 ? normImgs[0].url : ''
+      }
+    })
+
+    res.json({ code: 0, data: { list: finalRows, total, page, size }, message: 'ok' })
   } catch (err) { next(err) }
 })
 
@@ -850,6 +891,75 @@ router.put('/work-logs/:id', async (req, res, next) => {
     await pool.query(`UPDATE work_logs SET ${updates.join(', ')} WHERE id = ?`, params);
 
     res.json({ code: 0, message: 'Work log updated successfully' });
+  } catch (err) { next(err); }
+});
+
+// PATCH /api/oa/work-logs/:id/review - 管理员审核日志 (2026-07-17 minip admin 需求)
+router.patch('/work-logs/:id/review', requireRole(ROLES.ADMIN, ROLES.MANAGER, ROLES.DIRECTOR), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status, comment } = req.body;
+
+    // 校验 status 值
+    const allowedStatus = ['approved', 'rejected', 'submitted'];
+    if (!allowedStatus.includes(status)) {
+      return res.status(400).json({
+        code: 400,
+        message: 'status 必须是 approved / rejected / submitted'
+      });
+    }
+
+    // 校验日志存在
+    const [logs] = await pool.query(
+      'SELECT id FROM work_logs WHERE id = ?',
+      [id]
+    );
+    if (logs.length === 0) {
+      return res.status(404).json({ code: 404, message: '日志不存在' });
+    }
+
+    // 更新 status + 审核信息
+    await pool.query(
+      `UPDATE work_logs
+       SET status = ?,
+           reviewer_id = ?,
+           reviewed_at = NOW(),
+           review_comment = ?
+       WHERE id = ?`,
+      [status, req.user.id, comment || null, id]
+    );
+
+    res.json({
+      code: 0,
+      message: status === 'approved' ? '已通过' : status === 'rejected' ? '已驳回' : '已重置'
+    });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/oa/work-logs/:id - 删除日志 (2026-07-17 minip admin 需求)
+//   创建者可删自己的; admin/manager/director 可删任何人的
+router.delete('/work-logs/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const [logs] = await pool.query(
+      'SELECT user_id FROM work_logs WHERE id = ?',
+      [id]
+    );
+    if (logs.length === 0) {
+      return res.status(404).json({ code: 404, message: '日志不存在' });
+    }
+
+    // 权限: 自己的日志 / admin / manager / director
+    const isOwner = logs[0].user_id === req.user.id;
+    const isReviewer = [ROLES.ADMIN, ROLES.MANAGER, ROLES.DIRECTOR].includes(req.user.role);
+    if (!isOwner && !isReviewer) {
+      return res.status(403).json({ code: 403, message: '仅创建者或管理员可删除' });
+    }
+
+    await pool.query('DELETE FROM work_logs WHERE id = ?', [id]);
+
+    res.json({ code: 0, message: '已删除' });
   } catch (err) { next(err); }
 });
 

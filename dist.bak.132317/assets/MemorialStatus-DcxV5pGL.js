@@ -1,0 +1,1 @@
+import{d as e}from"./index-DaJRNfnb.js";import{o,f as s,j as r}from"./i18n-cGpaqGUJ.js";import"./scan-D7Ty9SHv.js";const a={},c={class:"p-6"};function n(i,t){return o(),s("div",c,[...t[0]||(t[0]=[r("h1",{class:"text-xl"},"MemorialStatus (TBD)",-1)])])}const _=e(a,[["render",n]]);export{_ as default};

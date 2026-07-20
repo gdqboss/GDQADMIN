@@ -370,10 +370,10 @@ router.post('/phone-login', loginLimiter, async (req, res, next) => {
     const [users] = await pool.query('SELECT * FROM users WHERE phone = ?', [phone])
     let user
     if (!users.length) {
-      // 自动注册
+      // 自动注册 — email/password 占位 (email/password 列 UNIQUE NOT NULL)
       const [result] = await pool.query(
-        `INSERT INTO users (name, phone, auth_type, role, status, created_at) VALUES (?, ?, 'phone', 'member', 'active', NOW())`,
-        [`用户${phone.slice(-4)}`, phone]
+        `INSERT INTO users (name, email, phone, password, auth_type, role, status, created_at) VALUES (?, ?, ?, '', 'phone', 'member', 'active', NOW())`,
+        [`用户${phone.slice(-4)}`, `${phone}@caimeite.local`, phone]
       )
       ;[user] = await pool.query('SELECT * FROM users WHERE id = ?', [result.insertId])
     } else {

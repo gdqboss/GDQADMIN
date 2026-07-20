@@ -1,0 +1,1 @@
+import{d as r}from"./index-DaJRNfnb.js";import{o as t,f as o,j as s}from"./i18n-cGpaqGUJ.js";import"./scan-D7Ty9SHv.js";const a={},n={class:"p-6"};function c(d,e){return t(),o("div",n,[...e[0]||(e[0]=[s("h1",{class:"text-xl"},"OrderManage (TBD)",-1)])])}const l=r(a,[["render",c]]);export{l as default};

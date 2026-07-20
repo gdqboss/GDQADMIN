@@ -117,15 +117,34 @@
 
 ---
 
-## 六、当前所有 profile 状态 (2026-07-12)
+## 六、当前所有 profile 状态 (2026-07-21 更新,profile 6/7 上线)
 
 ```
-profile 1 新加坡开发  (43.134.31.232, wecom.gdqshop.cn)        — 54 modules, 全选
-profile 2 北京彩美特  (81.70.199.64, claw.gdqshop.cn)          — 28 modules
-profile 3 3号仓库    (43.160.238.201, mywh3.com)              — 25 modules
-profile 4 上海智慧家园 (111.229.144.150, gdqshop.cn)          — 30 modules
-profile 5 SmartBiz   (100.64.122.98, wecom.gdqshop.cn/labor/) — 13 modules
+profile 1 新加坡开发          (43.134.31.232,  wecom.gdqshop.cn)        — 54 modules, 全选, dev
+profile 2 北京彩美特          (81.70.199.64,   claw.gdqshop.cn)         — 28 modules, prod
+profile 3 3号仓库             (43.160.238.201, mywh3.com)               — 25 modules, staging
+profile 4 上海智慧家园商城    (111.229.144.150, gdqshop.cn)             — 30 modules, staging
+profile 5 SmartBiz / Labor    (100.64.122.98,  wecom.gdqshop.cn/labor/) — 13 modules, dev
+profile 6 Bangkok-CMT         (43.152.237.77,  caimeite.com)            — TBD modules, prod
+profile 7 横琴港澳科技孵化器  (43.128.47.254,  hatch.gdqshop.cn)        — 26 modules, prod (HK)
 ```
+
+### Profile 7 (HK 横琴港澳科技孵化器) — 2026-07-21 接入
+
+| 项 | 值 |
+|---|---|
+| SSH | `ssh hk-incubator` (`/root/.ssh/hk-incubator/hk_incubator_v4.pem`) |
+| WireGuard | `hk-incubator-wg` (10.99.0.2, 快路径) |
+| nginx 路径 | `/var/www/hatch/` |
+| web server | **Caddy**(不是 nginx)— /api/* 走 wg 反代 SGP 3200 |
+| 后端 | **共享 SGP 后端**(通过 wg 隧道,HK 不跑自己的 Node) |
+| site_name_zh / en | 横琴港澳科技孵化器 / HK-GBA Tech Incubator |
+| language | `["zh-HK","zh-CN","en"]` (DB 配,代码 zh-HK 待补) |
+| currency / industry | HKD / 科技孵化 |
+| admin 账号 | id=9 江清波 phone=18676970008 server_profile_id=7 |
+| 4 应用入口 | `/` minip · `/labor` labor · `/gdqadmin` admin · `/api/*` → SGP |
+
+**同步逻辑** (`server-profiles.js` line 250): domain=hatch.gdqshop.cn 自动选 `/var/www/hatch/`,useSudo=true(env=production)。
 
 任何改动必须先 `mysql SELECT * FROM server_modules WHERE server_profile_id = ?`
 确认目标 profile 已勾选, 再动手.

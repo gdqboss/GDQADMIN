@@ -400,14 +400,21 @@ router.get('/', async (req, res, next) => {
       SELECT
         wl.*,
         u.name as creator_name,
+        u.avatar as creator_avatar,
         u.department as creator_department,
-        wlt.name as template_name
+        wlt.name as template_name,
+        (SELECT COUNT(*) FROM work_log_interactions WHERE log_id = wl.id AND type = 'like') as like_count,
+        (SELECT COUNT(*) FROM work_log_interactions WHERE log_id = wl.id AND type = 'dislike') as dislike_count,
+        (SELECT COUNT(*) FROM work_log_interactions WHERE log_id = wl.id AND type = 'forward') as forward_count,
+        (SELECT COUNT(*) FROM work_log_interactions WHERE log_id = wl.id AND type = 'comment') as comment_count,
+        EXISTS(SELECT 1 FROM work_log_interactions WHERE log_id = wl.id AND user_id = ? AND type = 'like') as liked_by_me,
+        EXISTS(SELECT 1 FROM work_log_interactions WHERE log_id = wl.id AND user_id = ? AND type = 'dislike') as disliked_by_me
       FROM work_logs wl
       LEFT JOIN users u ON wl.user_id = u.id
       LEFT JOIN work_log_templates wlt ON wl.template_id = wlt.id
       WHERE 1=1
     `;
-    const params = [];
+    const params = [req.user.id, req.user.id];
 
     // Filter by type
     if (logType === 'mine') {
@@ -505,6 +512,8 @@ router.get('/:id', async (req, res, next) => {
       `SELECT
         wl.*,
         u.name as creator_name,
+        u.avatar as creator_avatar,
+        u.department as creator_department,
         wlt.name as template_name,
         wlt.fields as template_fields
       FROM work_logs wl
@@ -522,6 +531,9 @@ router.get('/:id', async (req, res, next) => {
     }
 
     const log = logs[0];
+    // 兜底：JOIN miss 时显示"用户#user_id"（修 2026-07-16 BJ 详情缺作者）
+    log.creator_name = log.creator_name || `用户#${log.user_id}`;
+    log.creator_department = log.creator_department || '';
 
     // Check permission: creator or recipient or admin
     const isAdmin = [ROLES.ADMIN, ROLES.MANAGER, ROLES.DIRECTOR].includes(req.user.role);
@@ -873,13 +885,17 @@ router.post('/:id/like', async (req, res, next) => {
 });
 
 // GET /api/work-logs/:id/interactions - Get all interactions for a log
-router.get('/:id/interactions', async (req, res, next) => {
+// GET /api/work-logs/:id/interactions - 拉评论/点赞/反对/转发列表
+// 修 2026-07-17 BJ "评论回复不见了" — 互动信息是公司内部业务,
+// 所有登录用户都能查看(对齐"无权限不显示"原则 — 评论对全员可见)
+// 但仍用 requirePermission('work_log:read') 兜底,防止无权限用户偷看
+router.get('/:id/interactions', requirePermission('work_log:read'), async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    // Check if log exists and user has access
+    // Check if log exists
     const [logs] = await pool.query(
-      'SELECT user_id, recipients FROM work_logs WHERE id = ?',
+      'SELECT id, user_id, recipients FROM work_logs WHERE id = ?',
       [id]
     );
 
@@ -890,16 +906,9 @@ router.get('/:id/interactions', async (req, res, next) => {
       });
     }
 
-    const log = logs[0];
-    const recipients = safeParse(log.recipients);
-
-    if (log.user_id !== req.user.id && !recipients.includes(req.user.id)) {
-      return res.status(403).json({
-        code: 403,
-        message: 'Access denied'
-      });
-    }
-
+    // 修 2026-07-17 BJ "评论回复不见了" — 互动信息(评论/点赞)是公司内部业务信息,
+    // 不是私密数据,所有登录用户都应该能查看(对齐"无权限不显示,出现即可用"原则 — 评论对全员可见)
+    // 仍保留 work_log:read 权限检查作为安全网(中间件 requirePermission 在 mount 时已加)
     const [interactions] = await pool.query(
       `SELECT
         wli.*,

@@ -27,6 +27,8 @@ const MODULE_KEY_ALIASES = {
   'aftersale':          'aftersales.js',
   'referral':           'referral.js',
   'labor-ai':           'labor-ai.js',  // 2026-07-13: 鼓励/成长/知识库/健康 (复用既有表)
+  'smart-studio':       'smart-studio.js',  // 2026-07-17: 私聊模块,只在新加坡 profile 1 启用
+  'ai-assistant':       'ai-assistant.js',  // 2026-07-18: 横琴湾 AI 助手迁移（原 /root/backend/src/services/ai/assistant.js）,只 profile 1
 }
 
 // ============================================================
@@ -105,6 +107,8 @@ const syncWorkDir = '/tmp/sync-work'
 })
 
 // POST /:id/exec-sync — 立即返回 taskId，子进程跑同步
+// 铁律 2026-07-21: **only when 波哥 says "同步到 X"** — 绝对禁止任何 cron / agent 私自触发
+// AGENTS.md "跨服务器一致性铁律": 波哥没明确说同步 → 绝对不动目标服务器
 router.post('/:id/exec-sync', requireRole('admin'), async (req, res) => {
   const { spawn } = await import('child_process')
   const crypto = await import('crypto')
@@ -245,9 +249,18 @@ try {
   writeState({ status: 'running', step: 7, label: '模块配置同步完成', percent: 85 });
 
   // Step 5: mv to nginx root
+  // profile 路径规则（按 profile.domain 或 profile.name 匹配）:
+  //   domain=hatch.gdqshop.cn  → /var/www/hatch/                  (HK 横琴港澳科技孵化器)
+  //   domain=claw.gdqshop.cn   → /var/www/claw.gdqshop.cn/        (北京彩美特)
+  //   env=production / name=北京 → /var/www/claw.gdqshop.cn/      (兼容老规则)
+  //   其它                       → /var/www/caimeite/              (默认 SGP/Bangkok 等)
   let targetNginx = '/var/www/caimeite/';
-  if (profile.env === 'production' || profile.name === '北京') targetNginx = '/var/www/claw.gdqshop.cn/';
-  const useSudo = profile.env === 'production' || profile.name === '北京';
+  if (profile.domain === 'hatch.gdqshop.cn' || profile.name === '横琴港澳科技孵化器') {
+    targetNginx = '/var/www/hatch/';
+  } else if (profile.domain === 'claw.gdqshop.cn' || profile.env === 'production' || profile.name === '北京') {
+    targetNginx = '/var/www/claw.gdqshop.cn/';
+  }
+  const useSudo = profile.env === 'production' || profile.name === '北京' || profile.name === '横琴港澳科技孵化器';
   const mvCmd = (useSudo ? 'sudo ' : '') + 'cp -rf ' + remoteDir + '/* ' + targetNginx + '/ && ' + (useSudo ? 'sudo ' : '') + 'rm -rf ' + remoteDir + ' 2>/dev/null; true';
   await runSSH(mvCmd);
 

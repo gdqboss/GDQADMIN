@@ -51,9 +51,9 @@ router.post('/', uploadFeedback.array('images', 5), async (req, res, next) => {
     const images = req.files ? req.files.map(f => `/uploads/feedback/${f.filename}`) : []
 
     const [result] = await pool.query(
-      `INSERT INTO feedback (type, title, content, images, contact_phone, user_id, h5_user_id, target_user_id, recipients, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
-      [type, title, content, JSON.stringify(images), contact_phone, userId, h5UserId]
+      `INSERT INTO feedback_records (type, title, content, images, contact_phone, user_id, h5_user_id, target_user_id, recipients, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
+      [type, title, content, JSON.stringify(images), contact_phone, userId, h5UserId, target_user_id || null, recipients ? JSON.stringify(recipients) : null]
     )
 
     res.json({ code: 0, data: { id: result.insertId }, message: '提交成功' })
@@ -114,7 +114,7 @@ router.get('/', auth, async (req, res, next) => {
         u.name as user_name, u.email as user_email,
         h.name as h5_user_name, h.phone as h5_user_phone,
         a.name as assigned_to_name
-      FROM feedback f
+      FROM feedback_records f
       LEFT JOIN users u ON f.user_id = u.id
       LEFT JOIN h5_users h ON f.h5_user_id = h.id
       LEFT JOIN users a ON f.assigned_to = a.id
@@ -125,7 +125,7 @@ router.get('/', auth, async (req, res, next) => {
 
     const countSql = `
       SELECT COUNT(*) as total
-      FROM feedback f
+      FROM feedback_records f
       ${where}
     `
 
@@ -176,20 +176,20 @@ router.get('/stats', auth, async (req, res, next) => {
 
     // Total by type
     const [typeStats] = await pool.query(
-      `SELECT type, COUNT(*) as count FROM feedback WHERE 1=1 ${dateFilter} GROUP BY type`,
+      `SELECT type, COUNT(*) as count FROM feedback_records WHERE 1=1 ${dateFilter} GROUP BY type`,
       params
     )
 
     // Total by status
     const [statusStats] = await pool.query(
-      `SELECT status, COUNT(*) as count FROM feedback WHERE 1=1 ${dateFilter} GROUP BY status`,
+      `SELECT status, COUNT(*) as count FROM feedback_records WHERE 1=1 ${dateFilter} GROUP BY status`,
       params
     )
 
     // Average resolution time (in hours)
     const [[{ avg_resolution_time }]] = await pool.query(
       `SELECT AVG(TIMESTAMPDIFF(HOUR, created_at, resolved_at)) as avg_resolution_time
-       FROM feedback
+       FROM feedback_records
        WHERE status = 'resolved' AND resolved_at IS NOT NULL ${dateFilter}`,
       params
     )
@@ -226,7 +226,7 @@ router.get('/:id', auth, async (req, res, next) => {
         u.name as user_name, u.email as user_email, u.phone as user_phone,
         h.name as h5_user_name, h.phone as h5_user_phone,
         a.name as assigned_to_name, a.email as assigned_to_email
-       FROM feedback f
+       FROM feedback_records f
        LEFT JOIN users u ON f.user_id = u.id
        LEFT JOIN h5_users h ON f.h5_user_id = h.id
        LEFT JOIN users a ON f.assigned_to = a.id
@@ -284,7 +284,7 @@ router.put('/:id/assign', auth, async (req, res, next) => {
     }
 
     await pool.query(
-      `UPDATE feedback SET assigned_to = ?, status = 'processing', updated_at = NOW() WHERE id = ?`,
+      `UPDATE feedback_records SET assigned_to = ?, status = 'processing', updated_at = NOW() WHERE id = ?`,
       [assigned_to, req.params.id]
     )
 
@@ -304,7 +304,7 @@ router.put('/:id/reply', auth, async (req, res, next) => {
     }
 
     // Check if user is assigned or admin
-    const [[feedback]] = await pool.query('SELECT assigned_to FROM feedback WHERE id = ?', [req.params.id])
+    const [[feedback]] = await pool.query('SELECT assigned_to FROM feedback_records WHERE id = ?', [req.params.id])
 
     if (!feedback) {
       return res.status(404).json({ code: 404, message: '反馈不存在' })
@@ -315,7 +315,7 @@ router.put('/:id/reply', auth, async (req, res, next) => {
     }
 
     await pool.query(
-      `UPDATE feedback SET reply = ?, status = 'resolved', resolved_at = NOW(), updated_at = NOW() WHERE id = ?`,
+      `UPDATE feedback_records SET reply = ?, status = 'resolved', resolved_at = NOW(), updated_at = NOW() WHERE id = ?`,
       [reply, req.params.id]
     )
 
@@ -333,7 +333,7 @@ router.put('/:id/close', auth, async (req, res, next) => {
     }
 
     await pool.query(
-      `UPDATE feedback SET status = 'closed', updated_at = NOW() WHERE id = ?`,
+      `UPDATE feedback_records SET status = 'closed', updated_at = NOW() WHERE id = ?`,
       [req.params.id]
     )
 

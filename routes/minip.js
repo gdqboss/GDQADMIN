@@ -887,15 +887,17 @@ router.get('/config', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
-// GET /api/minip/office/work-logs - 我的工作日志列表（用 work_logs 表，统一主站）
+// GET /api/minip/office/work-logs - 我的工作日志列表（抄主站 work-logs.js，统一返回结构 + creator_* 字段）
 router.get('/office/work-logs', auth, async (req, res, next) => {
   try {
     const userId = req.user.id
-    const { page = 1, pageSize = 20 } = req.query
+    const { page = 1, pageSize = 20, type, status, date_from, date_to } = req.query
     const offset = (Number(page) - 1) * Number(pageSize)
+    // 与主站 work-logs.js 保持一致：creator_name + creator_avatar + attachments (JSON 数组)
     const [rows] = await pool.query(
-      `SELECT w.id, w.submit_date, w.content, w.today_work, w.tomorrow_plan, w.issues, w.status, w.log_type, w.created_at,
-              u.name as user_name
+      `SELECT w.id, w.user_id, w.log_type, w.submit_date, w.content, w.today_work, w.tomorrow_plan, w.issues, w.status,
+              w.attachments, w.created_at,
+              u.name as creator_name, u.avatar as creator_avatar, u.department as creator_department
        FROM work_logs w
        LEFT JOIN users u ON w.user_id = u.id
        WHERE w.user_id = ?
@@ -907,20 +909,48 @@ router.get('/office/work-logs', auth, async (req, res, next) => {
       'SELECT COUNT(*) as total FROM work_logs WHERE user_id = ?',
       [userId]
     )
-    res.json({ code: 0, data: { list: rows, total: Number(total) } })
+    // 解析 attachments 为 images 数组 (抄主站 WorkLogManage-Dg-nx-L1.js 渲染逻辑: e.url || e)
+    const logs = rows.map(r => {
+      let images = []
+      try { images = r.attachments ? (typeof r.attachments === 'string' ? JSON.parse(r.attachments) : r.attachments) : [] } catch (e) { images = [] }
+      return {
+        ...r,
+        attachments: images,
+        images,                                  // 主站 WorkLogManage 用 images 字段
+        image_url: images.length ? (images[0].url || images[0]) : '',  // 兼容前端 image 字段
+        user_name: r.creator_name || `用户#${r.user_id}`,              // 兼容前端 user_name 字段
+        avatar_url: r.creator_avatar || '',                             // 兼容前端 avatar_url 字段
+        creator_name: r.creator_name || `用户#${r.user_id}`
+      }
+    })
+    res.json({
+      code: 0,
+      data: {
+        list: logs,                  // 兼容 minip 原 list 字段
+        logs: logs,                  // 兼容主站 logs 字段
+        total: Number(total),
+        page: Number(page),
+        limit: Number(pageSize)
+      }
+    })
   } catch (err) { next(err) }
 })
 
-// POST /api/minip/office/work-logs - 提交工作日志
+// POST /api/minip/office/work-logs - 提交工作日志（抄主站 work-logs.js: 存 attachments JSON 数组）
 router.post('/office/work-logs', auth, async (req, res, next) => {
   try {
     const userId = req.user.id
-    const { submit_date, content, today_work, tomorrow_plan, issues, log_type = 'work' } = req.body
+    const { submit_date, content, today_work, tomorrow_plan, issues, log_type = 'work', attachments, cover_image, images } = req.body
     if (!content && !today_work) return res.status(400).json({ code: 400, message: '日志内容不能为空' })
+    // 兼容多种图片字段名: attachments 数组 / images 数组 / cover_image 单图
+    let normalizedAttachments = []
+    if (Array.isArray(attachments)) normalizedAttachments = attachments
+    else if (Array.isArray(images)) normalizedAttachments = images
+    else if (cover_image) normalizedAttachments = [{ url: cover_image }]
     const [r] = await pool.query(
-      `INSERT INTO work_logs (user_id, log_type, submit_date, content, today_work, tomorrow_plan, issues, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'submitted')`,
-      [userId, log_type, submit_date || new Date().toISOString().slice(0, 10), content || today_work, today_work || content, tomorrow_plan || null, issues || null]
+      `INSERT INTO work_logs (user_id, log_type, submit_date, content, today_work, tomorrow_plan, issues, attachments, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'submitted')`,
+      [userId, log_type, submit_date || new Date().toISOString().slice(0, 10), content || today_work, today_work || content, tomorrow_plan || null, issues || null, JSON.stringify(normalizedAttachments)]
     )
     res.json({ code: 0, data: { id: r.insertId } })
   } catch (err) {
