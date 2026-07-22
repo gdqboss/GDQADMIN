@@ -155,6 +155,12 @@ const PERMISSIONS = {
   PREORDER_CREATE:    'preorder:create',     // 店长/员工提交预订单
   PREORDER_READ:      'preorder:read',       // 查看预订单列表
   PREORDER_AGGREGATE: 'preorder:aggregate',  // 汇总表（合并多店 → 出 PO）
+
+  // 寺庙管理 (2026-07-22 波哥指令"必须和主站后端关联,可以管理和编辑")
+  TEMPLE_READ:     'temple:read',     // 浏览寺庙内容、牌位、家属信息
+  TEMPLE_WRITE:    'temple:write',    // 编辑审核、信众标注
+  TEMPLE_DELETE:   'temple:delete',   // 删除牌位/活动/轮播
+  TEMPLE_DISPATCH: 'temple:dispatch', // 派单 (QR 扫码触发)
 }
 
 // 角色常量

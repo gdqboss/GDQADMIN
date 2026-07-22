@@ -77,6 +77,7 @@ import minipAiHrRoutes from './routes/minip-ai-hr.js'
 import minipAiMarketingRoutes from './routes/minip-ai-marketing.js'
 import minipAiBrainRoutes from './routes/minip-ai-brain.js'
 import laborAiRoutes from './routes/labor-ai.js'
+import templeRoutes from './routes/temple.js'
 import {
   workerRouter as laborWorkerRouter,
   jobsiteRouter as laborJobsiteRouter,
@@ -608,10 +609,22 @@ app.use('/api/labor-hr', auth, apiLimiter, laborHrRoutes)
 app.use('/api/labor-appeals', auth, apiLimiter, laborAppealsRoutes)
 app.use('/api/server-profiles', auth, apiLimiter, requireRole('admin'), serverProfilesRoutes)
 app.use('/api/server-endpoints', auth, apiLimiter, requireRole('admin'), serverEndpointsRoutes)
-app.use('/api', auth, apiLimiter, inventoryRoutes)
+// inventory.js L406 app.use('/api', inventoryRoutes) 内的 /returns 路由接管
+// 2026-07-22 加 skip: /api/temple/* 路径必须穿透,否则会被 catch-all 的 auth 拦截
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/temple/')) return next()
+  return auth(req, res, () => apiLimiter(req, res, () => inventoryRoutes(req, res, next)))
+})
 app.use('/api/quote', auth, apiLimiter, quoteRoutes)
 app.use('/api/rental', auth, apiLimiter, rentalRoutes)
 app.use('/api/sidebar', sidebarRoutes)
+
+// 寺庙模块 — 2026-07-22 重构 (3 层路由)
+// /api/temple/public/*   公开接口,无需登录
+// /api/temple/me/*       登录用户接口 (auth 中间件)
+// /api/temple/family/*   牌位家属接口 (auth + requireFamilyOfCasket 业务中间件)
+// /api/temple/admin/*    管理端接口 (auth + requirePermission, admin 自动放行)
+app.use('/api/temple', templeRoutes)
 
 // rentalPublicRoutes 已在 inventory catch-all 之前挂载（见上面的位置）
 
