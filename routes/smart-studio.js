@@ -144,26 +144,31 @@ router.post('/login', async (req, res) => {
           let mappedRole = 'user'
           if (mRole === 'superadmin' || mRole === 'super_admin' || mRole === 'admin') mappedRole = 'superadmin'
           else if (mRole === 'manager') mappedRole = 'admin'
-          // 自动在 smart_studio_users 创建 mirror (或同步更新)
+          // A2 (2026-07-24): 不再自动建孤儿 mirror
+          //   主站命中 → 先看 chat 是否已有该 username 的 mirror
+          //     有 → 同步 display_name/role/hash 后用现有 mirror 登入 (保持跨系统登录能力)
+          //     没 → 拒绝 (账号未在 chat 注册), 防止"主站账号随便登 chat 就建个新孤儿"
           const mirrorUsername = main.phone || main.email || usernameClean
           const displayName = main.name || main.email || mirrorUsername
-          await pool.query(
-            `INSERT INTO smart_studio_users
-             (username, display_name, password_hash, role, is_active, created_at)
-             VALUES (?, ?, ?, ?, 1, NOW())
-             ON DUPLICATE KEY UPDATE
-               display_name = VALUES(display_name),
-               role = VALUES(role),
-               password_hash = VALUES(password_hash),
-               is_active = 1`,
-            [mirrorUsername, displayName, main.password || '', mappedRole]
-          )
-          // 重新读 mirror (使用 mirrorUsername, 不是 usernameClean — 因为 mirror 可能存 phone)
           const [rows2] = await pool.query(
             'SELECT * FROM smart_studio_users WHERE username=? LIMIT 1',
             [mirrorUsername]
           )
-          u = rows2[0]
+          const existingMirror = rows2[0]
+          if (!existingMirror) {
+            return res.json({ ok: false, error: '该主站账号未在 chat 注册,请联系管理员' })
+          }
+          // 同步更新 (不动 username/id,只刷新 display_name/role/hash/is_active)
+          await pool.query(
+            `UPDATE smart_studio_users SET
+               display_name = ?,
+               role = ?,
+               password_hash = ?,
+               is_active = 1
+             WHERE id = ?`,
+            [displayName, mappedRole, main.password || '', existingMirror.id]
+          )
+          u = { ...existingMirror, display_name: displayName, role: mappedRole, password_hash: main.password || '' }
           source = 'main_site'
         }
       } catch (e) {
@@ -412,8 +417,10 @@ async function getOrCreateDmRoom(userA, userB) {
     [userA, userB]
   )
   if (rooms.length) return rooms[0].id
+  // 改 (2026-07-24): userA 主动发起 → userA 是 created_by
   const [r] = await pool.query(
-    "INSERT INTO smart_studio_rooms (room_type) VALUES ('dm')"
+    "INSERT INTO smart_studio_rooms (room_type, created_by) VALUES ('dm', ?)",
+    [userA]
   )
   const roomId = r.insertId
   await pool.query(
@@ -435,56 +442,809 @@ async function ensureFriendship(uid1, uid2) {
 
 router.post('/rooms/with/:friendUserId', auth, requirePermission(P.SMART_STUDIO_READ), async (req, res) => {
   try {
+    console.warn('[DEPRECATED 2026-07-24] /rooms/with/:friendUserId 被调用, 应改用 /peers/user/:id/* (好友私聊不建房)')
     const me = req.userId
     const other = parseInt(req.params.friendUserId, 10)
     if (!other || other === me) return res.json({ ok: false, error: '参数错误' })
     const isFriend = await ensureFriendship(me, other)
     if (!isFriend) return res.json({ ok: false, error: '需要先加好友' })
+    // 兼容老前端: 仍然建/拿 DM 房 (但前端不应该再调, 留 1 周观察期再删)
     const roomId = await getOrCreateDmRoom(me, other)
-    res.json({ ok: true, room_id: roomId })
+    res.set('X-Deprecated', 'Use /peers/user/:id/messages instead')
+    res.json({ ok: true, room_id: roomId, _deprecated: true })
   } catch (e) {
     res.json({ ok: false, error: e.message })
   }
 })
 
+// ============================================================================
+// Telegram 风格重构 (2026-07-24): peer_id+peer_type 取代 room_id
+//   - GET /dialogs                              → 我的所有 dialog (好友 1-on-1 + group)
+//   - GET /peers/:peerType/:peerId/messages     → 拉一个对话的消息
+//   - POST /peers/:peerType/:peerId/send-text   → 发文本
+//   - POST /peers/:peerType/:peerId/send-image  → 发图
+//   - POST /peers/:peerType/:peerId/read        → 标记已读
+//   - POST /peers/:peerType/:peerId/typing      → 输入中心跳
+//   - GET /peers/:peerType/:peerId/typing       → 对方是否输入中
+//   - GET /peers/:peerType/:peerId/online       → peer 在线状态 (1-on-1)
+//   - GET /users/:userId/online                 → 用户在线
+//   - GET /groups/:groupId                      → 群详情 + 成员列表
+// ============================================================================
+
+// 工具: 把 message 序列化成前端友好结构
+function serializeMessage(m, me) {
+  return {
+    id: m.id,
+    peer_id: m.peer_id,
+    peer_type: m.peer_type,
+    sender_id: m.sender_id,
+    message_type: m.message_type,
+    content: m.content,
+    image_url: m.image_url,
+    hidden: m.hidden,
+    created_at: m.created_at,
+    edited_at: m.edited_at,
+    reply_to_id: m.reply_to_id || null,
+    reply_to_content: m.reply_to_content || null,
+    reply_to_sender_id: m.reply_to_sender_id || null,
+    reply_to_type: m.reply_to_type || null,
+    read_by_peer: m.sender_id === me && m.id <= (m.peer_last_read || 0)
+  }
+}
+
+// 计算 DM 双向: 给定 (me, peer_id, peer_type='user'), 拉所有"两人间"消息
+//   历史 dm 房的多成员消息: 只要 sender 或 peer_id 是我/对方, 都算 (历史兼容)
+async function getDmMessages(me, peerId, sinceId, beforeId, limit, role) {
+  const useBefore = beforeId > 0
+  const filterId = useBefore ? beforeId : sinceId
+  const idOp = useBefore ? '<' : '>'
+  const orderDir = useBefore ? 'DESC' : 'ASC'
+  // hidden 规则: superadmin 看全部; 自己发的隐身消息自己能看; 别人隐身消息看不到
+  const hiddenClause = role === 'superadmin' ? '' : 'AND (m.hidden = 0 OR m.sender_id = ?)'
+  // 参数顺序:  peer_last_read JOIN 用 (me, peerId);  OR 条件 (me, peerId, peerId, me);  idOp (filterId);  hidden (me);  LIMIT
+  const params = [me, peerId, me, peerId, peerId, me, filterId]
+  if (role !== 'superadmin') params.push(me)
+  params.push(limit)
+  // 用 LEFT JOIN 而不是子查询, 避免 mysql2 子查询 ? 占位符 edge case
+  const [rows] = await pool.query(
+    `SELECT m.id, m.peer_id, m.peer_type, m.sender_id, m.message_type, m.content, m.image_url,
+            m.hidden, m.created_at, m.edited_at,
+            m.reply_to_id, m.reply_to_content, m.reply_to_sender_id, m.reply_to_type,
+            d.last_read_message_id AS peer_last_read
+     FROM smart_studio_messages m
+     LEFT JOIN smart_studio_dialogs d
+       ON d.user_id=? AND d.peer_id=? AND d.peer_type='user'
+     WHERE m.peer_type='user'
+       AND (
+         (m.sender_id=? AND m.peer_id=?)
+         OR (m.sender_id=? AND m.peer_id=?)
+       )
+       AND m.id${idOp} ? ${hiddenClause}
+     ORDER BY m.id ${orderDir} LIMIT ?`,
+    params
+  )
+  return rows
+}
+
+async function getGroupMessages(me, groupId, sinceId, beforeId, limit, role) {
+  // 校验: 我是不是群成员 (superadmin 跳过)
+  if (me !== 1) {
+    const [mem] = await pool.query(
+      'SELECT 1 FROM smart_studio_group_members WHERE group_id=? AND user_id=?',
+      [groupId, me]
+    )
+    if (!mem.length) return { error: '无权访问', notMember: true }
+  }
+  const useBefore = beforeId > 0
+  const filterId = useBefore ? beforeId : sinceId
+  const idOp = useBefore ? '<' : '>'
+  const orderDir = useBefore ? 'DESC' : 'ASC'
+  const hiddenClause = role === 'superadmin' ? '' : 'AND (m.hidden = 0 OR m.sender_id = ?)'
+  // 参数: gm JOIN (groupId, me);  peer last_read (groupId, me);  peer_id=groupId;  idOp;  hidden;  limit
+  const params = [groupId, me, groupId, me, groupId, filterId]
+  if (role !== 'superadmin') params.push(me)
+  params.push(limit)
+  const [rows] = await pool.query(
+    `SELECT m.id, m.peer_id, m.peer_type, m.sender_id, m.message_type, m.content, m.image_url,
+            m.hidden, m.created_at, m.edited_at,
+            m.reply_to_id, m.reply_to_content, m.reply_to_sender_id, m.reply_to_type,
+            gm.last_read_message_id AS peer_last_read
+     FROM smart_studio_messages m
+     LEFT JOIN smart_studio_group_members gm
+       ON gm.group_id=? AND gm.user_id=? AND gm.user_id<>m.sender_id
+     WHERE m.peer_type='group' AND m.peer_id=?
+       AND m.id${idOp} ? ${hiddenClause}
+     ORDER BY m.id ${orderDir} LIMIT ?`,
+    params
+  )
+  return { rows }
+}
+
+// GET /dialogs — 我的所有 dialog
+router.get('/dialogs', auth, requirePermission(P.SMART_STUDIO_READ), async (req, res) => {
+  try {
+    const me = req.userId
+    const isSuperAdmin = me === 1
+    // 1. 好友 1-on-1 dialog: 来自 friendships, 只看 accepted
+    const [friends] = await pool.query(
+      `SELECT u.id, u.username, u.display_name, u.avatar
+       FROM smart_studio_friendships f
+       JOIN smart_studio_users u
+         ON u.id = IF(f.requester_id=?, f.addressee_id, f.requester_id)
+       WHERE (f.requester_id=? OR f.addressee_id=?) AND f.status='accepted'`,
+      [me, me, me]
+    )
+    // 2. 群 dialog: 我是成员的群
+    const [groups] = await pool.query(
+      `SELECT g.id, g.name, g.avatar, g.created_by, gm.role,
+              (SELECT COUNT(*) FROM smart_studio_group_members WHERE group_id=g.id) AS member_count
+       FROM smart_studio_groups g
+       JOIN smart_studio_group_members gm ON gm.group_id=g.id
+       WHERE gm.user_id=?`,
+      [me]
+    )
+    // superadmin: 额外看所有 user (像 telegram 联系人)
+    let extraUsers = []
+    if (isSuperAdmin) {
+      const [u] = await pool.query(
+        'SELECT id, username, display_name, avatar FROM smart_studio_users WHERE id<>?',
+        [me]
+      )
+      extraUsers = u
+    }
+    // 3. 每个 dialog 的 last_message + unread + peer info
+    const dialogs = []
+    // DM dialogs (好友) - 2026-07-24: 改 A 不影响 B + 波哥哲学
+    //   "好友不需要房间, 直接私聊, 群聊才需要房间"
+    //   → 好友在 "好友" tab, 不进 "聊天" tab
+    //   → 聊天 tab 只显示: 有过对话的好友 + 群
+    //   → 但用户首次给好友发消息后, 该好友要进聊天 tab (last_message 非 null 才会 push)
+    for (const f of friends) {
+      const [lastMsgs] = await pool.query(
+        `SELECT id, sender_id, message_type, content, image_url, hidden, created_at
+         FROM smart_studio_messages
+         WHERE peer_type='user'
+           AND ((sender_id=? AND peer_id=?) OR (sender_id=? AND peer_id=?))
+         ORDER BY id DESC LIMIT 1`,
+        [me, f.id, f.id, me]
+      )
+      const lm = lastMsgs[0] || null
+      // 2026-07-24: 没消息的好友不显示在 dialogs (波哥: 好友 tab 才是入口)
+      if (!lm) continue
+      // unread: 对方发的 + 我没标已读
+      const [unreads] = await pool.query(
+        `SELECT COUNT(*) AS cnt FROM smart_studio_messages
+         WHERE peer_type='user' AND sender_id=? AND peer_id=?
+           AND id > IFNULL((SELECT last_read_message_id FROM smart_studio_dialogs
+                            WHERE user_id=? AND peer_id=? AND peer_type='user'), 0)
+           AND hidden = 0`,
+        [f.id, me, me, f.id]
+      )
+      dialogs.push({
+        type: 'user',
+        peer_id: f.id,
+        peer_type: 'user',
+        peer: { id: f.id, username: f.username, display_name: f.display_name, avatar: f.avatar },
+        last_message: lm ? {
+          id: lm.id, sender_id: lm.sender_id, type: lm.message_type,
+          content: lm.content, image_url: lm.image_url, created_at: lm.created_at,
+          hidden: lm.hidden
+        } : null,
+        unread: unreads[0].cnt
+      })
+    }
+    // superadmin 加的"全用户" dialog (非好友)
+    for (const u of extraUsers) {
+      if (friends.some(f => f.id === u.id)) continue  // 已经在好友 dialog
+      dialogs.push({
+        type: 'user',
+        peer_id: u.id,
+        peer_type: 'user',
+        peer: { id: u.id, username: u.username, display_name: u.display_name, avatar: u.avatar },
+        last_message: null,
+        unread: 0,
+        not_friend: true
+      })
+    }
+    // 群 dialogs
+    for (const g of groups) {
+      const [lastMsgs] = await pool.query(
+        `SELECT id, sender_id, message_type, content, image_url, hidden, created_at
+         FROM smart_studio_messages
+         WHERE peer_type='group' AND peer_id=? ORDER BY id DESC LIMIT 1`,
+        [g.id]
+      )
+      const lm = lastMsgs[0] || null
+      const [unreads] = await pool.query(
+        `SELECT COUNT(*) AS cnt FROM smart_studio_messages
+         WHERE peer_type='group' AND peer_id=? AND sender_id<>?
+           AND id > IFNULL((SELECT last_read_message_id FROM smart_studio_group_members
+                            WHERE group_id=? AND user_id=?), 0)
+           AND hidden = 0`,
+        [g.id, me, g.id, me]
+      )
+      dialogs.push({
+        type: 'group',
+        peer_id: g.id,
+        peer_type: 'group',
+        peer: { id: g.id, name: g.name, avatar: g.avatar, member_count: g.member_count, role: g.role },
+        last_message: lm ? {
+          id: lm.id, sender_id: lm.sender_id, type: lm.message_type,
+          content: lm.content, image_url: lm.image_url, created_at: lm.created_at,
+          hidden: lm.hidden
+        } : null,
+        unread: unreads[0].cnt
+      })
+    }
+    // 按 last_message 时间降序
+    dialogs.sort((a, b) => {
+      const ta = a.last_message ? new Date(a.last_message.created_at).getTime() : 0
+      const tb = b.last_message ? new Date(b.last_message.created_at).getTime() : 0
+      return tb - ta
+    })
+    res.json({ ok: true, dialogs })
+  } catch (e) {
+    res.json({ ok: false, error: e.message })
+  }
+})
+
+// GET /peers/:peerType/:peerId/messages — 拉一个对话的消息
+router.get('/peers/:peerType/:peerId/messages', auth, requirePermission(P.SMART_STUDIO_READ), async (req, res) => {
+  try {
+    const me = req.userId
+    const peerType = req.params.peerType
+    const peerId = parseInt(req.params.peerId, 10)
+    if (!['user', 'group'].includes(peerType)) return res.json({ ok: false, error: 'peer_type 必须是 user/group' })
+    if (!peerId) return res.json({ ok: false, error: 'peer_id 必填' })
+    const role = req.smartStudioRole || 'user'
+    const sinceId = parseInt(req.query.since_id || '0', 10)
+    const beforeId = parseInt(req.query.before_id || '0', 10)
+    const limit = Math.min(parseInt(req.query.limit || '50', 10), 200)
+    let rows
+    let myRole = null
+    if (peerType === 'user') {
+      // DM 校验: 必须是好友, 或 superadmin
+      if (me !== 1) {
+        const [f] = await pool.query(
+          `SELECT 1 FROM smart_studio_friendships
+           WHERE status='accepted' AND ((requester_id=? AND addressee_id=?) OR (requester_id=? AND addressee_id=?))`,
+          [me, peerId, peerId, me]
+        )
+        if (!f.length) return res.json({ ok: false, error: '需要先加好友' })
+      }
+      rows = await getDmMessages(me, peerId, sinceId, beforeId, limit, role)
+      myRole = 'member'
+    } else {
+      const r = await getGroupMessages(me, peerId, sinceId, beforeId, limit, role)
+      if (r.error) return res.json({ ok: false, error: r.error })
+      rows = r.rows
+      const [mem] = await pool.query(
+        'SELECT role FROM smart_studio_group_members WHERE group_id=? AND user_id=?',
+        [peerId, me]
+      )
+      myRole = mem[0]?.role || 'observer'
+    }
+    const useBefore = beforeId > 0
+    const msgs = rows.map(m => serializeMessage(m, me))
+    // 标记已读: 用本次最大 id
+    if (msgs.length) {
+      const maxIdInBatch = msgs.reduce((mx, x) => x.id > mx ? x.id : mx, 0)
+      if (peerType === 'user') {
+        await pool.query(
+          `INSERT INTO smart_studio_dialogs (user_id, peer_id, peer_type, last_read_message_id, last_message_id)
+           VALUES (?, ?, 'user', ?, ?)
+           ON DUPLICATE KEY UPDATE
+             last_read_message_id=GREATEST(IFNULL(last_read_message_id,0), VALUES(last_read_message_id)),
+             last_message_id=GREATEST(IFNULL(last_message_id,0), VALUES(last_message_id)),
+             unread_count=0`,
+          [me, peerId, maxIdInBatch, maxIdInBatch]
+        )
+      } else {
+        await pool.query(
+          'UPDATE smart_studio_group_members SET last_read_message_id=GREATEST(IFNULL(last_read_message_id,0),?) WHERE group_id=? AND user_id=?',
+          [maxIdInBatch, peerId, me]
+        )
+      }
+    }
+    res.json({ ok: true, messages: msgs, direction: useBefore ? 'older' : 'newer', my_role: myRole })
+  } catch (e) {
+    res.json({ ok: false, error: e.message })
+  }
+})
+
+// POST /peers/:peerType/:peerId/send-text
+router.post('/peers/:peerType/:peerId/send-text', auth, requirePermission(P.SMART_STUDIO_WRITE), async (req, res) => {
+  try {
+    const me = req.userId
+    const peerType = req.params.peerType
+    const peerId = parseInt(req.params.peerId, 10)
+    if (!['user', 'group'].includes(peerType)) return res.json({ ok: false, error: 'peer_type 必须是 user/group' })
+    if (!peerId) return res.json({ ok: false, error: 'peer_id 必填' })
+    const role = req.smartStudioRole || 'user'
+    // 校验权限
+    if (peerType === 'user') {
+      if (me !== 1) {
+        const [f] = await pool.query(
+          `SELECT 1 FROM smart_studio_friendships
+           WHERE status='accepted' AND ((requester_id=? AND addressee_id=?) OR (requester_id=? AND addressee_id=?))`,
+          [me, peerId, peerId, me]
+        )
+        if (!f.length) return res.json({ ok: false, error: '需要先加好友' })
+      }
+    } else {
+      // 群: 必须成员 (superadmin 例外)
+      if (me !== 1) {
+        const [mem] = await pool.query(
+          'SELECT 1 FROM smart_studio_group_members WHERE group_id=? AND user_id=?',
+          [peerId, me]
+        )
+        if (!mem.length) return res.json({ ok: false, error: '不是群成员' })
+      }
+    }
+    const { content, reply_to_id } = req.body || {}
+    if (!content || !String(content).trim()) return res.json({ ok: false, error: '消息为空' })
+    const text = String(content).trim().slice(0, 4000)
+    const hidden = role === 'superadmin' && req.body?.hidden === true ? 1 : 0
+    let replyFields = [null, null, null, null]
+    if (reply_to_id) {
+      const [r2] = await pool.query(
+        'SELECT id, sender_id, message_type, content FROM smart_studio_messages WHERE id=? AND peer_id=? AND peer_type=?',
+        [parseInt(reply_to_id, 10), peerId, peerType]
+      )
+      if (r2.length) {
+        replyFields = [r2[0].id, (r2[0].content || '').slice(0, 200), r2[0].sender_id, r2[0].message_type]
+      }
+    }
+    const [ins] = await pool.query(
+      `INSERT INTO smart_studio_messages (peer_id, peer_type, sender_id, message_type, content, hidden, reply_to_id, reply_to_content, reply_to_sender_id, reply_to_type)
+       VALUES (?, ?, ?, 'text', ?, ?, ?, ?, ?, ?)`,
+      [peerId, peerType, me, text, hidden, ...replyFields]
+    )
+    // 写入 dialog last_message (DM)
+    if (peerType === 'user') {
+      // 我发给对方 → 对方的 dialog 更新
+      await pool.query(
+        `INSERT INTO smart_studio_dialogs (user_id, peer_id, peer_type, last_message_id, unread_count)
+         VALUES (?, ?, 'user', ?, 1)
+         ON DUPLICATE KEY UPDATE last_message_id=GREATEST(IFNULL(last_message_id,0), VALUES(last_message_id)), unread_count=unread_count+1`,
+        [peerId, me, ins.insertId]
+      )
+      // 自己的 dialog 也更新 (方便列表显示)
+      await pool.query(
+        `INSERT INTO smart_studio_dialogs (user_id, peer_id, peer_type, last_message_id)
+         VALUES (?, ?, 'user', ?)
+         ON DUPLICATE KEY UPDATE last_message_id=GREATEST(IFNULL(last_message_id,0), VALUES(last_message_id))`,
+        [me, peerId, ins.insertId]
+      )
+    } else {
+      // 群: 每个非我的成员 +1 unread, 更新群 last_message (只存到群表不存 dialog)
+    }
+    res.json({ ok: true, message: {
+      id: ins.insertId, peer_id: peerId, peer_type: peerType, sender_id: me,
+      message_type: 'text', content: text, image_url: null, hidden: !!hidden,
+      reply_to_id: replyFields[0], reply_to_content: replyFields[1],
+      reply_to_sender_id: replyFields[2], reply_to_type: replyFields[3],
+      read_by_peer: false, created_at: new Date().toISOString()
+    }})
+  } catch (e) {
+    res.json({ ok: false, error: e.message })
+  }
+})
+
+// POST /peers/:peerType/:peerId/send-image
+router.post('/peers/:peerType/:peerId/send-image', auth, requirePermission(P.SMART_STUDIO_WRITE), upload.single('image'), async (req, res) => {
+  try {
+    const me = req.userId
+    const peerType = req.params.peerType
+    const peerId = parseInt(req.params.peerId, 10)
+    if (!['user', 'group'].includes(peerType)) return res.json({ ok: false, error: 'peer_type 必须是 user/group' })
+    if (!peerId) return res.json({ ok: false, error: 'peer_id 必填' })
+    if (peerType === 'user') {
+      if (me !== 1) {
+        const [f] = await pool.query(
+          `SELECT 1 FROM smart_studio_friendships
+           WHERE status='accepted' AND ((requester_id=? AND addressee_id=?) OR (requester_id=? AND addressee_id=?))`,
+          [me, peerId, peerId, me]
+        )
+        if (!f.length) return res.json({ ok: false, error: '需要先加好友' })
+      }
+    } else {
+      if (me !== 1) {
+        const [mem] = await pool.query(
+          'SELECT 1 FROM smart_studio_group_members WHERE group_id=? AND user_id=?',
+          [peerId, me]
+        )
+        if (!mem.length) return res.json({ ok: false, error: '不是群成员' })
+      }
+    }
+    if (!req.file) return res.json({ ok: false, error: '未收到图片' })
+    const imageUrl = PUBLIC_BASE + '/' + req.file.filename
+    const text = (req.body.content || '').toString().trim()
+    const [ins] = await pool.query(
+      `INSERT INTO smart_studio_messages (peer_id, peer_type, sender_id, message_type, content, image_url)
+       VALUES (?, ?, ?, 'image', ?, ?)`,
+      [peerId, peerType, me, text, imageUrl]
+    )
+    if (peerType === 'user') {
+      await pool.query(
+        `INSERT INTO smart_studio_dialogs (user_id, peer_id, peer_type, last_message_id, unread_count)
+         VALUES (?, ?, 'user', ?, 1)
+         ON DUPLICATE KEY UPDATE last_message_id=GREATEST(IFNULL(last_message_id,0), VALUES(last_message_id)), unread_count=unread_count+1`,
+        [peerId, me, ins.insertId]
+      )
+      await pool.query(
+        `INSERT INTO smart_studio_dialogs (user_id, peer_id, peer_type, last_message_id)
+         VALUES (?, ?, 'user', ?)
+         ON DUPLICATE KEY UPDATE last_message_id=GREATEST(IFNULL(last_message_id,0), VALUES(last_message_id))`,
+        [me, peerId, ins.insertId]
+      )
+    }
+    res.json({ ok: true, message: {
+      id: ins.insertId, peer_id: peerId, peer_type: peerType, sender_id: me,
+      message_type: 'image', content: text, image_url: imageUrl,
+      created_at: new Date().toISOString()
+    }})
+  } catch (e) {
+    res.json({ ok: false, error: e.message })
+  }
+})
+
+// POST /peers/:peerType/:peerId/read — 标记已读
+router.post('/peers/:peerType/:peerId/read', auth, requirePermission(P.SMART_STUDIO_WRITE), async (req, res) => {
+  try {
+    const me = req.userId
+    const peerType = req.params.peerType
+    const peerId = parseInt(req.params.peerId, 10)
+    const lastId = parseInt(req.body?.last_message_id || '0', 10)
+    if (peerType === 'user') {
+      await pool.query(
+        `INSERT INTO smart_studio_dialogs (user_id, peer_id, peer_type, last_read_message_id)
+         VALUES (?, ?, 'user', ?)
+         ON DUPLICATE KEY UPDATE last_read_message_id=GREATEST(IFNULL(last_read_message_id,0), VALUES(last_read_message_id)), unread_count=0`,
+        [me, peerId, lastId]
+      )
+    } else {
+      await pool.query(
+        'UPDATE smart_studio_group_members SET last_read_message_id=GREATEST(IFNULL(last_read_message_id,0),?) WHERE group_id=? AND user_id=?',
+        [lastId, peerId, me]
+      )
+    }
+    res.json({ ok: true })
+  } catch (e) {
+    res.json({ ok: false, error: e.message })
+  }
+})
+
+// POST /peers/:peerType/:peerId/typing — 输入中心跳 (5s 过期)
+router.post('/peers/:peerType/:peerId/typing', auth, requirePermission(P.SMART_STUDIO_WRITE), async (req, res) => {
+  try {
+    const me = req.userId
+    const peerType = req.params.peerType
+    const peerId = parseInt(req.params.peerId, 10)
+    await pool.query(
+      `INSERT INTO smart_studio_typing_state (user_id, peer_id, peer_type, updated_at)
+       VALUES (?, ?, ?, NOW())
+       ON DUPLICATE KEY UPDATE updated_at=NOW()`,
+      [me, peerId, peerType]
+    )
+    res.json({ ok: true })
+  } catch (e) {
+    res.json({ ok: false, error: e.message })
+  }
+})
+
+// GET /peers/:peerType/:peerId/typing — 对方是否输入中 (10s 内算)
+router.get('/peers/:peerType/:peerId/typing', auth, requirePermission(P.SMART_STUDIO_READ), async (req, res) => {
+  try {
+    const me = req.userId
+    const peerType = req.params.peerType
+    const peerId = parseInt(req.params.peerId, 10)
+    // 对方在 (peer_id, peer_type) 输入中, 应该是 peer 写 (me, peerType, peerId) 吗?
+    // 语义: 用户 X 在 Y↔X dialog 输入 → X.peer=Y, X.peer_type=user
+    // 对方看到 X 在输入 → 查 (user_id=X, peer_id=Y, peer_type=user)
+    // 我(me) 看到的应该是 peer 给我写的心跳, 即 peer.peer_id=me
+    const [rows] = await pool.query(
+      `SELECT user_id, updated_at FROM smart_studio_typing_state
+       WHERE peer_id=? AND peer_type=? AND updated_at > NOW() - INTERVAL 10 SECOND`,
+      [me, peerType]
+    )
+    const typers = rows.map(r => r.user_id)
+    res.json({ ok: true, typing: typers })
+  } catch (e) {
+    res.json({ ok: false, error: e.message })
+  }
+})
+
+// GET /peers/:peerType/:peerId/online — peer 在线状态 (只对 user 有意义)
+router.get('/peers/:peerType/:peerId/online', auth, requirePermission(P.SMART_STUDIO_READ), async (req, res) => {
+  try {
+    const peerType = req.params.peerType
+    const peerId = parseInt(req.params.peerId, 10)
+    if (peerType !== 'user') return res.json({ ok: true, online: null })  // 群不适用
+    const [rows] = await pool.query(
+      'SELECT online, last_seen FROM smart_studio_presence WHERE user_id=?',
+      [peerId]
+    )
+    if (!rows.length) return res.json({ ok: true, online: false, last_seen: null })
+    const p = rows[0]
+    // 超过 60s 没心跳算离线
+    const isOnline = p.online === 1 && (Date.now() - new Date(p.last_seen).getTime()) < 60000
+    res.json({ ok: true, online: isOnline, last_seen: p.last_seen })
+  } catch (e) {
+    res.json({ ok: false, error: e.message })
+  }
+})
+
+// GET /users/:userId/online — 单用户在线
+router.get('/users/:userId/online', auth, requirePermission(P.SMART_STUDIO_READ), async (req, res) => {
+  try {
+    const userId = parseInt(req.params.userId, 10)
+    const [rows] = await pool.query(
+      'SELECT online, last_seen FROM smart_studio_presence WHERE user_id=?',
+      [userId]
+    )
+    if (!rows.length) return res.json({ ok: true, online: false, last_seen: null })
+    const p = rows[0]
+    const isOnline = p.online === 1 && (Date.now() - new Date(p.last_seen).getTime()) < 60000
+    res.json({ ok: true, online: isOnline, last_seen: p.last_seen })
+  } catch (e) {
+    res.json({ ok: false, error: e.message })
+  }
+})
+
+// POST /presence/heartbeat — 前端每 30s 调一次, 标记自己在线
+router.post('/presence/heartbeat', auth, requirePermission(P.SMART_STUDIO_WRITE), async (req, res) => {
+  try {
+    const me = req.userId
+    await pool.query(
+      `INSERT INTO smart_studio_presence (user_id, last_seen, online)
+       VALUES (?, NOW(), 1)
+       ON DUPLICATE KEY UPDATE last_seen=NOW(), online=1`,
+      [me]
+    )
+    res.json({ ok: true })
+  } catch (e) {
+    res.json({ ok: false, error: e.message })
+  }
+})
+
+// POST /presence/offline — 标记离线 (退出登录时调用)
+router.post('/presence/offline', auth, requirePermission(P.SMART_STUDIO_WRITE), async (req, res) => {
+  try {
+    const me = req.userId
+    await pool.query(
+      'UPDATE smart_studio_presence SET online=0 WHERE user_id=?',
+      [me]
+    )
+    res.json({ ok: true })
+  } catch (e) {
+    res.json({ ok: false, error: e.message })
+  }
+})
+
+// GET /groups/:groupId — 群详情 + 成员
+router.get('/groups/:groupId', auth, requirePermission(P.SMART_STUDIO_READ), async (req, res) => {
+  try {
+    const me = req.userId
+    const groupId = parseInt(req.params.groupId, 10)
+    const [g] = await pool.query(
+      'SELECT id, name, avatar, created_by, created_at FROM smart_studio_groups WHERE id=?',
+      [groupId]
+    )
+    if (!g.length) return res.json({ ok: false, error: '群不存在' })
+    const [mems] = await pool.query(
+      `SELECT u.id, u.username, u.display_name, u.avatar, gm.role, gm.joined_at
+       FROM smart_studio_group_members gm
+       JOIN smart_studio_users u ON u.id = gm.user_id
+       WHERE gm.group_id=? ORDER BY gm.joined_at`,
+      [groupId]
+    )
+    res.json({ ok: true, group: g[0], members: mems })
+  } catch (e) {
+    res.json({ ok: false, error: e.message })
+  }
+})
+
+// POST /groups/:groupId/leave — 退出群 (Telegram 风格, 2026-07-24)
+//   - 我必须是群成员
+//   - 群主 (created_by) 不允许退出 (要先解散)
+//   - DELETE FROM group_members 行 = 退出成功
+//   - 旧消息保留在 messages 表 (peer_type=group) 但我无法再拉到 (因为不再是成员)
+router.post('/groups/:groupId/leave', auth, requirePermission(P.SMART_STUDIO_WRITE), async (req, res) => {
+  try {
+    const me = req.userId
+    const groupId = parseInt(req.params.groupId, 10)
+    const [g] = await pool.query('SELECT id, created_by FROM smart_studio_groups WHERE id=?', [groupId])
+    if (!g.length) return res.json({ ok: false, error: '群不存在' })
+    if (g[0].created_by === me) return res.json({ ok: false, error: '群主不能退出群, 只能解散' })
+    const [del] = await pool.query(
+      'DELETE FROM smart_studio_group_members WHERE group_id=? AND user_id=?',
+      [groupId, me]
+    )
+    if (del.affectedRows === 0) return res.json({ ok: false, error: '我不是群成员' })
+    // 同步: 我对这个群的 dialog 清掉 (虽然 dialog 是按 friendships 现算的, 但群不在 friendships)
+    // 群 dialog 来自 /groups/:groupId 现算, 不需要单独清 dialogs 表 (本来就没有这条)
+    res.json({ ok: true, left_group_id: groupId })
+  } catch (e) {
+    res.json({ ok: false, error: e.message })
+  }
+})
+
+// DELETE /groups/:groupId — 解散群 (只有群主能解散)
+//   - DELETE groups (FK CASCADE? 我们没设 FK, 所以手动级联)
+//   - 旧消息保留在 messages 表 (peer_type=group) 但没人能再拉到
+//   - 同时清: groups + group_members + 我对这个群的 pinned_messages (如果有)
+router.delete('/groups/:groupId', auth, requirePermission(P.SMART_STUDIO_DELETE), async (req, res) => {
+  const conn = await pool.getConnection()
+  try {
+    const me = req.userId
+    const groupId = parseInt(req.params.groupId, 10)
+    await conn.beginTransaction()
+    const [g] = await conn.query('SELECT id, created_by FROM smart_studio_groups WHERE id=? FOR UPDATE', [groupId])
+    if (!g.length) {
+      await conn.rollback()
+      return res.json({ ok: false, error: '群不存在' })
+    }
+    if (g[0].created_by !== me) {
+      await conn.rollback()
+      return res.json({ ok: false, error: '只有群主能解散群' })
+    }
+    await conn.query('DELETE FROM smart_studio_group_members WHERE group_id=?', [groupId])
+    await conn.query('DELETE FROM smart_studio_groups WHERE id=?', [groupId])
+    // pinned_messages 按 room_id 概念清 (我们 pinned 表用 message_id, 不清也行 — 反正群都没了消息拉不到)
+    // 但 dialog 兜底: dialogs 表如果有这个 group 的行, 一并清掉
+    await conn.query('DELETE FROM smart_studio_dialogs WHERE peer_id=? AND peer_type=\'group\'', [groupId])
+    await conn.commit()
+    res.json({ ok: true, disbanded_group_id: groupId })
+  } catch (e) {
+    await conn.rollback()
+    res.json({ ok: false, error: e.message })
+  } finally {
+    conn.release()
+  }
+})
+
+// ============================================================================
+// 旧 routes (deprecated 2026-07-24): 保留 read-only 一段时间, 新代码用 /dialogs + /peers
+// ============================================================================
+
 router.get('/rooms', auth, requirePermission(P.SMART_STUDIO_READ), async (req, res) => {
   try {
     const me = req.userId
-    // 改: 加 peer.last_read_msg_id (对方用户的 last_read) 用于计算每条 last_message 是否被对方已读
+    // 改 (2026-07-24): 186 (smart_studio_users.id=1) 特权 vs 普通用户隐私
+    //   - 186: 返回所有 rooms (看全部房间列表)
+    //   - 普通用户 (和好友的): 自己成员 OR 至少有一个好友的房间
+    //             看不到完全陌生人的房间 (隐私保护)
+    const isSuperAdmin = me === 1
+    const [allMembers] = await pool.query(
+      `SELECT room_id, user_id, last_read_msg_id FROM smart_studio_room_members WHERE room_id IN (SELECT id FROM smart_studio_rooms)`
+    )
+    const [mySenders] = await pool.query(
+      `SELECT DISTINCT room_id FROM smart_studio_messages WHERE sender_id=?`, [me]
+    )
+    const mySenderRoomSet = new Set(mySenders.map(x => x.room_id))
+    // 按 room_id 聚合 members
+    const membersByRoom = new Map() // room_id -> [{user_id, last_read_msg_id}]
+    for (const m of allMembers) {
+      if (!membersByRoom.has(m.room_id)) membersByRoom.set(m.room_id, [])
+      membersByRoom.get(m.room_id).push(m)
+    }
+    // 我跟哪些 user_id 是好友 (accepted 双向)
+    const [friendRows] = await pool.query(
+      `SELECT requester_id, addressee_id FROM smart_studio_friendships
+       WHERE status='accepted' AND (requester_id=? OR addressee_id=?)`,
+      [me, me]
+    )
+    const friendUserSet = new Set()
+    for (const f of friendRows) {
+      friendUserSet.add(f.requester_id)
+      friendUserSet.add(f.addressee_id)
+    }
+    friendUserSet.delete(me)
+    // 拿所有 rooms + last_msg (改 2026-07-24: 加 r.created_by 给前端 + 普通用户过滤用)
     const [rows] = await pool.query(
-      `SELECT r.id AS room_id,
-              m.last_read_msg_id AS my_last_read,
-              m2.last_read_msg_id AS peer_last_read,
-              (SELECT MAX(id) FROM smart_studio_messages WHERE room_id=r.id) AS last_msg_id,
-              u.id AS peer_id, u.username AS peer_username, u.display_name AS peer_name, u.avatar AS peer_avatar,
+      `SELECT r.id AS room_id, r.created_by,
               (SELECT message_type FROM smart_studio_messages WHERE room_id=r.id ORDER BY id DESC LIMIT 1) AS last_type,
               (SELECT content FROM smart_studio_messages WHERE room_id=r.id ORDER BY id DESC LIMIT 1) AS last_content,
               (SELECT image_url FROM smart_studio_messages WHERE room_id=r.id ORDER BY id DESC LIMIT 1) AS last_image,
               (SELECT id FROM smart_studio_messages WHERE room_id=r.id ORDER BY id DESC LIMIT 1) AS last_msg_pk,
               (SELECT created_at FROM smart_studio_messages WHERE room_id=r.id ORDER BY id DESC LIMIT 1) AS last_time,
               (SELECT sender_id FROM smart_studio_messages WHERE room_id=r.id ORDER BY id DESC LIMIT 1) AS last_sender,
-              (SELECT COUNT(*) FROM smart_studio_messages WHERE room_id=r.id AND id > m.last_read_msg_id AND sender_id<>?) AS unread
+              (SELECT COUNT(*) FROM smart_studio_messages WHERE room_id=r.id AND sender_id<>?) AS total_msg
        FROM smart_studio_rooms r
-       JOIN smart_studio_room_members m ON m.room_id=r.id AND m.user_id=?
-       JOIN smart_studio_room_members m2 ON m2.room_id=r.id AND m2.user_id<>?
-       JOIN smart_studio_users u ON u.id=m2.user_id
-       ORDER BY last_time DESC`,
-      [me, me, me, me]
+       ORDER BY r.id DESC`,
+      [me]
     )
-    const rooms = rows.map(r => ({
-      room_id: r.room_id,
-      peer: { id: r.peer_id, username: r.peer_username, display_name: r.peer_name, avatar: r.peer_avatar },
-      last_message: r.last_msg_id ? {
-        id: r.last_msg_pk,
-        type: r.last_type, content: r.last_content, image_url: r.last_image,
-        sender_id: r.last_sender, created_at: r.last_time,
-        // 我发的最后一条消息 → 看对方是否已读 (peer.last_read_msg_id >= last_msg_pk)
-        // 对方发的最后一条消息 → 永远算未读 (对方自己已读不算)
-        read_by_peer: r.last_sender === me && r.last_msg_pk <= (r.peer_last_read || 0)
-      } : null,
-      unread: r.unread || 0
-    }))
-    res.json({ ok: true, rooms })
+    const rooms = rows.map(r => {
+      const members = membersByRoom.get(r.room_id) || []
+      const iAmMember = members.some(m => m.user_id === me)
+      // 跟任意成员是好友?
+      const anyFriendInRoom = members.some(m => m.user_id !== me && friendUserSet.has(m.user_id))
+      // 这个房是不是我建的?
+      const iCreatedIt = r.created_by === me
+      // 这个房是不是好友建的? (最严格过滤用)
+      const creatorIsMyFriend = r.created_by !== null && r.created_by !== me && friendUserSet.has(r.created_by)
+      const iHaveSent = mySenderRoomSet.has(r.room_id)
+      const related = iAmMember || anyFriendInRoom || iHaveSent
+      // 我在这个房间的 last_read (可能 undefined — 如果我不是成员)
+      const myMem = members.find(m => m.user_id === me)
+      const peerMem = members.find(m => m.user_id !== me)
+      const peerLastRead = peerMem ? peerMem.last_read_msg_id : 0
+      return {
+        room_id: r.room_id,
+        created_by: r.created_by,
+        i_am_member: iAmMember,
+        i_created_it: iCreatedIt,
+        creator_is_my_friend: creatorIsMyFriend,
+        related,
+        // 旁观模式标识: 不是成员 + 不相关 → 用户进房会自动 observer
+        observer_hint: !iAmMember && !related,
+        // peer: dm 房 → 对方; group 房 → 第一个非我的成员 (前端目前只支持 dm)
+        peer: peerMem ? { id: peerMem.user_id } : null,
+        peer_user_id: peerMem ? peerMem.user_id : null,
+        last_message: r.last_msg_pk ? {
+          id: r.last_msg_pk,
+          type: r.last_type, content: r.last_content, image_url: r.last_image,
+          sender_id: r.last_sender, created_at: r.last_time,
+          read_by_peer: r.last_sender === me && r.last_msg_pk <= (peerLastRead || 0)
+        } : null,
+        unread: 0
+      }
+    })
+    // 普通用户隐私过滤 (最严格 2026-07-24): 只看"好友建的房"
+    //   - 186: 全部返回
+    //   - 普通用户: created_by 是好友 才返回 (自己建的房看不到, 用户拍板"最严格")
+    //   - 兜底: created_by 为 NULL (旧数据没回填上的) 仍按 i_am_member 保留, 防止历史房丢失
+    const filteredRooms = isSuperAdmin
+      ? rooms
+      : rooms.filter(r => r.i_am_member && (r.created_by === null ? true : r.creator_is_my_friend))
+    // 收集所有出现过的 peer_user_id → 批量查 display_name/avatar
+    const peerIds = [...new Set(filteredRooms.map(r => r.peer_user_id).filter(Boolean))]
+    let peerInfoMap = new Map()
+    if (peerIds.length) {
+      const placeholders = peerIds.map(() => '?').join(',')
+      const [peerRows] = await pool.query(
+        `SELECT id, username, display_name, avatar FROM smart_studio_users WHERE id IN (${placeholders})`,
+        peerIds
+      )
+      peerInfoMap = new Map(peerRows.map(p => [p.id, p]))
+    }
+    // 把 peer 信息塞进 peer 对象 (前端依赖 peer.display_name/username/avatar)
+    for (const r of filteredRooms) {
+      if (r.peer && r.peer.id) {
+        const pi = peerInfoMap.get(r.peer.id) || {}
+        r.peer.username = pi.username || ''
+        r.peer.display_name = pi.display_name || ''
+        r.peer.avatar = pi.avatar || null
+      }
+      // 清理内部字段
+      delete r.peer_user_id
+    }
+    // 按 last_time 降序 (无消息排最后)
+    filteredRooms.sort((a, b) => {
+      const ta = a.last_message ? new Date(a.last_message.created_at).getTime() : 0
+      const tb = b.last_message ? new Date(b.last_message.created_at).getTime() : 0
+      return tb - ta
+    })
+    // 补 unread 精确数 (只对我是成员的房)
+    const myRoomIds = filteredRooms.filter(r => r.i_am_member).map(r => r.room_id)
+    if (myRoomIds.length) {
+      const placeholders = myRoomIds.map(() => '?').join(',')
+      const [unreads] = await pool.query(
+        `SELECT msg.room_id, COUNT(*) AS cnt
+         FROM smart_studio_messages msg
+         LEFT JOIN smart_studio_room_members mem ON mem.room_id=msg.room_id AND mem.user_id=?
+         WHERE msg.room_id IN (${placeholders})
+           AND msg.id > IFNULL(mem.last_read_msg_id, 0)
+           AND msg.sender_id <> ?
+           AND msg.hidden = 0
+         GROUP BY msg.room_id`,
+        [me, ...myRoomIds, me]
+      )
+      const unreadMap = new Map(unreads.map(u => [u.room_id, u.cnt]))
+      for (const r of filteredRooms) r.unread = unreadMap.get(r.room_id) || 0
+    }
+    res.json({ ok: true, rooms: filteredRooms })
   } catch (e) {
     res.json({ ok: false, error: e.message })
   }
@@ -494,12 +1254,37 @@ router.get('/rooms/:roomId/messages', auth, requirePermission(P.SMART_STUDIO_REA
   try {
     const me = req.userId
     const roomId = parseInt(req.params.roomId, 10)
-    const [check] = await pool.query(
-      'SELECT 1 FROM smart_studio_room_members WHERE room_id=? AND user_id=?',
-      [roomId, me]
+    // 改 (2026-07-24): 18676970008 (smart_studio_users.id=1) 唯一特权
+    //   - 普通用户: 必须 smart_studio_room_members 有自己 (原行为, 403 否则)
+    //   - 186:
+    //     * 是房间成员 → 正常看 + 发 (自己家, 不是旁观)
+    //     * 不是房间成员 → 隐身模式 (能看, 不能发)
+    const [roomRows] = await pool.query(
+      'SELECT id FROM smart_studio_rooms WHERE id=?', [roomId]
     )
-    if (!check.length) return res.json({ ok: false, error: '无权访问' })
+    if (!roomRows.length) return res.json({ ok: false, error: '房间不存在' })
+    const [memRows] = await pool.query(
+      'SELECT user_id, role FROM smart_studio_room_members WHERE room_id=?', [roomId]
+    )
+    const myMem = memRows.find(m => m.user_id === me)
+    const peerMembers = memRows.filter(m => m.user_id !== me)
+    let isObserver = false
+    if (!myMem) {
+      // 不是房间成员
+      if (me !== 1) {
+        // 普通用户 → 没权限 (原行为)
+        return res.json({ ok: false, error: '无权访问' })
+      }
+      // 186 特权: 不是成员 → 自动隐身模式 (能看不能发)
+      if (peerMembers.length === 0) {
+        return res.json({ ok: false, error: '房间无其他成员, 无需旁观' })
+      }
+      isObserver = true
+    }
+    // 注: 186 是房间成员 → 正常用户 (自己家, 能看+能发), 不强制 observer
+    const myRole = myMem ? myMem.role : (isObserver ? 'observer' : null)
     const sinceId = parseInt(req.query.since_id || '0', 10)
+    const beforeId = parseInt(req.query.before_id || '0', 10)
     const limit = Math.min(parseInt(req.query.limit || '50', 10), 200)
     // 隐身消息过滤: superadmin 看全部; 自己发的隐身消息总能看;
     //                其他 user 看不到 hidden=1 的消息
@@ -507,7 +1292,19 @@ router.get('/rooms/:roomId/messages', auth, requirePermission(P.SMART_STUDIO_REA
     const hiddenClause = role === 'superadmin'
       ? ''
       : 'AND (hidden = 0 OR sender_id = ?)'
-    const whereParams = [roomId, sinceId]
+    // before_id 优先: 取更老的消息 (id < before_id), 取完再 reverse 返给客户端
+    const useBefore = beforeId > 0
+    const filterId = useBefore ? beforeId : sinceId
+    const idOp = useBefore ? '<' : '>'
+    const orderDir = useBefore ? 'DESC' : 'ASC'
+    // 参数顺序必须严格按 SQL 中 ? 出现顺序:
+    //   1) 子查询 1 (peer_last_read): m2.user_id<>?    → me
+    //   2) 子查询 2 (peer_user_id):   m2.user_id<>?    → me
+    //   3) WHERE msg.room_id=?                           → roomId
+    //   4) WHERE msg.id>?                                → filterId
+    //   5) hiddenClause: (hidden=0 OR sender_id=?)      → me (非 superadmin)
+    //   6) LIMIT ?                                       → limit
+    const whereParams = [me, me, roomId, filterId]
     if (role !== 'superadmin') whereParams.push(me)
     whereParams.push(limit)
     // 改: 加 peer.last_read_msg_id + peer_user_id, 给每条消息返回 read_by_peer
@@ -515,12 +1312,12 @@ router.get('/rooms/:roomId/messages', auth, requirePermission(P.SMART_STUDIO_REA
       `SELECT msg.id, msg.sender_id, msg.message_type, msg.content, msg.image_url, msg.hidden, msg.created_at,
               msg.reply_to_id, msg.reply_to_content, msg.reply_to_sender_id, msg.reply_to_type,
               (SELECT m2.last_read_msg_id FROM smart_studio_room_members m2
-                 WHERE m2.room_id=msg.room_id AND m2.user_id<>msg.sender_id LIMIT 1) AS peer_last_read,
+                 WHERE m2.room_id=msg.room_id AND m2.user_id<>msg.sender_id AND m2.user_id<>? LIMIT 1) AS peer_last_read,
               (SELECT m2.user_id FROM smart_studio_room_members m2
-                 WHERE m2.room_id=msg.room_id AND m2.user_id<>msg.sender_id LIMIT 1) AS peer_user_id
+                 WHERE m2.room_id=msg.room_id AND m2.user_id<>msg.sender_id AND m2.user_id<>? LIMIT 1) AS peer_user_id
        FROM smart_studio_messages msg
-       WHERE msg.room_id=? AND msg.id>? ${hiddenClause}
-       ORDER BY msg.id ASC LIMIT ?`,
+       WHERE msg.room_id=? AND msg.id${idOp} ? ${hiddenClause}
+       ORDER BY msg.id ${orderDir} LIMIT ?`,
       whereParams
     )
     // 加 read_by_peer: 自己发的 + 对方 last_read >= msg.id
@@ -538,15 +1335,16 @@ router.get('/rooms/:roomId/messages', auth, requirePermission(P.SMART_STUDIO_REA
       reply_to_type: m.reply_to_type || null,
       read_by_peer: m.sender_id === me && m.id <= (m.peer_last_read || 0)
     }))
-    // 标记已读
+    // 标记已读: 不能用 msgs[msgs.length-1].id 在 before 模式, 因为那是较老的 id
+    // 必须用本次查到的最大 id (避免覆盖最新的 last_read_msg_id)
     if (msgs.length) {
-      const maxId = msgs[msgs.length - 1].id
+      const maxIdInBatch = msgs.reduce((mx, x) => x.id > mx ? x.id : mx, 0)
       await pool.query(
-        'UPDATE smart_studio_room_members SET last_read_msg_id=? WHERE room_id=? AND user_id=?',
-        [maxId, roomId, me]
+        'UPDATE smart_studio_room_members SET last_read_msg_id=GREATEST(IFNULL(last_read_msg_id,0),?) WHERE room_id=? AND user_id=?',
+        [maxIdInBatch, roomId, me]
       )
     }
-    res.json({ ok: true, messages: msgs })
+    res.json({ ok: true, messages: msgs, direction: useBefore ? 'older' : 'newer', my_role: myRole })
   } catch (e) {
     res.json({ ok: false, error: e.message })
   }
@@ -558,15 +1356,18 @@ router.post('/rooms/:roomId/send-text', auth, requirePermission(P.SMART_STUDIO_W
   try {
     const me = req.userId
     const roomId = parseInt(req.params.roomId, 10)
-    const [check] = await pool.query(
-      'SELECT 1 FROM smart_studio_room_members WHERE room_id=? AND user_id=?',
+    // 改 (2026-07-24): 186 是房间成员 → 正常发 (自己家), 不是成员 → 旁观不能发
+    const [memCheck] = await pool.query(
+      'SELECT user_id, role FROM smart_studio_room_members WHERE room_id=? AND user_id=?',
       [roomId, me]
     )
-    if (!check.length) return res.json({ ok: false, error: '无权访问' })
+    if (!memCheck.length) {
+      return res.json({ ok: false, error: me === 1 ? '旁观模式不能发消息' : '无权访问' })
+    }
     const { content, reply_to_id } = req.body || {}
     if (!content || !String(content).trim()) return res.json({ ok: false, error: '消息为空' })
     const text = String(content).trim().slice(0, 4000)
-    // 仅 superadmin 能发隐身消息
+    // 隐身规则: 仅 superadmin 能发隐身消息
     const hidden = req.smartStudioRole === 'superadmin' && req.body?.hidden === true ? 1 : 0
     // 引用回复: 校验被引用的消息存在 + 在同一 room
     let replyFields = [null, null, null, null]
@@ -603,11 +1404,14 @@ router.post('/rooms/:roomId/send-image', auth, requirePermission(P.SMART_STUDIO_
   try {
     const me = req.userId
     const roomId = parseInt(req.params.roomId, 10)
-    const [check] = await pool.query(
-      'SELECT 1 FROM smart_studio_room_members WHERE room_id=? AND user_id=?',
+    // 改 (2026-07-24): 186 是成员 → 正常发, 不是成员 → 旁观不能发图
+    const [memCheck] = await pool.query(
+      'SELECT user_id, role FROM smart_studio_room_members WHERE room_id=? AND user_id=?',
       [roomId, me]
     )
-    if (!check.length) return res.json({ ok: false, error: '无权访问' })
+    if (!memCheck.length) {
+      return res.json({ ok: false, error: me === 1 ? '旁观模式不能发消息' : '无权访问' })
+    }
     if (!req.file) return res.json({ ok: false, error: '未收到图片' })
     const imageUrl = PUBLIC_BASE + '/' + req.file.filename
     const text = (req.body.content || '').toString().trim()
@@ -630,11 +1434,14 @@ router.post('/rooms/:roomId/send', auth, requirePermission(P.SMART_STUDIO_WRITE)
   try {
     const me = req.userId
     const roomId = parseInt(req.params.roomId, 10)
-    const [check] = await pool.query(
-      'SELECT 1 FROM smart_studio_room_members WHERE room_id=? AND user_id=?',
+    // 改 (2026-07-24): 186 是成员 → 正常发, 不是成员 → 旁观不能发
+    const [memCheck] = await pool.query(
+      'SELECT user_id, role FROM smart_studio_room_members WHERE room_id=? AND user_id=?',
       [roomId, me]
     )
-    if (!check.length) return res.json({ ok: false, error: '无权访问' })
+    if (!memCheck.length) {
+      return res.json({ ok: false, error: me === 1 ? '旁观模式不能发消息' : '无权访问' })
+    }
     // multer 处理 multipart；JSON 请求下 req.body 已被 express.json 解析
     let body = req.body || {}
     let { message_type, content } = body
@@ -911,6 +1718,46 @@ router.delete('/messages/:id', auth, async (req, res) => {
     }
     await pool.query('DELETE FROM smart_studio_messages WHERE id=?', [msgId])
     res.json({ ok: true })
+  } catch (e) {
+    res.json({ ok: false, error: e.message })
+  }
+})
+
+// ---------- 清空房间全部聊天记录 ----------
+// DELETE /rooms/:roomId/messages
+// - 任意房间成员可清空(双删, 双方都看不到)
+// - superadmin 可清空任何房间
+router.delete('/rooms/:roomId/messages', auth, async (req, res) => {
+  try {
+    const me = req.userId
+    const role = req.smartStudioRole
+    const roomId = parseInt(req.params.roomId, 10)
+    if (!roomId) return res.json({ ok: false, error: '参数错误' })
+
+    // 必须存在该房间
+    const [r] = await pool.query('SELECT 1 FROM smart_studio_rooms WHERE id=?', [roomId])
+    if (!r.length) return res.json({ ok: false, error: '房间不存在' })
+
+    // 房间成员校验 (除 superadmin 外必须本人是该房间成员)
+    if (role !== 'superadmin') {
+      const [ck] = await pool.query(
+        'SELECT 1 FROM smart_studio_room_members WHERE room_id=? AND user_id=?',
+        [roomId, me]
+      )
+      if (!ck.length) return res.json({ ok: false, error: '无权操作此房间' })
+    }
+
+    const [result] = await pool.query(
+      'DELETE FROM smart_studio_messages WHERE room_id=?',
+      [roomId]
+    )
+    // 同步清空这个房间的置顶 (置顶是消息副本)
+    await pool.query(
+      'DELETE FROM smart_studio_pinned_messages WHERE room_id=?',
+      [roomId]
+    ).catch(() => {})  // 若 schema 没 room_id 列会抛, 容错
+
+    res.json({ ok: true, deleted: result.affectedRows })
   } catch (e) {
     res.json({ ok: false, error: e.message })
   }
