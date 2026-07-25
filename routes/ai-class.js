@@ -4,11 +4,27 @@
  */
 
 import { Router } from 'express'
+import multer from 'multer'
+import { spawn } from 'child_process'
+import { promises as fs } from 'fs'
+import path from 'path'
+import os from 'os'
 import { pool } from '../db/connection.js'
 import { auth } from '../middleware/auth.js'
 import { ROLES, PERMISSIONS } from '../middleware/rbac.js'
 
 const router = Router()
+
+// multer 用于 ASR 端点接收音频文件
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (req, file, cb) => {
+    const allowed = ['audio/webm', 'audio/wav', 'audio/ogg', 'audio/mp4', 'audio/m4a', 'audio/mpeg', 'audio/mp3']
+    if (allowed.includes(file.mimetype) || file.mimetype.startsWith('audio/')) cb(null, true)
+    else cb(new Error('不支持的音频格式'), false)
+  }
+})
 
 // ==================== 回复格式化函数 ====================
 function formatReply(text) {
@@ -369,6 +385,100 @@ router.get('/conversations', auth, async (req, res, next) => {
 
 // ==================== 对话路由 ====================
 // POST /api/ai-class/chat - 发送消息（支持RAG知识检索 + Function Calling）
+
+// ==================== TTS 语音合成 (Edge TTS) ====================
+// POST /api/ai-class/tts - 文字转语音
+// Body: {text, voice?, rate?}
+// 响应: audio/mpeg stream
+router.post('/tts', auth, async (req, res, next) => {
+  try {
+    const { text, voice = 'zh-CN-XiaoxiaoNeural', rate = '+0%' } = req.body || {}
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+      return res.status(400).json({ code: 400, message: 'text 不能为空' })
+    }
+    // 限制单次 ≤ 500 字，超长截断（避免 edge-tts 超时）
+    const safeText = text.length > 500 ? text.slice(0, 500) + '...' : text
+
+    const tmpFile = path.join(os.tmpdir(), `tts-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp3`)
+
+    // 用 node-edge-tts CLI（直接调用避免 npx 找不到）
+    const ttsBin = path.join(process.cwd(), 'node_modules', '.bin', 'node-edge-tts')
+    const child = spawn(ttsBin, [
+      '--text', safeText,
+      '--voice', voice,
+      '--rate', rate === '+0%' ? 'default' : rate,
+      '--filepath', tmpFile,
+      '--timeout', '8000'
+    ], { timeout: 12000 })
+
+    let stderr = ''
+    child.stderr.on('data', (d) => { stderr += d.toString() })
+
+    child.on('error', (err) => {
+      console.error('[ai-class/tts] spawn error:', err.message)
+      return res.status(500).json({ code: 500, message: 'TTS 服务异常', detail: err.message })
+    })
+
+    child.on('close', async (code) => {
+      if (code !== 0) {
+        console.error('[ai-class/tts] edge-tts exit', code, stderr.slice(-300))
+        return res.status(500).json({ code: 500, message: 'TTS 合成失败', detail: stderr.slice(-300) })
+      }
+      try {
+        const buf = await fs.readFile(tmpFile)
+        await fs.unlink(tmpFile).catch(() => {})
+        res.setHeader('Content-Type', 'audio/mpeg')
+        res.setHeader('Content-Length', buf.length)
+        res.setHeader('Cache-Control', 'no-store')
+        res.end(buf)
+      } catch (e) {
+        console.error('[ai-class/tts] readFile error:', e.message)
+        res.status(500).json({ code: 500, message: '读取音频失败', detail: e.message })
+      }
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// ==================== ASR 语音识别 (OpenAI Whisper-1) ====================
+// POST /api/ai-class/asr - 音频转文字
+// Body: multipart/form-data, field=audio (file)
+// 响应: {text, duration?}
+router.post('/asr', auth, upload.single('audio'), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ code: 400, message: '缺少音频文件' })
+    }
+    const openaiKey = process.env.OPENAI_API_KEY
+    if (!openaiKey) {
+      return res.json({ ok: false, code: 503, _fallback: 'web_speech', message: '未配置 OPENAI_API_KEY，请用浏览器 Web Speech API' })
+    }
+    const model = process.env.OPENAI_ASR_MODEL || 'whisper-1'
+
+    // 调 OpenAI Whisper API（与 smart-studio ASR 复用同一模式）
+    const formData = new FormData()
+    const blob = new Blob([req.file.buffer], { type: req.file.mimetype || 'audio/webm' })
+    formData.append('file', blob, req.file.originalname || 'audio.webm')
+    formData.append('model', model)
+    formData.append('language', 'zh')
+
+    const r = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${openaiKey}` },
+      body: formData
+    })
+    if (!r.ok) {
+      const errText = await r.text()
+      console.error('[ai-class/asr] whisper api error:', r.status, errText.slice(-300))
+      return res.status(502).json({ code: 502, message: 'ASR 服务异常', detail: errText.slice(-300) })
+    }
+    const data = await r.json()
+    res.json({ code: 0, ok: true, text: data.text || '', duration: data.duration })
+  } catch (err) {
+    next(err)
+  }
+})
 router.post('/chat', auth, async (req, res, next) => {
   try {
     const { message, session_id, stream, context } = req.body
