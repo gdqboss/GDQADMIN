@@ -86,7 +86,7 @@ router.get('/products', async (req, res, next) => {
 
     const [rows] = await pool.query(`
       SELECT p.id, p.sku, p.name, p.category, p.category_id, p.spec, p.unit,
-             p.supplier, p.purchase_price, p.sale_price, p.stock, p.safe_stock,
+             p.supplier, p.purchase_price, p.sale_price, p.stock, p.alert_stock,
              p.image_main, p.images, p.status, p.created_at,
              c.name as category_name
       FROM products p
