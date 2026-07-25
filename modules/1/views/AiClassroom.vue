@@ -21,9 +21,136 @@ const activeTab = ref('chat')
 const messages = ref([])
 const inputMessage = ref('')
 const sending = ref(false)
+const awaitingReply = ref(false) // 等待 AI 回复中提示
 const chatContainer = ref(null)
 const conversationLoaded = ref(false)
 const streamingIndex = ref(null) // index of message being typed
+
+// ==================== 🎤 语音输入（STT） ====================
+const isRecording = ref(false)
+const isTranscribing = ref(false)
+const mediaRecorder = ref(null)
+const audioChunks = ref([])
+let recordingStartAt = 0
+
+const startRecording = async () => {
+  if (isRecording.value || isTranscribing.value) return
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    // 优先 webm/opus (Chrome/Edge), Safari 走 mp4
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '')
+    mediaRecorder.value = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+    audioChunks.value = []
+    mediaRecorder.value.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunks.value.push(e.data)
+    }
+    mediaRecorder.value.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop())
+      await transcribeRecording()
+    }
+    recordingStartAt = Date.now()
+    mediaRecorder.value.start()
+    isRecording.value = true
+  } catch (err) {
+    console.error('[AI课堂] 麦克风权限失败:', err)
+    ElMessage.error('无法访问麦克风：' + (err.message || '请检查浏览器权限'))
+  }
+}
+
+const stopRecording = () => {
+  if (!isRecording.value || !mediaRecorder.value) return
+  // 至少录 500ms 避免空文件
+  if (Date.now() - recordingStartAt < 500) {
+    setTimeout(() => mediaRecorder.value && mediaRecorder.value.state !== 'inactive' && mediaRecorder.value.stop(), 600)
+  } else {
+    mediaRecorder.value.stop()
+  }
+}
+
+const transcribeRecording = async () => {
+  if (audioChunks.value.length === 0) {
+    isRecording.value = false
+    return
+  }
+  isRecording.value = false
+  isTranscribing.value = true
+  const mimeType = audioChunks.value[0]?.type || 'audio/webm'
+  const ext = mimeType.includes('mp4') ? 'm4a' : (mimeType.includes('ogg') ? 'ogg' : 'webm')
+  const blob = new Blob(audioChunks.value, { type: mimeType })
+  const formData = new FormData()
+  formData.append('audio', blob, `recording.${ext}`)
+  try {
+    const res = await api.post('/ai-class/asr', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    if (res.ok === false && res._fallback === 'web_speech') {
+      ElMessage.warning('后端未配置 ASR，请用 Chrome/Edge 浏览器原生语音输入')
+    } else if (res.code === 0 && res.text) {
+      // 把识别文字追加到现有输入（不覆盖，用户可继续编辑）
+      inputMessage.value = (inputMessage.value ? inputMessage.value + ' ' : '') + res.text.trim()
+      ElMessage.success('识别成功')
+    } else {
+      ElMessage.error(res.message || '语音识别失败')
+    }
+  } catch (err) {
+    console.error('[AI课堂] ASR error:', err)
+    ElMessage.error('语音识别失败：' + (err.message || '网络错误'))
+  } finally {
+    isTranscribing.value = false
+    audioChunks.value = []
+  }
+}
+
+// ==================== 🔊 TTS 语音播放 ====================
+const ttsEnabled = ref(true) // 用户可静音
+const ttsVoice = ref('zh-CN-XiaoxiaoNeural') // 默认音色
+const currentAudio = ref(null) // 当前播放的 audio 元素
+
+const playTTS = async (text) => {
+  if (!ttsEnabled.value || !text || !text.trim()) return
+  // 跳过太短或纯标点的内容
+  const clean = text.replace(/[\s\n\r\p{P}]/gu, '').trim()
+  if (clean.length < 2) return
+  // 截断到 500 字避免超时
+  const safeText = text.length > 500 ? text.slice(0, 500) + '...' : text
+  try {
+    // 停掉上一段
+    if (currentAudio.value) {
+      currentAudio.value.pause()
+      currentAudio.value = null
+    }
+    const res = await api.post('/ai-class/tts', {
+      text: safeText,
+      voice: ttsVoice.value,
+      rate: '+0%'
+    }, { responseType: 'blob' })
+    const url = URL.createObjectURL(res)
+    const audio = new Audio(url)
+    audio.onended = () => { URL.revokeObjectURL(url); if (currentAudio.value === audio) currentAudio.value = null }
+    audio.onerror = () => { URL.revokeObjectURL(url); if (currentAudio.value === audio) currentAudio.value = null }
+    currentAudio.value = audio
+    await audio.play().catch(() => {
+      // autoplay 被浏览器拦截，用户没交互过
+      console.warn('[AI课堂] autoplay 被拦截')
+    })
+  } catch (err) {
+    console.error('[AI课堂] TTS error:', err?.response?.data || err.message)
+  }
+}
+
+const stopTTS = () => {
+  if (currentAudio.value) {
+    currentAudio.value.pause()
+    currentAudio.value = null
+  }
+}
+
+const toggleTTS = () => {
+  ttsEnabled.value = !ttsEnabled.value
+  if (!ttsEnabled.value) stopTTS()
+}
 
 const SESSION_KEY = 'ai_classroom_session_id'
 
@@ -87,9 +214,11 @@ const sendMessage = async () => {
   scrollToBottom()
 
   sending.value = true
+  awaitingReply.value = true
   try {
     const res = await api.post('/ai-class/chat', { message: msg, session_id: sessionId.value })
     if (res.code === 0) {
+      awaitingReply.value = false
       const reply = res.data?.reply || ''
       // Push empty message first for typewriter effect
       messages.value.push({ role: 'assistant', content: '' })
@@ -107,6 +236,8 @@ const sendMessage = async () => {
           clearInterval(typeInterval)
           streamingIndex.value = null
           sending.value = false
+          // ✨ AI 回复完成 → 自动语音播报（ttsEnabled + 内容非空）
+          if (reply && reply.trim()) playTTS(reply)
         }
       }, 30)
       return
@@ -118,6 +249,7 @@ const sendMessage = async () => {
     ElMessage.error(e.message || $t('aiClassroom.sendFailed'))
     messages.value.push({ role: 'assistant', content: '抱歉，发生了错误。' })
   } finally {
+    awaitingReply.value = false
     if (streamingIndex.value === null) {
       sending.value = false
     }
@@ -387,6 +519,18 @@ onMounted(() => {
                   <div class="message-content"><span class="typing-indicator"><span></span><span></span><span></span></span></div>
                 </div>
               </div>
+              <!-- 等待 AI 回复 -->
+              <div v-if="awaitingReply && streamingIndex === null" class="message-row assistant">
+                <div class="message-bubble awaiting-reply">
+                  <span class="message-avatar"><span class="material-symbols-outlined">smart_toy</span></span>
+                  <div class="message-content">
+                    <span>{{ $t('aiClassroom.awaitingReply') }}</span>
+                    <span class="bounce-dots">
+                      <span>.</span><span>.</span><span>.</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- Input -->
@@ -398,6 +542,30 @@ onMounted(() => {
                 :disabled="sending"
                 @keyup.enter="sendMessage"
               />
+              <!-- 🎤 语音输入按钮（长按录音） -->
+              <button
+                class="btn-voice"
+                :class="{ recording: isRecording, transcribing: isTranscribing }"
+                :disabled="sending || isTranscribing"
+                :title="isRecording ? '松开结束录音' : (isTranscribing ? '识别中…' : '长按录音')"
+                @mousedown.prevent="startRecording"
+                @mouseup.prevent="stopRecording"
+                @mouseleave.prevent="stopRecording"
+                @touchstart.prevent="startRecording"
+                @touchend.prevent="stopRecording"
+              >
+                <span class="material-symbols-outlined">{{ isTranscribing ? 'hourglass_empty' : (isRecording ? 'mic' : 'mic_none') }}</span>
+                <span v-if="isRecording" class="rec-dot"></span>
+              </button>
+              <!-- 🔊 TTS 开关 -->
+              <button
+                class="btn-tts"
+                :class="{ active: ttsEnabled }"
+                :title="ttsEnabled ? '关闭语音播报' : '开启语音播报'"
+                @click="toggleTTS"
+              >
+                <span class="material-symbols-outlined">{{ ttsEnabled ? 'volume_up' : 'volume_off' }}</span>
+              </button>
               <button class="btn-send" @click="sendMessage" :disabled="sending || !inputMessage.trim()">
                 <span class="material-symbols-outlined">send</span>
               </button>
@@ -570,6 +738,18 @@ onMounted(() => {
 <style scoped>
 .ai-classroom {
   padding: 24px;
+}
+
+@media (max-width: 768px) {
+  .ai-classroom {
+    padding: 8px;  /* 手机端减小 padding */
+  }
+  .page-title {
+    font-size: 18px;  /* 手机端标题缩小 */
+  }
+  .page-header {
+    margin-bottom: 12px;
+  }
 }
 
 .page-header {
@@ -745,6 +925,7 @@ onMounted(() => {
   align-items: flex-start;
   gap: 10px;
   max-width: 70%;
+  min-width: 0;  /* 允许 flex item 收缩 */
 }
 
 .message-avatar {
@@ -856,40 +1037,56 @@ onMounted(() => {
 
 @media (max-width: 768px) {
   .chat-panel {
-    height: calc(100vh - 180px);
+    height: calc(100vh - 160px);
     min-height: 400px;
   }
 
   .chat-header {
-    padding: 10px 14px;
-  }
-
-  .user-info {
-    font-size: 13px;
-  }
-
-  .btn-clear {
-    padding: 5px 10px;
-    font-size: 12px;
-  }
-
-  .chat-messages {
-    padding: 12px 12px;
-    gap: 12px;
-  }
-
-  .message-bubble {
-    max-width: 85%;
+    padding: 8px 12px;
+    flex-wrap: wrap;
     gap: 8px;
   }
 
+  .user-info {
+    font-size: 12px;
+  }
+
+  .btn-clear {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .chat-messages {
+    padding: 8px 8px;
+    gap: 10px;
+  }
+
+  .message-bubble {
+    max-width: 92%;
+    gap: 6px;
+  }
+
   .message-avatar {
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
   }
 
   .message-avatar .material-symbols-outlined {
-    font-size: 15px;
+    font-size: 14px;
+  }
+
+  /* 输入栏手机端适配 */
+  .chat-input-bar {
+    padding: 8px;
+    gap: 6px;
+  }
+  .chat-input {
+    font-size: 14px;
+    padding: 8px 12px;
+  }
+  .btn-send {
+    width: 36px;
+    height: 36px;
   }
 
   .message-content {
@@ -911,15 +1108,28 @@ onMounted(() => {
     gap: 8px;
   }
 
-  .chat-input {
-    height: 40px;
-    padding: 0 12px;
-    font-size: 14px;
+  .btn-clear {
+    padding: 5px 10px;
+    font-size: 12px;
   }
 
-  .btn-send {
-    width: 40px;
-    height: 40px;
+  /* 表格内容溢出处理 */
+  .message-content table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+  /* el-tabs 适配 */
+  :deep(.el-tabs__header) {
+    margin: 0 0 8px 0;
+  }
+  :deep(.el-tabs__nav-wrap.is-scrollable) {
+    padding: 0;
+  }
+  :deep(.el-tabs__item) {
+    padding: 0 12px !important;
+    font-size: 14px;
   }
 }
 
@@ -967,6 +1177,85 @@ onMounted(() => {
 .btn-send:disabled {
   background: #93c5fd;
   cursor: not-allowed;
+}
+
+/* 🎤 语音输入按钮 */
+.btn-voice {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  color: #6b7280;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.btn-voice:hover:not(:disabled) {
+  background: #e5e7eb;
+  color: #374151;
+}
+.btn-voice:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-voice.recording {
+  background: #ef4444;
+  border-color: #dc2626;
+  color: #fff;
+  animation: pulse-rec 1.2s ease-in-out infinite;
+}
+.btn-voice.transcribing {
+  background: #fbbf24;
+  border-color: #f59e0b;
+  color: #fff;
+}
+.btn-voice .rec-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  animation: pulse-dot 0.8s ease-in-out infinite;
+}
+@keyframes pulse-rec {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+  50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.3); }
+}
+
+/* 🔊 TTS 开关按钮 */
+.btn-tts {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  color: #9ca3af;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.btn-tts:hover {
+  background: #e5e7eb;
+  color: #6b7280;
+}
+.btn-tts.active {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #2563eb;
 }
 
 .btn-send .material-symbols-outlined {
@@ -1302,5 +1591,38 @@ onMounted(() => {
   border: none;
   border-top: 1px solid #e0e0e0;
   margin: 10px 0;
+}
+
+/* ── 等待 AI 回复 ── */
+.message-bubble.awaiting-reply .message-content {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 13px;
+  color: #888;
+}
+
+.bounce-dots {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 1px;
+}
+
+.bounce-dots span {
+  display: inline-block;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  color: #888;
+  animation: bounceDot 1.4s infinite ease-in-out;
+}
+
+.bounce-dots span:nth-child(1) { animation-delay: 0ms; }
+.bounce-dots span:nth-child(2) { animation-delay: 150ms; }
+.bounce-dots span:nth-child(3) { animation-delay: 300ms; }
+
+@keyframes bounceDot {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
 }
 </style>
