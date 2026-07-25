@@ -143,6 +143,7 @@ async function openEdit(row) {
     name: row.name, ip: row.ip, ssh_port: row.ssh_port || 22,
     ssh_user: row.ssh_user || 'ubuntu', ssh_key_path: row.ssh_key_path || '/root/clawgdqshop.pem',
     description: row.description || '', env: row.env || 'production',
+    remark: row.remark || '',
     build_date: row.build_date || '', manager: row.manager || '',
     domain: row.domain || '', pem_content: row.pem_content || '',
     website: row.website || '', site_logo: row.site_logo || '',
@@ -567,6 +568,9 @@ onMounted(() => {
             </el-form-item>
             <el-form-item :label="$t('serverProfiles.formDescription')" class="col-span-2">
               <el-input v-model="form.description" type="textarea" :rows="2" />
+            </el-form-item>
+            <el-form-item label="备注 (内部, 多行, 不展示给客户)" class="col-span-2">
+              <el-input v-model="form.remark" type="textarea" :rows="5" placeholder="实施计划 / 待办 / 决策记录等..." />
             </el-form-item>
           </el-form>
         </div>
