@@ -26,42 +26,115 @@ const chatContainer = ref(null)
 const conversationLoaded = ref(false)
 const streamingIndex = ref(null) // index of message being typed
 
-// ==================== 🎤 语音输入（STT） ====================
+// ==================== 🎤 语音输入（STT）===================
+// 三模态自动适配策略（2026-07-26 HK 上线扩展）：
+//  1) 浏览器原生 SpeechRecognition（webkitSpeechRecognition / SpeechRecognition）— 首选，零成本零 key
+//  2) MediaRecorder → /api/ai-class/asr（服务端 Whisper）— 后端 OPENAI_API_KEY 有真值时才用
+//  3) 都不支持时按钮 disabled + tooltip 提示
+// 优先级在 onMounted() 里探测一次后定下来（不每次录音切模式，体验跳跃）
 const isRecording = ref(false)
 const isTranscribing = ref(false)
 const mediaRecorder = ref(null)
 const audioChunks = ref([])
 let recordingStartAt = 0
+// 三种语音输入模式
+const STT_MODES = { WEB_SPEECH: 'web_speech', MEDIA_RECORDER: 'media_recorder', UNAVAILABLE: 'unavailable' }
+const sttMode = ref(STT_MODES.UNAVAILABLE) // 默认 unavailable, onMounted() 里探测
+const webSpeechRecognition = ref(null) // SpeechRecognition 实例（如果走 web_speech 模式）
+
+// 探测浏览器能力，给 sttMode 赋值（在组件 onMounted 时跑一次）
+const detectSTTMode = () => {
+  const RecCtor = window.SpeechRecognition || window.webkitSpeechRecognition
+  if (RecCtor) {
+    sttMode.value = STT_MODES.WEB_SPEECH
+    return
+  }
+  if (navigator.mediaDevices && window.MediaRecorder) {
+    sttMode.value = STT_MODES.MEDIA_RECORDER
+    return
+  }
+  sttMode.value = STT_MODES.UNAVAILABLE
+}
 
 const startRecording = async () => {
   if (isRecording.value || isTranscribing.value) return
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    // 优先 webm/opus (Chrome/Edge), Safari 走 mp4
-    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-      ? 'audio/webm;codecs=opus'
-      : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '')
-    mediaRecorder.value = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
-    audioChunks.value = []
-    mediaRecorder.value.ondataavailable = (e) => {
-      if (e.data.size > 0) audioChunks.value.push(e.data)
+
+  // 模式 A: 浏览器原生 Web Speech API（零 key,优先）
+  if (sttMode.value === STT_MODES.WEB_SPEECH) {
+    const RecCtor = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!RecCtor) return
+    const rec = new RecCtor()
+    rec.lang = 'zh-CN'
+    rec.interimResults = false
+    rec.maxAlternatives = 1
+    rec.onresult = (e) => {
+      const text = e.results[0][0].transcript
+      if (text) {
+        inputMessage.value = (inputMessage.value ? inputMessage.value + ' ' : '') + text.trim()
+        ElMessage.success('识别成功')
+      }
     }
-    mediaRecorder.value.onstop = async () => {
-      stream.getTracks().forEach(t => t.stop())
-      await transcribeRecording()
+    rec.onerror = (e) => {
+      console.warn('[AI课堂] Web Speech error:', e.error)
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        ElMessage.error('麦克风权限被拒绝')
+      } else if (e.error === 'no-speech') {
+        ElMessage.warning('没听到声音，请重试')
+      } else {
+        ElMessage.warning('语音识别失败：' + (e.error || '未知错误'))
+      }
     }
-    recordingStartAt = Date.now()
-    mediaRecorder.value.start()
-    isRecording.value = true
-  } catch (err) {
-    console.error('[AI课堂] 麦克风权限失败:', err)
-    ElMessage.error('无法访问麦克风：' + (err.message || '请检查浏览器权限'))
+    rec.onend = () => { isRecording.value = false }
+    try {
+      rec.start()
+      webSpeechRecognition.value = rec
+      isRecording.value = true
+    } catch (err) {
+      console.error('[AI课堂] Web Speech start failed:', err)
+      ElMessage.error('无法启动语音识别：' + (err.message || '浏览器不支持'))
+    }
+    return
   }
+
+  // 模式 B: MediaRecorder + 后端 ASR（需要服务端 OPENAI_API_KEY）
+  if (sttMode.value === STT_MODES.MEDIA_RECORDER) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '')
+      mediaRecorder.value = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+      audioChunks.value = []
+      mediaRecorder.value.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunks.value.push(e.data)
+      }
+      mediaRecorder.value.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop())
+        await transcribeRecording()
+      }
+      recordingStartAt = Date.now()
+      mediaRecorder.value.start()
+      isRecording.value = true
+    } catch (err) {
+      console.error('[AI课堂] 麦克风权限失败:', err)
+      ElMessage.error('无法访问麦克风：' + (err.message || '请检查浏览器权限'))
+    }
+    return
+  }
+
+  // 模式 C: 啥都不支持
+  ElMessage.warning('当前浏览器不支持语音输入，请用 Chrome/Edge/Safari')
 }
 
 const stopRecording = () => {
+  // 模式 A: Web Speech API
+  if (sttMode.value === STT_MODES.WEB_SPEECH && webSpeechRecognition.value) {
+    try { webSpeechRecognition.value.stop() } catch (e) { /* noop */ }
+    webSpeechRecognition.value = null
+    return
+  }
+  // 模式 B: MediaRecorder
   if (!isRecording.value || !mediaRecorder.value) return
-  // 至少录 500ms 避免空文件
   if (Date.now() - recordingStartAt < 500) {
     setTimeout(() => mediaRecorder.value && mediaRecorder.value.state !== 'inactive' && mediaRecorder.value.stop(), 600)
   } else {
@@ -86,9 +159,9 @@ const transcribeRecording = async () => {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     if (res.ok === false && res._fallback === 'web_speech') {
-      ElMessage.warning('后端未配置 ASR，请用 Chrome/Edge 浏览器原生语音输入')
+      // 后端没配 OPENAI_API_KEY — 提示用户降级到浏览器原生 API(本次录音已废)
+      ElMessage.warning('当前服务端未配置语音识别,请下次用 Chrome/Edge 浏览器并允许麦克风权限')
     } else if (res.code === 0 && res.text) {
-      // 把识别文字追加到现有输入（不覆盖，用户可继续编辑）
       inputMessage.value = (inputMessage.value ? inputMessage.value + ' ' : '') + res.text.trim()
       ElMessage.success('识别成功')
     } else {
@@ -96,12 +169,22 @@ const transcribeRecording = async () => {
     }
   } catch (err) {
     console.error('[AI课堂] ASR error:', err)
-    ElMessage.error('语音识别失败：' + (err.message || '网络错误'))
+    ElMessage.error('语音识别失败:' + (err.message || '网络错误'))
   } finally {
     isTranscribing.value = false
     audioChunks.value = []
   }
 }
+
+// 按钮可见性 + tooltip
+const sttAvailable = computed(() => sttMode.value !== STT_MODES.UNAVAILABLE)
+const voiceButtonTitle = computed(() => {
+  if (isRecording.value) return '松开结束录音'
+  if (isTranscribing.value) return '识别中…'
+  if (!sttAvailable.value) return '当前浏览器不支持语音输入（请用 Chrome/Edge/Safari）'
+  if (sttMode.value === STT_MODES.WEB_SPEECH) return '长按录音（浏览器内置识别，零 key）'
+  return '长按录音（服务端识别）'
+})
 
 // ==================== 🔊 TTS 语音播放 ====================
 const ttsEnabled = ref(true) // 用户可静音
@@ -463,6 +546,7 @@ const getMemoryTypeLabel = (type) => {
 
 // ─── Mounted ───────────────────────────────────────────────────────────────────
 onMounted(() => {
+  detectSTTMode()
   loadKnowledge()
   loadMemories()
   loadConversations()
@@ -542,17 +626,17 @@ onMounted(() => {
                 :disabled="sending"
                 @keyup.enter="sendMessage"
               />
-              <!-- 🎤 语音输入按钮（长按录音） -->
+              <!-- 🎤 语音输入按钮（长按录音；三模态自适应：webkitSpeech / MediaRecorder / disabled）-->
               <button
                 class="btn-voice"
-                :class="{ recording: isRecording, transcribing: isTranscribing }"
-                :disabled="sending || isTranscribing"
-                :title="isRecording ? '松开结束录音' : (isTranscribing ? '识别中…' : '长按录音')"
-                @mousedown.prevent="startRecording"
-                @mouseup.prevent="stopRecording"
-                @mouseleave.prevent="stopRecording"
-                @touchstart.prevent="startRecording"
-                @touchend.prevent="stopRecording"
+                :class="{ recording: isRecording, transcribing: isTranscribing, unavailable: !sttAvailable }"
+                :disabled="sending || isTranscribing || !sttAvailable"
+                :title="voiceButtonTitle"
+                @mousedown.prevent="sttAvailable && startRecording"
+                @mouseup.prevent="sttAvailable && stopRecording"
+                @mouseleave.prevent="sttAvailable && stopRecording"
+                @touchstart.prevent="sttAvailable && startRecording"
+                @touchend.prevent="sttAvailable && stopRecording"
               >
                 <span class="material-symbols-outlined">{{ isTranscribing ? 'hourglass_empty' : (isRecording ? 'mic' : 'mic_none') }}</span>
                 <span v-if="isRecording" class="rec-dot"></span>
