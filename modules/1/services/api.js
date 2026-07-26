@@ -82,6 +82,24 @@ export const serverProfileApi = {
   remove(id) { return api.delete(`/server-profiles/${id}`) },
   sync(id) { return api.post(`/server-profiles/${id}/sync`) },
   execSync(id) { return api.post(`/server-profiles/${id}/exec-sync`) },
+  getModules(id) { return api.get(`/server-profiles/${id}/modules`) },
+  addModule(profileId, moduleKey) { return api.post(`/server-profiles/${profileId}/modules`, { module_key: moduleKey }) },
+  syncModules(profileId, modules) { return api.put(`/server-profiles/${profileId}/modules`, { modules }) },
+  removeModule(profileId, moduleKey) { return api.delete(`/server-profiles/${profileId}/modules/${moduleKey}`) },
+}
+
+// 端点管理 API (2026-07-26 补强: 之前后端有 CRUD 但前端无 service)
+export const serverEndpointApi = {
+  listByProfile(profileId) { return api.get(`/server-profiles/${profileId}/endpoints`) },
+  create(profileId, data) { return api.post(`/server-profiles/${profileId}/endpoints`, data) },
+  update(profileId, endpointId, data) { return api.put(`/server-profiles/${profileId}/endpoints/${endpointId}`, data) },
+  remove(profileId, endpointId) { return api.delete(`/server-profiles/${profileId}/endpoints/${endpointId}`) },
+  resetPrimary(profileId, endpointType, endpointId) {
+    return api.post(`/server-profiles/${profileId}/endpoints/reset-primary`, {
+      endpoint_type: endpointType,
+      endpoint_id: endpointId
+    })
+  },
 }
 
 // 菜单配置 API

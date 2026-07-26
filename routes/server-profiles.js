@@ -5,6 +5,8 @@ import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { createRequire } from 'module'
+import { spawn } from 'child_process'
+import net from 'net'
 
 const require = createRequire(import.meta.url)
 const __filename = fileURLToPath(import.meta.url)
@@ -382,14 +384,43 @@ router.get('/:id', async (req, res) => {
 // 新增
 router.post('/', async (req, res) => {
   try {
-    const { name, ip, ssh_port, ssh_user, ssh_key_path, ssh_auth_type, ssh_password, description, env, build_date, manager, domain, website, remark, modules, site_name_zh, site_name_en, language, currency, industry, wechat_appid } = req.body
-    const mysqlBuildDate = build_date ? new Date(build_date).toISOString().slice(0, 10) : null
-    const mysqlLanguage = Array.isArray(language) ? JSON.stringify(language) : language
+    // 完整 38 字段白名单(2026-07-26 补强:写入 schema 全字段,之前 18 个丢失: mysql_*, http_port, backend_port, web_server, db_*, redis_*, deployment_*, last_*, auto_sync, os_*, cpu_*, ram_*, disk_*, user_*, order_*, data_isolation, notes, frontend_type, dist_path, target_nginx, target_domain, is_source, site_logo, wx_pub_*, pem_content)
+    const b = req.body || {}
+    const fields = [
+      'name','ip','ssh_port','ssh_user','ssh_key_path','ssh_auth_type','ssh_password',
+      'description','env','build_date','manager','domain',
+      // 站点信息
+      'site_name_zh','site_name_en','site_logo','language','currency','industry',
+      'website','wechat_appid','wx_pub_account','wx_pub_email','wx_pub_secret',
+      // 部署路径 / 资源
+      'http_port','backend_port','web_server',
+      'frontend_type','dist_path','target_nginx','target_domain','is_source',
+      'pem_content','remark',
+      // DB / 缓存
+      'mysql_host','mysql_port','mysql_db','mysql_user','mysql_password',
+      'db_engine','db_version','redis_host','redis_port','ssh_tunnel_use',
+      // 部署状态
+      'deployment_mode','last_deploy_at','last_health_at','last_sync_from','auto_sync',
+      // 资源
+      'os_version','cpu_cores','ram_total_mb','disk_total_gb',
+      // 业务
+      'user_count','order_count','data_isolation','notes'
+    ]
+    // 只接受白名单字段
+    const cols = fields.filter(f => b[f] !== undefined)
+    const vals = cols.map(f => {
+      let v = b[f]
+      if (f === 'build_date' && v) v = new Date(v).toISOString().slice(0, 10)
+      if (f === 'language' && Array.isArray(v)) v = JSON.stringify(v)
+      return v
+    })
+    const placeholders = cols.map(() => '?').join(',')
     const [result] = await pool.query(
-      `INSERT INTO ${TABLE} (name, ip, ssh_port, ssh_user, ssh_key_path, ssh_auth_type, ssh_password, description, env, build_date, manager, domain, website, remark, site_name_zh, site_name_en, language, currency, industry, wechat_appid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name, ip, ssh_port, ssh_user, ssh_key_path, ssh_auth_type, ssh_password, description, env, mysqlBuildDate, manager, domain, website, remark, site_name_zh, site_name_en, mysqlLanguage, currency, industry, wechat_appid]
+      `INSERT INTO ${TABLE} (${cols.join(',')}) VALUES (${placeholders})`,
+      vals
     )
     const profileId = result.insertId
+    const modules = b.modules
     if (modules && modules.length) {
       const values = modules.map(m => [profileId, m])
       await pool.query('INSERT INTO server_modules (server_profile_id, module_key) VALUES ?', [values])
@@ -401,21 +432,53 @@ router.post('/', async (req, res) => {
 // 更新
 router.put('/:id', async (req, res) => {
   try {
-    const { name, ip, ssh_port, ssh_user, ssh_key_path, ssh_auth_type, ssh_password, description, env, build_date, manager, domain, website, remark, modules, site_name_zh, site_name_en, language, currency, industry, wechat_appid } = req.body
-    const mysqlBuildDate = build_date ? new Date(build_date).toISOString().slice(0, 10) : null
-    const mysqlLanguage = Array.isArray(language) ? JSON.stringify(language) : language
-    await pool.query(
-      `UPDATE ${TABLE} SET name=?, ip=?, ssh_port=?, ssh_user=?, ssh_key_path=?, ssh_auth_type=?, ssh_password=?, description=?, env=?, build_date=?, manager=?, domain=?, website=?, remark=?, site_name_zh=?, site_name_en=?, language=?, currency=?, industry=?, wechat_appid=? WHERE id=?`,
-      [name, ip, ssh_port, ssh_user, ssh_key_path, ssh_auth_type, ssh_password, description, env, mysqlBuildDate, manager, domain, website, remark, site_name_zh, site_name_en, mysqlLanguage, currency, industry, wechat_appid, req.params.id]
-    )
-    await pool.query('DELETE FROM server_modules WHERE server_profile_id=?', [req.params.id])
-    if (modules && modules.length) {
-      const values = modules.map(m => [parseInt(req.params.id), m])
-      await pool.query('INSERT INTO server_modules (server_profile_id, module_key) VALUES ?', [values])
+    const b = req.body || {}
+    // 同 POST 的白名单
+    const fields = [
+      'name','ip','ssh_port','ssh_user','ssh_key_path','ssh_auth_type','ssh_password',
+      'description','env','build_date','manager','domain',
+      'site_name_zh','site_name_en','site_logo','language','currency','industry',
+      'website','wechat_appid','wx_pub_account','wx_pub_email','wx_pub_secret',
+      'http_port','backend_port','web_server',
+      'frontend_type','dist_path','target_nginx','target_domain','is_source',
+      'pem_content','remark',
+      'mysql_host','mysql_port','mysql_db','mysql_user','mysql_password',
+      'db_engine','db_version','redis_host','redis_port','ssh_tunnel_use',
+      'deployment_mode','last_deploy_at','last_health_at','last_sync_from','auto_sync',
+      'os_version','cpu_cores','ram_total_mb','disk_total_gb',
+      'user_count','order_count','data_isolation','notes'
+    ]
+    const cols = fields.filter(f => b[f] !== undefined)
+    if (cols.length === 0) {
+      // 没字段要更新,只处理 modules
+      await handleModulesUpdate(req.params.id, b.modules)
+      return res.json({ code: 0, data: { id: req.params.id } })
     }
+    const vals = cols.map(f => {
+      let v = b[f]
+      if (f === 'build_date' && v) v = new Date(v).toISOString().slice(0, 10)
+      if (f === 'language' && Array.isArray(v)) v = JSON.stringify(v)
+      return v
+    })
+    const setClause = cols.map(f => `${f}=?`).join(',')
+    await pool.query(
+      `UPDATE ${TABLE} SET ${setClause} WHERE id=?`,
+      [...vals, req.params.id]
+    )
+    await handleModulesUpdate(req.params.id, b.modules)
     res.json({ code: 0, data: { id: req.params.id } })
   } catch (err) { res.status(500).json({ code: 500, message: err.message }) }
 })
+
+// 抽出:同步 modules 子表
+async function handleModulesUpdate(profileId, modules) {
+  if (!Array.isArray(modules)) return
+  await pool.query('DELETE FROM server_modules WHERE server_profile_id=?', [profileId])
+  if (modules.length) {
+    const values = modules.map(m => [parseInt(profileId), m])
+    await pool.query('INSERT INTO server_modules (server_profile_id, module_key) VALUES ?', [values])
+  }
+}
 
 // 删除
 router.delete('/:id', async (req, res) => {
@@ -580,6 +643,177 @@ router.post('/:id/endpoints/reset-primary', async (req, res) => {
     await pool.query('UPDATE server_endpoints SET is_primary = 0 WHERE server_profile_id = ? AND endpoint_type = ?', [req.params.id, endpoint_type])
     await pool.query('UPDATE server_endpoints SET is_primary = 1 WHERE id = ? AND server_profile_id = ?', [endpoint_id, req.params.id])
     res.json({ code: 0, data: {} })
+  } catch (err) { res.status(500).json({ code: 500, message: err.message }) }
+})
+
+// ============================================================
+// 健康检查 (2026-07-26 补强)
+// 不依赖外部 SSH,只用本地 net socket + child_process nc 探测
+// 每个 profile 的检测项从 server_profiles 配置读取
+// ============================================================
+
+// 单项 TCP 端口探测 (本地 node, 0 依赖)
+function tcpProbe(host, port, timeoutMs = 4000) {
+  return new Promise((resolve) => {
+    const start = Date.now()
+    const socket = new net.Socket()
+    let done = false
+    const finish = (status, message) => {
+      if (done) return
+      done = true
+      try { socket.destroy() } catch (_) {}
+      resolve({ status, message, latency_ms: Date.now() - start })
+    }
+    socket.setTimeout(timeoutMs)
+    socket.on('connect', () => finish('ok', `connected ${host}:${port}`))
+    socket.on('timeout', () => finish('fail', `timeout after ${timeoutMs}ms`))
+    socket.on('error', (e) => finish('fail', e.code || e.message))
+    try {
+      socket.connect(port, host)
+    } catch (e) {
+      finish('fail', e.message)
+    }
+  })
+}
+
+// SSH/TCP 探针 (用 nc 命令, 3 秒超时)
+function ncProbe(host, port, timeoutMs = 4000) {
+  return new Promise((resolve) => {
+    const start = Date.now()
+    const child = spawn('nc', ['-zv', '-w', '3', host, String(port)], { timeout: timeoutMs })
+    let stderr = ''
+    child.stderr.on('data', d => { stderr += d.toString() })
+    child.on('error', (e) => resolve({ status: 'fail', message: 'nc not found or spawn error: ' + e.message, latency_ms: Date.now() - start }))
+    child.on('close', (code) => {
+      const latency = Date.now() - start
+      // nc -zv 退出 0 = 通; 非 0 = 不通 (但有些 nc 退出 0 即使 fail)
+      if (code === 0 || stderr.includes('open') || stderr.includes('succeeded')) {
+        resolve({ status: 'ok', message: stderr.trim().slice(-100) || 'port open', latency_ms: latency })
+      } else {
+        resolve({ status: 'fail', message: stderr.trim().slice(-200) || `nc exit ${code}`, latency_ms: latency })
+      }
+    })
+  })
+}
+
+// 单次健康检查: 返回 6 项结果 + 写 server_health_log
+router.get('/:id/health', requireRole('admin'), async (req, res) => {
+  try {
+    const id = req.params.id
+    const [rows] = await pool.query('SELECT * FROM server_profiles WHERE id = ?', [id])
+    if (!rows[0]) return res.status(404).json({ code: 404, message: 'Profile not found' })
+    const p = rows[0]
+    const host = p.ip
+    const checks = []
+
+    // 1) SSH 端口
+    if (p.ssh_port) {
+      const r = await ncProbe(host, p.ssh_port)
+      checks.push({ check_type: 'ssh', ...r })
+    } else {
+      checks.push({ check_type: 'ssh', status: 'skip', message: 'no ssh_port configured', latency_ms: 0 })
+    }
+
+    // 2) HTTP 端口 (nginx/caddy 外部端口)
+    if (p.http_port && p.http_port !== 3000 /* 默认值 */) {
+      const r = await ncProbe(host, p.http_port)
+      checks.push({ check_type: 'http', ...r })
+    } else {
+      checks.push({ check_type: 'http', status: 'skip', message: 'no http_port configured', latency_ms: 0 })
+    }
+
+    // 3) 后端 API 端口
+    if (p.backend_port) {
+      const r = await ncProbe(host, p.backend_port)
+      checks.push({ check_type: 'api', ...r })
+    } else {
+      checks.push({ check_type: 'api', status: 'skip', message: 'no backend_port configured', latency_ms: 0 })
+    }
+
+    // 4) MySQL 端口
+    // 独立部署的 profile (HK 等), mysql 仅 bind 127.0.0.1,远程 nc 探测必失败
+    // 但这是安全默认,不算 fail — 标记 'skip' 让前端知道"独立部署,DB 不暴露"
+    const dbIsLocalOnly = !p.mysql_host || p.mysql_host === 'localhost' || p.mysql_host === '127.0.0.1'
+    const dbHost = dbIsLocalOnly ? host : p.mysql_host
+    const dbPort = p.mysql_port || 3306
+    if (p.db_engine && p.db_engine !== 'none') {
+      const r = await ncProbe(dbHost, dbPort)
+      // 独立部署:DB 远程探测失败但不是真问题,标记为 skip
+      if (r.status === 'fail' && dbIsLocalOnly && p.deployment_mode === 'independent') {
+        checks.push({ check_type: 'db', status: 'skip', message: '独立部署, DB 仅本地 bind (安全默认,非故障)', latency_ms: r.latency_ms })
+      } else {
+        checks.push({ check_type: 'db', ...r })
+      }
+    } else {
+      checks.push({ check_type: 'db', status: 'skip', message: 'no db configured', latency_ms: 0 })
+    }
+
+    // 5) Redis 端口 (同上,独立部署 redis 本机不暴露)
+    if (p.redis_host) {
+      const redisIsLocal = p.redis_host === 'localhost' || p.redis_host === '127.0.0.1'
+      const redisHost = redisIsLocal ? host : p.redis_host
+      const redisPort = p.redis_port || 6379
+      const r = await ncProbe(redisHost, redisPort)
+      if (r.status === 'fail' && redisIsLocal && p.deployment_mode === 'independent') {
+        checks.push({ check_type: 'redis', status: 'skip', message: '独立部署, Redis 仅本地 bind', latency_ms: r.latency_ms })
+      } else {
+        checks.push({ check_type: 'redis', ...r })
+      }
+    } else {
+      checks.push({ check_type: 'redis', status: 'skip', message: 'no redis configured', latency_ms: 0 })
+    }
+
+    // 6) 本机 API health 端点 (只测 SGP 本机: id=1, 因为只有 SGP 在 127.0.0.1 上有 Node)
+    if (id === '1' && p.backend_port) {
+      try {
+        const start = Date.now()
+        const ctrl = new AbortController()
+        const timer = setTimeout(() => ctrl.abort(), 4000)
+        const r = await fetch(`http://127.0.0.1:${p.backend_port}/api/health`, { signal: ctrl.signal }).catch(() => null)
+        clearTimeout(timer)
+        if (r && (r.status === 200 || r.status === 404)) {
+          checks.push({ check_type: 'tcp', status: 'ok', message: `/api/health HTTP ${r.status}`, latency_ms: Date.now() - start })
+        } else {
+          checks.push({ check_type: 'tcp', status: 'fail', message: 'fetch failed', latency_ms: Date.now() - start })
+        }
+      } catch (e) {
+        checks.push({ check_type: 'tcp', status: 'fail', message: e.message, latency_ms: 0 })
+      }
+    } else {
+      checks.push({ check_type: 'tcp', status: 'skip', message: 'remote server - use nc only', latency_ms: 0 })
+    }
+
+    // 写日志
+    try {
+      const values = checks.map(c => [id, c.check_type, c.status, c.latency_ms || null, (c.message || '').slice(0, 500)])
+      await pool.query(
+        'INSERT INTO server_health_log (server_profile_id, check_type, status, latency_ms, message) VALUES ?',
+        [values]
+      )
+      // 更新 profile.last_health_at (任意 ok 即视为健康)
+      const anyOk = checks.some(c => c.status === 'ok')
+      if (anyOk) {
+        await pool.query('UPDATE server_profiles SET last_health_at = NOW() WHERE id = ?', [id])
+      }
+    } catch (logErr) {
+      console.error('[health log]', logErr.message)
+    }
+
+    res.json({ code: 0, data: { profile_id: id, checks, checked_at: new Date().toISOString() } })
+  } catch (err) { res.status(500).json({ code: 500, message: err.message }) }
+})
+
+// 历史健康日志
+router.get('/:id/health-log', requireRole('admin'), async (req, res) => {
+  try {
+    const id = req.params.id
+    const limit = Math.min(parseInt(req.query.limit || '20'), 100)
+    const [rows] = await pool.query(
+      `SELECT id, check_type, status, latency_ms, message, checked_at
+       FROM server_health_log WHERE server_profile_id = ? ORDER BY id DESC LIMIT ?`,
+      [id, limit]
+    )
+    res.json({ code: 0, data: rows })
   } catch (err) { res.status(500).json({ code: 500, message: err.message }) }
 })
 
