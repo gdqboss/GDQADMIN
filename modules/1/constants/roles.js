@@ -19,6 +19,8 @@ export const ROLES = Object.freeze({
   DIRECTOR:   'director',     // 总监
   WAREHOUSE:  'warehouse',    // 仓库管理员
   FINANCE:    'finance',      // 财务
+  CUSTOMER_SERVICE: 'customer_service', // 客服
+  REPAIRER:   'repairer',     // 维修员
 })
 
 // ─── 综合判断 ─────────────────────────────────────────────────────────────────

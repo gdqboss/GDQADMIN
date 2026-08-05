@@ -1,13 +1,22 @@
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../../components/PageHeader.vue'
 import StatusTag from '../../components/StatusTag.vue'
 import api from '../../services/api.js'
 import { useUserStore } from '../../stores/user.js'
+import {
+  formatDate,
+  formatDateTime,
+  changeTypeBadge,
+  changeTypeLabel,
+  formatSkuLabel,
+} from './helpers.js'
 
 const { t } = useI18n()
 const userStore = useUserStore()
+const route = useRoute()
 
 // ─── State ───────────────────────────────────────────────────────────────────
 const activeTab = ref('inbound')
@@ -15,12 +24,41 @@ const showForm = ref(false)
 const submitting = ref(false)
 const formError = ref('')
 const formSuccess = ref('')
+const formConflicts = ref([]) // 新模型：冲突的 SKU（已存在的库存关系）
+const editingId = ref(null) // 编辑时的记录ID，null=新建
 
 const inboundRecords = ref([])
 const outboundRecords = ref([])
 const returnRecords = ref([])
+
+// ─── 操作记录 Tab 数据 ───
+const movementsRecords = ref([])
+const movementsTotal = ref(0)
+const movementsPage = ref(1)
+const movementsLimit = ref(20)
+const movementsFilter = ref({
+  warehouse_id: '', change_type: '', operator: '',
+  start_date: '', end_date: '', keyword: '',
+})
+
+// ─── 手动调整（补单/冲正/盘点） ───
+const showAdjustForm = ref(false)
+const adjustSubmitting = ref(false)
+const adjustError = ref('')
+const adjustForm = ref({
+  warehouse_id: '',
+  product_id: '',
+  sku_id: '',
+  current_qty: 0, // 当前数量（加载时自动填）
+  new_qty: 0,     // 目标数量
+  reason: '',     // 调整原因（必填）
+})
+
 const warehouses = ref([])
 const products = ref([])
+const stockedProducts = ref([]) // outbound 用：当前仓库已入库商品
+const productSkus = ref({}) // { productId: [ {id, sku, sku_key, specs, stock}, ... ] }
+const productFilters = ref({}) // { rowIndex: filterString }
 
 // Pagination
 const pagination = ref({ inbound: {}, outbound: {}, return: {} })
@@ -28,26 +66,6 @@ const pagination = ref({ inbound: {}, outbound: {}, return: {} })
 // Detail modal
 const showDetail = ref(false)
 const detailRecord = ref(null)
-
-// 规格组合显示：颜色/尺寸等组合值
-function formatSkuSpec(item) {
-  if (!item) return ''
-  // 优先用后端 JOIN 过来的 sku_specs (product_skus.specs JSON)
-  if (item.sku_specs) {
-    try {
-      const specs = typeof item.sku_specs === 'string' ? JSON.parse(item.sku_specs) : item.sku_specs
-      if (specs && typeof specs === 'object') {
-        const values = Object.values(specs).filter(v => v != null && v !== '')
-        if (values.length) return values.join('/')
-      }
-    } catch (_) { /* JSON parse 失败走兜底 */ }
-  }
-  // 兜底：有 sku_code 就显示
-  if (item.sku_code) return item.sku_code
-  // 最后兜底：用 item.sku
-  if (item.sku) return item.sku
-  return ''
-}
 
 // Print
 const printRecord = ref(null)
@@ -57,7 +75,7 @@ const emptyForm = () => ({
   warehouse_id: '',
   party: '',   // supplier / customer / source depending on tab
   remark: '',
-  items: [{ product_id: '', quantity: 1, qrcode_id: '' }],
+  items: [{ product_id: '', sku_id: '', quantity: 1, qrcode_id: '', alert_stock: 0 }],
 })
 const form = ref(emptyForm())
 
@@ -70,15 +88,23 @@ const batchLoading = ref(false)
 const batchError = ref('')
 
 // ─── Computed ─────────────────────────────────────────────────────────────────
-const tabs = computed(() => [
-  { key: 'inbound',  label: t('inout.inbound'),  icon: 'input',  count: inboundRecords.value.length },
-  { key: 'outbound', label: t('inout.outbound'), icon: 'output', count: outboundRecords.value.length },
-  { key: 'return',   label: t('inout.returns'),  icon: 'undo',   count: returnRecords.value.length },
-])
+const tabs = computed(() => {
+  const all = [
+    { key: 'inbound',  label: t('inout.inbound'),  icon: 'input',    count: inboundRecords.value.length },
+    { key: 'outbound', label: t('inout.outbound'), icon: 'output',   count: outboundRecords.value.length },
+    { key: 'return',   label: t('inout.returns'),  icon: 'undo',     count: returnRecords.value.length },
+  ]
+  // 操作记录 Tab 独立权限：stock_movements:read
+  if (userStore.canAccess?.('stock_movements:read')) {
+    all.push({ key: 'movements', label: t('inout.movements') || '操作记录', icon: 'history', count: movementsTotal.value })
+  }
+  return all
+})
 
 const currentRecords = computed(() => {
   if (activeTab.value === 'inbound')  return inboundRecords.value
   if (activeTab.value === 'outbound') return outboundRecords.value
+  if (activeTab.value === 'movements') return []  // 操作记录走专属表格
   return returnRecords.value
 })
 
@@ -89,9 +115,10 @@ const partyLabel = computed(() => {
 })
 
 const modalTitle = computed(() => {
-  if (activeTab.value === 'inbound')  return t('inout.newInbound')
-  if (activeTab.value === 'outbound') return t('inout.newOutbound')
-  return t('inout.newReturn')
+  const isEdit = editingId.value !== null
+  if (activeTab.value === 'inbound')  return isEdit ? t('inout.editInbound')  : t('inout.newInbound')
+  if (activeTab.value === 'outbound') return isEdit ? t('inout.editOutbound') : t('inout.newOutbound')
+  return isEdit ? t('inout.editReturn') : t('inout.newReturn')
 })
 
 const statusMap = computed(() => ({
@@ -111,23 +138,7 @@ const operatorName = computed(() => {
   }
 })
 
-const canDelete = computed(() => userStore.canAccess('inventory_delete'))
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function formatDate(str) {
-  if (!str) return ''
-  return String(str).slice(0, 16)
-}
-
-function productById(id) {
-  return products.value.find(p => String(p.id) === String(id)) || null
-}
-
-function needsQrcode(item) {
-  if (activeTab.value !== 'outbound') return false
-  const p = productById(item.product_id)
-  return p?.require_qrcode === true || p?.require_qrcode === 1
-}
+const canDelete = computed(() => userStore.canAccess('inventory:delete'))
 
 // ─── Load data ────────────────────────────────────────────────────────────────
 async function loadRecords() {
@@ -150,6 +161,132 @@ async function loadRecords() {
   }
 }
 
+async function loadMovements() {
+  try {
+    const params = {
+      page: movementsPage.value,
+      limit: movementsLimit.value,
+    }
+    if (movementsFilter.value.warehouse_id) params.warehouse_id = movementsFilter.value.warehouse_id
+    if (movementsFilter.value.change_type)  params.change_type  = movementsFilter.value.change_type
+    if (movementsFilter.value.operator)     params.operator     = movementsFilter.value.operator
+    if (movementsFilter.value.start_date)   params.start_date   = movementsFilter.value.start_date
+    if (movementsFilter.value.end_date)     params.end_date     = movementsFilter.value.end_date
+    if (movementsFilter.value.keyword)      params.keyword      = movementsFilter.value.keyword
+    const res = await api.get('/stock-movements', { params })
+    movementsRecords.value = res?.data?.list ?? []
+    movementsTotal.value = res?.data?.total ?? 0
+  } catch (e) {
+    console.error('loadMovements failed:', e)
+    movementsRecords.value = []
+    movementsTotal.value = 0
+  }
+}
+
+function applyMovementsFilter() {
+  movementsPage.value = 1
+  loadMovements()
+}
+
+function resetMovementsFilter() {
+  movementsFilter.value = { warehouse_id: '', change_type: '', operator: '', start_date: '', end_date: '', keyword: '' }
+  applyMovementsFilter()
+}
+
+// ─── 手动调整：弹窗逻辑 ───
+function openAdjustForm() {
+  adjustForm.value = {
+    warehouse_id: warehouses.value[0]?.id ?? '',
+    product_id: '',
+    sku_id: '',
+    current_qty: 0,
+    new_qty: 0,
+    reason: '',
+  }
+  adjustError.value = ''
+  showAdjustForm.value = true
+}
+
+function closeAdjustForm() {
+  showAdjustForm.value = false
+  adjustError.value = ''
+}
+
+// 当切换商品/SKU时，自动加载当前库存
+async function loadCurrentQty() {
+  const { warehouse_id, product_id, sku_id } = adjustForm.value
+  if (!warehouse_id || !product_id) {
+    adjustForm.value.current_qty = 0
+    return
+  }
+  try {
+    // 用 stock 接口查当前数量（已有接口，路径是 /api/stock，不是 /api/inventory/stock）
+    const res = await api.get('/stock', {
+      params: {
+        warehouse_id,
+        product_id,
+        sku_id: sku_id || undefined,
+      },
+    })
+    // 后端可能返回 list 或单条，兼容两种
+    const list = res?.data?.list || res?.data || []
+    const item = Array.isArray(list) ? list[0] : list
+    adjustForm.value.current_qty = item?.quantity ?? 0
+    // 同步显示给 new_qty（让用户看到差异）
+    adjustForm.value.new_qty = adjustForm.value.current_qty
+  } catch (e) {
+    console.warn('loadCurrentQty failed:', e)
+    adjustForm.value.current_qty = 0
+  }
+}
+
+async function submitAdjust() {
+  adjustError.value = ''
+  const { warehouse_id, product_id, new_qty, reason } = adjustForm.value
+  if (!warehouse_id || !product_id) {
+    adjustError.value = '请选择仓库和商品'
+    return
+  }
+  if (new_qty == null || Number(new_qty) < 0) {
+    adjustError.value = '新数量必须是非负整数'
+    return
+  }
+  if (!reason || !reason.trim()) {
+    adjustError.value = '请填写调整原因（必填，可追溯）'
+    return
+  }
+  if (Number(new_qty) === adjustForm.value.current_qty) {
+    adjustError.value = '新数量与当前数量一致，无需调整'
+    return
+  }
+
+  adjustSubmitting.value = true
+  try {
+    const res = await api.post('/stock-movements/adjust', {
+      warehouse_id,
+      product_id,
+      sku_id: adjustForm.value.sku_id || undefined,
+      new_qty: Number(new_qty),
+      reason: reason.trim(),
+    })
+    if (res?.code === 0) {
+      formSuccess.value = `调整成功：${res.data.before_qty} → ${res.data.after_qty}（${res.data.delta > 0 ? '+' : ''}${res.data.delta}）`
+      setTimeout(() => { formSuccess.value = '' }, 3000)
+      closeAdjustForm()
+      // 刷新流水列表
+      await loadMovements()
+      // 刷新入/出库 tab 的数量（因为可能影响计数）
+      await loadRecords()
+    } else {
+      adjustError.value = res?.message || '调整失败'
+    }
+  } catch (e) {
+    adjustError.value = e?.response?.data?.message || e?.message || '请求失败'
+  } finally {
+    adjustSubmitting.value = false
+  }
+}
+
 async function loadWarehouses() {
   try {
     const res = await api.get('/warehouses')
@@ -160,17 +297,193 @@ async function loadWarehouses() {
 }
 
 async function loadProducts() {
-  try {
-    const res = await api.get('/products')
-    products.value = res?.data?.list ?? res?.list ?? res?.data ?? []
-  } catch (e) {
-    console.error('Failed to load products', e)
-  }
+    try {
+        const res = await api.get('/products/all')
+        products.value = res?.data ?? []
+    } catch (e) {
+        console.error('Failed to load products', e)
+    }
+}
+
+// 出库专用：加载当前仓库已入库的商品（warehouse_stock.quantity > 0）
+// 使用 /warehouses/:id 接口获取该仓库的库存商品
+async function loadStockedProducts(warehouseId) {
+    if (!warehouseId) {
+        stockedProducts.value = []
+        return
+    }
+    try {
+        const res = await api.get(`/warehouses/${warehouseId}`)
+        // warehouse 详情接口返回 data.stockList
+        const stockList = res?.data?.data?.stockList ?? res?.data?.stockList ?? []
+        // 只保留 quantity > 0 的记录；同商品按 (product_id) 聚合，取最大库存
+        const map = new Map()
+        for (const row of stockList) {
+            if (Number(row.quantity) <= 0) continue
+            // warehouse_stock 可能同一商品多条记录（不同批次），合并库存
+            const pid = String(row.product_id)
+            if (map.has(pid)) {
+                map.get(pid).stock += Number(row.quantity)
+            } else {
+                map.set(pid, {
+                    id: row.product_id,
+                    sku: row.sku || '',
+                    name: row.product_name || '',
+                    image_main: row.image_main || '',
+                    sku_id: row.sku_id || null,
+                    sku_code: row.sku_code || row.sku || '',
+                    sku_key: row.sku_key || '',
+                    specs: row.specs || '',
+                    stock: Number(row.quantity),
+                    require_qrcode: false,
+                })
+            }
+        }
+        stockedProducts.value = Array.from(map.values())
+        // 如果没有库存商品，操作记录留个提示
+        if (stockedProducts.value.length === 0) {
+            console.log('该仓库暂无库存商品')
+        }
+    } catch (e) {
+        console.error('Failed to load stocked products', e)
+        stockedProducts.value = []
+    }
+}
+
+async function loadSkus(productId) {
+    if (!productId || productSkus.value[productId]) return
+    try {
+        const res = await api.get(`/products/${productId}/specs`)
+        if (res.code === 0) {
+            productSkus.value[productId] = res.data?.skus ?? []
+        }
+    } catch (e) {
+        console.warn('loadSkus failed', productId, e)
+    }
+}
+
+// 给"每个 item"取它对应的 SKU 列表（按 product_id 缓存）
+function getSkusForItem(item) {
+    if (!item?.product_id) return []
+    // 出库时：只显示该仓库有库存的 SKU
+    if (activeTab.value === 'outbound') {
+        return stockedProducts.value
+            .filter(p => Number(p.id) === Number(item.product_id) && p.sku_id)
+            .map(p => ({ id: p.sku_id, sku: p.sku_code, sku_key: p.sku_key, specs: p.specs, stock: p.stock }))
+    }
+    return productSkus.value[item.product_id] || []
+}
+
+// 商品下拉的搜索过滤（按 row index 区分）
+// outbound 只用 stockedProducts（已入库），inbound 用全部 products
+function getFilteredProducts(index) {
+    const filter = (productFilters.value[index] || '').toLowerCase()
+    const source = activeTab.value === 'outbound' ? stockedProducts.value : products.value
+    if (!filter) return source
+    return source.filter(p =>
+        (p.sku && p.sku.toLowerCase().includes(filter)) ||
+        (p.name && p.name.toLowerCase().includes(filter))
+    )
+}
+
+function productById(id) {
+    if (!id) return null
+    if (activeTab.value === 'outbound') {
+        return stockedProducts.value.find(p => String(p.id) === String(id))
+            || products.value.find(p => String(p.id) === String(id))
+            || null
+    }
+    return products.value.find(p => String(p.id) === String(id)) || null
+}
+
+function needsQrcode(item) {
+    return false
+}
+
+// 出库时：获取该商品在该仓库的最大可出库数量（库存量）
+function getItemMaxQty(item) {
+    if (activeTab.value !== 'outbound') return 999999
+    if (!item?.product_id) return 1
+    const stocked = stockedProducts.value
+    // 如果选了 SKU，按 sku_id 匹配；否则按 product_id
+    if (item.sku_id) {
+        const match = stocked.find(p =>
+            Number(p.id) === Number(item.product_id) && Number(p.sku_id) === Number(item.sku_id)
+        )
+        return match?.stock ?? 1
+    }
+    // 没选 SKU：累加该商品所有 SKU 的库存，取最大值
+    const withSku = stocked.filter(p => Number(p.id) === Number(item.product_id))
+    if (withSku.length > 0) {
+        const total = withSku.reduce((s, p) => s + (p.stock || 0), 0)
+        return Math.max(total, 1)
+    }
+    // 无 SKU 商品
+    const match = stocked.find(p => Number(p.id) === Number(item.product_id) && !p.sku_id)
+    return match?.stock ?? 999999
+}
+
+// 仓库下拉变化时：出库 tab 重新加载已入库商品并清空已有商品选择
+function onWarehouseChange(val) {
+    if (activeTab.value !== 'outbound') return
+    // 清空已选商品（仓库变了，之前选的商品可能不在新仓库）
+    form.value.items = [{ product_id: '', sku_id: '', quantity: 1, qrcode_id: '', alert_stock: 0 }]
+    if (val) {
+        loadStockedProducts(val)
+    } else {
+        stockedProducts.value = []
+    }
+}
+
+function filterProduct(val, index) {
+    productFilters.value[index] = val || ''
+}
+
+function resetProductFilter(index) {
+    productFilters.value[index] = ''
+}
+
+function onProductChange(item) {
+    item.sku_id = '' // reset SKU when product changes
+    if (item.product_id) loadSkus(item.product_id)
 }
 
 onMounted(async () => {
-  await Promise.all([loadRecords(), loadWarehouses(), loadProducts()])
+  await Promise.all([loadRecords(), loadWarehouses(), loadProducts(), loadMovements()])
+  // 切到 movements tab 时自动刷新流水
+  watch(activeTab, (val) => {
+    if (val === 'movements') loadMovements()
+  })
+  // 补仓预警预填：?type=inbound&prefill=...
+  if (route.query.type === 'inbound') activeTab.value = 'inbound'
+  if (route.query.prefill) {
+    try {
+      const data = JSON.parse(decodeURIComponent(route.query.prefill))
+      activeTab.value = 'inbound'
+      showForm.value = true
+      editingId.value = null
+      form.value = {
+        warehouse_id: data.warehouse_id || '',
+        party: '',
+        remark: data.note || '',
+        items: (data.items || []).map(it => ({
+          product_id: it.product_id,
+          sku_id: '',
+          quantity: it.quantity || 1,
+          qrcode_id: '',
+          alert_stock: it.alert_stock ?? 0
+        }))
+      }
+    } catch (e) {
+      console.error('prefill parse error', e)
+    }
+  }
+  // 入库成功后如果是从预警跳过来的，自动标记 handled
+  prefilledAlertId.value = route.query.alert_id ? Number(route.query.alert_id) : null
 })
+
+// ─── 预警关联：从库存预警页跳过来预填时记录 alert_id，入库成功后自动 PUT 标记 handled ──
+const prefilledAlertId = ref(null)
 
 // ─── Batch mode functions ─────────────────────────────────────────────────────
 async function previewBatch() {
@@ -220,6 +533,7 @@ function toggleBatchMode() {
 
 // ─── Form actions ─────────────────────────────────────────────────────────────
 function openForm() {
+  editingId.value = null
   form.value = emptyForm()
   formError.value = ''
   formSuccess.value = ''
@@ -229,6 +543,12 @@ function openForm() {
   batchPreview.value = null
   batchError.value = ''
   showForm.value = true
+  // 出库弹窗打开时，若已选仓库则加载该仓库已入库商品
+  if (activeTab.value === 'outbound' && form.value.warehouse_id) {
+    loadStockedProducts(form.value.warehouse_id)
+  } else if (activeTab.value === 'outbound') {
+    stockedProducts.value = []
+  }
 }
 
 function closeForm() {
@@ -236,7 +556,32 @@ function closeForm() {
 }
 
 function addItem() {
-  form.value.items.push({ product_id: '', quantity: 1, qrcode_id: '' })
+  form.value.items.push({ product_id: '', sku_id: '', quantity: 1, qrcode_id: '', alert_stock: 0 })
+}
+
+// 出库：点击库存清单某行→添加到明细
+function selectStockedItem(sp) {
+  // 检查是否已添加
+  const existing = form.value.items.find(i =>
+    Number(i.product_id) === Number(sp.id) &&
+    (sp.sku_id ? Number(i.sku_id) === Number(sp.sku_id) : !i.sku_id)
+  )
+  if (existing) {
+    existing.quantity = Math.min((existing.quantity || 1) + 1, sp.stock)
+    return
+  }
+  // 新增一条
+  form.value.items.push({
+    product_id: sp.id,
+    sku_id: sp.sku_id || '',
+    quantity: 1,
+    qrcode_id: '',
+    alert_stock: 0,
+  })
+  // 加载规格（如果有 SKU）
+  if (sp.sku_id) {
+    loadSkus(Number(sp.id))
+  }
 }
 
 function removeItem(index) {
@@ -248,6 +593,7 @@ function removeItem(index) {
 async function submitForm() {
   formError.value = ''
   formSuccess.value = ''
+  formConflicts.value = []
 
   // Basic validation
   if (!form.value.warehouse_id) {
@@ -267,7 +613,8 @@ async function submitForm() {
     }
   } else {
     // Normal mode validation
-    const validItems = form.value.items.filter(i => i.product_id && Number(i.quantity) > 0)
+    // 入库允许 0 数量（占位先入库，事后补实际数量）
+    const validItems = form.value.items.filter(i => i.product_id && Number(i.quantity) >= 0)
     if (validItems.length === 0) {
       formError.value = t('inout.addAtLeastOneProduct')
       return
@@ -302,8 +649,8 @@ async function submitForm() {
         quantity: batchQuantity.value
       }
     } else {
-      // Normal mode
-      const validItems = form.value.items.filter(i => i.product_id && Number(i.quantity) > 0)
+      // Normal mode — 入库允许 0 数量（占位先入库，事后补实际数量）
+      const validItems = form.value.items.filter(i => i.product_id && Number(i.quantity) >= 0)
       payload = {
         warehouse_id: form.value.warehouse_id,
         [partyKey]: form.value.party,
@@ -311,6 +658,11 @@ async function submitForm() {
         operator: operatorName.value,
         items: validItems.map(i => {
           const item = { product_id: i.product_id, quantity: Number(i.quantity) }
+          if (i.sku_id) item.sku_id = i.sku_id
+          // 入库时同步传 alert_stock（>0 才传，0=不预警表示不修改）
+          if (activeTab.value === 'inbound' && Number(i.alert_stock) > 0) {
+            item.alert_stock = Number(i.alert_stock)
+          }
           if (activeTab.value === 'outbound' && needsQrcode(i) && i.qrcode_id) {
             item.qrcode_id = i.qrcode_id
           }
@@ -319,9 +671,37 @@ async function submitForm() {
       }
     }
 
-    await api.post(endpoint, payload)
-    formSuccess.value = t('inout.submitSuccess')
+    const isEdit = editingId.value !== null
+    if (isEdit) {
+      await api.put(`${endpoint}/${editingId.value}`, payload)
+      formSuccess.value = t('inout.submitSuccess') || '编辑成功'
+    } else {
+      try {
+        await api.post(endpoint, payload)
+        formSuccess.value = t('inout.submitSuccess') || '提交成功'
+      } catch (e) {
+        // ✅ 新模型：409 冲突（SKU 在此仓库已存在）→ 引导用户去库存管理调整
+        if (e?.code === 409 || e?.response?.data?.code === 409) {
+          const errData = e?.data || e?.response?.data || e
+          formConflicts.value = errData.data?.conflicts || []
+          formError.value = errData.message || '有 SKU 已存在，请用「库存管理 → 调整数量」'
+          submitting.value = false
+          return
+        }
+        throw e
+      }
+    }
     await loadRecords()
+    // 入库成功后，如果是从预警页跳转过来的，自动标记预警 handled
+    if (prefilledAlertId.value && !isEdit) {
+      try {
+        await api.put('/stock-alerts/' + prefilledAlertId.value)
+        formSuccess.value += ' · 预警 #' + prefilledAlertId.value + ' 已标记处理'
+        prefilledAlertId.value = null
+      } catch (e) {
+        console.warn('标记预警 handled 失败（不影响入库）', e)
+      }
+    }
     setTimeout(() => {
       closeForm()
     }, 800)
@@ -376,6 +756,38 @@ function confirmPrint() {
   nextTick(() => {
     window.print()
   })
+}
+
+// ─── Edit Record ──────────────────────────────────────────────────────────────
+function editRecord(record) {
+  const partyKey = activeTab.value === 'inbound'
+    ? 'supplier'
+    : activeTab.value === 'outbound'
+      ? 'customer'
+      : 'source'
+  form.value = {
+    warehouse_id: record.warehouse_id,
+    party: record[partyKey] || '',
+    remark: record.remark || '',
+    items: (record.items || []).map(i => ({
+      product_id: i.product_id,
+      sku_id: i.sku_id || '',
+      quantity: i.quantity,
+      qrcode_id: i.qrcode_id || '',
+    })),
+  }
+  if (form.value.items.length === 0) {
+    form.value.items = [{ product_id: '', sku_id: '', quantity: 1, qrcode_id: '' }]
+  }
+  // Load SKUs for all products in the form
+  for (const item of form.value.items) {
+    if (item.product_id) loadSkus(item.product_id)
+  }
+  editingId.value = record.id
+  formError.value = ''
+  formSuccess.value = ''
+  batchMode.value = false
+  showForm.value = true
 }
 
 // ─── Delete Record ────────────────────────────────────────────────────────────
@@ -456,12 +868,111 @@ async function handleDeleteRecord() {
         </div>
       </div>
 
+      <!-- 操作记录 Tab 内容（独立模板） -->
+      <div v-if="activeTab === 'movements'" class="p-4">
+        <!-- 筛选区 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 mb-4">
+          <select v-model="movementsFilter.warehouse_id" class="border border-gray-200 rounded-lg px-3 py-2 text-sm">
+            <option value="">全部门店</option>
+            <option v-for="w in warehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
+          </select>
+          <select v-model="movementsFilter.change_type" class="border border-gray-200 rounded-lg px-3 py-2 text-sm">
+            <option value="">全部类型</option>
+            <option value="inbound">入库</option>
+            <option value="adjust">调整</option>
+            <option value="outbound">出库</option>
+            <option value="return">退货</option>
+            <option value="transferIn">调入</option>
+            <option value="transferOut">调出</option>
+            <option value="delete">删除</option>
+          </select>
+          <input v-model="movementsFilter.operator" type="text" placeholder="操作人" class="border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          <input v-model="movementsFilter.start_date" type="date" class="border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          <input v-model="movementsFilter.end_date"   type="date" class="border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          <input v-model="movementsFilter.keyword"    type="text" placeholder="商品编号/名称/SKU" class="border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+        <div class="flex gap-2 mb-4">
+          <button @click="applyMovementsFilter" class="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium">查询</button>
+          <button @click="resetMovementsFilter" class="border border-gray-200 hover:bg-gray-50 text-text-secondary px-4 py-2 rounded-lg text-sm">重置</button>
+          <!-- 手动调整按钮（需 stock_movements:write 权限） -->
+          <button v-if="userStore.canAccess?.('stock_movements:write')"
+            @click="openAdjustForm"
+            class="ml-auto border border-orange-300 bg-orange-50 hover:bg-orange-100 text-orange-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-1">
+            <span class="material-symbols-outlined text-base">tune</span>
+            手动调整库存
+          </button>
+          <span v-else class="ml-auto text-sm text-text-secondary self-center">共 {{ movementsTotal }} 条</span>
+          <span v-if="userStore.canAccess?.('stock_movements:write')" class="text-sm text-text-secondary self-center">共 {{ movementsTotal }} 条</span>
+        </div>
+
+        <!-- 流水表格 -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
+              <tr>
+                <th class="px-4 py-3 font-medium w-44">操作时间</th>
+                <th class="px-4 py-3 font-medium w-28">类型</th>
+                <th class="px-4 py-3 font-medium w-28">门店</th>
+                <th class="px-4 py-3 font-medium">商品</th>
+                <th class="px-4 py-3 font-medium w-24">SKU</th>
+                <th class="px-4 py-3 font-medium w-28 text-right">数量变化</th>
+                <th class="px-4 py-3 font-medium w-32 text-right">变更前→后</th>
+                <th class="px-4 py-3 font-medium w-24">操作人</th>
+                <th class="px-4 py-3 font-medium">备注</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-if="movementsRecords.length === 0">
+                <td colspan="9" class="px-4 py-12 text-center text-text-secondary text-sm">
+                  <span class="material-symbols-outlined text-4xl block mb-2 text-gray-300">history</span>
+                  暂无操作记录
+                </td>
+              </tr>
+              <tr v-for="m in movementsRecords" :key="m.id" class="hover:bg-gray-50 transition-colors">
+                <td class="px-4 py-3 text-text-secondary">{{ formatDateTime(m.created_at) }}</td>
+                <td class="px-4 py-3">
+                  <span :class="changeTypeBadge(m.change_type)" class="px-2 py-0.5 rounded text-xs font-medium">
+                    {{ changeTypeLabel(m.change_type) }}
+                  </span>
+                </td>
+                <td class="px-4 py-3 text-text-secondary">{{ m.warehouse_name || '-' }}</td>
+                <td class="px-4 py-3">
+                  <div class="font-medium text-text-primary">{{ m.product_name || '-' }}</div>
+                  <div class="text-xs text-text-secondary">{{ m.product_code || '' }}</div>
+                </td>
+                <td class="px-4 py-3 text-text-secondary">{{ m.sku_key || '-' }}</td>
+                <td class="px-4 py-3 text-right font-medium" :class="(m.delta ?? 0) > 0 ? 'text-green-600' : 'text-red-600'">
+                  {{ (m.delta ?? 0) > 0 ? '+' : '' }}{{ m.delta }}
+                </td>
+                <td class="px-4 py-3 text-right text-text-secondary">
+                  {{ m.before_qty }} → <span class="text-text-primary font-medium">{{ m.after_qty }}</span>
+                </td>
+                <td class="px-4 py-3 text-text-secondary">{{ m.operator || '-' }}</td>
+                <td class="px-4 py-3 text-text-secondary">{{ m.remark || '-' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 分页 -->
+        <div v-if="movementsTotal > movementsLimit" class="flex items-center justify-end gap-2 mt-4">
+          <button @click="movementsPage = Math.max(1, movementsPage - 1); loadMovements()"
+            :disabled="movementsPage === 1"
+            class="border border-gray-200 rounded-lg px-3 py-1.5 text-sm disabled:opacity-50">上一页</button>
+          <span class="text-sm text-text-secondary">第 {{ movementsPage }} / {{ Math.ceil(movementsTotal / movementsLimit) }} 页</span>
+          <button @click="movementsPage = Math.min(Math.ceil(movementsTotal / movementsLimit), movementsPage + 1); loadMovements()"
+            :disabled="movementsPage >= Math.ceil(movementsTotal / movementsLimit)"
+            class="border border-gray-200 rounded-lg px-3 py-1.5 text-sm disabled:opacity-50">下一页</button>
+        </div>
+      </div>
+
       <!-- Table -->
       <div class="overflow-x-auto">
         <table class="w-full text-left text-sm">
           <thead class="bg-gray-50 text-text-secondary text-xs uppercase">
             <tr>
               <th class="px-4 py-3 font-medium">{{ $t('inout.recordNo') }}</th>
+              <th class="px-4 py-3 font-medium w-12"></th>
               <th class="px-4 py-3 font-medium">{{ $t('inout.date') }}</th>
               <th class="px-4 py-3 font-medium">{{ $t('inout.warehouse') }}</th>
               <th class="px-4 py-3 font-medium">{{ partyLabel }}</th>
@@ -474,7 +985,7 @@ async function handleDeleteRecord() {
           <tbody class="divide-y divide-gray-100">
             <!-- Empty state -->
             <tr v-if="currentRecords.length === 0">
-              <td colspan="8" class="px-4 py-12 text-center text-text-secondary text-sm">
+              <td colspan="9" class="px-4 py-12 text-center text-text-secondary text-sm">
                 <span class="material-symbols-outlined text-4xl block mb-2 text-gray-300">inbox</span>
                 {{ $t('common.noData') }}
               </td>
@@ -486,6 +997,17 @@ async function handleDeleteRecord() {
               class="hover:bg-gray-50 transition-colors"
             >
               <td class="px-4 py-3 font-mono text-xs text-primary font-medium whitespace-nowrap">{{ r.record_no }}</td>
+              <td class="px-4 py-3">
+                <img
+                  v-if="r.items && r.items[0] && r.items[0].image_main"
+                  :src="r.items[0].image_main"
+                  class="w-10 h-10 object-cover rounded border border-gray-200"
+                  @error="$event.target.style.display='none'"
+                />
+                <div v-else class="w-10 h-10 bg-gray-100 rounded border border-gray-200 flex items-center justify-center">
+                  <span class="material-symbols-outlined text-gray-300 text-sm">image</span>
+                </div>
+              </td>
               <td class="px-4 py-3 text-text-secondary whitespace-nowrap">{{ formatDate(r.created_at) }}</td>
               <td class="px-4 py-3 text-text-primary">{{ r.warehouse_name }}</td>
               <td class="px-4 py-3 text-text-primary">{{ r.supplier || r.customer || r.source || '—' }}</td>
@@ -505,13 +1027,19 @@ async function handleDeleteRecord() {
                   {{ $t('common.detail') }}
                 </button>
                 <button
+                  @click="editRecord(r)"
+                  class="text-warning hover:text-yellow-600 text-xs font-medium mr-3"
+                >
+                  {{ $t('common.edit') }}
+                </button>
+                <button
                   @click="openPrintPreview(r)"
                   class="text-text-secondary hover:text-text-primary text-xs font-medium mr-3"
                 >
                   {{ $t('inout.print') }}
                 </button>
                 <button
-                  v-if="userStore.canAccess('inventory_delete')"
+                  v-if="userStore.canAccess('inventory:delete')"
                   @click="deleteRecord(r)"
                   class="text-danger hover:text-red-700 text-xs font-medium"
                 >
@@ -545,13 +1073,23 @@ async function handleDeleteRecord() {
                 <label class="block text-sm font-medium text-text-primary mb-1">
                   {{ $t('inout.warehouse') }} <span class="text-danger">*</span>
                 </label>
-                <select
+                <el-select
                   v-model="form.warehouse_id"
-                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+                  :placeholder="$t('inout.selectWarehouse')"
+                  filterable
+                  clearable
+                  class="w-full"
+                  :empty-values="[null, undefined, '']"
+                  value-key="id"
+                  @change="onWarehouseChange"
                 >
-                  <option value="">{{ $t('inout.selectWarehouse') }}</option>
-                  <option v-for="wh in warehouses" :key="wh.id" :value="wh.id">{{ wh.name }}</option>
-                </select>
+                  <el-option
+                    v-for="wh in warehouses"
+                    :key="wh.id"
+                    :label="wh.name"
+                    :value="wh.id"
+                  />
+                </el-select>
               </div>
               <div>
                 <label class="block text-sm font-medium text-text-primary mb-1">{{ partyLabel }}</label>
@@ -585,8 +1123,28 @@ async function handleDeleteRecord() {
                   class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
                 />
                 <span class="text-sm font-medium text-text-primary">{{ $t('inout.batchOutboundMode') }}</span>
+                <el-tooltip
+                  placement="right"
+                  :show-after="100"
+                  popper-class="batch-mode-tip"
+                >
+                  <template #content>
+                    <div class="text-left leading-relaxed">
+                      <div class="font-semibold mb-1">{{ $t('inout.batchOutboundTooltipTitle') }}</div>
+                      <ol class="text-xs space-y-1 pl-4 list-decimal">
+                        <li>{{ $t('inout.batchOutboundStep1') }}</li>
+                        <li>{{ $t('inout.batchOutboundStep2') }}</li>
+                        <li>{{ $t('inout.batchOutboundStep3') }}</li>
+                        <li>{{ $t('inout.batchOutboundStep4') }}</li>
+                      </ol>
+                      <div class="text-xs text-yellow-200 mt-2">
+                        {{ $t('inout.batchOutboundWarning') }}
+                      </div>
+                    </div>
+                  </template>
+                  <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-200 text-blue-700 text-xs font-bold cursor-help hover:bg-blue-300">?</span>
+                </el-tooltip>
               </label>
-              <span class="text-xs text-text-secondary">{{ $t('inout.batchOutboundHint') }}</span>
             </div>
 
             <!-- Batch Mode Fields -->
@@ -646,6 +1204,7 @@ async function handleDeleteRecord() {
                     <thead class="bg-gray-100">
                       <tr>
                         <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.productCol') }}</th>
+                        <th class="px-3 py-2 w-12"></th>
                         <th class="px-3 py-2 text-center text-xs font-medium text-text-secondary">{{ $t('inout.qtyCol') }}</th>
                         <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.qrcodeCol') }}</th>
                       </tr>
@@ -659,6 +1218,17 @@ async function handleDeleteRecord() {
                         <td class="px-3 py-2">
                           <div class="text-sm font-medium text-text-primary">{{ item.product_name }}</div>
                           <div class="text-xs text-text-secondary">{{ item.sku }}</div>
+                        </td>
+                        <td class="px-3 py-2">
+                          <img
+                            v-if="item.image_main"
+                            :src="item.image_main"
+                            class="w-8 h-8 object-cover rounded border border-gray-200"
+                            @error="$event.target.style.display='none'"
+                          />
+                          <div v-else class="w-8 h-8 bg-gray-100 rounded border border-gray-200 flex items-center justify-center">
+                            <span class="material-symbols-outlined text-gray-300 text-xs">image</span>
+                          </div>
                         </td>
                         <td class="px-3 py-2 text-center font-medium">{{ item.quantity }}</td>
                         <td class="px-3 py-2">
@@ -677,6 +1247,70 @@ async function handleDeleteRecord() {
 
             <!-- Items (Normal Mode) -->
             <div v-if="!(activeTab === 'outbound' && batchMode)">
+              <!-- 出库：选仓库后展示库存清单 -->
+              <div v-if="activeTab === 'outbound' && stockedProducts.length > 0">
+                <label class="text-sm font-medium text-text-primary mb-2 block">{{ $t('inout.warehouseStock') || '该仓库库存清单' }} ({{ stockedProducts.length }})</label>
+                <div class="border border-gray-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto mb-4">
+                  <table class="w-full text-sm">
+                    <thead class="bg-gray-100 sticky top-0">
+                      <tr>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.productCol') }}</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.skuCol') }}</th>
+                        <th class="px-3 py-2 text-center text-xs font-medium text-text-secondary w-16">{{ $t('inout.qtyCol') }}</th>
+                        <th class="px-3 py-2 text-center text-xs font-medium text-text-secondary w-16">{{ $t('common.action') }}</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                      <tr
+                        v-for="sp in stockedProducts"
+                        :key="sp.id + '-' + (sp.sku_id || '')"
+                        class="hover:bg-blue-50 transition-colors"
+                      >
+                        <td class="px-3 py-1.5">
+                          <div class="flex items-center gap-2">
+                            <img
+                              v-if="sp.image_main"
+                              :src="sp.image_main"
+                              class="w-8 h-8 object-cover rounded border border-gray-200"
+                              @error="$event.target.style.display='none'"
+                            />
+                            <div v-else class="w-8 h-8 bg-gray-100 rounded border border-gray-200 flex items-center justify-center">
+                              <span class="material-symbols-outlined text-gray-300 text-xs">image</span>
+                            </div>
+                            <div>
+                              <div class="text-xs font-medium text-text-primary leading-tight">{{ sp.name }}</div>
+                              <div v-if="sp.sku_code" class="text-[10px] text-text-secondary font-mono">{{ sp.sku_code }}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td class="px-3 py-1.5">
+                          <span v-if="sp.specs" class="text-xs text-text-secondary">{{ sp.specs }}</span>
+                          <span v-else class="text-xs text-gray-300">—</span>
+                        </td>
+                        <td class="px-3 py-1.5 text-center">
+                          <span class="text-sm font-semibold" :class="sp.stock > 0 ? 'text-success' : 'text-danger'">{{ sp.stock || 0 }}</span>
+                        </td>
+                        <td class="px-3 py-1.5 text-center">
+                          <button
+                            v-if="sp.stock > 0"
+                            @click="selectStockedItem(sp)"
+                            class="inline-flex items-center gap-1 px-2 py-1 bg-primary hover:bg-primary-hover text-white rounded text-xs font-medium transition-colors"
+                          >
+                            <span class="material-symbols-outlined text-[12px]">add</span>
+                            选择
+                          </button>
+                          <span v-else class="text-xs text-gray-300">缺货</span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div v-if="activeTab === 'outbound' && form.warehouse_id && stockedProducts.length === 0" class="bg-yellow-50 text-yellow-700 text-sm px-4 py-3 rounded-lg border border-yellow-100 mb-4">
+                <span class="material-symbols-outlined text-[16px] align-middle mr-1">info</span>
+                该仓库暂无库存商品
+              </div>
+
               <div class="flex items-center justify-between mb-2">
                 <label class="text-sm font-medium text-text-primary">{{ $t('inout.itemDetails') }} <span class="text-danger">*</span></label>
                 <button
@@ -693,7 +1327,12 @@ async function handleDeleteRecord() {
                   <thead class="bg-gray-50">
                     <tr>
                       <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.productCol') }}</th>
+                      <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.skuCol') }}</th>
                       <th class="px-3 py-2 text-center text-xs font-medium text-text-secondary w-24">{{ $t('inout.qtyCol') }}</th>
+                      <th v-if="activeTab === 'inbound'" class="px-3 py-2 text-center text-xs font-medium text-text-secondary w-32">
+                        {{ $t('inout.alertStockCol') }}
+                        <span class="text-text-secondary font-normal">({{ $t('inout.alertStockHint') }})</span>
+                      </th>
                       <th v-if="activeTab === 'outbound'" class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.qrCodeCol') }}</th>
                       <th class="px-3 py-2 text-center text-xs font-medium text-text-secondary w-10"></th>
                     </tr>
@@ -706,22 +1345,68 @@ async function handleDeleteRecord() {
                     >
                       <!-- Product select -->
                       <td class="px-3 py-2">
-                        <select
+                        <el-select
                           v-model="item.product_id"
-                          class="w-full border border-gray-200 rounded px-2 py-1 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+                          filterable
+                          clearable
+                          :placeholder="$t('inout.selectProduct')"
+                          class="w-full"
+                          size="small"
+                          :filter-method="(val) => filterProduct(val, index)"
+                          @visible-change="(open) => { if (!open) resetProductFilter(index) }"
+                          @change="onProductChange(item)"
                         >
-                          <option value="">{{ $t('inout.selectProduct') }}</option>
-                          <option v-for="p in products" :key="p.id" :value="p.id">
-                            {{ p.sku }} - {{ p.name }}
-                          </option>
-                        </select>
+                          <el-option
+                            v-for="p in getFilteredProducts(index)"
+                            :key="p.id"
+                            :label="p.sku + ' - ' + p.name"
+                            :value="p.id"
+                          />
+                        </el-select>
+                      </td>
+                      <!-- SKU select (shown only when product has SKUs) -->
+                      <td class="px-3 py-2">
+                        <template v-if="item.product_id && getSkusForItem(item).length > 0">
+                          <el-select
+                            v-model="item.sku_id"
+                            clearable
+                            :placeholder="$t('inout.selectSku')"
+                            class="w-full"
+                            size="small"
+                          >
+                            <el-option
+                              v-for="sku in getSkusForItem(item)"
+                              :key="sku.id"
+                              :label="formatSkuLabel(sku)"
+                              :value="sku.id"
+                            />
+                          </el-select>
+                        </template>
+                        <span v-else class="text-xs text-gray-300">—</span>
                       </td>
                       <!-- Quantity -->
                       <td class="px-3 py-2">
+                        <div class="flex items-center gap-1">
+                          <input
+                            v-model.number="item.quantity"
+                            type="number"
+                            min="1"
+                            :max="getItemMaxQty(item)"
+                            class="w-16 border border-gray-200 rounded px-2 py-1 text-sm text-center focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+                          />
+                          <span v-if="activeTab === 'outbound'" class="text-xs text-text-secondary whitespace-nowrap">
+                            / {{ getItemMaxQty(item) }}
+                          </span>
+                        </div>
+                      </td>
+                      <!-- Alert Stock (inbound only) -->
+                      <td v-if="activeTab === 'inbound'" class="px-3 py-2">
                         <input
-                          v-model.number="item.quantity"
+                          v-model.number="item.alert_stock"
                           type="number"
-                          min="1"
+                          min="0"
+                          placeholder="0"
+                          :title="$t('inout.alertStockHint')"
                           class="w-full border border-gray-200 rounded px-2 py-1 text-sm text-center focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
                         />
                       </td>
@@ -793,6 +1478,127 @@ async function handleDeleteRecord() {
       </div>
     </Teleport>
 
+    <!-- ─── 手动调整库存 Modal（补单/冲正/盘点） ───────────────────── -->
+    <Teleport to="body">
+      <div v-if="showAdjustForm" class="fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-black/30" @click="closeAdjustForm"></div>
+        <div class="relative bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+          <!-- Header -->
+          <div class="flex items-center justify-between px-6 py-4 border-b">
+            <h3 class="text-lg font-bold text-text-primary flex items-center gap-2">
+              <span class="material-symbols-outlined text-orange-600">tune</span>
+              手动调整库存
+            </h3>
+            <button @click="closeAdjustForm" class="text-text-secondary hover:text-text-primary">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+
+          <!-- Body -->
+          <div class="overflow-y-auto flex-1 p-6 space-y-4">
+            <!-- 提示 -->
+            <div class="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-800">
+              <strong>⚠ 调整须知：</strong>此操作会直接修改库存数量并写入操作流水。<br>
+              <strong>原因必填</strong>，用于事后追溯（盘点/纠错/补单）。
+            </div>
+
+            <!-- 仓库 -->
+            <div>
+              <label class="block text-sm font-medium text-text-primary mb-1">
+                仓库 <span class="text-danger">*</span>
+              </label>
+              <select v-model="adjustForm.warehouse_id"
+                @change="loadCurrentQty"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+                <option value="">请选择仓库</option>
+                <option v-for="wh in warehouses" :key="wh.id" :value="wh.id">{{ wh.name }}</option>
+              </select>
+            </div>
+
+            <!-- 商品 -->
+            <div>
+              <label class="block text-sm font-medium text-text-primary mb-1">
+                商品 <span class="text-danger">*</span>
+              </label>
+              <select v-model="adjustForm.product_id"
+                @change="adjustForm.sku_id = ''; loadCurrentQty()"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+                <option value="">请选择商品</option>
+                <option v-for="p in products" :key="p.id" :value="p.id">
+                  {{ p.sku }} - {{ p.name }}
+                </option>
+              </select>
+            </div>
+
+            <!-- SKU（如果有） -->
+            <div v-if="adjustForm.product_id && productSkus[adjustForm.product_id]?.length">
+              <label class="block text-sm font-medium text-text-primary mb-1">SKU</label>
+              <select v-model="adjustForm.sku_id"
+                @change="loadCurrentQty"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
+                <option value="">全部 SKU</option>
+                <option v-for="s in productSkus[adjustForm.product_id]" :key="s.id" :value="s.id">
+                  {{ s.sku_key || ('#' + s.id) }}
+                </option>
+              </select>
+            </div>
+
+            <!-- 当前数量（只读） -->
+            <div>
+              <label class="block text-sm font-medium text-text-primary mb-1">当前库存</label>
+              <input :value="adjustForm.current_qty" type="number" readonly
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-text-secondary font-mono" />
+            </div>
+
+            <!-- 新数量 -->
+            <div>
+              <label class="block text-sm font-medium text-text-primary mb-1">
+                调整后数量 <span class="text-danger">*</span>
+              </label>
+              <input v-model.number="adjustForm.new_qty" type="number" min="0" step="1"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none font-mono" />
+              <!-- 差异预览 -->
+              <div v-if="adjustForm.new_qty != null && adjustForm.current_qty != null" class="mt-2 text-sm">
+                <span class="text-text-secondary">差异：</span>
+                <span :class="(adjustForm.new_qty - adjustForm.current_qty) > 0 ? 'text-green-600 font-medium' : ((adjustForm.new_qty - adjustForm.current_qty) < 0 ? 'text-red-600 font-medium' : 'text-text-secondary')">
+                  {{ adjustForm.current_qty }} →
+                  <span class="text-text-primary font-bold">{{ adjustForm.new_qty }}</span>
+                  （{{ (adjustForm.new_qty - adjustForm.current_qty) > 0 ? '+' : '' }}{{ adjustForm.new_qty - adjustForm.current_qty }}）
+                </span>
+              </div>
+            </div>
+
+            <!-- 原因 -->
+            <div>
+              <label class="block text-sm font-medium text-text-primary mb-1">
+                调整原因 <span class="text-danger">*</span>
+              </label>
+              <textarea v-model="adjustForm.reason" rows="3"
+                placeholder="例如：盘点发现多3件 / 系统数据有误纠正 / 补单"
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none resize-none"></textarea>
+            </div>
+
+            <!-- 错误提示 -->
+            <div v-if="adjustError" class="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+              {{ adjustError }}
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="flex items-center justify-end gap-3 px-6 py-4 border-t bg-gray-50">
+            <button @click="closeAdjustForm"
+              class="border border-gray-200 hover:bg-gray-100 text-text-secondary px-4 py-2 rounded-lg text-sm">
+              取消
+            </button>
+            <button @click="submitAdjust" :disabled="adjustSubmitting"
+              class="bg-orange-600 hover:bg-orange-700 disabled:bg-orange-300 text-white px-4 py-2 rounded-lg text-sm font-medium">
+              {{ adjustSubmitting ? '提交中...' : '确认调整' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- ─── Detail Modal ───────────────────────────────────────────────────── -->
     <Teleport to="body">
       <div v-if="showDetail && detailRecord" class="fixed inset-0 z-50 flex items-center justify-center">
@@ -853,6 +1659,7 @@ async function handleDeleteRecord() {
                   <thead class="bg-gray-50">
                     <tr>
                       <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">{{ $t('inout.productCol') }}</th>
+                      <th class="px-3 py-2 w-16"></th>
                       <th class="px-3 py-2 text-center text-xs font-medium text-text-secondary">{{ $t('inout.skuCol') }}</th>
                       <th class="px-3 py-2 text-left text-xs font-medium text-text-secondary">规格</th>
                       <th class="px-3 py-2 text-center text-xs font-medium text-text-secondary">{{ $t('inout.qtyCol') }}</th>
@@ -865,9 +1672,22 @@ async function handleDeleteRecord() {
                       :key="idx"
                       class="border-t border-gray-100"
                     >
-                      <td class="px-3 py-2">{{ item.product_name || item.name || '—' }}</td>
+                      <td class="px-3 py-2">
+                        <div class="font-medium text-sm">{{ item.product_name || item.name || '—' }}</div>
+                      </td>
+                      <td class="px-3 py-2">
+                        <img
+                          v-if="item.image_main"
+                          :src="item.image_main"
+                          class="w-10 h-10 object-cover rounded border border-gray-200"
+                          @error="$event.target.style.display='none'"
+                        />
+                        <div v-else class="w-10 h-10 bg-gray-100 rounded border border-gray-200 flex items-center justify-center">
+                          <span class="material-symbols-outlined text-gray-300 text-sm">image</span>
+                        </div>
+                      </td>
                       <td class="px-3 py-2 text-center font-mono text-xs">{{ item.sku || item.sku_code || '—' }}</td>
-                      <td class="px-3 py-2 text-text-secondary text-sm">{{ formatSkuSpec(item) || '—' }}</td>
+                      <td class="px-3 py-2 text-text-secondary text-sm">{{ formatSkuLabel(item.sku_specs ? { specs: item.sku_specs } : item) || '—' }}</td>
                       <td class="px-3 py-2 text-center font-medium">{{ item.quantity }}</td>
                       <td v-if="detailRecord.items.some(i => i.qrcode_id)" class="px-3 py-2 font-mono text-xs">{{ item.qrcode_id || '—' }}</td>
                     </tr>
@@ -878,7 +1698,7 @@ async function handleDeleteRecord() {
           </div>
           <div class="px-6 py-4 border-t flex justify-between gap-3">
             <button
-              v-if="userStore.canAccess('inventory_delete')"
+              v-if="userStore.canAccess('inventory:delete')"
               @click="handleDeleteRecord"
               class="flex items-center gap-2 px-4 py-2 border border-danger text-danger hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"
             >

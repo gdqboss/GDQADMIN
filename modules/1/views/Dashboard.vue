@@ -14,6 +14,16 @@ const loading = ref(true)
 const error = ref(null)
 const myResponsibilities = ref([])
 
+// ─── Dashboard Stats ───────────────────────────────────────────────────────────
+const stats = ref({
+  todayInbound: 0,
+  todayOutbound: 0,
+  pendingApprovals: 0,
+  lowStockCount: 0,
+  todayOrders: 0,
+  pendingTasks: 0,
+})
+
 // ─── Scan Modal ─────────────────────────────────────────────────────────────────
 const showScanModal = ref(false)
 const scanMode = ref('manual')
@@ -29,6 +39,46 @@ const saleNote = ref('')
 const saleLoading = ref(false)
 const saleError = ref('')
 const saleSuccess = ref('')
+
+// ─── Receipt (收款) ─────────────────────────────────────────────────────────────────
+const showReceipt = ref(false)       // 是否显示收款表单
+const receiptAmount = ref(0)         // 收款金额
+const receiptMethod = ref('cash')    // 收款方式: cash/bank/alipay/wechat/other
+const receiptNote = ref('')          // 收款备注
+const receiptLoading = ref(false)
+const receiptSuccess = ref(false)
+const receiptError = ref('')
+const lastSaleRecordId = ref(null)   // 刚完成的销售记录ID
+const lastSalePrice = ref(0)         // 刚完成的销售价格
+
+async function handleReceipt() {
+  if (!receiptAmount.value || receiptAmount.value <= 0) {
+    receiptError.value = '请输入有效金额'
+    return
+  }
+  receiptLoading.value = true
+  receiptError.value = ''
+  try {
+    const res = await api.post('/finance-simple/receipts', {
+      receipt_date: new Date().toISOString().slice(0, 10),
+      customer_phone: buyerPhone.value || '未知',
+      customer_name: buyerName.value || '扫码销售',
+      amount: receiptAmount.value,
+      payment_method: receiptMethod.value,
+      note: receiptNote.value || `扫码销售收款 - 记录ID:${lastSaleRecordId.value}`
+    })
+    if (res.code === 0) {
+      receiptSuccess.value = true
+    } else {
+      receiptError.value = res.message || '收款失败'
+    }
+  } catch (e) {
+    receiptError.value = e.message || '收款失败'
+  } finally {
+    receiptLoading.value = false
+  }
+}
+
 let html5QrScanner = null
 
 // ─── Gift ──────────────────────────────────────────────────────────────────────
@@ -39,15 +89,16 @@ const rejectedCount = ref(0)
 const giftCheckLoading = ref(false)
 
 // ─── Quick Actions ───────────────────────────────────────────────────────────────────
+// 按钮 permission 必须 = 路由 meta.permission（"出现即可用，无权限不出现"原则）
 const quickActions = [
-  { name: () => t('dashboard.quickAttendance'), icon: 'schedule', color: 'success', route: '/oa/attendance',   permission: 'quick-action-attendance' },
-  { name: () => t('dashboard.quickWorkLog'), icon: 'description', color: 'primary', route: '/logs/work-logs', permission: 'quick-action-worklog' },
-  { name: () => t('dashboard.quickMyTasks'), icon: 'task_alt', color: 'info', route: '/tasks',              permission: 'quick-action-task' },
+  { name: () => t('dashboard.quickAttendance'), icon: 'schedule', color: 'success', route: '/oa/attendance',   permission: 'attendance:view' },
+  { name: () => t('dashboard.quickWorkLog'), icon: 'description', color: 'primary', route: '/logs/work-logs', permission: 'work_log:read' },
+  { name: () => t('dashboard.quickMyTasks'), icon: 'task_alt', color: 'info', route: '/tasks',              permission: 'task:read' },
   { name: () => t('dashboard.quickScanSale'), icon: 'qr_code_scanner', color: 'warning', action: 'scan',     permission: 'quick-action-scan' },
-  { name: () => t('dashboard.quickMyDuties'), icon: 'assignment', color: 'blue', route: '/oa/my-responsibility', permission: 'quick-action-responsibility' },
-  { name: () => t('dashboard.quickExpense'), icon: 'receipt_long', color: 'danger', route: '/oa/approvals/create?type=expense', permission: 'quick-action-expense' },
+  { name: () => t('dashboard.quickMyDuties'), icon: 'assignment', color: 'blue', route: '/oa/my-responsibility', permission: 'oa:read' },
+  { name: () => t('dashboard.quickExpense'), icon: 'receipt_long', color: 'danger', route: '/oa/approvals/create?type=expense', permission: 'approval:write' },
   { name: () => t('dashboard.quickProfile'), icon: 'person', color: 'purple', route: '/profile',            permission: 'quick-action-profile' },
-  { name: () => t('dashboard.quickQrcode'), icon: 'qr_code', color: 'teal', route: '/qrcode',           permission: 'quick-action-qrcode' },
+  { name: () => t('dashboard.quickQrcode'), icon: 'qr_code', color: 'teal', route: '/qrcode',           permission: 'qrcode:read' },
 ]
 
 // 按权限过滤显示的快捷操作
@@ -81,6 +132,15 @@ const openScanModal = () => {
 
 const closeScanModal = () => {
   showScanModal.value = false
+  // 重置收款状态
+  showReceipt.value = false
+  receiptAmount.value = 0
+  receiptMethod.value = 'cash'
+  receiptNote.value = ''
+  receiptSuccess.value = false
+  receiptError.value = ''
+  lastSaleRecordId.value = null
+  lastSalePrice.value = 0
   stopCameraScanner()
 }
 
@@ -231,8 +291,14 @@ const confirmSale = async () => {
       approver_id: saleType.value === 'gift' ? selectedApprover.value : undefined,
     })
     if (res.code === 0) {
-      saleSuccess.value = saleType.value === 'sale' ? '销售记录已保存' : '赠送申请已提交'
-      setTimeout(closeScanModal, 1500)
+      saleSuccess.value = saleType.value === 'sale' ? '销售完成' : '赠送申请已提交'
+      lastSaleRecordId.value = res.data?.id || null  // 保存记录ID用于收款
+      lastSalePrice.value = salePrice.value
+      // 销售模式：显示收款选项
+      if (saleType.value === 'sale') {
+        receiptAmount.value = salePrice.value  // 默认使用售价
+        showReceipt.value = true
+      }
     } else {
       saleError.value = res.message || '操作失败'
     }
@@ -244,25 +310,55 @@ const confirmSale = async () => {
 }
 
 // ─── Data Loading ───────────────────────────────────────────────────────────────
-// ─── 仓库情况组件状态 ───────────────────────────────────────────────────────────────
-const warehouseSummary = ref([])
-const wsLoading = ref(false)
-
 const loadDashboardData = async () => {
   try {
     error.value = null
     const respRes = await Promise.allSettled([
       api.get('/job-responsibilities/my'),
-      api.get('/reports/dashboard-top-warehouses?limit=5'),  // 仓库情况 Top5
+      api.get('/dashboard/stats'),
+      api.get('/inbound?page=1&limit=1'),
+      api.get('/outbound?page=1&limit=1'),
+      api.get('/approvals?page=1&limit=1'),
+      api.get('/tasks?page=1&limit=1'),
     ])
 
-    if (respRes?.[0]?.status === 'fulfilled' && respRes[0].value.code === 0) {
+    if (respRes[0]?.status === 'fulfilled' && respRes[0].value.code === 0) {
       myResponsibilities.value = respRes[0].value.data || []
     }
-    if (respRes?.[1]?.status === 'fulfilled' && respRes[1].value.code === 0) {
-      warehouseSummary.value = respRes[1].value.data || []
+
+    // Try to parse dashboard stats
+    if (respRes[1]?.status === 'fulfilled' && respRes[1].value.code === 0) {
+      const data = respRes[1].value.data || {}
+      stats.value = {
+        todayInbound: data.todayInbound || data.totalInbound || 0,
+        todayOutbound: data.todayOutbound || data.totalOutbound || 0,
+        pendingApprovals: data.pendingApprovals || data.pendingApproval || 0,
+        lowStockCount: data.lowStockCount || data.lowStock || 0,
+        todayOrders: data.todayOrders || data.todayOrder || 0,
+        pendingTasks: data.pendingTasks || data.pendingTask || 0,
+      }
     } else {
-      wsLoading.value = true
+      // Fallback: derive from individual API calls
+      try {
+        if (respRes[2]?.status === 'fulfilled') {
+          stats.value.todayInbound = respRes[2].value.data?.total || respRes[2].value.data?.list?.length || 0
+        }
+      } catch(e) {}
+      try {
+        if (respRes[3]?.status === 'fulfilled') {
+          stats.value.todayOutbound = respRes[3].value.data?.total || respRes[3].value.data?.list?.length || 0
+        }
+      } catch(e) {}
+      try {
+        if (respRes[4]?.status === 'fulfilled') {
+          stats.value.pendingApprovals = respRes[4].value.data?.total || 0
+        }
+      } catch(e) {}
+      try {
+        if (respRes[5]?.status === 'fulfilled') {
+          stats.value.pendingTasks = respRes[5].value.data?.total || 0
+        }
+      } catch(e) {}
     }
   } catch (err) {
     console.error('Failed to load dashboard data:', err)
@@ -327,7 +423,7 @@ onUnmounted(() => { stopCameraScanner() })
             v-for="action in visibleQuickActions"
             :key="action.permission"
             @click="handleQuickAction(action)"
-            class="flex flex-col items-center gap-2 p-3 sm:p-4 rounded-lg border border-gray-200 hover:border-primary hover:bg-primary/5 transition-all group"
+            class="flex flex-col items-center gap-2 p-3 sm:p-4 rounded-lg border border-gray-200 hover:border-primary hover:bg-primary/5 hover:shadow-md transition-all duration-200 group"
           >
             <span :class="['material-symbols-outlined text-2xl sm:text-3xl group-hover:scale-110 transition-transform', `text-${action.color}`]">{{ action.icon }}</span>
             <span class="text-xs sm:text-sm font-medium text-text-primary text-center">{{ action.name() }}</span>
@@ -335,68 +431,71 @@ onUnmounted(() => { stopCameraScanner() })
         </div>
       </div>
 
-      <!-- 仓库情况 Top 5 -->
-      <div v-if="warehouseSummary.length > 0 && userStore.canAccess('dashboard:warehouse_summary')" class="bg-white rounded-lg border border-gray-100 shadow-card p-4 sm:p-6 mb-6">
-        <div class="flex items-center justify-between mb-4">
-          <div>
-            <h4 class="font-bold text-text-primary flex items-center gap-2">
-              <span class="material-symbols-outlined text-primary">warehouse</span>
-              {{ t('dashboard.warehouseSummary') || '仓库情况' }}
-            </h4>
-            <p class="text-xs text-text-secondary mt-1">{{ t('dashboard.warehouseSummaryDesc') || '按库存数量排序，展示前 5 个仓库' }}</p>
+      <!-- 数据概览卡片 -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
+              <span class="material-symbols-outlined text-blue-500">inventory_2</span>
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-text-primary">{{ stats.todayInbound }}</p>
+              <p class="text-xs text-text-secondary">{{ $t('dashboard.todayInbound') }}</p>
+            </div>
           </div>
-          <router-link
-            to="/reports?tab=stock"
-            class="text-xs text-primary hover:underline flex items-center gap-1"
-          >
-            {{ t('common.viewAll') || '查看全部' }}
-            <span class="material-symbols-outlined text-sm">arrow_forward</span>
-          </router-link>
         </div>
-        <div class="space-y-2">
-          <div
-            v-for="(wh, idx) in warehouseSummary"
-            :key="wh.id"
-            @click="router.push(`/reports?tab=stock&warehouse=${wh.id}`)"
-            class="flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-primary hover:bg-primary/5 cursor-pointer transition-all"
-          >
-            <!-- 排名 -->
-            <div :class="['flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold',
-              idx === 0 ? 'bg-yellow-100 text-yellow-700' :
-              idx === 1 ? 'bg-gray-100 text-gray-700' :
-              idx === 2 ? 'bg-orange-100 text-orange-700' :
-              'bg-gray-50 text-gray-500']">
-              {{ idx + 1 }}
+        <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center">
+              <span class="material-symbols-outlined text-green-500">outbox</span>
             </div>
-            <!-- 仓库名 + 类型 -->
-            <div class="flex-shrink-0 w-40">
-              <p class="font-medium text-sm text-text-primary truncate">{{ wh.name }}</p>
-              <p class="text-xs text-text-secondary">{{ wh.type }} · {{ wh.manager || '未指定' }}</p>
+            <div>
+              <p class="text-2xl font-bold text-text-primary">{{ stats.todayOutbound }}</p>
+              <p class="text-xs text-text-secondary">{{ $t('dashboard.todayOutbound') }}</p>
             </div>
-            <!-- 5 个指标 -->
-            <div class="flex-1 grid grid-cols-5 gap-2 text-center">
-              <div>
-                <p class="text-xs text-text-secondary">库存数</p>
-                <p class="text-sm font-bold text-text-primary">{{ Number(wh.total_qty).toLocaleString() }}</p>
-              </div>
-              <div>
-                <p class="text-xs text-text-secondary">价值(元)</p>
-                <p class="text-sm font-bold text-primary">{{ Number(wh.total_value).toLocaleString() }}</p>
-              </div>
-              <div>
-                <p class="text-xs text-text-secondary">商品种类</p>
-                <p class="text-sm font-bold text-text-primary">{{ wh.sku_count }}</p>
-              </div>
-              <div>
-                <p class="text-xs text-text-secondary">30天出库</p>
-                <p class="text-sm font-bold text-success">{{ wh.outbound_30d }}</p>
-              </div>
-              <div>
-                <p class="text-xs text-text-secondary">低库存</p>
-                <p :class="['text-sm font-bold', wh.low_stock_count > 0 ? 'text-danger' : 'text-text-primary']">
-                  {{ wh.low_stock_count }}
-                </p>
-              </div>
+          </div>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center">
+              <span class="material-symbols-outlined text-orange-500">pending_actions</span>
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-text-primary">{{ stats.pendingApprovals }}</p>
+              <p class="text-xs text-text-secondary">{{ $t('dashboard.pendingApprovals') }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
+              <span class="material-symbols-outlined text-red-500">warning</span>
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-text-primary">{{ stats.lowStockCount }}</p>
+              <p class="text-xs text-text-secondary">{{ $t('dashboard.lowStockCount') }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center">
+              <span class="material-symbols-outlined text-purple-500">shopping_cart</span>
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-text-primary">{{ stats.todayOrders }}</p>
+              <p class="text-xs text-text-secondary">{{ $t('dashboard.todayOrders') }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 hover:shadow-md transition-shadow">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-cyan-50 flex items-center justify-center">
+              <span class="material-symbols-outlined text-cyan-500">task_alt</span>
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-text-primary">{{ stats.pendingTasks }}</p>
+              <p class="text-xs text-text-secondary">{{ $t('dashboard.pendingTasks') }}</p>
             </div>
           </div>
         </div>
@@ -482,13 +581,13 @@ onUnmounted(() => { stopCameraScanner() })
           <div v-if="scanMode === 'manual'">
             <label class="block text-sm font-medium text-text-primary mb-2">输入二维码编号</label>
             <div class="flex gap-2">
-              <input type="text" v-model="manualQrCode" placeholder="请输入二维码编号"
-                class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none"
+              <el-input v-model="manualQrCode" placeholder="请输入二维码编号"
+                class="flex-1" clearable
                 @keyup.enter="handleManualInput(manualQrCode)" />
-              <button @click="handleManualInput(manualQrCode)"
-                class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors">
+              <el-button type="primary" @click="handleManualInput(manualQrCode)">
+                <span class="material-symbols-outlined text-lg">search</span>
                 查询
-              </button>
+              </el-button>
             </div>
           </div>
 
@@ -553,8 +652,7 @@ onUnmounted(() => { stopCameraScanner() })
           <!-- 售价 -->
           <div v-if="saleType === 'sale'">
             <label class="block text-sm font-medium text-text-primary mb-1">售价 <span class="text-danger">*</span></label>
-            <input type="number" v-model="salePrice" placeholder="0" :min="scannedProduct.purchase_price || 0"
-              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+            <el-input-number v-model="salePrice" :min="0" :precision="2" class="w-full" controls-position="right" />
             <p v-if="scannedProduct.purchase_price" class="text-xs text-text-secondary mt-1">
               成本价: ¥{{ scannedProduct.purchase_price }}，建议售价: ¥{{ scannedProduct.sale_price }}
             </p>
@@ -577,11 +675,10 @@ onUnmounted(() => { stopCameraScanner() })
           <!-- 审批人 -->
           <div v-if="saleType === 'gift' && canGift">
             <label class="block text-sm font-medium text-text-primary mb-1">审批人 <span class="text-danger">*</span></label>
-            <select v-model="selectedApprover"
-              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none">
-              <option value="" disabled>{{ giftCheckLoading ? '加载中...' : '请选择审批人' }}</option>
-              <option v-for="a in approverList" :key="a.id" :value="a.id">{{ a.name }} ({{ a.role }})</option>
-            </select>
+            <el-select v-model="selectedApprover" placeholder="请选择审批人" filterable clearable
+              class="w-full">
+              <el-option v-for="a in approverList" :key="a.id" :label="a.name + ' (' + a.role + ')'" :value="a.id" />
+            </el-select>
           </div>
 
           <!-- 客户姓名 -->
@@ -590,8 +687,7 @@ onUnmounted(() => { stopCameraScanner() })
               <span v-if="saleType === 'gift'" class="text-danger">*</span>
               <span v-else class="text-text-secondary text-xs font-normal">选填</span>
             </label>
-            <input type="text" v-model="buyerName" placeholder="客户姓名"
-              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+            <el-input v-model="buyerName" placeholder="客户姓名" clearable />
           </div>
 
           <!-- 客户电话 -->
@@ -600,8 +696,7 @@ onUnmounted(() => { stopCameraScanner() })
               <span v-if="saleType === 'gift'" class="text-danger">*</span>
               <span v-else class="text-text-secondary text-xs font-normal">选填</span>
             </label>
-            <input type="tel" v-model="buyerPhone" placeholder="客户电话"
-              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none" />
+            <el-input v-model="buyerPhone" placeholder="客户电话" clearable />
           </div>
 
           <!-- 备注 -->
@@ -620,6 +715,51 @@ onUnmounted(() => { stopCameraScanner() })
           {{ saleSuccess }}
         </div>
 
+        <!-- 收款区域（销售成功后可选） -->
+        <div v-if="showReceipt && saleType === 'sale'" class="border-t border-gray-100 pt-4 space-y-3">
+          <h4 class="text-sm font-bold text-text-primary flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary">payments</span>
+            收款（可选）
+          </h4>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-text-secondary mb-1">收款金额</label>
+              <el-input-number v-model="receiptAmount" :min="0" :precision="2" class="w-full" controls-position="right" />
+            </div>
+            <div>
+              <label class="block text-xs text-text-secondary mb-1">支付方式</label>
+              <el-select v-model="receiptMethod" class="w-full">
+                <el-option label="现金" value="cash" />
+                <el-option label="银行转账" value="bank" />
+                <el-option label="支付宝" value="alipay" />
+                <el-option label="微信" value="wechat" />
+                <el-option label="其他" value="other" />
+              </el-select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-text-secondary mb-1">备注 <span class="text-text-secondary text-xs font-normal">选填</span></label>
+            <el-input v-model="receiptNote" placeholder="收款备注" clearable />
+          </div>
+          <div v-if="receiptSuccess" class="text-xs text-success bg-green-50 py-2 px-3 rounded-lg flex items-center gap-2">
+            <span class="material-symbols-outlined text-sm">check_circle</span>
+            收款已登记
+          </div>
+          <div v-if="receiptError" class="text-xs text-danger bg-red-50 py-2 px-3 rounded-lg flex items-center gap-2">
+            <span class="material-symbols-outlined text-sm">error</span>
+            {{ receiptError }}
+          </div>
+          <div class="flex gap-2">
+            <el-button v-if="!receiptSuccess" @click="handleReceipt" type="success" :loading="receiptLoading" :disabled="!receiptAmount || receiptAmount <= 0">
+              <span class="material-symbols-outlined text-lg">payments</span>
+              确认收款
+            </el-button>
+            <el-button @click="closeScanModal" plain>
+              {{ receiptSuccess ? '完成' : '跳过收款' }}
+            </el-button>
+          </div>
+        </div>
+
         <!-- 错误提示 -->
         <div v-if="saleError" class="text-sm text-danger bg-red-50 py-2 px-3 rounded-lg flex items-center gap-2">
           <span class="material-symbols-outlined text-lg">error</span>
@@ -628,24 +768,22 @@ onUnmounted(() => { stopCameraScanner() })
 
         <!-- 操作按钮 -->
         <div v-if="!saleSuccess" class="flex gap-3 pt-1">
-          <button v-if="scannedQrcode" @click="openScanModal"
-            class="flex-1 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-text-primary hover:bg-gray-50">
+          <el-button v-if="scannedQrcode" @click="openScanModal" plain>
             重新扫描
-          </button>
-          <button @click="closeScanModal"
-            class="flex-1 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-text-primary hover:bg-gray-50">
+          </el-button>
+          <el-button @click="closeScanModal" plain>
             取消
-          </button>
-          <button v-if="scannedProduct && saleType === 'sale'" @click="confirmSale"
-            :disabled="saleLoading || !salePrice || salePrice <= 0"
-            class="flex-1 py-2.5 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed">
-            {{ saleLoading ? '处理中...' : '确认销售' }}
-          </button>
-          <button v-if="scannedProduct && saleType === 'gift'" @click="confirmSale"
-            :disabled="saleLoading || !canGift || !selectedApprover"
-            class="flex-1 py-2.5 bg-orange-500 text-white rounded-lg text-sm font-bold hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed">
-            {{ saleLoading ? '处理中...' : '确认赠送' }}
-          </button>
+          </el-button>
+          <el-button v-if="scannedProduct && saleType === 'sale'" @click="confirmSale"
+            type="primary" :loading="saleLoading" :disabled="!salePrice || salePrice <= 0">
+            <span class="material-symbols-outlined text-lg">sell</span>
+            确认销售
+          </el-button>
+          <el-button v-if="scannedProduct && saleType === 'gift'" @click="confirmSale"
+            type="warning" :loading="saleLoading" :disabled="!canGift || !selectedApprover">
+            <span class="material-symbols-outlined text-lg">card_giftcard</span>
+            确认赠送
+          </el-button>
         </div>
       </div>
     </div>

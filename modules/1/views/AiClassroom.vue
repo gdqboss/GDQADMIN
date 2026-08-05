@@ -26,215 +26,6 @@ const chatContainer = ref(null)
 const conversationLoaded = ref(false)
 const streamingIndex = ref(null) // index of message being typed
 
-// ==================== 🎤 语音输入（STT）===================
-// 三模态自动适配策略（2026-07-26 HK 上线扩展）：
-//  1) 浏览器原生 SpeechRecognition（webkitSpeechRecognition / SpeechRecognition）— 首选，零成本零 key
-//  2) MediaRecorder → /api/ai-class/asr（服务端 Whisper）— 后端 OPENAI_API_KEY 有真值时才用
-//  3) 都不支持时按钮 disabled + tooltip 提示
-// 优先级在 onMounted() 里探测一次后定下来（不每次录音切模式，体验跳跃）
-const isRecording = ref(false)
-const isTranscribing = ref(false)
-const mediaRecorder = ref(null)
-const audioChunks = ref([])
-let recordingStartAt = 0
-// 三种语音输入模式
-const STT_MODES = { WEB_SPEECH: 'web_speech', MEDIA_RECORDER: 'media_recorder', UNAVAILABLE: 'unavailable' }
-const sttMode = ref(STT_MODES.UNAVAILABLE) // 默认 unavailable, onMounted() 里探测
-const webSpeechRecognition = ref(null) // SpeechRecognition 实例（如果走 web_speech 模式）
-
-// 探测浏览器能力，给 sttMode 赋值（在组件 onMounted 时跑一次）
-const detectSTTMode = () => {
-  const RecCtor = window.SpeechRecognition || window.webkitSpeechRecognition
-  if (RecCtor) {
-    sttMode.value = STT_MODES.WEB_SPEECH
-    return
-  }
-  if (navigator.mediaDevices && window.MediaRecorder) {
-    sttMode.value = STT_MODES.MEDIA_RECORDER
-    return
-  }
-  sttMode.value = STT_MODES.UNAVAILABLE
-}
-
-const startRecording = async () => {
-  if (isRecording.value || isTranscribing.value) return
-
-  // 模式 A: 浏览器原生 Web Speech API（零 key,优先）
-  if (sttMode.value === STT_MODES.WEB_SPEECH) {
-    const RecCtor = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!RecCtor) return
-    const rec = new RecCtor()
-    rec.lang = 'zh-CN'
-    rec.interimResults = false
-    rec.maxAlternatives = 1
-    rec.onresult = (e) => {
-      const text = e.results[0][0].transcript
-      if (text) {
-        inputMessage.value = (inputMessage.value ? inputMessage.value + ' ' : '') + text.trim()
-        ElMessage.success('识别成功')
-      }
-    }
-    rec.onerror = (e) => {
-      console.warn('[AI课堂] Web Speech error:', e.error)
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        ElMessage.error('麦克风权限被拒绝')
-      } else if (e.error === 'no-speech') {
-        ElMessage.warning('没听到声音，请重试')
-      } else {
-        ElMessage.warning('语音识别失败：' + (e.error || '未知错误'))
-      }
-    }
-    rec.onend = () => { isRecording.value = false }
-    try {
-      rec.start()
-      webSpeechRecognition.value = rec
-      isRecording.value = true
-    } catch (err) {
-      console.error('[AI课堂] Web Speech start failed:', err)
-      ElMessage.error('无法启动语音识别：' + (err.message || '浏览器不支持'))
-    }
-    return
-  }
-
-  // 模式 B: MediaRecorder + 后端 ASR（需要服务端 OPENAI_API_KEY）
-  if (sttMode.value === STT_MODES.MEDIA_RECORDER) {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '')
-      mediaRecorder.value = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
-      audioChunks.value = []
-      mediaRecorder.value.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunks.value.push(e.data)
-      }
-      mediaRecorder.value.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop())
-        await transcribeRecording()
-      }
-      recordingStartAt = Date.now()
-      mediaRecorder.value.start()
-      isRecording.value = true
-    } catch (err) {
-      console.error('[AI课堂] 麦克风权限失败:', err)
-      ElMessage.error('无法访问麦克风：' + (err.message || '请检查浏览器权限'))
-    }
-    return
-  }
-
-  // 模式 C: 啥都不支持
-  ElMessage.warning('当前浏览器不支持语音输入，请用 Chrome/Edge/Safari')
-}
-
-const stopRecording = () => {
-  // 模式 A: Web Speech API
-  if (sttMode.value === STT_MODES.WEB_SPEECH && webSpeechRecognition.value) {
-    try { webSpeechRecognition.value.stop() } catch (e) { /* noop */ }
-    webSpeechRecognition.value = null
-    return
-  }
-  // 模式 B: MediaRecorder
-  if (!isRecording.value || !mediaRecorder.value) return
-  if (Date.now() - recordingStartAt < 500) {
-    setTimeout(() => mediaRecorder.value && mediaRecorder.value.state !== 'inactive' && mediaRecorder.value.stop(), 600)
-  } else {
-    mediaRecorder.value.stop()
-  }
-}
-
-const transcribeRecording = async () => {
-  if (audioChunks.value.length === 0) {
-    isRecording.value = false
-    return
-  }
-  isRecording.value = false
-  isTranscribing.value = true
-  const mimeType = audioChunks.value[0]?.type || 'audio/webm'
-  const ext = mimeType.includes('mp4') ? 'm4a' : (mimeType.includes('ogg') ? 'ogg' : 'webm')
-  const blob = new Blob(audioChunks.value, { type: mimeType })
-  const formData = new FormData()
-  formData.append('audio', blob, `recording.${ext}`)
-  try {
-    const res = await api.post('/ai-class/asr', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
-    if (res.ok === false && res._fallback === 'web_speech') {
-      // 后端没配 OPENAI_API_KEY — 提示用户降级到浏览器原生 API(本次录音已废)
-      ElMessage.warning('当前服务端未配置语音识别,请下次用 Chrome/Edge 浏览器并允许麦克风权限')
-    } else if (res.code === 0 && res.text) {
-      inputMessage.value = (inputMessage.value ? inputMessage.value + ' ' : '') + res.text.trim()
-      ElMessage.success('识别成功')
-    } else {
-      ElMessage.error(res.message || '语音识别失败')
-    }
-  } catch (err) {
-    console.error('[AI课堂] ASR error:', err)
-    ElMessage.error('语音识别失败:' + (err.message || '网络错误'))
-  } finally {
-    isTranscribing.value = false
-    audioChunks.value = []
-  }
-}
-
-// 按钮可见性 + tooltip
-const sttAvailable = computed(() => sttMode.value !== STT_MODES.UNAVAILABLE)
-const voiceButtonTitle = computed(() => {
-  if (isRecording.value) return '松开结束录音'
-  if (isTranscribing.value) return '识别中…'
-  if (!sttAvailable.value) return '当前浏览器不支持语音输入（请用 Chrome/Edge/Safari）'
-  if (sttMode.value === STT_MODES.WEB_SPEECH) return '长按录音（浏览器内置识别，零 key）'
-  return '长按录音（服务端识别）'
-})
-
-// ==================== 🔊 TTS 语音播放 ====================
-const ttsEnabled = ref(true) // 用户可静音
-const ttsVoice = ref('zh-CN-XiaoxiaoNeural') // 默认音色
-const currentAudio = ref(null) // 当前播放的 audio 元素
-
-const playTTS = async (text) => {
-  if (!ttsEnabled.value || !text || !text.trim()) return
-  // 跳过太短或纯标点的内容
-  const clean = text.replace(/[\s\n\r\p{P}]/gu, '').trim()
-  if (clean.length < 2) return
-  // 截断到 500 字避免超时
-  const safeText = text.length > 500 ? text.slice(0, 500) + '...' : text
-  try {
-    // 停掉上一段
-    if (currentAudio.value) {
-      currentAudio.value.pause()
-      currentAudio.value = null
-    }
-    const res = await api.post('/ai-class/tts', {
-      text: safeText,
-      voice: ttsVoice.value,
-      rate: '+0%'
-    }, { responseType: 'blob' })
-    const url = URL.createObjectURL(res)
-    const audio = new Audio(url)
-    audio.onended = () => { URL.revokeObjectURL(url); if (currentAudio.value === audio) currentAudio.value = null }
-    audio.onerror = () => { URL.revokeObjectURL(url); if (currentAudio.value === audio) currentAudio.value = null }
-    currentAudio.value = audio
-    await audio.play().catch(() => {
-      // autoplay 被浏览器拦截，用户没交互过
-      console.warn('[AI课堂] autoplay 被拦截')
-    })
-  } catch (err) {
-    console.error('[AI课堂] TTS error:', err?.response?.data || err.message)
-  }
-}
-
-const stopTTS = () => {
-  if (currentAudio.value) {
-    currentAudio.value.pause()
-    currentAudio.value = null
-  }
-}
-
-const toggleTTS = () => {
-  ttsEnabled.value = !ttsEnabled.value
-  if (!ttsEnabled.value) stopTTS()
-}
-
 const SESSION_KEY = 'ai_classroom_session_id'
 
 const getSessionId = () => {
@@ -319,8 +110,6 @@ const sendMessage = async () => {
           clearInterval(typeInterval)
           streamingIndex.value = null
           sending.value = false
-          // ✨ AI 回复完成 → 自动语音播报（ttsEnabled + 内容非空）
-          if (reply && reply.trim()) playTTS(reply)
         }
       }, 30)
       return
@@ -546,7 +335,6 @@ const getMemoryTypeLabel = (type) => {
 
 // ─── Mounted ───────────────────────────────────────────────────────────────────
 onMounted(() => {
-  detectSTTMode()
   loadKnowledge()
   loadMemories()
   loadConversations()
@@ -626,30 +414,6 @@ onMounted(() => {
                 :disabled="sending"
                 @keyup.enter="sendMessage"
               />
-              <!-- 🎤 语音输入按钮（长按录音；三模态自适应：webkitSpeech / MediaRecorder / disabled）-->
-              <button
-                class="btn-voice"
-                :class="{ recording: isRecording, transcribing: isTranscribing, unavailable: !sttAvailable }"
-                :disabled="sending || isTranscribing || !sttAvailable"
-                :title="voiceButtonTitle"
-                @mousedown.prevent="sttAvailable && startRecording"
-                @mouseup.prevent="sttAvailable && stopRecording"
-                @mouseleave.prevent="sttAvailable && stopRecording"
-                @touchstart.prevent="sttAvailable && startRecording"
-                @touchend.prevent="sttAvailable && stopRecording"
-              >
-                <span class="material-symbols-outlined">{{ isTranscribing ? 'hourglass_empty' : (isRecording ? 'mic' : 'mic_none') }}</span>
-                <span v-if="isRecording" class="rec-dot"></span>
-              </button>
-              <!-- 🔊 TTS 开关 -->
-              <button
-                class="btn-tts"
-                :class="{ active: ttsEnabled }"
-                :title="ttsEnabled ? '关闭语音播报' : '开启语音播报'"
-                @click="toggleTTS"
-              >
-                <span class="material-symbols-outlined">{{ ttsEnabled ? 'volume_up' : 'volume_off' }}</span>
-              </button>
               <button class="btn-send" @click="sendMessage" :disabled="sending || !inputMessage.trim()">
                 <span class="material-symbols-outlined">send</span>
               </button>
@@ -1261,85 +1025,6 @@ onMounted(() => {
 .btn-send:disabled {
   background: #93c5fd;
   cursor: not-allowed;
-}
-
-/* 🎤 语音输入按钮 */
-.btn-voice {
-  width: 42px;
-  height: 42px;
-  border-radius: 8px;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
-  color: #6b7280;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-  position: relative;
-  user-select: none;
-  -webkit-user-select: none;
-}
-.btn-voice:hover:not(:disabled) {
-  background: #e5e7eb;
-  color: #374151;
-}
-.btn-voice:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.btn-voice.recording {
-  background: #ef4444;
-  border-color: #dc2626;
-  color: #fff;
-  animation: pulse-rec 1.2s ease-in-out infinite;
-}
-.btn-voice.transcribing {
-  background: #fbbf24;
-  border-color: #f59e0b;
-  color: #fff;
-}
-.btn-voice .rec-dot {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #fff;
-  animation: pulse-dot 0.8s ease-in-out infinite;
-}
-@keyframes pulse-rec {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
-  50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
-}
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(1.3); }
-}
-
-/* 🔊 TTS 开关按钮 */
-.btn-tts {
-  width: 42px;
-  height: 42px;
-  border-radius: 8px;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
-  color: #9ca3af;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-.btn-tts:hover {
-  background: #e5e7eb;
-  color: #6b7280;
-}
-.btn-tts.active {
-  background: #dbeafe;
-  border-color: #93c5fd;
-  color: #2563eb;
 }
 
 .btn-send .material-symbols-outlined {

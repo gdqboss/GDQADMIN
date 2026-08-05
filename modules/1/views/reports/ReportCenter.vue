@@ -1,7 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
 import PageHeader from '../../components/PageHeader.vue'
 import api from '../../services/api.js'
 import { use } from 'echarts/core'
@@ -14,21 +13,8 @@ import VChart from 'vue-echarts'
 use([CanvasRenderer, BarChart, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent, TitleComponent])
 
 const { t } = useI18n()
-const route = useRoute()
 
 const activeTab = ref('inout')
-// 从 URL ?tab=stock 读取初始 tab + ?warehouse=ID 高亮
-const highlightedWarehouseId = ref(null)
-
-onMounted(() => {
-  const tab = route.query.tab
-  if (tab && ['inout', 'price', 'stock'].includes(tab)) {
-    activeTab.value = tab
-  }
-  if (route.query.warehouse) {
-    highlightedWarehouseId.value = Number(route.query.warehouse)
-  }
-})
 
 const tabs = computed(() => [
   { key: 'inout', label: t('report.inoutTrend'), icon: 'swap_horiz' },
@@ -281,19 +267,9 @@ onMounted(async () => {
                 <p class="text-xs text-text-secondary">{{ $t('report.warehouseSummaryDesc') }}</p>
               </div>
               <div class="space-y-3">
-                <div
-                  v-for="wh in warehouseStockSummary"
-                  :key="wh.warehouse"
-                  :class="['border rounded-lg p-4 transition-all',
-                    highlightedWarehouseId === wh.id
-                      ? 'border-primary bg-primary/5 ring-2 ring-primary/30'
-                      : 'border-gray-100']"
-                >
+                <div v-for="wh in warehouseStockSummary" :key="wh.warehouse" class="border border-gray-100 rounded-lg p-4">
                   <div class="flex justify-between items-center mb-2">
-                    <span class="font-medium text-text-primary text-sm flex items-center gap-2">
-                      {{ wh.warehouse }}
-                      <span v-if="highlightedWarehouseId === wh.id" class="material-symbols-outlined text-primary text-base">bookmark</span>
-                    </span>
+                    <span class="font-medium text-text-primary text-sm">{{ wh.warehouse }}</span>
                     <span class="text-xs text-text-secondary">{{ $t('report.valueInTenThousand', { value: (wh.total_value / 10000).toFixed(1) }) }}</span>
                   </div>
                   <div class="flex gap-2">

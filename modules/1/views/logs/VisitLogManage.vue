@@ -316,7 +316,7 @@ function getCustomerTypeLabel(type) {
           </div>
         </div>
       </div>
-      <div v-if="userStore.canAccess('visitlogs_admin') && stats.byUser.length > 0" class="bg-white rounded-lg border border-gray-100 shadow-card p-4">
+      <div v-if="userStore.canAccess('work_log:write') && stats.byUser.length > 0" class="bg-white rounded-lg border border-gray-100 shadow-card p-4">
         <p class="text-xs text-text-secondary mb-2">{{ $t('logs.employeeVisitStats') }}</p>
         <div class="space-y-1 text-xs max-h-[60px] overflow-y-auto">
           <div v-for="u in stats.byUser.slice(0, 3)" :key="u.user_id" class="flex justify-between">

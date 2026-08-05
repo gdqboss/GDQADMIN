@@ -17,7 +17,7 @@
         <label class="block text-sm font-medium mb-1">{{ $t('common.endDate') }}</label>
         <input v-model="filters.end_date" type="date" class="w-full border rounded px-3 py-2" />
       </div>
-      <div v-if="userStore.canAccess('attendance_admin')">
+      <div v-if="userStore.canAccess('attendance:manage')">
         <label class="block text-sm font-medium mb-1">{{ $t('common.department') }}</label>
         <select v-model="filters.department" class="w-full border rounded px-3 py-2">
           <option value="">{{ $t('common.all') }}</option>
@@ -162,7 +162,7 @@ async function fetchSummary() {
     const params = { ...filters.value }
 
     // If not admin, only show current user's records
-    if (!userStore.canAccess('attendance_admin')) {
+    if (!userStore.canAccess('attendance:manage')) {
       params.user_id = userStore.user?.id
     }
 

@@ -1,13 +1,16 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
+const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const submitting = ref(false)
 const stores = ref([])
 const products = ref([])
+const isEdit = ref(false)
+const editId = ref(null)
 
 const form = ref({
   from_store_id: null,
@@ -22,7 +25,47 @@ const itemQuantity = ref(1)
 
 onMounted(async () => {
   await Promise.all([fetchStores(), fetchProducts()])
+  if (route.query.id) {
+    isEdit.value = true
+    editId.value = route.query.id
+    await loadTransferForEdit(editId.value)
+  } else if (route.query.prefill) {
+    // 补仓预警预填
+    try {
+      const data = JSON.parse(decodeURIComponent(route.query.prefill))
+      form.value.to_store_id = data.to_warehouse_id || null
+      form.value.note = data.note || ''
+      form.value.items = (data.items || []).map(it => ({
+        product_id: it.product_id,
+        product_name: '',
+        quantity: it.quantity || 1
+      }))
+    } catch (e) {
+      console.error('prefill parse error', e)
+    }
+  }
 })
+
+async function loadTransferForEdit(id) {
+  const res = await fetch(`/api/transfer/${id}`, {
+    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+  })
+  const json = await res.json()
+  if (json.code === 0) {
+    const tr = json.data
+    form.value.from_store_id = tr.from_store_id
+    form.value.to_store_id = tr.to_store_id
+    form.value.note = tr.note || ''
+    form.value.items = (tr.items || []).map(it => ({
+      product_id: it.product_id,
+      product_name: it.product_name,
+      quantity: it.quantity
+    }))
+  } else {
+    alert(json.message)
+    router.push('/transfer')
+  }
+}
 
 async function fetchStores() {
   const res = await fetch('/api/stores?page=1&limit=1000', {
@@ -83,8 +126,10 @@ async function submit() {
 
   submitting.value = true
   try {
-    const res = await fetch('/api/transfer', {
-      method: 'POST',
+    const url = isEdit.value ? `/api/transfer/${editId.value}` : '/api/transfer'
+    const method = isEdit.value ? 'PUT' : 'POST'
+    const res = await fetch(url, {
+      method,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -93,7 +138,7 @@ async function submit() {
     })
     const json = await res.json()
     if (json.code === 0) {
-      alert(t('transfer.createSuccess'))
+      alert(isEdit.value ? '调货单已更新' : t('transfer.createSuccess'))
       router.push('/transfer')
     } else {
       alert(json.message)
@@ -107,7 +152,7 @@ async function submit() {
 <template>
   <div class="p-6">
     <div class="mb-6">
-      <h1 class="text-2xl font-bold text-text-primary">{{ $t('transfer.createTitle') }}</h1>
+      <h1 class="text-2xl font-bold text-text-primary">{{ isEdit ? '编辑调货单' : $t('transfer.createTitle') }}</h1>
       <p class="text-sm text-text-secondary mt-1">{{ $t('transfer.createSubtitle') }}</p>
     </div>
 
@@ -205,7 +250,7 @@ async function submit() {
             :disabled="submitting"
             class="flex-1 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
           >
-            {{ submitting ? $t('common.submitting') : $t('transfer.createTransfer') }}
+            {{ submitting ? $t('common.submitting') : (isEdit ? '保存修改' : $t('transfer.createTransfer')) }}
           </button>
         </div>
       </div>

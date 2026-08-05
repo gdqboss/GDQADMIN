@@ -11,7 +11,17 @@
     <div v-else-if="responsibility" class="space-y-6">
       <div class="bg-white rounded-lg shadow p-6">
         <h2 class="text-xl font-bold text-primary mb-4">{{ responsibility.title }}</h2>
-        <p class="text-gray-600">{{ responsibility.description }}</p>
+        <p v-if="responsibility.description" class="text-gray-600 mb-4">{{ responsibility.description }}</p>
+        <ul v-if="responsibility.details && responsibility.details.length" class="space-y-3">
+          <li
+            v-for="(item, idx) in responsibility.details"
+            :key="idx"
+            class="flex items-start gap-3 text-gray-700"
+          >
+            <span class="material-symbols-outlined text-primary text-base mt-0.5">check_circle</span>
+            <span>{{ item }}</span>
+          </li>
+        </ul>
       </div>
     </div>
 
@@ -38,14 +48,22 @@ onMounted(async () => {
       return
     }
     const user = userRes.data
-    // 从职级的 responsibility_desc 获取权责说明（job_level_id 实际对应 job_levels.level）
-    if (user.job_level_id) {
-      const levelsRes = await api.get('/users/job-levels/list')
-      if (levelsRes && levelsRes.code === 0) {
-        const level = (levelsRes.data || []).find(l => String(l.level) === String(user.job_level_id))
-        if (level?.responsibility_desc) {
-          responsibility.value = { title: level.name, description: level.responsibility_desc }
-        }
+    // 按用户角色（role）从 role_responsibilities 表获取权责
+    const role = user.role || 'member'
+    const respRes = await api.get(`/responsibilities/${role}`)
+    if (respRes && respRes.code === 0 && respRes.data) {
+      const data = respRes.data
+      // 解析 responsibilities JSON 字段（数组），显示为列表
+      let details = []
+      if (typeof data.responsibilities === 'string') {
+        try { details = JSON.parse(data.responsibilities) } catch (e) { details = [data.responsibilities] }
+      } else if (Array.isArray(data.responsibilities)) {
+        details = data.responsibilities
+      }
+      responsibility.value = {
+        title: data.title,
+        description: data.description || '',
+        details
       }
     }
   } catch (e) {

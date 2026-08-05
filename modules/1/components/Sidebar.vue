@@ -175,7 +175,6 @@ const menuGroups = computed(() => [
     children: [
       { key: 'task:read', label: t('tasks.title'), to: '/tasks' },
       { key: 'work_log:read', label: t('logs.workLog'), to: '/logs/work-logs' },
-      { key: 'work_log:read', label: t('logs.visitLog'), to: '/logs/visit-logs' },
       { key: 'attendance:manage', label: t('nav.qaAttendance'), to: '/oa/attendance' },
       { key: 'approval:read', label: t('nav.approvals'), to: '/approvals' },
     ]
@@ -189,6 +188,7 @@ const menuGroups = computed(() => [
       { key: 'product:write', label: t('nav.products'), to: '/products' },
       { key: 'inventory:inout', label: t('nav.inout'), to: '/in-out' },
       { key: 'warehouse:write', label: t('nav.warehouses'), to: '/warehouses' },
+      { key: 'qrcode:write', label: t('nav.qrcode'), to: '/qrcode' },
       { key: 'stock:read', label: t('nav.alerts'), to: '/alerts', badge: alertCount.value },
       { key: 'transfer:read', label: t('nav.transfer'), to: '/transfer' },
       { key: 'inventory:return', label: t('nav.returnRecords'), to: '/inventory/returns' },
@@ -236,7 +236,7 @@ const menuGroups = computed(() => [
       { key: 'bi:excel', label: t('nav.excelAnalyzer'), to: '/excel-analyzer' },
       { key: 'bi:report', label: t('nav.reportManage'), to: '/excel-report-manage' },
       { key: 'bi:excel', label: t('nav.storeSales'), to: '/store-sales' },
-      { key: 'qrcode:write', label: t('nav.qrcode'), to: '/qrcode' },
+      { key: 'bi:excel', label: t('nav.importRecords'), to: '/import-records' },
       { key: 'referral:read', label: t('nav.referral'), to: '/referral' },
       { key: 'report:read', label: t('nav.reports'), to: '/reports' },
     ]

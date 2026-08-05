@@ -18,6 +18,7 @@ export const qrcodeStatusMap = {
   outStock: { label: '已出库', type: 'warning' },
   shipped: { label: '已发货', type: 'warning' },
   sold: { label: '已销售', type: 'success' },
+  sold_out: { label: '已售罄', type: 'success' },
   activated: { label: '已激活', type: 'success' },
   afterSale: { label: '售后中', type: 'danger' },
   returned: { label: '已退货', type: 'danger' },

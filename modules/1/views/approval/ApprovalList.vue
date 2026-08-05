@@ -13,6 +13,35 @@ const userStore = useUserStore()
 const activeTab = ref('pending')
 const approvals = ref([])
 
+// ─── Delete State ──────────────────────────────────────────────────────────────
+const showDeleteDialog = ref(false)
+const deletingId = ref(null)
+const deleting = ref(false)
+
+const isAdmin = computed(() => userStore.user?.role === 'admin')
+
+const confirmDelete = (id) => {
+  deletingId.value = id
+  showDeleteDialog.value = true
+}
+
+const doDelete = async () => {
+  if (!deletingId.value) return
+  deleting.value = true
+  try {
+    const res = await api.delete(`/approvals/${deletingId.value}`)
+    if (res.code === 0) {
+      approvals.value = approvals.value.filter(a => a.id !== deletingId.value)
+      showDeleteDialog.value = false
+      deletingId.value = null
+    }
+  } catch (e) {
+    console.error('Delete approval failed:', e)
+  } finally {
+    deleting.value = false
+  }
+}
+
 onMounted(async () => {
   try {
     const res = await api.get('/approvals')
@@ -106,7 +135,11 @@ const typeIconMap = {
                 <StatusTag :type="statusMap[ap.status]?.type || 'info'" :text="statusMap[ap.status]?.text || ap.status" />
               </td>
               <td class="px-4 py-3 text-right">
-                <button class="text-primary hover:text-primary-hover text-xs font-medium">{{ $t('approval.view') }}</button>
+                <div class="flex items-center justify-end gap-2">
+                  <button class="text-primary hover:text-primary-hover text-xs font-medium">{{ $t('approval.view') }}</button>
+                  <button v-if="isAdmin" @click.stop="confirmDelete(ap.id)"
+                    class="text-danger hover:text-red-700 text-xs font-medium">删除</button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -114,6 +147,24 @@ const typeIconMap = {
       </div>
       <div class="px-4 py-3 border-t border-gray-100 text-sm text-text-secondary">
         {{ filteredApprovals.length }} {{ $t('common.records') }}
+      </div>
+    </div>
+
+    <!-- Delete Confirmation Dialog -->
+    <div v-if="showDeleteDialog"
+      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      @click.self="showDeleteDialog = false">
+      <div class="w-full max-w-sm bg-white rounded-xl shadow-2xl p-6">
+        <h3 class="text-lg font-bold text-text-primary mb-2">确认删除</h3>
+        <p class="text-sm text-text-secondary mb-6">确定要删除这条审批记录吗？此操作不可撤销。</p>
+        <div class="flex gap-3 justify-end">
+          <button @click="showDeleteDialog = false"
+            class="px-4 py-2 border border-gray-200 rounded-lg text-sm text-text-primary hover:bg-gray-50">取消</button>
+          <button @click="doDelete" :disabled="deleting"
+            class="px-4 py-2 bg-danger text-white rounded-lg text-sm font-medium hover:bg-red-600 disabled:opacity-50">
+            {{ deleting ? '删除中...' : '确认删除' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>

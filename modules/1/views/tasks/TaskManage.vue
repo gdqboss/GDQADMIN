@@ -80,7 +80,7 @@ const tabs = computed(() => {
     { key: 'my-tasks', label: t('tasks.myTasks'), icon: 'task_alt' },
     { key: 'assigned-tasks', label: t('tasks.assignedTasks'), icon: 'assignment_ind' }
   ]
-  if (userStore.canAccess('tasks_admin')) {
+  if (userStore.canAccess('task:write')) {
     baseTabs.push({ key: 'all-tasks', label: t('tasks.allTasks'), icon: 'list_alt' })
   }
   baseTabs.push({ key: 'create-task', label: t('tasks.createTask'), icon: 'add_task' })
@@ -209,7 +209,7 @@ const loadUsers = async () => {
       allUsers.value = userData // 保存所有用户用于筛选
 
       // 如果是超级管理员，显示所有用户
-      if (userStore.canAccess('tasks_admin')) {
+      if (userStore.canAccess('task:write')) {
         users.value = userData
       } else {
         // 否则只显示当前用户的下级（通过递归查找supervisor_id链条）
@@ -524,7 +524,7 @@ onMounted(async () => {
   // 默认打开"我的任务"Tab（所有人都一样）
   activeTab.value = 'my-tasks'
   await Promise.all([loadMyTasks(), loadAssignedTasks()])
-  if (userStore.canAccess('tasks_admin')) {
+  if (userStore.canAccess('task:write')) {
     await loadAllTasks()
   }
 })
@@ -770,7 +770,7 @@ onMounted(async () => {
               <span>{{ $t('tasks.assignedToLabel') }}: {{ task.assigned_to_name }}</span>
               <span>{{ $t('tasks.dueLabel') }}: {{ formatDate(task.due_date) }}</span>
               <button
-                v-if="task.assigned_by === userStore.user.id || userStore.canAccess('tasks_admin')"
+                v-if="task.assigned_by === userStore.user.id || userStore.canAccess('task:write')"
                 @click.stop="handleDeleteTask(task)"
                 class="text-red-500 hover:text-red-700 hover:underline ml-auto"
               >

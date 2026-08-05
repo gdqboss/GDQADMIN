@@ -57,15 +57,25 @@ export default defineConfig(({ mode }) => {
       base: 'auto',
       rollupOptions: {
         output: {
-          manualChunks: (id) => {
-            // 手动分包：i18n 翻译文件打包在一起
-            if (id.includes('i18n/') || id.includes('/zh.js') || id.includes('/en.js') || id.includes('/ms.js')) {
-              return 'i18n'
-            }
-            // 扫码页独立 chunk（公开路由，不依赖后台 layout，独立加载更快）
-            if (id.includes('ScanPage') || id.includes('views/scan/')) {
-              return 'scan'
-            }
+          // 2026-08-06 修复: 删掉 i18n 强制合并
+          //   之前: zh.js + en.js + ms.js 强制进 'i18n' chunk → 一个 477KB bundle 三语言混在一起
+          //   修复: 让 vite 按 dynamic import 自动拆 chunk
+          //   - zh.js 静态 import (在 i18n/index.js 顶部) → 进主 bundle
+          //   - en.js / ms.js 动态 import (await import(`./${locale}.js`)) → 独立 chunk, 用户切换时才下载
+          // 2026-08-06 江小鱼加: vendor split (解決 macau /gdqadmin 首次加載慢)
+          //   把 vue / pinia / vue-router / axios / element-plus / icons / i18n 拆到獨立 vendor chunk
+          //   → 瀏覽器並行下載 + 緩存命中, main bundle 從 1.19MB → ~300KB
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return undefined
+            if (id.includes('@element-plus/icons-vue')) return 'vendor-icons'
+            if (id.includes('element-plus')) return 'vendor-element-plus'
+            if (id.includes('vue-demi') || id.match(/\/vue\//)) return 'vendor-vue'
+            if (id.includes('pinia')) return 'vendor-pinia'
+            if (id.includes('vue-router')) return 'vendor-router'
+            if (id.includes('axios')) return 'vendor-axios'
+            if (id.includes('vue-i18n') || id.includes('/i18n/')) return 'vendor-i18n'
+            if (id.includes('@vueuse') || id.includes('echarts') || id.includes('xlsx')) return 'vendor-misc'
+            return 'vendor-misc'
           }
         }
       }

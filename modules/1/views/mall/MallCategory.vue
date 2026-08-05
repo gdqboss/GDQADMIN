@@ -1,47 +1,59 @@
 <template>
-  <div class="pb-16">
+  <div class="pb-4">
+    <!-- 分类标题 -->
     <div class="flex items-center gap-2 mb-4">
-      <button @click="$router.back()" class="p-1">
-        <span class="material-symbols-outlined">arrow_back</span>
+      <button @click="$router.back()" class="flex-shrink-0">
+        <span class="material-symbols-outlined text-2xl text-gray-600">arrow_back</span>
       </button>
-      <h1 class="font-bold text-base">{{ categoryName || '全部分类' }}</h1>
+      <h1 class="font-bold text-base text-gray-800">{{ categoryName || '全部分类' }}</h1>
     </div>
 
-    <!-- 分类子菜单 -->
+    <!-- 分类标签 -->
     <div v-if="children.length" class="flex gap-2 overflow-x-auto pb-3 mb-3 scrollbar-hide">
       <button v-for="c in children" :key="c.id"
-        class="flex-shrink-0 px-3 py-1.5 rounded-full text-sm border"
-        :class="selectedId === c.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200'"
+        class="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+        :class="selectedId === c.id ? 'bg-primary text-white shadow-sm shadow-primary/20' : 'bg-white text-gray-500 border border-gray-200 hover:border-primary/30'"
         @click="selectCategory(c.id, c.name)">
         {{ c.name }}
       </button>
       <button v-if="parentId"
-        class="flex-shrink-0 px-3 py-1.5 rounded-full text-sm border border-gray-200 bg-white text-gray-500"
+        class="flex-shrink-0 px-3 py-1.5 rounded-full text-xs bg-white text-gray-400 border border-gray-200"
         @click="selectCategory(parentId, parentName)">
         返回上级
       </button>
     </div>
 
-    <!-- 商品列表 -->
-    <div v-if="loading" class="text-center py-10 text-gray-400">
-      <span class="material-symbols-outlined text-4xl animate-spin">progress_activity</span>
+    <!-- 加载中 -->
+    <div v-if="loading" class="text-center py-12 text-gray-400">
+      <div class="flex justify-center gap-1">
+        <span class="w-2 h-2 bg-primary rounded-full animate-bounce" style="animation-delay:0ms"></span>
+        <span class="w-2 h-2 bg-primary rounded-full animate-bounce" style="animation-delay:150ms"></span>
+        <span class="w-2 h-2 bg-primary rounded-full animate-bounce" style="animation-delay:300ms"></span>
+      </div>
     </div>
-    <div v-else-if="!products.length" class="text-center py-10 text-gray-400">
-      <span class="material-symbols-outlined text-5xl">inventory_2</span>
-      <p class="mt-2 text-sm">该分类暂无商品</p>
+
+    <!-- 空状态 -->
+    <div v-else-if="!products.length" class="flex flex-col items-center py-16 text-gray-300">
+      <span class="material-symbols-outlined text-5xl mb-3" style="font-variation-settings: 'FILL' 1">inventory_2</span>
+      <p class="text-sm">该分类暂无商品</p>
     </div>
+
+    <!-- 商品网格 -->
     <div v-else class="grid grid-cols-2 gap-3">
       <div v-for="p in products" :key="p.id"
-        class="bg-white rounded-xl overflow-hidden shadow-sm"
+        class="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all active:scale-[0.98] cursor-pointer"
         @click="$router.push(`/mall/product/${p.id}`)">
-        <div class="aspect-square bg-gray-100">
-          <img v-if="p.image_main" :src="'/' + p.image_main" class="w-full h-full object-cover" @error="e => e.target.parentElement.innerHTML='<div class=\'flex items-center justify-center h-full text-gray-300\'><span class=\'material-symbols-outlined text-4xl\'>image</span></div>'" />
+        <div class="aspect-square bg-gray-100 overflow-hidden">
+          <img v-if="p.image_main || p.image_url"
+            :src="p.image_main ? '/' + p.image_main : p.image_url"
+            class="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+            @error="handleImgError" />
           <div v-else class="flex items-center justify-center h-full text-gray-300">
             <span class="material-symbols-outlined text-4xl">image</span>
           </div>
         </div>
         <div class="p-2.5">
-          <p class="text-sm text-gray-800 line-clamp-2 leading-tight">{{ p.name }}</p>
+          <p class="text-sm text-gray-800 font-medium line-clamp-2 leading-tight">{{ p.name }}</p>
           <p class="mt-1.5 text-sm font-bold text-red-500">¥{{ p.sale_price || '--' }}</p>
         </div>
       </div>
@@ -49,7 +61,8 @@
 
     <!-- 加载更多 -->
     <div v-if="hasMore" class="mt-4 text-center">
-      <button @click="loadMore" :disabled="loading" class="px-6 py-2 bg-white border border-gray-200 rounded-full text-sm disabled:opacity-50">
+      <button @click="loadMore" :disabled="loading"
+        class="px-6 py-2 bg-white border border-gray-200 rounded-full text-sm text-gray-500 hover:border-primary/30 hover:text-primary transition-all disabled:opacity-50 active:scale-95">
         {{ loading ? '加载中...' : '加载更多' }}
       </button>
     </div>
@@ -71,8 +84,12 @@ const page = ref(1)
 const hasMore = ref(false)
 const loading = ref(false)
 
+function handleImgError(e) {
+  e.target.style.display = 'none'
+}
+
 async function loadCategory(id) {
-  const res = await fetch('/api/store-mall/categories')
+  const res = await fetch('/api/mall/categories')
   const cats = await res.json()
   const flat = flattenCats(cats)
   const cat = flat.find(c => c.id === Number(id))
@@ -97,7 +114,7 @@ function flattenCats(cats, result = []) {
 async function loadProducts(append = false) {
   loading.value = true
   try {
-    const url = `/api/store-mall/products?category_id=${selectedId.value || 0}&page=${page.value}&size=10`
+    const url = `/api/mall/products?category_id=${selectedId.value || 0}&page=${page.value}&size=10`
     const res = await fetch(url)
     const data = await res.json()
     if (append) products.value.push(...data.list)

@@ -96,7 +96,7 @@
           <el-input-number v-model="form.stock" :min="0" />
         </el-form-item>
         <el-form-item label="安全库存">
-          <el-input-number v-model="form.safe_stock" :min="0" />
+          <el-input-number v-model="form.alert_stock" :min="0" />
         </el-form-item>
         <el-form-item label="分类">
           <el-select v-model="form.category_id" placeholder="选择分类" clearable class="!w-full">
@@ -150,7 +150,7 @@ const total = ref(0)
 
 const defaultForm = {
   name: '', description: '', image_main: '', score_price: 100, stock: 10,
-  safe_stock: 2, category_id: null, is_recommend: 0, sort_order: 0, status: 'active'
+  alert_stock: 2, category_id: null, is_recommend: 0, sort_order: 0, status: 'active'
 }
 const form = ref({ ...defaultForm })
 
@@ -199,7 +199,7 @@ async function toggleRecommend(row) {
 function editProduct(row) {
   editingId.value = row.id
   form.value = { name: row.name, description: row.description, image_main: row.image_main,
-    score_price: row.score_price, stock: row.stock, safe_stock: row.safe_stock,
+    score_price: row.score_price, stock: row.stock, alert_stock: row.alert_stock,
     category_id: row.category_id, is_recommend: row.is_recommend,
     sort_order: row.sort_order, status: row.status }
   showCreateDialog.value = true

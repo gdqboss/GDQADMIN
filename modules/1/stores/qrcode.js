@@ -50,12 +50,29 @@ export const useQrcodeStore = defineStore('qrcode', () => {
     return res
   }
 
-  async function bindProduct(qrcodeId, productId, skuId = null) {
+  async function bindProduct(qrcodeId, productId, skuId = null, options = {}) {
+    // options: { mode: 'single'|'batch', batch_quantity: number, warehouse_id: number }
     const payload = { product_id: productId }
     if (skuId) payload.sku_id = skuId
+    if (options.mode) payload.mode = options.mode
+    if (options.batch_quantity) payload.batch_quantity = options.batch_quantity
+    if (options.warehouse_id) payload.warehouse_id = options.warehouse_id
     const res = await api.put(`/qrcodes/${qrcodeId}/bind`, payload)
     if (res.code === 0) await fetchQrcodes()
-    return res.code === 0
+    return res
+  }
+
+  async function sell(qrcodeId, options = {}) {
+    // options: { quantity, buyer, sales_person }
+    const res = await api.post(`/qrcodes/${qrcodeId}/sell`, options)
+    if (res.code === 0) await fetchQrcodes()
+    return res
+  }
+
+  async function adjustBatch(qrcodeId, delta, reason = '') {
+    const res = await api.put(`/qrcodes/${qrcodeId}/adjust-batch`, { delta, reason })
+    if (res.code === 0) await fetchQrcodes()
+    return res
   }
 
   async function updateStatus(qrcodeId, newStatus, extra = {}) {
@@ -95,7 +112,7 @@ export const useQrcodeStore = defineStore('qrcode', () => {
   return {
     qrcodes, qrTotal, scanLogs, afterSaleRecords, userHierarchy, commissionRecords,
     loading, stats, totalCommission, pendingCommission, qrcodeStatusMap,
-    fetchQrcodes, generateBatch, bindProduct, updateStatus,
+    fetchQrcodes, generateBatch, bindProduct, sell, adjustBatch, updateStatus,
     fetchScanLogs, fetchAfterSale, fetchHierarchy, fetchCommissions, deleteQrcodes,
   }
 })

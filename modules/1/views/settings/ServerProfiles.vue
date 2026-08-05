@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PageHeader from '../../components/PageHeader.vue'
-import { serverProfileApi, serverEndpointApi } from '../../services/api.js'
+import { serverProfileApi } from '../../services/api.js'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -123,18 +123,8 @@ function openAdd() {
     site_logo: '',
     modules: [], site_name_zh: '', site_name_en: '', language: [], currency: '', industry: '',
     mysql_host: '', mysql_db: '', mysql_user: '', mysql_password: '', mysql_port: 3306,
-    // 2026-07-26 补强
-    http_port: null, backend_port: null,
-    web_server: 'nginx', db_engine: 'mysql', db_version: '',
-    redis_host: '', redis_port: 6379, ssh_tunnel_use: 'none',
-    deployment_mode: 'fork', last_deploy_at: '', last_sync_from: null,
-    os_version: '', cpu_cores: null, ram_total_mb: null, disk_total_gb: null,
-    user_count: 0, order_count: 0, data_isolation: 'partial', notes: '',
   }
   dialogVisible.value = true
-  // 新建模式没 profile id, endpoint 等保存后再加载
-  endpointList.value = []
-  loadEndpointTypes()
 }
 
 async function openEdit(row) {
@@ -153,6 +143,7 @@ async function openEdit(row) {
     name: row.name, ip: row.ip, ssh_port: row.ssh_port || 22,
     ssh_user: row.ssh_user || 'ubuntu', ssh_key_path: row.ssh_key_path || '/root/clawgdqshop.pem',
     description: row.description || '', env: row.env || 'production',
+    remark: row.remark || '',
     build_date: row.build_date || '', manager: row.manager || '',
     domain: row.domain || '', pem_content: row.pem_content || '',
     website: row.website || '', site_logo: row.site_logo || '',
@@ -161,26 +152,11 @@ async function openEdit(row) {
     language: langArray, currency: row.currency || '', industry: row.industry || '',
     mysql_host: row.mysql_host || '', mysql_db: row.mysql_db || '', mysql_user: row.mysql_user || '',
     mysql_password: row.mysql_password || '', mysql_port: row.mysql_port || 3306,
-    // 2026-07-26 补强
-    http_port: row.http_port, backend_port: row.backend_port,
-    web_server: row.web_server || 'nginx',
-    db_engine: row.db_engine || 'mysql', db_version: row.db_version || '',
-    redis_host: row.redis_host || '', redis_port: row.redis_port || 6379,
-    ssh_tunnel_use: row.ssh_tunnel_use || 'none',
-    deployment_mode: row.deployment_mode || 'fork',
-    last_deploy_at: row.last_deploy_at || '', last_sync_from: row.last_sync_from || null,
-    os_version: row.os_version || '', cpu_cores: row.cpu_cores || null,
-    ram_total_mb: row.ram_total_mb || null, disk_total_gb: row.disk_total_gb || null,
-    user_count: row.user_count || 0, order_count: row.order_count || 0,
-    data_isolation: row.data_isolation || 'partial',
-    notes: row.notes || '',
   }
   newModuleKey.value = ''
   bulkModuleKeys.value = []
   dialogVisible.value = true
   await loadProfileModules(row.id)
-  await loadEndpoints(row.id)
-  await loadEndpointTypes()
 }
 
 async function submitForm() {
@@ -414,181 +390,6 @@ function getIndustryLabel(ind) {
   return industryNameMap[ind] || ind || '-'
 }
 
-// ─── Health Check (2026-07-26 补强) ───────────────────────────────────────────
-const healthChecking = ref(false)
-const healthLogLoading = ref(false)
-const healthResult = ref(null)
-const healthLog = ref([])
-
-async function runHealthCheck() {
-  if (!editingId.value) {
-    ElMessage.warning('请先选中一个 profile')
-    return
-  }
-  const token = localStorage.getItem('caimeite_token') || ''
-  healthChecking.value = true
-  healthResult.value = null
-  try {
-    const res = await fetch(`/api/server-profiles/${editingId.value}/health`, {
-      headers: { 'Authorization': 'Bearer ' + token }
-    })
-    const json = await res.json()
-    if (json.code === 0) {
-      healthResult.value = json.data
-    } else {
-      ElMessage.error(json.message || '健康检查失败')
-    }
-  } catch (err) {
-    ElMessage.error('健康检查异常: ' + err.message)
-  } finally {
-    healthChecking.value = false
-  }
-}
-
-async function loadHealthLog() {
-  if (!editingId.value) return
-  const token = localStorage.getItem('caimeite_token') || ''
-  healthLogLoading.value = true
-  try {
-    const res = await fetch(`/api/server-profiles/${editingId.value}/health-log?limit=20`, {
-      headers: { 'Authorization': 'Bearer ' + token }
-    })
-    const json = await res.json()
-    if (json.code === 0) {
-      healthLog.value = json.data
-      if (json.data.length === 0) ElMessage.info('暂无历史检查记录')
-    }
-  } catch (err) {
-    ElMessage.error('加载历史失败: ' + err.message)
-  } finally {
-    healthLogLoading.value = false
-  }
-}
-
-// ─── Endpoint Management (2026-07-26 补强) ────────────────────────────────────
-const endpointList = ref([])
-const endpointLoading = ref(false)
-const endpointTypes = ref([]) // 端点类型字典
-const endpointDialogVisible = ref(false)
-const endpointEditingId = ref(null)
-const endpointForm = ref({
-  endpoint_type: 'admin_backend',
-  label: '',
-  url: '',
-  is_primary: 0,
-  is_active: 1,
-  env: 'production',
-  sort_order: 99,
-  description: ''
-})
-
-async function loadEndpointTypes() {
-  if (endpointTypes.value.length > 0) return
-  try {
-    const res = await serverProfileApi.getEndpointTypes()
-    endpointTypes.value = res || []
-  } catch (e) {
-    console.error('[loadEndpointTypes]', e.message)
-  }
-}
-
-function endpointTypeLabel(typeKey) {
-  const t = endpointTypes.value.find(x => x.type_key === typeKey)
-  return t ? t.label_zh : typeKey
-}
-
-async function loadEndpoints(profileId) {
-  if (!profileId) {
-    endpointList.value = []
-    return
-  }
-  endpointLoading.value = true
-  try {
-    const list = await serverEndpointApi.listByProfile(profileId)
-    endpointList.value = list || []
-  } catch (e) {
-    ElMessage.error('加载端点失败: ' + e.message)
-    endpointList.value = []
-  } finally {
-    endpointLoading.value = false
-  }
-}
-
-function openEndpointAdd() {
-  if (!editingId.value) {
-    ElMessage.warning('请先保存 profile')
-    return
-  }
-  endpointEditingId.value = null
-  endpointForm.value = {
-    endpoint_type: endpointTypes.value[0]?.type_key || 'admin_backend',
-    label: '', url: '',
-    is_primary: 0, is_active: 1,
-    env: 'production', sort_order: 99,
-    description: ''
-  }
-  endpointDialogVisible.value = true
-}
-
-function openEndpointEdit(row) {
-  endpointEditingId.value = row.id
-  endpointForm.value = {
-    endpoint_type: row.endpoint_type,
-    label: row.label,
-    url: row.url,
-    is_primary: row.is_primary,
-    is_active: row.is_active,
-    env: row.env,
-    sort_order: row.sort_order,
-    description: row.description || ''
-  }
-  endpointDialogVisible.value = true
-}
-
-async function submitEndpoint() {
-  if (!editingId.value) return
-  if (!endpointForm.value.label || !endpointForm.value.url) {
-    ElMessage.warning('请填写名称和 URL')
-    return
-  }
-  try {
-    if (endpointEditingId.value) {
-      await serverEndpointApi.update(editingId.value, endpointEditingId.value, endpointForm.value)
-      ElMessage.success('端点已更新')
-    } else {
-      await serverEndpointApi.create(editingId.value, endpointForm.value)
-      ElMessage.success('端点已新增')
-    }
-    endpointDialogVisible.value = false
-    await loadEndpoints(editingId.value)
-  } catch (e) {
-    ElMessage.error('保存失败: ' + e.message)
-  }
-}
-
-async function deleteEndpoint(row) {
-  if (!editingId.value) return
-  try {
-    await ElMessageBox.confirm(`确定删除端点 "${row.label}"?`, '确认', { type: 'warning' })
-    await serverEndpointApi.remove(editingId.value, row.id)
-    ElMessage.success('已删除')
-    await loadEndpoints(editingId.value)
-  } catch (e) {
-    if (e !== 'cancel') ElMessage.error('删除失败: ' + e.message)
-  }
-}
-
-async function setEndpointPrimary(row) {
-  if (!editingId.value) return
-  try {
-    await serverEndpointApi.resetPrimary(editingId.value, row.endpoint_type, row.id)
-    ElMessage.success('已设为主端点')
-    await loadEndpoints(editingId.value)
-  } catch (e) {
-    ElMessage.error('设置失败: ' + e.message)
-  }
-}
-
 // ─── Module Management ───────────────────────────────────────────────────────
 async function loadProfileModules(profileId) {
   if (!profileId) return
@@ -768,6 +569,9 @@ onMounted(() => {
             <el-form-item :label="$t('serverProfiles.formDescription')" class="col-span-2">
               <el-input v-model="form.description" type="textarea" :rows="2" />
             </el-form-item>
+            <el-form-item label="备注 (内部, 多行, 不展示给客户)" class="col-span-2">
+              <el-input v-model="form.remark" type="textarea" :rows="5" placeholder="实施计划 / 待办 / 决策记录等..." />
+            </el-form-item>
           </el-form>
         </div>
 
@@ -857,196 +661,6 @@ onMounted(() => {
           <el-form-item :label="$t('serverProfiles.formPem')">
             <el-input v-model="form.pem_content" type="textarea" :rows="3" placeholder="-----BEGIN RSA PRIVATE KEY-----" class="font-mono text-xs" />
           </el-form-item>
-        </div>
-
-        <!-- 基础设施 (2026-07-26 补强: web_server / backend_port / db / redis) -->
-        <div class="bg-gray-50 rounded-lg p-4">
-          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">基础设施</div>
-          <el-form :model="form" label-width="120px" class="grid grid-cols-2 gap-x-4">
-            <el-form-item label="Web 服务器" class="col-span-2 md:col-span-1">
-              <el-select v-model="form.web_server" class="w-full" clearable>
-                <el-option value="nginx" label="nginx" />
-                <el-option value="caddy" label="caddy (auto SSL)" />
-                <el-option value="openresty" label="openresty" />
-                <el-option value="apache" label="apache" />
-                <el-option value="none" label="none" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="HTTP 端口" class="col-span-2 md:col-span-1">
-              <el-input-number v-model="form.http_port" :min="1" :max="65535" controls-position="right" class="w-full" placeholder="80/443" />
-            </el-form-item>
-            <el-form-item label="Node 后端端口" class="col-span-2 md:col-span-1">
-              <el-input-number v-model="form.backend_port" :min="1" :max="65535" controls-position="right" class="w-full" placeholder="SGP=3200, HK=3300" />
-            </el-form-item>
-            <el-form-item label="通信通道" class="col-span-2 md:col-span-1">
-              <el-select v-model="form.ssh_tunnel_use" class="w-full" clearable>
-                <el-option value="none" label="无 (直连)" />
-                <el-option value="wireguard" label="WireGuard (HK 之前)" />
-                <el-option value="ssh_tunnel" label="SSH 隧道" />
-                <el-option value="vpn" label="VPN" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="DB 引擎" class="col-span-2 md:col-span-1">
-              <el-select v-model="form.db_engine" class="w-full" clearable>
-                <el-option value="mysql" label="MySQL" />
-                <el-option value="mariadb" label="MariaDB (HK=SGP)" />
-                <el-option value="postgres" label="PostgreSQL" />
-                <el-option value="sqlite" label="SQLite" />
-                <el-option value="none" label="none" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="DB 版本" class="col-span-2 md:col-span-1">
-              <el-input v-model="form.db_version" placeholder="10.11.14 / 8.0.36" />
-            </el-form-item>
-            <el-form-item label="Redis 地址" class="col-span-2 md:col-span-1">
-              <el-input v-model="form.redis_host" placeholder="127.0.0.1 (空=未启用)" />
-            </el-form-item>
-            <el-form-item label="Redis 端口" class="col-span-2 md:col-span-1">
-              <el-input-number v-model="form.redis_port" :min="1" :max="65535" controls-position="right" class="w-full" placeholder="6379" />
-            </el-form-item>
-          </el-form>
-        </div>
-
-        <!-- 部署状态 + 资源 (2026-07-26 补强) -->
-        <div class="bg-gray-50 rounded-lg p-4">
-          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">部署状态 / 资源</div>
-          <el-form :model="form" label-width="120px" class="grid grid-cols-2 gap-x-4">
-            <el-form-item label="部署模式" class="col-span-2 md:col-span-1">
-              <el-select v-model="form.deployment_mode" class="w-full" clearable>
-                <el-option value="source" label="source (唯一源头)" />
-                <el-option value="fork" label="fork (复制)" />
-                <el-option value="independent" label="independent (独立)" />
-                <el-option value="shared_via_tunnel" label="shared_via_tunnel (隧道共享)" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="数据隔离" class="col-span-2 md:col-span-1">
-              <el-select v-model="form.data_isolation" class="w-full" clearable>
-                <el-option value="full" label="full (零数据交集, HK)" />
-                <el-option value="partial" label="partial (部分共享)" />
-                <el-option value="none" label="none (共享 SGP)" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="OS 版本" class="col-span-2 md:col-span-1">
-              <el-input v-model="form.os_version" placeholder="Ubuntu 24.04.4 LTS" />
-            </el-form-item>
-            <el-form-item label="CPU 核心" class="col-span-2 md:col-span-1">
-              <el-input-number v-model="form.cpu_cores" :min="1" :max="128" controls-position="right" class="w-full" />
-            </el-form-item>
-            <el-form-item label="RAM (MB)" class="col-span-2 md:col-span-1">
-              <el-input-number v-model="form.ram_total_mb" :min="256" controls-position="right" class="w-full" placeholder="3600" />
-            </el-form-item>
-            <el-form-item label="Disk (GB)" class="col-span-2 md:col-span-1">
-              <el-input-number v-model="form.disk_total_gb" :min="1" controls-position="right" class="w-full" placeholder="55" />
-            </el-form-item>
-            <el-form-item label="上次部署" class="col-span-2 md:col-span-1">
-              <el-date-picker v-model="form.last_deploy_at" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" placeholder="2026-07-26 12:00:00" class="w-full" />
-            </el-form-item>
-            <el-form-item label="上次同步源" class="col-span-2 md:col-span-1">
-              <el-input-number v-model="form.last_sync_from" :min="1" controls-position="right" class="w-full" placeholder="profile_id (如 1)" />
-            </el-form-item>
-          </el-form>
-        </div>
-
-        <!-- 业务运营 / 备注 (2026-07-26 补强) -->
-        <div class="bg-gray-50 rounded-lg p-4">
-          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">业务 / 备注</div>
-          <el-form :model="form" label-width="120px" class="grid grid-cols-2 gap-x-4">
-            <el-form-item label="用户数" class="col-span-2 md:col-span-1">
-              <el-input-number v-model="form.user_count" :min="0" controls-position="right" class="w-full" />
-            </el-form-item>
-            <el-form-item label="订单数" class="col-span-2 md:col-span-1">
-              <el-input-number v-model="form.order_count" :min="0" controls-position="right" class="w-full" />
-            </el-form-item>
-            <el-form-item label="运维备注" class="col-span-2">
-              <el-input v-model="form.notes" type="textarea" :rows="4" placeholder="运维备注: 部署历史/特殊配置/坑/未解事项" />
-            </el-form-item>
-          </el-form>
-        </div>
-
-        <!-- 健康检查 (2026-07-26 补强:实时探针) -->
-        <div class="bg-gray-50 rounded-lg p-4">
-          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center justify-between">
-            <span>健康检查 (实时探针)</span>
-            <div class="flex gap-2">
-              <button @click="runHealthCheck" :disabled="healthChecking" class="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
-                {{ healthChecking ? '检查中...' : '立即检查' }}
-              </button>
-              <button @click="loadHealthLog" :disabled="healthLogLoading" class="px-3 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50">
-                {{ healthLogLoading ? '加载...' : '查看历史' }}
-              </button>
-            </div>
-          </div>
-          <div v-if="healthResult" class="space-y-2">
-            <div v-for="check in healthResult.checks" :key="check.check_type"
-              :class="['flex items-center justify-between p-2 rounded border text-sm',
-                       check.status === 'ok' ? 'bg-green-50 border-green-200' :
-                       check.status === 'warn' ? 'bg-yellow-50 border-yellow-200' :
-                       check.status === 'skip' ? 'bg-gray-50 border-gray-200' :
-                       'bg-red-50 border-red-200']">
-              <div class="flex items-center gap-2">
-                <span :class="['inline-block w-2 h-2 rounded-full',
-                              check.status === 'ok' ? 'bg-green-500' :
-                              check.status === 'warn' ? 'bg-yellow-500' :
-                              check.status === 'skip' ? 'bg-gray-400' :
-                              'bg-red-500']"></span>
-                <span class="font-mono text-xs uppercase">{{ check.check_type }}</span>
-                <span class="text-gray-600">{{ check.message }}</span>
-              </div>
-              <span v-if="check.latency_ms > 0" class="text-xs text-gray-500 font-mono">{{ check.latency_ms }}ms</span>
-            </div>
-            <div class="text-xs text-gray-400">检查时间: {{ healthResult.checked_at }}</div>
-          </div>
-          <div v-else-if="healthLog.length > 0" class="space-y-1 max-h-48 overflow-y-auto">
-            <div v-for="log in healthLog" :key="log.id" class="flex items-center justify-between text-xs py-1 px-2 hover:bg-gray-50">
-              <div class="flex items-center gap-2">
-                <span :class="['inline-block w-1.5 h-1.5 rounded-full',
-                              log.status === 'ok' ? 'bg-green-500' :
-                              log.status === 'warn' ? 'bg-yellow-500' :
-                              log.status === 'skip' ? 'bg-gray-400' :
-                              'bg-red-500']"></span>
-                <span class="font-mono">{{ log.check_type }}</span>
-                <span class="text-gray-500">{{ log.message?.slice(0, 60) }}</span>
-              </div>
-              <span class="text-gray-400 font-mono">{{ log.checked_at }}</span>
-            </div>
-          </div>
-          <div v-else class="text-xs text-gray-400 py-2">未检查, 点击"立即检查"开始</div>
-        </div>
-
-        <!-- 端点管理 (2026-07-26 补强: server_endpoints 子表 CRUD UI) -->
-        <div class="bg-gray-50 rounded-lg p-4">
-          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center justify-between">
-            <span>应用入口 (端点 URL)</span>
-            <button @click="openEndpointAdd" class="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">新增端点</button>
-          </div>
-          <el-table :data="endpointList" v-loading="endpointLoading" stripe size="small" class="w-full">
-            <el-table-column prop="endpoint_type" label="类型" width="120">
-              <template #default="{ row }">
-                <span class="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded">{{ endpointTypeLabel(row.endpoint_type) }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="label" label="名称" min-width="120" />
-            <el-table-column prop="url" label="URL" min-width="180">
-              <template #default="{ row }">
-                <a :href="row.url" target="_blank" class="text-blue-600 hover:underline text-xs font-mono truncate block max-w-xs">{{ row.url }}</a>
-              </template>
-            </el-table-column>
-            <el-table-column label="主" width="50">
-              <template #default="{ row }">
-                <span v-if="row.is_primary" class="text-green-600 text-xs">✓</span>
-                <button v-else @click="setEndpointPrimary(row)" class="text-xs text-gray-400 hover:text-blue-600">设主</button>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="100">
-              <template #default="{ row }">
-                <button @click="openEndpointEdit(row)" class="text-xs text-blue-600 hover:underline mr-2">编辑</button>
-                <button @click="deleteEndpoint(row)" class="text-xs text-red-600 hover:underline">删除</button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <div v-if="endpointList.length === 0 && !endpointLoading" class="text-xs text-gray-400 py-2 text-center">
-            暂无端点,点击"新增端点"添加 URL
-          </div>
         </div>
 
         <!-- 模块管理（独立Tab） -->
@@ -1233,46 +847,6 @@ onMounted(() => {
       <template #footer>
         <button @click="dialogVisible = false" class="px-4 py-2 text-gray-600 hover:text-gray-800 mr-2">{{ $t('common.cancel') }}</button>
         <button @click="submitForm" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">{{ $t('common.save') }}</button>
-      </template>
-    </el-dialog>
-
-    <!-- 端点编辑子弹窗 (2026-07-26 补强) -->
-    <el-dialog v-model="endpointDialogVisible" :title="endpointEditingId ? '编辑端点' : '新增端点'" width="500px" :close-on-click-modal="false">
-      <el-form :model="endpointForm" label-width="100px">
-        <el-form-item label="类型" required>
-          <el-select v-model="endpointForm.endpoint_type" class="w-full">
-            <el-option v-for="t in endpointTypes" :key="t.type_key" :label="t.label_zh" :value="t.type_key" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="名称" required>
-          <el-input v-model="endpointForm.label" placeholder="HK 主站后台 /admin" />
-        </el-form-item>
-        <el-form-item label="URL" required>
-          <el-input v-model="endpointForm.url" placeholder="https://hatch.gdqshop.cn/admin" />
-        </el-form-item>
-        <el-form-item label="是否主">
-          <el-switch v-model="endpointForm.is_primary" :active-value="1" :inactive-value="0" />
-        </el-form-item>
-        <el-form-item label="启用">
-          <el-switch v-model="endpointForm.is_active" :active-value="1" :inactive-value="0" />
-        </el-form-item>
-        <el-form-item label="环境">
-          <el-select v-model="endpointForm.env" class="w-full">
-            <el-option value="production" label="production" />
-            <el-option value="staging" label="staging" />
-            <el-option value="development" label="development" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="排序">
-          <el-input-number v-model="endpointForm.sort_order" :min="0" controls-position="right" class="w-full" />
-        </el-form-item>
-        <el-form-item label="说明">
-          <el-input v-model="endpointForm.description" type="textarea" :rows="2" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <button @click="endpointDialogVisible = false" class="px-4 py-2 border rounded-lg mr-2">取消</button>
-        <button @click="submitEndpoint" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">保存</button>
       </template>
     </el-dialog>
 
