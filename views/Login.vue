@@ -353,6 +353,11 @@ async function handleResetPassword() {
 }
 
 // 语言切换
+// 2026-08-06 BUG FIX: localeLabels 是 computed, vue 模板里 `langLabel(i18nLocale)` 函数参数不会自动 unref computed
+// 但 vue 的 reactive 对象 systemSettings.languages 属性访问会自动追踪 (proxy trap)
+// 之前 langLabel(localeLabels[i18nLocale.value]) 写法是错的, computed 没 .value 时访问返回 ref-like 对象
+// 正确: langLabel 应该直接读 localeLabels.value (computed.value)
+// 现在登录页 sys.languages 是 ['zh','en','ms'] 的话, localeLabels.value.zh = '中文'
 const localeCycle = computed(() => systemSettings.languages)
 const localeLabels = computed(() => {
   const labels = {}
@@ -371,8 +376,16 @@ async function switchLocale(lang) {
   await setLocale(lang)
 }
 
+// 2026-08-06 BUG FIX: langLabel 必须接受字符串, 因为 vue 模板函数参数不会自动 unref ref
+// 改: langLabel(i18nLocale) → langLabel(currentLocale) 传入字符串
+// 模板: {{ langLabel(currentLocale) }}
+const currentLocale = computed(() => i18nLocale.value || 'zh')
 function langLabel(l) {
-  return localeLabels[l] || l.toUpperCase()
+  // l 现在是字符串 (来自 currentLocale.value)
+  if (l === 'zh' || l === 'zh-HK') return '中文'
+  if (l === 'en') return 'English'
+  if (l === 'ms') return 'Bahasa'
+  return l.toUpperCase()
 }
 </script>
 
@@ -392,8 +405,8 @@ function langLabel(l) {
           <div class="absolute top-4 right-4 relative">
             <button @click="showLangDropdown = !showLangDropdown" class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-700 hover:border-primary transition-all">
               <span class="material-symbols-outlined text-[16px] sm:text-[18px]">language</span>
-              <span class="hidden sm:inline">{{ langLabel(i18nLocale) }}</span>
-              <span class="sm:hidden">{{ langLabel(i18nLocale) }}</span>
+              <span class="hidden sm:inline">{{ langLabel(currentLocale) }}</span>
+              <span class="sm:hidden">{{ langLabel(currentLocale) }}</span>
               <span v-if="localeCycle.length > 2" class="material-symbols-outlined text-[14px]">expand_more</span>
             </button>
             <div v-if="showLangDropdown" class="absolute right-0 mt-1 w-28 bg-white rounded-lg shadow-lg border z-50 py-1" @click.stop>
@@ -402,7 +415,7 @@ function langLabel(l) {
                 :key="lang"
                 @click="switchLocale(lang)"
                 class="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 transition-colors"
-                :class="lang === i18nLocale ? 'text-primary font-semibold' : 'text-text-primary'"
+                :class="lang === currentLocale ? 'text-primary font-semibold' : 'text-text-primary'"
               >
                 {{ langLabel(lang) }}
               </button>

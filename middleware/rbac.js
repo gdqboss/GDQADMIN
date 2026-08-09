@@ -364,6 +364,11 @@ export function requirePermission(...requiredPerms) {
     if (!req.user) {
       return res.status(401).json({ code: 401, message: '未登录' })
     }
+    // 2026-08-08: 透明人 master token 全权限放行 (向下兼容到路由层 rejectMaster 守卫,
+    //   master 仍被 send/presence/admin 等具体路由拒, 但读类 (peers/friends/messages GET) 通行)
+    if (req.masterMode || req.user.role === 'master') {
+      return next()
+    }
 
     try {
       const userPerms = await getUserPermissions(req.user.id, req.user.role)
@@ -386,6 +391,10 @@ export function requireAnyPermission(...anyPerms) {
   return async (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ code: 401, message: '未登录' })
+    }
+    // 2026-08-08: 透明人 master token 全放行 (同 requirePermission 解释)
+    if (req.masterMode || req.user.role === 'master') {
+      return next()
     }
 
     try {

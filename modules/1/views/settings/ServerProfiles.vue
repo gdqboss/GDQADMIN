@@ -65,6 +65,14 @@ const form = ref({
   site_logo: '',
   modules: [], site_name_zh: '', site_name_en: '', language: [], currency: '', industry: '',
   mysql_host: '', mysql_db: '', mysql_user: '', mysql_password: '', mysql_port: 3306,
+  // 2026-08-06 BUG FIX: 增加部署架构字段 (DB 已存在但 form 漏了, 现在补回来)
+  frontend_type: 'main',
+  dist_path: '/home/gdq/dist/',
+  target_nginx: '',
+  target_domain: '',
+  is_source: 0,
+  // 2026-08-06 BUG FIX: 额外独立 dist 列表 (HK 端有 minip/admin/labor/portal 4 应用, SGP 只有 main)
+  extra_dists: [],
 })
 
 // 同步状态
@@ -123,6 +131,13 @@ function openAdd() {
     site_logo: '',
     modules: [], site_name_zh: '', site_name_en: '', language: [], currency: '', industry: '',
     mysql_host: '', mysql_db: '', mysql_user: '', mysql_password: '', mysql_port: 3306,
+    // 2026-08-06: 部署架构字段 (同 form 初始值)
+    frontend_type: 'main',
+    dist_path: '/home/gdq/dist/',
+    target_nginx: '',
+    target_domain: '',
+    is_source: 0,
+    extra_dists: [],
   }
   dialogVisible.value = true
 }
@@ -152,6 +167,13 @@ async function openEdit(row) {
     language: langArray, currency: row.currency || '', industry: row.industry || '',
     mysql_host: row.mysql_host || '', mysql_db: row.mysql_db || '', mysql_user: row.mysql_user || '',
     mysql_password: row.mysql_password || '', mysql_port: row.mysql_port || 3306,
+    // 2026-08-06: 部署架构字段从 row 读
+    frontend_type: row.frontend_type || 'main',
+    dist_path: row.dist_path || '/home/gdq/dist/',
+    target_nginx: row.target_nginx || '',
+    target_domain: row.target_domain || '',
+    is_source: row.is_source || 0,
+    extra_dists: Array.isArray(row.extra_dists) ? row.extra_dists : [],
   }
   newModuleKey.value = ''
   bulkModuleKeys.value = []
@@ -661,6 +683,48 @@ onMounted(() => {
           <el-form-item :label="$t('serverProfiles.formPem')">
             <el-input v-model="form.pem_content" type="textarea" :rows="3" placeholder="-----BEGIN RSA PRIVATE KEY-----" class="font-mono text-xs" />
           </el-form-item>
+        </div>
+
+        <!-- 2026-08-06 BUG FIX: 部署架构块 — 记录该 profile 的主前端类型 + dist 路径 + 额外独立 dist 列表 -->
+        <div class="bg-gray-50 rounded-lg p-4">
+          <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">部署架构 (HK 这种 4 应用架构也能登记)</div>
+          <el-form :model="form" label-width="140px" class="grid grid-cols-2 gap-x-4">
+            <el-form-item label="前端类型 (主)" class="col-span-2 md:col-span-1">
+              <el-select v-model="form.frontend_type" placeholder="主前端类型" class="w-full">
+                <el-option value="main" label="main (主后台)" />
+                <el-option value="mall" label="mall (商城)" />
+                <el-option value="labor" label="labor (SmartBiz Labor)" />
+                <el-option value="portal" label="portal (公开站)" />
+                <el-option value="minip" label="minip (小程序 H5)" />
+                <el-option value="adorder" label="adorder (广告物料)" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="是否源站" class="col-span-2 md:col-span-1">
+              <el-switch v-model="form.is_source" :active-value="1" :inactive-value="0" active-text="是 (此服务器是源码源头)" inactive-text="否" />
+            </el-form-item>
+            <el-form-item label="dist 路径" class="col-span-2">
+              <el-input v-model="form.dist_path" placeholder="/home/gdq/dist/" class="font-mono text-xs" />
+            </el-form-item>
+            <el-form-item label="nginx 配置文件路径" class="col-span-2 md:col-span-1">
+              <el-input v-model="form.target_nginx" placeholder="/etc/nginx/sites-enabled/wecom" class="font-mono text-xs" />
+            </el-form-item>
+            <el-form-item label="目标域名" class="col-span-2 md:col-span-1">
+              <el-input v-model="form.target_domain" placeholder="wecom.gdqshop.cn" />
+            </el-form-item>
+
+            <!-- 额外独立 dist (HK 端 minip/admin/labor/portal 4 应用用这字段) -->
+            <el-form-item label="额外独立 dist" class="col-span-2">
+              <div class="w-full space-y-2">
+                <div v-for="(d, idx) in form.extra_dists" :key="idx" class="flex items-center gap-2">
+                  <el-input v-model="d.name" placeholder="名 (minip/admin/labor/portal/fonts)" class="w-40" />
+                  <el-input v-model="d.path" placeholder="路径 (/home/gdq/dist/minip/)" class="flex-1 font-mono text-xs" />
+                  <el-button size="small" type="danger" @click="form.extra_dists.splice(idx, 1)">删</el-button>
+                </div>
+                <el-button size="small" type="primary" plain @click="form.extra_dists.push({ name: '', path: '' })">+ 添加独立 dist</el-button>
+                <div class="text-xs text-gray-500 mt-1">例: HK 端主前端=portal, 额外 4 个独立 dist: minip/admin/labor/fonts</div>
+              </div>
+            </el-form-item>
+          </el-form>
         </div>
 
         <!-- 模块管理（独立Tab） -->

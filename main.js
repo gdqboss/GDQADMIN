@@ -5,6 +5,12 @@ import router from './router'
 import i18n from './i18n'
 import { loadSystemSettings } from './stores/system.js'
 import 'material-symbols/outlined.css'
+// 2026-08-06 BUG FIX: Material Symbols 默认 font-display: block (字体加载完前图标区域空白, 然后突然显示)
+// 手机 4G 用户加载 3.8MB woff2 太慢, 在加载完前看到空白方框 (体验差)
+// 改成 font-display: swap - 加载前显示 fallback (虽然空白, 但不会"突然跳出来")
+// 注意: fallback 文字 (menu/language/refresh) 不会出现, 因为 icon 字符 (U+EE0A 等) 不是 ASCII
+// swap 让 font 加载期间直接保持空白方框而不是延迟渲染
+import './styles/material-symbols-font-display.css'
 
 // ElementPlus 按需引入（仅项目实际用到的 51 个组件 + 4 个核心 css）
 // 完整列表见 /root/src/i18n/../EP_USAGE.md
@@ -129,9 +135,15 @@ app.config.globalProperties.$prompt = ElMessageBox.prompt
 // ElementPlus 指令
 app.directive('loading', ElLoading.directive)
 
-// 加载系统设置（站点名称等全局配置）
-const savedLocale = localStorage.getItem('caimeite_locale') || 'zh'
-loadSystemSettings(savedLocale)
+// 加载系统设置（站点名称 + 默认语言等全局配置）
+// 2026-08-06 重大改: 启动时永远用 'zh' 启动, 等公共接口下发 data.locale 后再 setLocale
+// 不再用 navigator.language 启发式, 原因:
+//   1. navigator.language 是浏览器语言不一定匹配服务器用户群体
+//      (例如 SGP 浏览器是 en, 但 SGP profile 默认 zh, 强行切成 en 会乱)
+//   2. 启发式会让公共接口 ?locale=en 进来, 后端 data.locale=en, system.js 误判不切换
+//   3. 真正的"按 profile 默认"应该由 server_profiles.languages[0] 决定
+// 流程: zh 启动 → loadSystemSettings('zh') → 公共接口 data.locale = profile.languages[0] → setLocale(data.locale)
+loadSystemSettings('zh')
 
 // 全局 Vue 错误处理：静默处理，不弹 alert
 app.config.errorHandler = (err, instance, info) => {

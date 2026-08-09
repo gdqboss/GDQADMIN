@@ -5,10 +5,14 @@
     <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SmartBiz</title>
-    <!-- Material Symbols Outlined from Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet">
+    <!-- 2026-08-06 删除 Google Fonts CDN 引用 (国内 GFW 屏蔽, 加载超时阻塞主样式)
+         Material Symbols Outlined 字体由 npm 包 material-symbols/outlined.css 提供
+         vite build 时 woff2 已复制到 /assets/, 本地同源访问, 不再被 GFW 屏蔽 -->
+    <!-- Material Symbols Outlined: 删除 Google Fonts 引用, 改由 main.js → material-symbols/outlined.css 注入 -->
+    <!-- 2026-08-06 BUG FIX: preload 本地 woff2, 避免 FOIT (字体加载前空白 3-5 秒, 然后突然显示)
+         手机 4G 用户 woff2 3.8MB 加载慢, 加 preload 后浏览器提前开始下载
+         href 占位 MATERIALSYMBOLSWOFF2 由 vite-plugins/material-symbols-preload.js 在 html transform 时注入
+         然后 build-for-profile.sh sed 替换为真实 hash 文件名 -->
   </head>
   <body>
     <div id="app"></div>

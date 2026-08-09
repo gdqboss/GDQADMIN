@@ -204,6 +204,18 @@ const routes = [
       { path: 'hotel/orders', name: 'HotelOrderList', component: lazyLoad(() => import('../views/hotel/HotelOrderList.vue')), meta: { title: '酒店订单', parent: '酒店管理', permission: 'hotel:read' } },
       { path: 'hotel/orders/:id', name: 'HotelOrderDetail', component: lazyLoad(() => import('../views/hotel/HotelOrderDetail.vue')), meta: { title: '订单详情', parent: '酒店管理', permission: 'hotel:read' } },
       { path: 'hotel/reviews', name: 'HotelReviews', component: lazyLoad(() => import('../views/hotel/ReviewList.vue')), meta: { title: '评价管理', parent: '酒店管理', permission: 'hotel:read' } },
+
+      // ── 寺庙管理 (2026-08-06 BUG FIX: macau/HK 有 Temple.vue, SGP 之前缺, 现从 macau 补回) ──────
+      { path: 'temple', name: 'Temple', component: lazyLoad(() => import('../views/Temple.vue')), meta: { title: '寺庙管理', permission: 'temple:read' } },
+
+      // ── 预订单 (2026-08-06 BUG FIX: macau/HK 有 preorder, SGP 之前缺, 现从 macau 补回) ────────────
+      { path: 'preorder', name: 'PreorderSummary', component: lazyLoad(() => import('../views/preorder/PreorderSummary.vue')), meta: { title: '产品预订', parent: '库存管理', permission: 'preorder:read' } },
+
+      // ── 小程序前端 (2026-08-06 BUG FIX: macau/HK 有 Minip.vue 占位, SGP 之前缺, 现从 macau 补回) ──────
+      { path: 'minip', name: 'Minip', component: lazyLoad(() => import('../views/Minip.vue')), meta: { title: '小程序前端', permission: 'minip:read' } },
+
+      // ── 微信小程序 (2026-08-06 BUG FIX: macau/HK 有 Wxapp.vue 占位, SGP 之前缺, 现从 macau 补回) ──────
+      { path: 'wxapp', name: 'Wxapp', component: lazyLoad(() => import('../views/Wxapp.vue')), meta: { title: '微信小程序', permission: 'wxapp:read' } },
     ],
   },
 ]

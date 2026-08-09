@@ -110,7 +110,9 @@ const breadcrumbs = computed(() => {
   return items
 })
 
-const languages = computed(() => systemSettings.languages || ['zh', 'en'])
+// 2026-08-06 改: 不写死 ['zh', 'en'] fallback, 完全走 systemSettings.languages
+// 公共接口未加载完时 dropdown 是空数组 (欢迎页场景下没 dropdown 是正常的)
+const languages = computed(() => systemSettings.languages || [])
 const showLangDropdown = ref(false)
 
 const langLabelMap = { zh: '中文', en: 'English', ja: '日本語', ko: '한국어', th: 'ภาษาไทย', vi: 'Tiếng Việt', id: 'Bahasa' }
@@ -252,7 +254,7 @@ onMounted(() => {
             :key="lang"
             @click="switchLang(lang)"
             class="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 transition-colors"
-            :class="lang === i18nLocale ? 'text-primary font-semibold' : 'text-text-primary'"
+            :class="lang === i18nLocale.value ? 'text-primary font-semibold' : 'text-text-primary'"
           >
             {{ langLabel(lang) }}
           </button>

@@ -5,6 +5,8 @@ import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
 import path from 'path'
 import fs from 'fs'
+import http from 'http'
+import { WebSocketServer } from 'ws'
 import { fileURLToPath } from 'url'
 import 'dotenv/config'
 import { pool } from './db/connection.js'
@@ -66,6 +68,7 @@ import reportsRoutes from './routes/reports.js'
 import bossChatRoutes from './routes/boss-chat.js'
 import aiClassRoutes from './routes/ai-class.js'
 import aiClassReactRoutes from './routes/ai-class-react.js'
+import aiClassPublicRoutes from './routes/ai-class-public.js'
 import aiKnowledgeDomainsRoutes from './routes/ai-knowledge-domains.js'
 import laborAiAgentRoutes from './routes/labor-ai-agent.js'
 import laborAiSupervisorRoutes from './routes/labor-ai-supervisor.js'
@@ -78,6 +81,7 @@ import minipAiMarketingRoutes from './routes/minip-ai-marketing.js'
 import minipAiBrainRoutes from './routes/minip-ai-brain.js'
 import laborAiRoutes from './routes/labor-ai.js'
 import templeRoutes from './routes/temple.js'
+import templeKaraokeRoutes, { attachKaraokeWS } from './routes/temple-karaoke.js'
 import {
   workerRouter as laborWorkerRouter,
   jobsiteRouter as laborJobsiteRouter,
@@ -188,6 +192,7 @@ app.use(cors({
 app.use(cookieParser())
 app.use(express.json({ limit: '1mb' }))
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
+app.use('/static-demo', express.static(path.join(__dirname, 'public')))
 
 // Health check endpoint (public, no auth required)
 app.get('/api/health', async (req, res) => {
@@ -228,6 +233,9 @@ app.use('/api/preorder', auth, preorderRoutes)
 app.use('/api/openclaw', openclawRoutes)
 app.use('/api/boss', auth, bossChatRoutes)
 app.use('/api/ai-config', auth, aiConfigRoutes)
+// AI 课堂 - 必须先挂 /public 子路径 (免登录), 再挂带 auth 的父前缀
+// 否则父前缀 auth 中间件会先匹配 /api/ai-class/public/* → 永远 401
+app.use('/api/ai-class/public', aiClassPublicRoutes)
 app.use('/api/ai-class', auth, aiClassRoutes)
 app.use('/api/ai-class', auth, aiClassReactRoutes)
 app.use('/api/labor-ai-agent', auth, laborAiAgentRoutes)
@@ -626,6 +634,9 @@ app.use('/api/sidebar', sidebarRoutes)
 // /api/temple/admin/*    管理端接口 (auth + requirePermission, admin 自动放行)
 app.use('/api/temple', templeRoutes)
 
+// 2026-08-07 佛经卡拉OK同步系统 — 公开端点 (主持 APP + N 个大屏扫码加入)
+app.use('/api/temple/karaoke', templeKaraokeRoutes)
+
 // rentalPublicRoutes 已在 inventory catch-all 之前挂载（见上面的位置）
 
 app.use(errorHandler)
@@ -638,8 +649,19 @@ checkPreviousCrash()
 installCrashCapture({ app_version: process.env.SERVER_APP_VERSION || 'dev-local' })
 
 const PORT = process.env.PORT || 3000
-const server = app.listen(PORT, () => {
+const httpServer = http.createServer(app)
+const wssKaraoke = new WebSocketServer({ noServer: true })
+httpServer.on('upgrade', (req, socket, head) => {
+  if (req.url.startsWith('/ws/temple/karaoke/')) {
+    wssKaraoke.handleUpgrade(req, socket, head, (ws) => wssKaraoke.emit('connection', ws, req))
+  } else {
+    socket.destroy()
+  }
+})
+attachKaraokeWS(wssKaraoke)
+const server = httpServer.listen(PORT, () => {
   console.log(`GDQ server running on port ${PORT}`)
+  console.log(`[KARAOKE] WebSocket 已挂载: ws://localhost:${PORT}/ws/temple/karaoke/:session_id`)
   startCronJobs()
   startFinanceReminderJobs()
 })
