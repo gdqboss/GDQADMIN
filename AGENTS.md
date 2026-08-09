@@ -126,7 +126,9 @@ profile 3 3号仓库             (43.160.238.201, mywh3.com)               — 2
 profile 4 上海智慧家园商城    (111.229.144.150, gdqshop.cn)             — 30 modules, staging
 profile 5 SmartBiz / Labor    (100.64.122.98,  wecom.gdqshop.cn/labor/) — 13 modules, dev
 profile 6 Bangkok-CMT         (43.152.237.77,  caimeite.com)            — TBD modules, prod
-profile 7 横琴港澳科技孵化器  (43.128.47.254,  hatch.gdqshop.cn)        — 26 modules, prod (HK)
+profile 6 横琴港澳科技孵化器  (43.128.47.254,  hatch.gdqshop.cn)        — 64 modules, prod (HK)
+profile 7 澳門中醫藥學會 (macau) (101.33.32.177,  aippmcm.com)        — 27 modules, prod (fork)
+profile 11 海丰大道庵 (寺庙)  (124.156.180.188, dda.gdqshop.cn)        — 85 modules, prod (temple)
 ```
 
 ### Profile 7 (HK 横琴港澳科技孵化器) — 2026-07-21 接入

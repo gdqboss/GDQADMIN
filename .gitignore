@@ -5,3 +5,29 @@ dist/
 
 # Test/diagnostic outputs
 dist-*/
+
+# Sensitive / local config (AGENTS.md #13)
+.env
+.env.local
+.env.*.local
+
+# Test / demo / output
+output.mp3
+*.log
+logs/
+.cache/
+public/*-demo.html
+public/*-demo-screenshot.png
+public/*-demo-*.png
+
+# Backup files (AGENTS.md #16)
+*.bak
+*.bak.*
+.bak*/
+dist.bak*/
+sites-enabled.bak*/
+
+# IDE
+.vscode/
+.idea/
+*.swp
