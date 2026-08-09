@@ -31,3 +31,6 @@ sites-enabled.bak*/
 .vscode/
 .idea/
 *.swp
+
+# Dependencies (8-09 加)
+node_modules/
