@@ -65,23 +65,20 @@ router.get('/', async (req, res, next) => {
       data.site_name_en = data.site_name_en || 'SmartBiz'
     }
 
-    // 设置默认语言：根据 profile.languages 数组的第一个元素作为 data.locale
-    // 这样前端 loadSystemSettings 时会把默认 locale 切到 zh-HK (HK profile)
-    console.log('[public-settings] before locale set: data.locale=', data.locale, 'languages=', data.languages, 'req.query.locale=', req.query.locale)
+    // 设置默认语言: 每个服务器一个默认 (server_profiles.languages[0])
+    // 2026-08-06 波哥新规: 以后不写死多语言数组, 每个 profile 默认只能 1 个, 其它运行时按需加载
+    // 防御: 即使 DB 里写成了多元素数组, 也只取第一个作为默认 (保证"一个默认"铁律不破)
     if (Array.isArray(data.languages) && data.languages.length > 0) {
       if (!data.locale) {
         data.locale = data.languages[0]  // 没指定就用 profile 默认
       }
-      // 验证请求的 locale 是否在该 profile 支持列表里，不在则 fallback 到第一个
-      if (req.query.locale && !data.languages.includes(req.query.locale)) {
-        data.locale = data.languages[0]
-      }
     }
-    // 最终 fallback: 没有 profile 时默认 zh
+    // 用户请求的非默认 locale, 前端 lazy load 后还能用, 这里是设默认 data.locale
+    // 按新规"其它语言运行时按需加载", 任意 locale 都应该接受
+    // 最终 fallback: 没有 profile / profile 没配语言 → zh
     if (!data.locale) {
       data.locale = 'zh'
     }
-    console.log('[public-settings] after locale set: data.locale=', data.locale)
 
     res.json({ code: 0, data, message: 'ok' })
   } catch (err) { next(err) }

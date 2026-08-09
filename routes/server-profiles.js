@@ -394,7 +394,7 @@ router.post('/', async (req, res) => {
       'website','wechat_appid','wx_pub_account','wx_pub_email','wx_pub_secret',
       // 部署路径 / 资源
       'http_port','backend_port','web_server',
-      'frontend_type','dist_path','target_nginx','target_domain','is_source',
+      'frontend_type','dist_path','target_nginx','target_domain','is_source','extra_dists',
       'pem_content','remark',
       // DB / 缓存
       'mysql_host','mysql_port','mysql_db','mysql_user','mysql_password',
@@ -440,7 +440,7 @@ router.put('/:id', async (req, res) => {
       'site_name_zh','site_name_en','site_logo','language','currency','industry',
       'website','wechat_appid','wx_pub_account','wx_pub_email','wx_pub_secret',
       'http_port','backend_port','web_server',
-      'frontend_type','dist_path','target_nginx','target_domain','is_source',
+      'frontend_type','dist_path','target_nginx','target_domain','is_source','extra_dists',
       'pem_content','remark',
       'mysql_host','mysql_port','mysql_db','mysql_user','mysql_password',
       'db_engine','db_version','redis_host','redis_port','ssh_tunnel_use',

