@@ -1,0 +1,32 @@
+/* 2026-08-06 BUG FIX: Material Symbols Outlined 默认 font-display: block
+   字体没加载完前图标区域空白 (FOIT), 加载完后突然显示 (FOUT)
+   改成 font-display: swap + size-adjust 让图标区域预留位置, 避免页面跳动
+   
+   关键: Material Symbols 的 icon 是 U+EE00~U+EE0A 等 unicode private 区字符
+   系统字体没有这些字符, 所以 fallback 时显示空白方框
+   不会显示 "menu" "language" "refresh" 这种英文单词 (因为 fallback 不是字符)
+
+   之前用户看到的 "menu" "language" "refresh" 英文单词其实是 fontface 加载延迟期间
+   element-plus 的 button 组件渲染时 i18n key 缺失 fallback 到了英文!
+   需要双管齐下: 1. font-display 改 swap 2. i18n 兜底翻译
+*/
+
+@font-face {
+  font-family: 'Material Symbols Outlined';
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: swap;
+  src: url('../node_modules/material-symbols/material-symbols-outlined.woff2') format('woff2');
+}
+
+/* 预留图标尺寸, 避免 FOIT/FOUT 跳动 */
+.material-symbols-outlined {
+  font-display: swap;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+  word-wrap: normal;
+  /* Material Symbols 默认 ligature 显示文字 (如 "menu" 显示 📋), 
+     我们需要 ligature OFF 让它只显示图标不显示文字 */
+  font-feature-settings: 'liga';
+}
