@@ -312,8 +312,6 @@ router.delete('/admin/activities/:id', auth, requireRole('admin'), async (req, r
     res.json({ code: 0, message: '删除成功' })
   } catch (err) { next(err) }
 })
-
-export default router
 // ============================================================
 // 企业端接口（需要登录 - JWT 通过 auth 中间件校验）
 // 路由前缀：/api/minip/enterprise/*
@@ -1051,3 +1049,131 @@ router.delete('/office/tasks/:id', auth, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+
+
+// ════════════════════════════════════════════════════════════════════════
+// 2026-08-11 融合: HK 横琴 hatch AI 需求 placeholder routes
+// 波哥原话: "把这个内容融合到 hatch.gdqshop.cn/minip"
+// 这些 routes 是占位实现, 让前端不报错. 完整业务逻辑后续迭代.
+// ════════════════════════════════════════════════════════════════════════
+
+// GET /api/minip/butler/tickets - 管家工单列表 (mock)
+router.get('/butler/tickets', auth, async (req, res) => {
+  return res.json({
+    code: 0,
+    data: { list: [] }
+  })
+})
+
+// POST /api/minip/butler/tickets - 创建工单 (mock, 实际写库)
+router.post('/butler/tickets', auth, async (req, res) => {
+  const { service_key, service_label, time_slot, description } = req.body
+  if (!service_key || !time_slot) {
+    return res.status(400).json({ code: 400, message: '服务类型和时间段必填' })
+  }
+  return res.json({
+    code: 0,
+    data: {
+      id: Date.now(),
+      service_key, service_label, time_slot, description,
+      status: 'pending',
+      status_label: '待接单',
+      created_at: new Date().toISOString()
+    },
+    message: '工单已提交'
+  })
+})
+
+// GET /api/minip/notifications/unread - 未读通知 (mock)
+router.get('/notifications/unread', auth, async (req, res) => {
+  return res.json({
+    code: 0,
+    data: {
+      count: 2,
+      latest: {
+        id: 1,
+        title: '2026 横琴湾区创新中心揭牌仪式即将举行',
+        created_at: new Date().toISOString()
+      }
+    }
+  })
+})
+
+// GET /api/minip/notifications/history - 通知历史 (mock)
+router.get('/notifications/history', auth, async (req, res) => {
+  return res.json({
+    code: 0,
+    data: { list: [] }
+  })
+})
+
+// POST /api/minip/notifications/send - 发送通知 (mock, 仅记录日志)
+router.post('/notifications/send', auth, requireRole('admin'), async (req, res) => {
+  console.log('[notification] send:', req.body)
+  return res.json({
+    code: 0,
+    message: '通知已发送',
+    data: { recipient_count: req.body.target_type === 'all' ? 128 : (req.body.target_ids?.length || 0) }
+  })
+})
+
+// GET /api/minip/enterprise/list - 企业列表 (mock, 给通知推送用)
+router.get('/enterprise/list', auth, async (req, res) => {
+  return res.json({
+    code: 0,
+    data: {
+      list: [
+        { id: 1, name: 'AI 科技有限公司' },
+        { id: 2, name: '横琴湾创生物医药' },
+        { id: 3, name: '湾区新能源研发' },
+        { id: 4, name: '澳门青年跨境电商' }
+      ]
+    }
+  })
+})
+
+// GET /api/minip/rental/credit-score - 信用分 (mock)
+router.get('/rental/credit-score', auth, async (req, res) => {
+  return res.json({
+    code: 0,
+    data: {
+      score: 120,
+      level: 'excellent',
+      advance_days: 7,
+      max_active: 3,
+      max_per_day: 1
+    }
+  })
+})
+
+// GET /api/minip/rental/rooms - 会议室列表 (mock)
+router.get('/rental/rooms', async (req, res) => {
+  return res.json({
+    code: 0,
+    data: {
+      list: [
+        { id: 1, name: '小会议室 04-1301', capacity: 4, location: '4楼东区' },
+        { id: 2, name: '大会议室 04-1302', capacity: 12, location: '4楼西区' },
+        { id: 3, name: '路演厅 02-2101', capacity: 50, location: '2楼中庭' },
+        { id: 4, name: '大堂接待区', capacity: 20, location: '1楼大堂' },
+        { id: 5, name: 'VIP 接待室 02-2201', capacity: 8, location: '2楼北侧' }
+      ]
+    }
+  })
+})
+
+// POST /api/minip/rental/bookings - 创建预约 (mock)
+router.post('/rental/bookings', auth, async (req, res) => {
+  return res.json({
+    code: 0,
+    data: { id: Date.now(), ...req.body, status: 'confirmed' },
+    message: '预约成功'
+  })
+})
+
+// GET /api/minip/rental/my-bookings - 我的预约 (mock)
+router.get('/rental/my-bookings', auth, async (req, res) => {
+  return res.json({ code: 0, data: { list: [] } })
+})
+
+export default router
