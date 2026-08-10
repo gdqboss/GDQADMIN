@@ -33,3 +33,13 @@ export const loginLimiter = rateLimit({
   skipSuccessfulRequests: true,
   message: { code: 429, message: '登录尝试过多，请15分钟后再试' }
 })
+
+// 2026-08-11: 上传限流 (防刷)
+export const uploadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.userId ? `upload:${req.userId}` : `upload:${req.ip}`,
+  message: { code: 429, message: '上传过于频繁，请稍后再试' }
+})

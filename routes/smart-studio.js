@@ -14,6 +14,8 @@ import { fileURLToPath } from 'url'
 import fs from 'fs'
 import { pool } from '../db/connection.js'
 import { requirePermission, PERMISSIONS as P } from '../middleware/rbac.js'
+import { uploadLimiter } from '../middleware/rateLimit.js'
+import sharp from 'sharp'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const router = Router()
@@ -37,12 +39,105 @@ const storage = multer.diskStorage({
 })
 const upload = multer({
   storage,
-  limits: { fileSize: 8 * 1024 * 1024 },
+  limits: { fileSize: 12 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (/^image\//.test(file.mimetype)) cb(null, true)
     else cb(new Error('仅支持图片'))
   }
 })
+// 2026-08-11: 多文件上传 (一次最多 9 张, 总 36MB)
+const uploadMulti = multer({
+  storage,
+  limits: { fileSize: 12 * 1024 * 1024, files: 9 },
+  fileFilter: (_req, file, cb) => {
+    if (/^image\//.test(file.mimetype)) cb(null, true)
+    else cb(new Error('仅支持图片'))
+  }
+})
+
+// ---------- 2026-08-11 图片优化 helper ----------
+// 1. magic bytes 验 (防 MIME 欺骗)
+const MAGIC_BYTES = {
+  jpg:  [Buffer.from([0xff, 0xd8, 0xff])],
+  png:  [Buffer.from([0x89, 0x50, 0x4e, 0x47])],
+  gif:  [Buffer.from([0x47, 0x49, 0x46])],
+  webp: [Buffer.from('RIFF'), Buffer.from('WEBP')],
+}
+async function verifyImageMagic(path) {
+  try {
+    const fd = await fs.promises.open(path, 'r')
+    const head = Buffer.alloc(16)
+    await fd.read(head, 0, 16, 0)
+    await fd.close()
+    for (const sig of MAGIC_BYTES.jpg) if (head.slice(0, 3).equals(sig)) return 'jpg'
+    for (const sig of MAGIC_BYTES.png) if (head.slice(0, 4).equals(sig)) return 'png'
+    for (const sig of MAGIC_BYTES.gif) if (head.slice(0, 3).equals(sig)) return 'gif'
+    // webp: 0..4 RIFF, 8..12 WEBP
+    if (head.slice(0, 4).equals(MAGIC_BYTES.webp[0]) && head.slice(8, 12).equals(MAGIC_BYTES.webp[1])) return 'webp'
+    return null
+  } catch (e) { return null }
+}
+
+// 2. sharp 处理: 压缩 (max 1920px) + thumbnail (300px) + EXIF strip + 读尺寸
+// 返回: { imageUrl, thumbnailUrl, width, height, mime, size }
+// 如果优化失败, 走 fallback 返回原图 (不破坏)
+async function processImage(originalPath, originalFilename) {
+  try {
+    const ext = path.extname(originalFilename).slice(1).toLowerCase() || 'jpg'
+    const realType = await verifyImageMagic(originalPath) || ext
+    const baseName = originalFilename.replace(/\.[^.]+$/, '')
+    const subdir = new Date().toISOString().slice(0, 7).replace('-', '/') // 2026/08
+    const dir = path.join(UPLOAD_DIR, subdir)
+    await fs.promises.mkdir(dir, { recursive: true })
+    
+    // 主图: 压缩到 max 1920px, 转 webp (减 30%), EXIF strip
+    const mainName = baseName + '.webp'
+    const mainPath = path.join(dir, mainName)
+    const sharp1 = sharp(originalPath, { failOnError: false }).rotate()
+    const meta = await sharp1.metadata()
+    const mainBuf = await sharp1
+      .resize({ width: 1920, height: 1920, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 82, effort: 4 })
+      .toBuffer()
+    await fs.promises.writeFile(mainPath, mainBuf)
+    
+    // 缩略图: 300px (列表展示)
+    const thumbName = baseName + '_thumb.webp'
+    const thumbPath = path.join(dir, thumbName)
+    const thumbBuf = await sharp(originalPath, { failOnError: false })
+      .rotate()
+      .resize({ width: 300, height: 300, fit: 'cover' })
+      .webp({ quality: 75, effort: 4 })
+      .toBuffer()
+    await fs.promises.writeFile(thumbPath, thumbBuf)
+    
+    // 删原文件 (节省空间)
+    try { await fs.promises.unlink(originalPath) } catch (e) {}
+    
+    return {
+      imageUrl: `${PUBLIC_BASE}/${subdir}/${mainName}`,
+      thumbnailUrl: `${PUBLIC_BASE}/${subdir}/${thumbName}`,
+      width: meta.width,
+      height: meta.height,
+      mime: 'image/webp',
+      size: mainBuf.length,
+      optimized: true,
+      originalSize: (await fs.promises.stat(originalPath).catch(() => ({ size: 0 }))).size
+    }
+  } catch (e) {
+    console.error('[image-optimize] failed:', e.message)
+    // fallback: 返回原图
+    return {
+      imageUrl: `${PUBLIC_BASE}/${originalFilename}`,
+      thumbnailUrl: `${PUBLIC_BASE}/${originalFilename}`,
+      width: 0,
+      height: 0,
+      mime: 'image/jpeg',
+      size: 0,
+      optimized: false
+    }
+  }
+}
 
 // ---------- 透明人模式守卫 helper (2026-08-08) ----------
 //   master token 用户: 全栈只读, 不能发消息 / 改密码 / 标记 presence / 改 admin
@@ -966,7 +1061,7 @@ router.post('/peers/:peerType/:peerId/send-text', auth, requirePermission(P.SMAR
 })
 
 // POST /peers/:peerType/:peerId/send-image
-router.post('/peers/:peerType/:peerId/send-image', auth, requirePermission(P.SMART_STUDIO_WRITE), upload.single('image'), async (req, res) => {
+router.post('/peers/:peerType/:peerId/send-image', auth, uploadLimiter, requirePermission(P.SMART_STUDIO_WRITE), upload.single('image'), async (req, res) => {
   if (req.masterMode) return rejectMaster(res)
   try {
     const me = req.userId
@@ -994,12 +1089,14 @@ router.post('/peers/:peerType/:peerId/send-image', auth, requirePermission(P.SMA
       }
     }
     if (!req.file) return res.json({ ok: false, error: '未收到图片' })
-    const imageUrl = PUBLIC_BASE + '/' + req.file.filename
+    // 2026-08-11 sharp 优化: 压缩 + thumbnail + EXIF strip + WebP + 分目录
+    const originalPath = req.file.path
+    const processed = await processImage(originalPath, req.file.filename)
     const text = (req.body.content || '').toString().trim()
     const [ins] = await pool.query(
-      `INSERT INTO smart_studio_messages (peer_id, peer_type, sender_id, message_type, content, image_url)
-       VALUES (?, ?, ?, 'image', ?, ?)`,
-      [peerId, peerType, me, text, imageUrl]
+      `INSERT INTO smart_studio_messages (peer_id, peer_type, sender_id, message_type, content, image_url, thumbnail_url)
+       VALUES (?, ?, ?, 'image', ?, ?, ?)`,
+      [peerId, peerType, me, text, processed.imageUrl, processed.thumbnailUrl]
     )
     if (peerType === 'user') {
       await pool.query(
@@ -1017,7 +1114,10 @@ router.post('/peers/:peerType/:peerId/send-image', auth, requirePermission(P.SMA
     }
     res.json({ ok: true, message: {
       id: ins.insertId, peer_id: peerId, peer_type: peerType, sender_id: me,
-      message_type: 'image', content: text, image_url: imageUrl,
+      message_type: 'image', content: text, image_url: processed.imageUrl,
+      thumbnail_url: processed.thumbnailUrl,
+      width: processed.width, height: processed.height,
+      mime: processed.mime, size: processed.size, optimized: processed.optimized,
       created_at: new Date().toISOString()
     }})
   } catch (e) {
@@ -1538,7 +1638,7 @@ router.post('/rooms/:roomId/send-text', auth, requirePermission(P.SMART_STUDIO_W
 })
 
 // 发送图片消息（multipart/form-data，multer 处理）
-router.post('/rooms/:roomId/send-image', auth, requirePermission(P.SMART_STUDIO_WRITE), upload.single('image'), async (req, res) => {
+router.post('/rooms/:roomId/send-image', auth, uploadLimiter, requirePermission(P.SMART_STUDIO_WRITE), upload.single('image'), async (req, res) => {
   if (req.masterMode) return rejectMaster(res)
   console.log('[smart-studio/send-image] roomId=' + req.params.roomId + ' userId=' + req.userId + ' hasFile=' + !!req.file)
   try {
@@ -1553,16 +1653,20 @@ router.post('/rooms/:roomId/send-image', auth, requirePermission(P.SMART_STUDIO_
       return res.json({ ok: false, error: me === 1 ? '旁观模式不能发消息' : '无权访问' })
     }
     if (!req.file) return res.json({ ok: false, error: '未收到图片' })
-    const imageUrl = PUBLIC_BASE + '/' + req.file.filename
+    // 2026-08-11 sharp 优化
+    const processed = await processImage(req.file.path, req.file.filename)
     const text = (req.body.content || '').toString().trim()
     const [r] = await pool.query(
-      `INSERT INTO smart_studio_messages (room_id, sender_id, message_type, content, image_url)
-       VALUES (?, ?, 'image', ?, ?)`,
-      [roomId, me, text, imageUrl]
+      `INSERT INTO smart_studio_messages (room_id, sender_id, message_type, content, image_url, thumbnail_url)
+       VALUES (?, ?, 'image', ?, ?, ?)`,
+      [roomId, me, text, processed.imageUrl, processed.thumbnailUrl]
     )
     res.json({ ok: true, message: {
       id: r.insertId, room_id: roomId, sender_id: me,
-      message_type: 'image', content: text, image_url: imageUrl,
+      message_type: 'image', content: text, image_url: processed.imageUrl,
+      thumbnail_url: processed.thumbnailUrl,
+      width: processed.width, height: processed.height,
+      mime: processed.mime, size: processed.size, optimized: processed.optimized,
       created_at: new Date().toISOString()
     }})
   } catch (e) {
@@ -1570,7 +1674,7 @@ router.post('/rooms/:roomId/send-image', auth, requirePermission(P.SMART_STUDIO_
   }
 })
 
-router.post('/rooms/:roomId/send', auth, requirePermission(P.SMART_STUDIO_WRITE), upload.single('image'), async (req, res) => {
+router.post('/rooms/:roomId/send', auth, uploadLimiter, requirePermission(P.SMART_STUDIO_WRITE), upload.single('image'), async (req, res) => {
   if (req.masterMode) return rejectMaster(res)
   try {
     const me = req.userId
@@ -1588,22 +1692,32 @@ router.post('/rooms/:roomId/send', auth, requirePermission(P.SMART_STUDIO_WRITE)
     let { message_type, content } = body
     let imageUrl = null
     if (req.file) {
+      // 2026-08-11 sharp 优化
+      const processed = await processImage(req.file.path, req.file.filename)
       message_type = 'image'
-      imageUrl = PUBLIC_BASE + '/' + req.file.filename
+      imageUrl = processed.imageUrl
       content = content || ''
     } else {
       message_type = 'text'
       if (!content || !content.trim()) return res.json({ ok: false, error: '消息为空' })
       content = content.trim().slice(0, 4000)
     }
+    let thumbnailUrl = null
+    if (req.file) {
+      // 已 processed, 取 thumbnail
+      const processed = await processImage(req.file.path, req.file.filename)
+      thumbnailUrl = processed.thumbnailUrl
+      // 更新 imageUrl 因为 processImage 写到分目录
+      imageUrl = processed.imageUrl
+    }
     const [r] = await pool.query(
-      `INSERT INTO smart_studio_messages (room_id, sender_id, message_type, content, image_url)
-       VALUES (?, ?, ?, ?, ?)`,
-      [roomId, me, message_type, content, imageUrl]
+      `INSERT INTO smart_studio_messages (room_id, sender_id, message_type, content, image_url, thumbnail_url)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [roomId, me, message_type, content, imageUrl, thumbnailUrl]
     )
     res.json({ ok: true, message: {
       id: r.insertId, room_id: roomId, sender_id: me,
-      message_type, content, image_url: imageUrl,
+      message_type, content, image_url: imageUrl, thumbnail_url: thumbnailUrl,
       created_at: new Date().toISOString()
     }})
   } catch (e) {
@@ -1612,10 +1726,47 @@ router.post('/rooms/:roomId/send', auth, requirePermission(P.SMART_STUDIO_WRITE)
 })
 
 // 上传纯图片（不绑定消息，由前端组合 form-data）
-router.post('/upload', auth, requirePermission(P.SMART_STUDIO_WRITE), upload.single('image'), (req, res) => {
+router.post('/upload', auth, uploadLimiter, requirePermission(P.SMART_STUDIO_WRITE), upload.single('image'), async (req, res) => {
+  if (req.masterMode) return rejectMaster(res)
   try {
     if (!req.file) return res.json({ ok: false, error: '未收到文件' })
-    res.json({ ok: true, url: PUBLIC_BASE + '/' + req.file.filename })
+    // 2026-08-11 sharp 优化
+    const processed = await processImage(req.file.path, req.file.filename)
+    res.json({
+      ok: true,
+      url: processed.imageUrl,
+      thumbnail_url: processed.thumbnailUrl,
+      width: processed.width,
+      height: processed.height,
+      mime: processed.mime,
+      size: processed.size,
+      optimized: processed.optimized
+    })
+  } catch (e) {
+    res.json({ ok: false, error: e.message })
+  }
+})
+
+// 2026-08-11: 多文件上传 (一次最多 9 张, 每张独立优化)
+router.post('/upload-multi', auth, uploadLimiter, requirePermission(P.SMART_STUDIO_WRITE), uploadMulti.array('images', 9), async (req, res) => {
+  if (req.masterMode) return rejectMaster(res)
+  try {
+    if (!req.files || !req.files.length) return res.json({ ok: false, error: '未收到文件' })
+    const results = []
+    for (const f of req.files) {
+      const processed = await processImage(f.path, f.filename)
+      results.push({
+        url: processed.imageUrl,
+        thumbnail_url: processed.thumbnailUrl,
+        width: processed.width,
+        height: processed.height,
+        mime: processed.mime,
+        size: processed.size,
+        optimized: processed.optimized,
+        original_name: f.originalname
+      })
+    }
+    res.json({ ok: true, count: results.length, files: results })
   } catch (e) {
     res.json({ ok: false, error: e.message })
   }
