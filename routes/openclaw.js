@@ -1,6 +1,6 @@
 /**
  * OpenClaw助手绑定接口
- * 用于彩美特系统与OpenClaw助手的身份绑定
+ * 用于智能商业系统与OpenClaw助手的身份绑定
  */
 import { Router } from 'express'
 import jwt from 'jsonwebtoken'
@@ -133,7 +133,7 @@ router.get('/bind', async (req, res, next) => {
     
     const welcomeMsg = `👋 欢迎回来，${employee.name}！
 
-🏠 您已成功接入彩美特智能家园
+🏠 您已成功接入智能商业系统
 
 📋 功能说明：
 • 💬 接收客户消息 - 客户扫描产品二维码，您的微信会收到通知

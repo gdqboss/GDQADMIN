@@ -2,13 +2,11 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 import moduleFilterPlugin from '../../vite-plugins/module-filter.js'
-import materialSymbolsPreloadPlugin from '../../vite-plugins/material-symbols-preload.js'
-
 // 自动从 server_modules DB 生成 (AGENTS.md #1 + 零硬编码)
 const enabledModules = ["approvals","article","association-academic","association-activities","association-announcements","association-cards","association-downloads","association-info","association-inquiries","association-journals","association-members","association-org","banner-manage","banner-management","dashboard","finance","finance-simple","job-responsibilities","logistics","oa","rbac","reports","roles","settings","tasks","users","work-logs"]
 
 export default defineConfig({
-  plugins: [materialSymbolsPreloadPlugin(), vue(), moduleFilterPlugin(enabledModules)],
+  plugins: [vue(), moduleFilterPlugin(enabledModules)],
   resolve: { alias: { '@': resolve(__dirname) } },
   build: {
     outDir: '/root/server/dist-7',

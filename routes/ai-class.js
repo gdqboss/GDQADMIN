@@ -627,7 +627,8 @@ router.post('/chat', auth, async (req, res, next) => {
     }
 
     // 4.5 加载默认系统知识库（system/business/table/glossary 4 类）
-    // 这些知识不进 LIKE 检索，直接拼到 System Prompt，让 AI 立即了解彩美特整套系统
+    // 这些知识不进 LIKE 检索，直接拼到 System Prompt，让 AI 立即了解智能商业整套系统
+    // 2026-08-10 波哥铁律: SGP 不准用"彩美特"字眼 (彩美特是北京专用)
     const [defaultKnowledge] = await pool.query(
       `SELECT title, content, doc_type FROM ai_class_knowledge
        WHERE doc_type IN ('system','business','table','glossary')
@@ -636,7 +637,7 @@ router.post('/chat', auth, async (req, res, next) => {
     )
     let systemKnowledgeContext = ''
     if (defaultKnowledge.length > 0) {
-      systemKnowledgeContext = '\n\n【彩美特系统知识库（自动加载）】\n' + defaultKnowledge
+      systemKnowledgeContext = '\n\n【智能商业系统知识库（自动加载）】\n' + defaultKnowledge
         .map(k => `### ${k.title}\n${k.content}`)
         .join('\n\n')
     }
@@ -665,12 +666,12 @@ router.post('/chat', auth, async (req, res, next) => {
     const permNote = userPermissions.length > 0
       ? `\n【用户权限】${userPermissions.join('、')}`
       : '\n【用户权限】无（只能看公开信息）'
-    const systemContent = `你是${botName}，彩美特（Caimeite）管理系统的智能助手。
+    const systemContent = `你是${botName}，智能商业系统的智能助手。
 直接、务实、有温度——像一位熟悉业务的资深同事那样回答问题。
 
 【核心职责】
 1. 系统操作培训：用户问"怎么做"时，告诉他具体步骤（哪个菜单→哪按钮→怎么填）
-2. 业务答疑：用户问"为什么"或"是什么"时，用彩美特业务术语解释
+2. 业务答疑：用户问"为什么"或"是什么"时，用智能商业系统业务术语解释
 3. 数据查询：用户问"查什么"时，必须调用 Function Calling 工具查真实数据库，禁止编造
 4. 权限感知：用户没权限的功能，明确告知"您没有xxx权限，需要联系管理员"
 5. 新员工引导：识别新员工（入职<30天），主动介绍系统模块和基本操作
@@ -696,7 +697,7 @@ ${permNote}${userIdentityContext}${systemKnowledgeContext}${memoryContext}${ragC
         type: 'function',
         function: {
           name: 'get_products',
-          description: '查询彩美特系统的产品列表，可以按产品名称或分类筛选',
+          description: '查询智能商业系统的产品列表，可以按产品名称或分类筛选',
           parameters: {
             type: 'object',
             properties: {

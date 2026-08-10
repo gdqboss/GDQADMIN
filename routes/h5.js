@@ -677,7 +677,7 @@ router.get('/chat/:qrcodeId/anonymous', async (req, res, next) => {
       const empName = employee?.name || '员工'
       const welcomeMsg = `👋 欢迎回来，${empName}！
 
-🏠 您已成功接入**彩美特智能家园**
+🏠 您已成功接入**智能商业系统**
 
 📋 **您的功能：**
 • 💬 接收并回复客户消息

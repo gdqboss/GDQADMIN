@@ -66,7 +66,7 @@ router.get('/scan/:code', async (req, res, next) => {
         pay_config: cfg && cfg.enabled ? {
           wechat_qr_image: cfg.wechat_qr_image,
           alipay_qr_image: cfg.alipay_qr_image,
-          merchant_name: cfg.merchant_name || '彩美特官方',
+          merchant_name: cfg.merchant_name || '智能商业系统官方',
           merchant_phone: cfg.merchant_phone || null,
           default_amount: cfg.default_amount || null,
         } : null,

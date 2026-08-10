@@ -632,7 +632,7 @@ onMounted(() => {
           <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">站点信息</div>
           <el-form :model="form" label-width="120px" class="grid grid-cols-2 gap-x-4">
             <el-form-item :label="$t('serverProfiles.formSiteNameZh')" class="col-span-2 md:col-span-1">
-              <el-input v-model="form.site_name_zh" placeholder="彩美特" />
+              <el-input v-model="form.site_name_zh" placeholder="智能商业系统" />
             </el-form-item>
             <el-form-item :label="$t('serverProfiles.formSiteNameEn')" class="col-span-2 md:col-span-1">
               <el-input v-model="form.site_name_en" placeholder="TRAVELMATE" />

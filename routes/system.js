@@ -57,7 +57,8 @@ router.get('/settings', async (req, res, next) => {
       data[row.key] = row.value
     }
     data.bot_name = data.bot_name || '美特'
-    data.site_name = data.site_name || '彩美特'
+    // 2026-08-10 波哥铁律: 新加坡不准再用'彩美特'字眼 (彩美特是北京专用, 见 AGENTS.md #21)
+    data.site_name = data.site_name || '智能商业系统'
     res.json({ code: 0, data })
   } catch (err) { next(err) }
 })

@@ -253,10 +253,11 @@ try {
   // Step 5: mv to nginx root
   // profile 路径规则（按 profile.domain 或 profile.name 匹配）:
   //   domain=hatch.gdqshop.cn  → /var/www/hatch/                  (HK 横琴港澳科技孵化器)
-  //   domain=claw.gdqshop.cn   → /var/www/claw.gdqshop.cn/        (北京彩美特)
+  //   domain=claw.gdqshop.cn   → /var/www/claw.gdqshop.cn/        (北京彩美特, 北京专用 brand)
   //   env=production / name=北京 → /var/www/claw.gdqshop.cn/      (兼容老规则)
-  //   其它                       → /var/www/caimeite/              (默认 SGP/Bangkok 等)
-  let targetNginx = '/var/www/caimeite/';
+  //   其它                       → /var/www/sgp/                   (SGP 默认, 不用 'caimeite' 字眼)
+  // 2026-08-10 波哥铁律: 新加坡不准再用'彩美特'字眼 (彩美特是北京专用, 见 AGENTS.md #21)
+  let targetNginx = '/var/www/sgp/';
   if (profile.domain === 'hatch.gdqshop.cn' || profile.name === '横琴港澳科技孵化器') {
     targetNginx = '/var/www/hatch/';
   } else if (profile.domain === 'claw.gdqshop.cn' || profile.env === 'production' || profile.name === '北京') {

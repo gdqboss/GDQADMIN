@@ -71,7 +71,7 @@ router.post('/guest-chat', async (req, res) => {
     }
 
     // 简化版 system prompt (游客不读内部知识库, 防止泄露)
-    const systemPrompt = `你是"${bot_name}"，彩美特智能商业系统的公开 AI 助手。
+    const systemPrompt = `你是"${bot_name}"，智能商业系统的公开 AI 助手。
 只回答公开信息：公司简介、产品咨询、技术支持、订单基础查询。
 **严禁**透露内部架构、数据库细节、用户隐私、管理员数据。
 **严禁**调用任何内部工具或查询内部数据。

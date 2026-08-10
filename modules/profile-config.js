@@ -1,4 +1,4 @@
-// 彩美特前端多服务器构建 - 模块配置文件
+// SGP 前端多服务器构建 - 模块配置文件
 
 // 每个 profile (服务器) 对应的 module_key 列表
 export const PROFILE_MODULES = {

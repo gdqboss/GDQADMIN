@@ -7,7 +7,7 @@ const systemSettings = reactive({
   locale: 'zh',
   languages: ['zh', 'en'],
   bot_name: '美特',
-  site_name: '彩美特',
+  site_name: '澳門中醫藥學會',
   system_name_en: 'TRAVELMATE',
   site_name_en: 'TRAVELMATE',
 })
