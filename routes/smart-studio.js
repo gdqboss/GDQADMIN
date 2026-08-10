@@ -857,6 +857,52 @@ router.get('/dialogs', auth, requirePermission(P.SMART_STUDIO_READ), async (req,
   }
 })
 
+
+// 2026-08-11: Element next_batch 增量同步 — 离线消息自动补齐
+//   客户端 GET /sync?since=X&limit=100 → 拿 seq>X 的所有事件
+//   取代 5s polling 兜底
+router.get('/sync', auth, requirePermission(P.SMART_STUDIO_READ), async (req, res) => {
+  try {
+    const me = req.userId
+    const since = parseInt(req.query.since || '0', 10) || 0
+    const limit = Math.min(parseInt(req.query.limit || '100', 10) || 100, 500)
+    if (req.masterMode) {
+      // master (uid=0) 看所有消息
+      const [rows] = await pool.query(
+        `SELECT m.*, d.last_read_message_id
+         FROM smart_studio_messages m
+         LEFT JOIN smart_studio_dialogs d
+           ON d.user_id=? AND d.peer_type=m.peer_type AND d.peer_id=m.peer_id
+         WHERE m.id > ?
+         ORDER BY m.id ASC LIMIT ?`,
+        [me, since, limit]
+      )
+      const next = rows.length > 0 ? rows[rows.length-1].id : since
+      return res.json({ ok:true, messages: rows, next_since: next })
+    }
+    // 普通用户: 只看自己参与的对话 (DM = sender/receiver, 群 = 群成员)
+    const [rows] = await pool.query(
+      `SELECT m.*, d.last_read_message_id
+       FROM smart_studio_messages m
+       LEFT JOIN smart_studio_dialogs d
+         ON d.user_id=? AND d.peer_type=m.peer_type AND d.peer_id=m.peer_id
+       WHERE m.id > ? AND (
+         (m.peer_type='user' AND (m.sender_id=? OR m.peer_id=?))
+         OR (m.peer_type='group' AND m.peer_id IN (
+           SELECT group_id FROM smart_studio_group_members WHERE user_id=?
+         ))
+       )
+       ORDER BY m.id ASC LIMIT ?`,
+      [me, since, me, me, me, limit]
+    )
+    const next = rows.length > 0 ? rows[rows.length-1].id : since
+    res.json({ ok:true, messages: rows, next_since: next })
+  } catch (e) {
+    console.error('/sync failed:', e.message)
+    res.status(500).json({ ok:false, error: e.message })
+  }
+})
+
 // GET /peers/:peerType/:peerId/messages — 拉一个对话的消息
 // ---------- 2026-08-08 补: GET /peers — 我的联系人列表 (前端 loadPeers() 依赖) ----------
 //   场景: 前端 api('/peers') 期望返 {ok, peers:[{peer_id, last_message_at, last_message_from_me, online}]}
@@ -1065,6 +1111,13 @@ router.post('/peers/:peerType/:peerId/send-text', auth, requirePermission(P.SMAR
     }
     // 2026-08-11 实时推送 (避免 5s 轮询兜底延迟)
     broadcastNewMessage(me, peerType, peerId, newMsg).catch(()=>{})
+    
+    // 2026-08-11: Element next_batch — bumpUserSeq 给 sender + receiver 各 +1 seq
+    Promise.all([
+      bumpUserSeq(pool, me),
+      bumpUserSeq(pool, peerId)
+    ]).catch(e=>console.warn('bumpUserSeq:', e.message))
+    
     res.json({ ok: true, message: newMsg })
   } catch (e) {
     res.json({ ok: false, error: e.message })
@@ -2292,5 +2345,18 @@ router.get('/messages/:msgId', auth, async (req, res) => {
     res.json({ ok: false, error: e.message })
   }
 })
+
+
+// 2026-08-11: Element next_batch 模式 — per-user 单调递增 seq
+//   send-text / 撤回 / 输入状态 都会 bumpUserSeq
+//   前端 GET /sync?since=X → 拿 seq>X 的所有事件 (消息 + 撤回 + 已读 + 输入 + presence)
+async function bumpUserSeq(pool, userId){
+  if(!userId || userId < 0) return
+  await pool.query(
+    `INSERT INTO smart_studio_user_seq (user_id, seq) VALUES (?, 1)
+     ON DUPLICATE KEY UPDATE seq = seq + 1`,
+    [userId]
+  )
+}
 
 export default router

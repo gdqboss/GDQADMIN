@@ -332,7 +332,7 @@ function openAiChat(record) {
 处理备注: ${record.handler_note || '无'}
 提交时间: ${record.created_at || '未知'}
 
-你是智能商业系统一物一码售后客服，请根据以上工单信息回答用户的问题。
+你是彩美特一物一码售后客服，请根据以上工单信息回答用户的问题。
 你可以查询数据库获取更多信息（商品详情、售后记录、维修记录等）。
 回答要专业、简洁，直接解决客户问题。`
   aiMessages.value.push({

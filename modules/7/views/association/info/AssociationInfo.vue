@@ -52,7 +52,7 @@
     <el-dialog v-model="dialogVisible" title="编辑协会介绍" width="700px" :close-on-click-modal="false">
       <el-form :model="form" label-width="100px">
         <el-form-item label="中文名 (简体)"><el-input v-model="form.name_zh" /></el-form-item>
-        <el-form-item label="中文名 (繁体)"><el-input v-model="form.name_zh_tw" placeholder="例: 澳門中醫藥學會" /></el-form-item>
+        <el-form-item label="中文名 (繁体)"><el-input v-model="form.name_zh_tw" placeholder="例: 新加坡彩美特協會" /></el-form-item>
         <el-form-item label="英文名"><el-input v-model="form.name_en" /></el-form-item>
         <el-form-item label="标语 (简体)"><el-input v-model="form.slogan" /></el-form-item>
         <el-form-item label="标语 (繁体)"><el-input v-model="form.slogan_zh_tw" /></el-form-item>
