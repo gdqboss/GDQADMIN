@@ -67,13 +67,11 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 import moduleFilterPlugin from '../../vite-plugins/module-filter.js'
-import materialSymbolsPreloadPlugin from '../../vite-plugins/material-symbols-preload.js'
-
 // 自动从 server_modules DB 生成 (AGENTS.md #1 + 零硬编码)
 const enabledModules = [$MODULES_STR]
 
 export default defineConfig({
-  plugins: [materialSymbolsPreloadPlugin(), vue(), moduleFilterPlugin(enabledModules)],
+  plugins: [vue(), moduleFilterPlugin(enabledModules)],
   resolve: { alias: { '@': resolve(__dirname) } },
   build: {
     outDir: '$DIST_DIR',
@@ -101,12 +99,6 @@ VITEEOF
 echo "--- 5. Running Vite build for profile $PROFILE_ID ---"
 cd "$MODULE_DIR" && node ../../node_modules/vite/bin/vite.js build --emptyOutDir
 
-# 6. woff2 preload 修复
-WOFF2_FILE=$(ls "$DIST_DIR/assets/"material-symbols-outlined-*.woff2 2>/dev/null | head -1 | xargs -I{} basename {})
-if [ -n "$WOFF2_FILE" ]; then
-  sed -i "s|MATERIALSYMBOLSWOFF2|/assets/$WOFF2_FILE|" "$DIST_DIR/index.html"
-  echo "Material Symbols preload: /assets/$WOFF2_FILE"
-fi
 
 echo
 echo "=== Build Complete ==="
