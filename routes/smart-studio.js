@@ -16,6 +16,11 @@ import { pool } from '../db/connection.js'
 import { requirePermission, PERMISSIONS as P } from '../middleware/rbac.js'
 import { uploadLimiter } from '../middleware/rateLimit.js'
 import sharp from 'sharp'
+import {
+  broadcastNewMessage,
+  broadcastReadReceipt,
+  broadcastMessageEdited
+} from '../ws/chat-ws.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const router = Router()
@@ -1048,13 +1053,16 @@ router.post('/peers/:peerType/:peerId/send-text', auth, requirePermission(P.SMAR
     } else {
       // 群: 每个非我的成员 +1 unread, 更新群 last_message (只存到群表不存 dialog)
     }
-    res.json({ ok: true, message: {
+    const newMsg = {
       id: ins.insertId, peer_id: peerId, peer_type: peerType, sender_id: me,
       message_type: 'text', content: text, image_url: null, hidden: !!hidden,
       reply_to_id: replyFields[0], reply_to_content: replyFields[1],
       reply_to_sender_id: replyFields[2], reply_to_type: replyFields[3],
       read_by_peer: false, created_at: new Date().toISOString()
-    }})
+    }
+    // 2026-08-11 实时推送 (避免 5s 轮询兜底延迟)
+    broadcastNewMessage(me, peerType, peerId, newMsg).catch(()=>{})
+    res.json({ ok: true, message: newMsg })
   } catch (e) {
     res.json({ ok: false, error: e.message })
   }
@@ -1112,14 +1120,16 @@ router.post('/peers/:peerType/:peerId/send-image', auth, uploadLimiter, requireP
         [me, peerId, ins.insertId]
       )
     }
-    res.json({ ok: true, message: {
+    const newImg = {
       id: ins.insertId, peer_id: peerId, peer_type: peerType, sender_id: me,
       message_type: 'image', content: text, image_url: processed.imageUrl,
       thumbnail_url: processed.thumbnailUrl,
       width: processed.width, height: processed.height,
       mime: processed.mime, size: processed.size, optimized: processed.optimized,
       created_at: new Date().toISOString()
-    }})
+    }
+    broadcastNewMessage(me, peerType, peerId, newImg).catch(()=>{})
+    res.json({ ok: true, message: newImg })
   } catch (e) {
     res.json({ ok: false, error: e.message })
   }
@@ -1145,6 +1155,8 @@ router.post('/peers/:peerType/:peerId/read', auth, requirePermission(P.SMART_STU
         [lastId, peerId, me]
       )
     }
+    // 2026-08-11 实时广播已读
+    broadcastReadReceipt(peerType, peerId, me, lastId)
     res.json({ ok: true })
   } catch (e) {
     res.json({ ok: false, error: e.message })
@@ -1661,14 +1673,17 @@ router.post('/rooms/:roomId/send-image', auth, uploadLimiter, requirePermission(
        VALUES (?, ?, 'image', ?, ?, ?)`,
       [roomId, me, text, processed.imageUrl, processed.thumbnailUrl]
     )
-    res.json({ ok: true, message: {
+    const newRoomImg = {
       id: r.insertId, room_id: roomId, sender_id: me,
       message_type: 'image', content: text, image_url: processed.imageUrl,
       thumbnail_url: processed.thumbnailUrl,
       width: processed.width, height: processed.height,
       mime: processed.mime, size: processed.size, optimized: processed.optimized,
       created_at: new Date().toISOString()
-    }})
+    }
+    // room 用 group 模式 broadcast
+    broadcastNewMessage(me, 'group', roomId, newRoomImg).catch(()=>{})
+    res.json({ ok: true, message: newRoomImg })
   } catch (e) {
     res.json({ ok: false, error: e.message })
   }
@@ -1715,11 +1730,13 @@ router.post('/rooms/:roomId/send', auth, uploadLimiter, requirePermission(P.SMAR
        VALUES (?, ?, ?, ?, ?, ?)`,
       [roomId, me, message_type, content, imageUrl, thumbnailUrl]
     )
-    res.json({ ok: true, message: {
+    const newRoomMsg = {
       id: r.insertId, room_id: roomId, sender_id: me,
       message_type, content, image_url: imageUrl, thumbnail_url: thumbnailUrl,
       created_at: new Date().toISOString()
-    }})
+    }
+    broadcastNewMessage(me, 'group', roomId, newRoomMsg).catch(()=>{})
+    res.json({ ok: true, message: newRoomMsg })
   } catch (e) {
     res.json({ ok: false, error: e.message })
   }
@@ -2004,6 +2021,8 @@ router.patch('/messages/:id', auth, async (req, res) => {
       'UPDATE smart_studio_messages SET content=?, edited_at=NOW(), edited_by=? WHERE id=?',
       [editedMarker.trim(), me, msgId]
     )
+    // 2026-08-11 实时广播
+    broadcastMessageEdited(msgId, editedMarker.trim(), me).catch(()=>{})
     res.json({ ok: true, edited_by_superadmin: editedBySuperadmin })
   } catch (e) {
     res.json({ ok: false, error: e.message })

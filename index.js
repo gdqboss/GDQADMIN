@@ -7,6 +7,7 @@ import path from 'path'
 import fs from 'fs'
 import http from 'http'
 import { WebSocketServer } from 'ws'
+import { attachChatWS } from './ws/chat-ws.js'
 import { fileURLToPath } from 'url'
 import 'dotenv/config'
 import { pool } from './db/connection.js'
@@ -651,17 +652,23 @@ installCrashCapture({ app_version: process.env.SERVER_APP_VERSION || 'dev-local'
 const PORT = process.env.PORT || 3000
 const httpServer = http.createServer(app)
 const wssKaraoke = new WebSocketServer({ noServer: true })
+// 2026-08-11 smart-studio /xchat 实时通信
+const wssChat = new WebSocketServer({ noServer: true })
 httpServer.on('upgrade', (req, socket, head) => {
   if (req.url.startsWith('/ws/temple/karaoke/')) {
     wssKaraoke.handleUpgrade(req, socket, head, (ws) => wssKaraoke.emit('connection', ws, req))
+  } else if (req.url.startsWith('/ws/chat')) {
+    wssChat.handleUpgrade(req, socket, head, (ws) => wssChat.emit('connection', ws, req))
   } else {
     socket.destroy()
   }
 })
 attachKaraokeWS(wssKaraoke)
+attachChatWS(wssChat)
 const server = httpServer.listen(PORT, () => {
   console.log(`GDQ server running on port ${PORT}`)
   console.log(`[KARAOKE] WebSocket 已挂载: ws://localhost:${PORT}/ws/temple/karaoke/:session_id`)
+  console.log(`[CHAT]   WebSocket 已挂载: ws://localhost:${PORT}/ws/chat?token=xxx (smart-studio /xchat)`)
   startCronJobs()
   startFinanceReminderJobs()
 })
