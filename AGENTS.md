@@ -204,3 +204,71 @@ profile 11 海丰大道庵 (寺庙)  (124.156.180.188, dda.gdqshop.cn)        �
 ---
 
 > **本节与 `/root/src/AGENTS.md` 第 "📝 开发日志规范" 段并列, 前后端共用 `/root/src/docs/DEV_LOG.md`**
+
+---
+
+## 八、#20 源码模块在 SGP (2026-08-09 波哥原话)
+
+> "原则,所有的模块和源码必须在你本机,其它的服务器模块按目标服务器管理选择的,源代码同样,功能同样,但是各个服务器数据库独立"
+
+### 核心三原则
+
+| # | 原则 | 含义 |
+|---|------|------|
+| 1 | **模块源码在 SGP** | 所有模块代码、源码、build 产物全在 `/root/server/` |
+| 2 | **消费端按 server_profiles 选模块** | 每个 profile 从 SGP 选 N 个 module_key (server_modules 勾选) |
+| 3 | **DB 物理独立** | 每个客户服务器有自己的 DB (`gdq_macau` / `gdq_hk` / `gdq_bj` / `gdq_3` / `gdq_sh` / `gdq_bkk` / `gdq_dda`), 不共享表, 不交叉 query |
+
+### 8 个 profile (SGP server_profiles)
+
+| Profile | 服务器 | IP | 域名 | 角色 |
+|---------|-------|----|----|------|
+| 1 | 新加坡开发 SGP | 43.134.31.232 | wecom.gdqshop.cn | **source** (唯一源码 / build) |
+| 2 | 北京彩美特 | 81.70.199.64 | claw.gdqshop.cn | fork (消费端) |
+| 3 | 3号仓库 | 43.160.238.201 | mywh3.com | fork (消费端) |
+| 4 | 上海智慧家园 | 111.229.144.150 | gdqshop.cn | fork (消费端) |
+| 5 | SmartBiz Labor | 43.152.237.77 | wecom.gdqshop.cn/labor/ | shared_via_tunnel |
+| 6 | 横琴港澳科技孵化器 | 43.128.47.254 | hatch.gdqshop.cn | fork (HK) |
+| **7** | **macau 中医学会** | **101.33.32.177** | **aippmcm.com** | **fork** |
+| 11 | 海丰大道庵 | 124.156.180.188 | dda.gdqshop.cn | fork (temple) |
+
+### 加新模块流程 (4 处)
+
+1. `views/<m>/_meta.js` — 前端视图声明
+2. `routes/<m>.js` — 后端 API
+3. `rbac_permissions` — INSERT 三件套 (read/write/delete)
+4. `server_modules` — INSERT 勾选到目标 profile_id
+
+**禁止**:
+- ❌ 改 profile-config.js (2026-08-12 零硬编码铁律)
+- ❌ 改 SGP modules/ 顶层硬编码
+- ❌ 改 views/<other>/ 跨模块引用
+
+### 加新客户流程 (3 步)
+
+1. `server_profiles` 加 1 行 (DB)
+2. `server_modules` 勾选 N 个 module_key (DB)
+3. nginx / systemd / DB 创建 (一次性部署)
+
+**代码改动**: **0 行**。
+
+### 消费端铁律 (绝对禁止)
+
+- ❌ 消费端不能跑 `vite build`
+- ❌ 消费端不能 git push 源码改动
+- ❌ 消费端不能改 `views/` / `components/` / `modules/` / `routes/`
+- ✅ 消费端只拉 SGP build 产物 (dist-<id>/) + 独立维护 DB
+- ✅ 消费端可改 `nginx conf.d/` / `systemd unit` / `my.cnf` / `.env`
+
+### SGP build & sync 工具
+
+| 脚本 | 用途 |
+|------|------|
+| `scripts/build-for-profile.sh <id>` | 通用 build (profile 1/2/3 走 profile-config.js) |
+| **`scripts/build-macau.sh`** | **macau 专用 build (从 server_modules DB 拉 27 modules)** |
+| **`scripts/sync-macau.sh`** | **SGP dist-7 → macau /opt/soc-server/dist-1/ 全自动** |
+
+### 经济意义
+
+SGP 集中 = **1 个波哥 + 1 个 agent 维护 8 客户** 的唯一可行路径。
+违反 #20 = 8 倍 bug / 8 倍工作量 / 8 倍配置 / 不可持续。
