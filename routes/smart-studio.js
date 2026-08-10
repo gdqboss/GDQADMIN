@@ -2076,9 +2076,10 @@ router.delete('/messages/:id', auth, async (req, res) => {
         if (!f.length) return res.json({ ok: false, error: '无权操作此消息' })
       }
     }
-    await pool.query('DELETE FROM smart_studio_messages WHERE id=?', [msgId])
-    // 2026-08-11 实时广播
+    // 2026-08-11 实时广播 (先广播再删 — broadcastMessageDeleted 内部会查消息表,
+    //   如果先删后广播, SELECT 返回 0 行, broadcast 静默退出)
     broadcastMessageDeleted(msgId, me).catch(()=>{})
+    await pool.query('DELETE FROM smart_studio_messages WHERE id=?', [msgId])
     res.json({ ok: true })
   } catch (e) {
     res.json({ ok: false, error: e.message })

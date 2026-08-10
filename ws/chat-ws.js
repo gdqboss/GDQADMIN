@@ -33,22 +33,55 @@ const clients = new Map() // userId → Set<ws>
 const wsToUser = new Map() // ws → userId (master=0)
 
 // 全局消息路由: 推送用
+/**
+ * safeSend — 发送 push 给 ws, 自动清理 dead ws
+ * @returns {boolean} true=发送成功, false=ws 已死 (已清理)
+ */
+function safeSend(ws, payload) {
+  if (ws.readyState !== 1) {  // OPEN
+    // 不是 OPEN 状态 (CONNECTING=0 / CLOSING=2 / CLOSED=3) → 清理
+    removeClient(ws)
+    return false
+  }
+  try {
+    ws.send(payload)
+    return true
+  } catch (e) {
+    // send 抛异常 (broken pipe / ws closed between check and send) → 清理
+    removeClient(ws)
+    return false
+  }
+}
+
 function addClient(userId, ws) {
   if (!clients.has(userId)) clients.set(userId, new Set())
+  const wasOffline = clients.get(userId).size === 0
   clients.get(userId).add(ws)
   wsToUser.set(ws, userId)
   console.log(`[chat-ws] connect user=${userId} (online=${clients.get(userId).size})`)
+  // 2026-08-11: 上线广播给朋友 (只在第一次连接时, 避免重连刷屏)
+  if (wasOffline && userId !== 0) {
+    broadcastPresence(userId, true).catch(() => {})
+  }
 }
 
 function removeClient(ws) {
   const userId = wsToUser.get(ws)
   if (userId == null) return
   wsToUser.delete(ws)
+  let isFullyOffline = false
   if (clients.has(userId)) {
     clients.get(userId).delete(ws)
-    if (clients.get(userId).size === 0) clients.delete(userId)
+    if (clients.get(userId).size === 0) {
+      clients.delete(userId)
+      isFullyOffline = true
+    }
   }
   console.log(`[chat-ws] disconnect user=${userId} (online=${clients.get(userId)?.size || 0})`)
+  // 2026-08-11: 离线广播给朋友 (只在完全下线时, 避免重连闪断)
+  if (isFullyOffline && userId !== 0) {
+    broadcastPresence(userId, false).catch(() => {})
+  }
 }
 
 /**
@@ -78,7 +111,7 @@ export async function broadcastNewMessage(senderId, peerType, peerId, message) {
     if (clients.has(0)) targets.add(0)
 
     const payload = JSON.stringify({
-      type: 'new_message',
+      type: 'message',  // 2026-08-11: 前端 case 'message' 期望 (此前 'new_message' 错位)
       peer_type: peerType,
       peer_id: peerId,
       sender_id: senderId,
@@ -91,12 +124,10 @@ export async function broadcastNewMessage(senderId, peerType, peerId, message) {
       const set = clients.get(uid)
       if (!set) return
       set.forEach(ws => {
-        if (ws.readyState === 1) {  // OPEN
-          try { ws.send(payload); sent++ } catch (e) {}
-        }
+        if (safeSend(ws, payload)) sent++
       })
     })
-    console.log(`[chat-ws] broadcast new_message → ${targets.size} users, ${sent} sockets`)
+    console.log(`[chat-ws] broadcast message → ${targets.size} users, ${sent} sockets`)
   } catch (e) {
     console.error('[chat-ws] broadcastNewMessage failed:', e.message)
   }
@@ -114,7 +145,7 @@ export function broadcastReadReceipt(peerType, peerId, readerId, lastReadMessage
   targets.add(readerId)
 
   const payload = JSON.stringify({
-    type: 'read_receipt',
+    type: 'read',  // 2026-08-11: 前端 case 'read' 期望
     peer_type: peerType,
     peer_id: peerId,
     by: readerId,
@@ -122,15 +153,15 @@ export function broadcastReadReceipt(peerType, peerId, readerId, lastReadMessage
     ts: Date.now()
   })
 
+  let sent = 0
   targets.forEach(uid => {
     const set = clients.get(uid)
     if (!set) return
     set.forEach(ws => {
-      if (ws.readyState === 1) {
-        try { ws.send(payload) } catch (e) {}
-      }
+      if (safeSend(ws, payload)) sent++
     })
   })
+  console.log(`[chat-ws] broadcast read_receipt → ${targets.size} users, ${sent} sockets`)
 }
 
 /**
@@ -144,18 +175,11 @@ export async function broadcastClear(peerType, peerId, byUserId, deletedCount = 
   try {
     const targets = new Set()
     if (peerType === 'user') {
-      // DM: 推 by 自己 (确认) + 对方
+      // DM: 推 by 自己 (确认) + 对方 (peerId 本身就是对方 user_id, 无需查 dialog)
       targets.add(byUserId)
-      // 找 DM 对方的 user_id (smart_studio_dialogs 反查)
-      const [rows] = await pool.query(
-        `SELECT user_id, peer_id FROM smart_studio_dialogs
-         WHERE peer_type='user' AND ((user_id=? AND peer_id=?) OR (user_id=? AND peer_id=?))
-         LIMIT 1`,
-        [byUserId, peerId, peerId, byUserId]
-      )
-      if (rows.length) {
-        targets.add(rows[0].user_id === byUserId ? rows[0].peer_id : rows[0].user_id)
-      }
+      // 2026-08-11 修复: 之前查 dialogs 反查对方 user_id, 但 handler 已经把 dialogs 删了,
+      //   SELECT 返回 0 行, 对方收不到 clear 推送
+      targets.add(peerId)
     } else if (peerType === 'group') {
       // 群: 推所有成员 + by 自己
       const [mem] = await pool.query(
@@ -174,16 +198,15 @@ export async function broadcastClear(peerType, peerId, byUserId, deletedCount = 
       deleted: deletedCount,
       ts: Date.now()
     })
+    let sent = 0
     targets.forEach(uid => {
       const set = clients.get(uid)
       if (!set) return
       set.forEach(ws => {
-        if (ws.readyState === 1) {
-          try { ws.send(payload) } catch (e) {}
-        }
+        if (safeSend(ws, payload)) sent++
       })
     })
-    console.log(`[chat-ws] broadcast clear → ${targets.size} users`)
+    console.log(`[chat-ws] broadcast clear → ${targets.size} users, ${sent} sockets`)
   } catch (e) {
     console.error('[chat-ws] broadcastClear failed:', e.message)
   }
@@ -214,22 +237,23 @@ export async function broadcastMessageDeleted(messageId, byUserId) {
     if (clients.has(0)) targets.add(0)
 
     const payload = JSON.stringify({
-      type: 'message_deleted',
+      type: 'delete',  // 2026-08-11: 前端 case 'delete' 期望 (但前端用 d.message_id, 字段名不同)
       id: messageId,
+      message_id: messageId,  // 前端 read d.message_id
       by: byUserId,
       peer_type: m.peer_type,
       peer_id: m.peer_id,
       ts: Date.now()
     })
+    let sent = 0
     targets.forEach(uid => {
       const set = clients.get(uid)
       if (!set) return
       set.forEach(ws => {
-        if (ws.readyState === 1) {
-          try { ws.send(payload) } catch (e) {}
-        }
+        if (safeSend(ws, payload)) sent++
       })
     })
+    console.log(`[chat-ws] broadcast message_deleted → ${targets.size} users, ${sent} sockets`)
   } catch (e) {
     console.error('[chat-ws] broadcastMessageDeleted failed:', e.message)
   }
@@ -260,23 +284,24 @@ export async function broadcastMessageEdited(messageId, newContent, editedBy) {
     if (clients.has(0)) targets.add(0)
 
     const payload = JSON.stringify({
-      type: 'message_edited',
+      type: 'message_edited',  // 前端 switch 没 case 'edit', 暂时保留原名, 后续前端 build 加 case
       id: messageId,
+      message_id: messageId,
       content: newContent,
       edited_by: editedBy,
       peer_type: m.peer_type,
       peer_id: m.peer_id,
       ts: Date.now()
     })
+    let sent = 0
     targets.forEach(uid => {
       const set = clients.get(uid)
       if (!set) return
       set.forEach(ws => {
-        if (ws.readyState === 1) {
-          try { ws.send(payload) } catch (e) {}
-        }
+        if (safeSend(ws, payload)) sent++
       })
     })
+    console.log(`[chat-ws] broadcast message_edited → ${targets.size} users, ${sent} sockets`)
   } catch (e) {
     console.error('[chat-ws] broadcastMessageEdited failed:', e.message)
   }
@@ -304,17 +329,18 @@ export async function broadcastPresence(userId, online) {
       type: 'presence',
       user_id: userId,
       online,
+      last_seen_at: new Date().toISOString(),
       ts: Date.now()
     })
+    let sent = 0
     friends.forEach(uid => {
       const set = clients.get(uid)
       if (!set) return
       set.forEach(ws => {
-        if (ws.readyState === 1) {
-          try { ws.send(payload) } catch (e) {}
-        }
+        if (safeSend(ws, payload)) sent++
       })
     })
+    console.log(`[chat-ws] broadcast presence → ${friends.size} friends, ${sent} sockets`)
   } catch (e) {
     console.error('[chat-ws] broadcastPresence failed:', e.message)
   }
@@ -362,6 +388,8 @@ export function attachChatWS(wss) {
       type: 'hello',
       user_id: userId,
       master_mode: masterMode,
+      online_users: Array.from(clients.keys()).filter(uid => uid !== 0),
+      online_total: clients.size,
       server_time: Date.now()
     }))
 
