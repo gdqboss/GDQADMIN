@@ -19,7 +19,9 @@ import sharp from 'sharp'
 import {
   broadcastNewMessage,
   broadcastReadReceipt,
-  broadcastMessageEdited
+  broadcastMessageEdited,
+  broadcastClear,
+  broadcastMessageDeleted
 } from '../ws/chat-ws.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -2053,20 +2055,113 @@ router.delete('/messages/:id', auth, async (req, res) => {
       // 既不是自己发的, 也不是 superadmin → 没权限
       return res.json({ ok: false, error: '无权撤回' })
     }
-    // 房间成员校验 (防跨房间)
-    if (role !== 'superadmin') {
+    // 房间成员校验 (防跨房间) - 仅 room_id 非 NULL 时校验
+    // 2026-08-11: 修复波哥「撤回自己发的消息」对 DM (room_id=NULL) 失败的 bug
+    if (m.room_id !== null && m.room_id !== undefined && role !== 'superadmin') {
       const [ck] = await pool.query(
         'SELECT 1 FROM smart_studio_room_members WHERE room_id=? AND user_id=?',
         [m.room_id, me]
       )
       if (!ck.length) return res.json({ ok: false, error: '无权操作此消息' })
     }
+    if (!m.room_id && role !== 'superadmin') {
+      // DM: 检查对方是朋友
+      // 但如果 sender==me (自己发的) — sender_id==me 已通过 L2051 验证, 不再二次查友谊
+      if (m.sender_id !== me) {
+        const [f] = await pool.query(
+          `SELECT 1 FROM smart_studio_friendships
+           WHERE status='accepted' AND ((requester_id=? AND addressee_id=?) OR (requester_id=? AND addressee_id=?))`,
+          [me, m.sender_id, m.sender_id, me]
+        )
+        if (!f.length) return res.json({ ok: false, error: '无权操作此消息' })
+      }
+    }
     await pool.query('DELETE FROM smart_studio_messages WHERE id=?', [msgId])
+    // 2026-08-11 实时广播
+    broadcastMessageDeleted(msgId, me).catch(()=>{})
     res.json({ ok: true })
   } catch (e) {
     res.json({ ok: false, error: e.message })
   }
 })
+// ---------- 清空 DM 全部聊天记录 ----------
+// DELETE /peers/:peerType/:peerId/messages
+// 2026-08-11: 修复波哥「清除信息功能不正常」— 前端调用此 endpoint 但后端没实现
+// - master 模式: 透明人, 不允许清空 (避免误操作)
+// - DM: 必须是好友 (除 superadmin)
+// - 群组: 必须是成员 (除 superadmin)
+router.delete('/peers/:peerType/:peerId/messages', auth, requirePermission(P.SMART_STUDIO_DELETE), async (req, res) => {
+  if (req.masterMode) return rejectMaster(res)
+  try {
+    const me = req.userId
+    const role = req.smartStudioRole || 'user'
+    const peerType = req.params.peerType
+    const peerId = parseInt(req.params.peerId, 10)
+    if (!['user', 'group'].includes(peerType)) return res.json({ ok: false, error: 'peer_type 必须是 user/group' })
+    if (!peerId) return res.json({ ok: false, error: 'peer_id 必填' })
+
+    if (peerType === 'user') {
+      // DM: 必须是好友 (除 superadmin)
+      if (role !== 'superadmin') {
+        const [f] = await pool.query(
+          `SELECT 1 FROM smart_studio_friendships
+           WHERE status='accepted' AND ((requester_id=? AND addressee_id=?) OR (requester_id=? AND addressee_id=?))`,
+          [me, peerId, peerId, me]
+        )
+        if (!f.length) return res.json({ ok: false, error: '需要先加好友' })
+      }
+      // 删所有 sender/peer=me/peerId 的 DM 消息 (双向配对, 不限 peer_id 顶层)
+      // 2026-08-11 bug fix: 之前 SQL 顶层加 peer_id=peerId 限制, 导致 sender=me peer_id=peerId 的对方消息被漏
+      const [result] = await pool.query(
+        `DELETE FROM smart_studio_messages
+         WHERE peer_type='user'
+           AND ((sender_id=? AND peer_id=?) OR (sender_id=? AND peer_id=?))`,
+        [me, peerId, peerId, me]
+      )
+      // 同步清空置顶 (双向配对)
+      await pool.query(
+        `DELETE FROM smart_studio_pinned_messages
+         WHERE peer_type='user'
+           AND ((sender_id=? AND peer_id=?) OR (sender_id=? AND peer_id=?))`,
+        [me, peerId, peerId, me]
+      ).catch(() => {})
+      // 同步清空两个用户的 dialog (双向)
+      await pool.query(
+        `DELETE FROM smart_studio_dialogs
+         WHERE peer_type='user'
+           AND ((user_id=? AND peer_id=?) OR (user_id=? AND peer_id=?))`,
+        [me, peerId, peerId, me]
+      ).catch(() => {})
+      // 2026-08-11 实时广播清空 (推给 by+对方+master)
+      broadcastClear('user', peerId, me, result.affectedRows).catch(()=>{})
+      res.json({ ok: true, deleted: result.affectedRows })
+    } else {
+      // 群组 (peerType='group')
+      const [r] = await pool.query('SELECT 1 FROM smart_studio_groups WHERE id=?', [peerId])
+      if (!r.length) return res.json({ ok: false, error: '群组不存在' })
+      if (role !== 'superadmin') {
+        const [mem] = await pool.query(
+          'SELECT 1 FROM smart_studio_group_members WHERE group_id=? AND user_id=?',
+          [peerId, me]
+        )
+        if (!mem.length) return res.json({ ok: false, error: '不是群成员' })
+      }
+      const [result] = await pool.query(
+        'DELETE FROM smart_studio_messages WHERE peer_type=? AND peer_id=?',
+        ['group', peerId]
+      )
+      await pool.query(
+        'DELETE FROM smart_studio_pinned_messages WHERE peer_type=? AND peer_id=?',
+        ['group', peerId]
+      ).catch(() => {})
+      broadcastClear('group', peerId, me, result.affectedRows).catch(()=>{})
+      res.json({ ok: true, deleted: result.affectedRows })
+    }
+  } catch (e) {
+    res.json({ ok: false, error: e.message })
+  }
+})
+
 
 // ---------- 清空房间全部聊天记录 ----------
 // DELETE /rooms/:roomId/messages
@@ -2101,7 +2196,8 @@ router.delete('/rooms/:roomId/messages', auth, async (req, res) => {
       'DELETE FROM smart_studio_pinned_messages WHERE room_id=?',
       [roomId]
     ).catch(() => {})  // 若 schema 没 room_id 列会抛, 容错
-
+    // 2026-08-11 实时广播清空
+    broadcastClear('group', roomId, me, result.affectedRows).catch(()=>{})
     res.json({ ok: true, deleted: result.affectedRows })
   } catch (e) {
     res.json({ ok: false, error: e.message })

@@ -134,6 +134,108 @@ export function broadcastReadReceipt(peerType, peerId, readerId, lastReadMessage
 }
 
 /**
+ * broadcastClear — 清空对话广播 (DM 推对方 + 自己, 群推所有成员)
+ * @param peerType {'user'|'group'}
+ * @param peerId {number}
+ * @param byUserId {number} 谁清的
+ * @param deletedCount {number}
+ */
+export async function broadcastClear(peerType, peerId, byUserId, deletedCount = 0) {
+  try {
+    const targets = new Set()
+    if (peerType === 'user') {
+      // DM: 推 by 自己 (确认) + 对方
+      targets.add(byUserId)
+      // 找 DM 对方的 user_id (smart_studio_dialogs 反查)
+      const [rows] = await pool.query(
+        `SELECT user_id, peer_id FROM smart_studio_dialogs
+         WHERE peer_type='user' AND ((user_id=? AND peer_id=?) OR (user_id=? AND peer_id=?))
+         LIMIT 1`,
+        [byUserId, peerId, peerId, byUserId]
+      )
+      if (rows.length) {
+        targets.add(rows[0].user_id === byUserId ? rows[0].peer_id : rows[0].user_id)
+      }
+    } else if (peerType === 'group') {
+      // 群: 推所有成员 + by 自己
+      const [mem] = await pool.query(
+        'SELECT user_id FROM smart_studio_group_members WHERE group_id=?',
+        [peerId]
+      )
+      mem.forEach(r => targets.add(r.user_id))
+    }
+    if (clients.has(0)) targets.add(0) // master
+
+    const payload = JSON.stringify({
+      type: 'clear',
+      peer_type: peerType,
+      peer_id: peerId,
+      by: byUserId,
+      deleted: deletedCount,
+      ts: Date.now()
+    })
+    targets.forEach(uid => {
+      const set = clients.get(uid)
+      if (!set) return
+      set.forEach(ws => {
+        if (ws.readyState === 1) {
+          try { ws.send(payload) } catch (e) {}
+        }
+      })
+    })
+    console.log(`[chat-ws] broadcast clear → ${targets.size} users`)
+  } catch (e) {
+    console.error('[chat-ws] broadcastClear failed:', e.message)
+  }
+}
+
+/**
+ * broadcastMessageDeleted — 单条消息删除广播
+ */
+export async function broadcastMessageDeleted(messageId, byUserId) {
+  try {
+    // 查消息的 peer + sender
+    const [rows] = await pool.query(
+      `SELECT id, peer_id, peer_type, sender_id FROM smart_studio_messages WHERE id=?`,
+      [messageId]
+    )
+    if (!rows.length) return // 消息已被删
+    const m = rows[0]
+    const targets = new Set()
+    targets.add(m.sender_id)
+    if (m.peer_type === 'user') targets.add(m.peer_id)
+    else {
+      const [mem] = await pool.query(
+        'SELECT user_id FROM smart_studio_group_members WHERE group_id=?',
+        [m.peer_id]
+      )
+      mem.forEach(r => targets.add(r.user_id))
+    }
+    if (clients.has(0)) targets.add(0)
+
+    const payload = JSON.stringify({
+      type: 'message_deleted',
+      id: messageId,
+      by: byUserId,
+      peer_type: m.peer_type,
+      peer_id: m.peer_id,
+      ts: Date.now()
+    })
+    targets.forEach(uid => {
+      const set = clients.get(uid)
+      if (!set) return
+      set.forEach(ws => {
+        if (ws.readyState === 1) {
+          try { ws.send(payload) } catch (e) {}
+        }
+      })
+    })
+  } catch (e) {
+    console.error('[chat-ws] broadcastMessageDeleted failed:', e.message)
+  }
+}
+
+/**
  * broadcastMessageEdited — 编辑消息后广播
  */
 export async function broadcastMessageEdited(messageId, newContent, editedBy) {
