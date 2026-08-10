@@ -6,7 +6,7 @@
 import express from 'express'
 import { WebSocketServer } from 'ws'
 import http from 'http'
-import { pool } from '../db.js'
+import { pool } from '../db/connection.js'
 
 const router = express.Router()
 
