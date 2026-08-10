@@ -57,7 +57,12 @@ router.get('/', async (req, res, next) => {
     }
     // site_name 以 server_profiles 里的为准（行业模板可自定义）
     if (profileSiteName) {
-      const locale = req.query.locale || req.cookies?.locale || 'zh'
+      // 2026-08-10 通用化: 默认 locale 从 server_profiles.languages[0] 拉
+      // macau profile 7 → ['zh-TW','zh-CN','en'][0] = 'zh-TW' (繁体默认)
+      // SGP profile 1 → ['zh','en','ms'][0] = 'zh' (简体默认)
+      // 修复前 hardcode 'zh' 导致 macau /gdqadmin 后台走简体, site_name 取不到繁体
+      const defaultLocale = (Array.isArray(data.languages) && data.languages.length > 0) ? data.languages[0] : 'zh'
+      const locale = req.query.locale || req.cookies?.locale || defaultLocale
       data.site_name = profileSiteName[locale] || profileSiteName.zh
       data.site_name_en = profileSiteName.en || 'SmartBiz'
     } else {
