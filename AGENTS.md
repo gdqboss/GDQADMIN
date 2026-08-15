@@ -337,3 +337,23 @@ SGP 集中 = **1 个波哥 + 1 个 agent 维护 8 客户** 的唯一可行路径
 - ❌ 在目标 server 上 `vim routes/X.js` 改 bug 后忘了回传到 SGP (下次 sync 被覆盖)
 - ❌ 在 SGP 改 `routes/macau-xxx.js` 假设 macau 会自动拿到 (macau 是独立服务, 必须 rsync)
 - ❌ 给目标 server `UPDATE users SET password=...` (波哥 #21 #4 铁律禁止改 DB 现有记录)
+
+
+### 例外: macau (profile 7) 是完整后端 fork, 不在 #21 标准范围内
+
+macau 体检发现 (2026-08-15):
+- `/opt/soc-server/index.js` 有 **126 处 `./routes/X.js` 引用 + 6 处 middleware + 1 db + 1 services + 1 jobs**
+- 后端跑的是 **macau 自己的 Node** (aippmcm.com:3200), 不是 SGP 共享后端
+- macau 端**从来没 git repo** (历史遗留)
+
+**跟其它 profile 的差异**:
+- HK 横琴 (profile 6) 走 wg 隧道, **共用 SGP 后端**, 仅前端 fork — 合规
+- macau (profile 7) **后端完全独立**, 算"完整后端 fork" — **不在 #21 "SGP 集中" 范围内**, 是历史遗留, 需要单独处理
+
+### macau 整改路径 (3 选 1, 待波哥拍板)
+
+A. **保留 fork, 禁止 macau 改业务代码** — macau 后端继续独立, 但所有新功能在 SGP 开发 + 手动 rsync routes/ 到 macau. 短期可行, 长期累.
+B. **macau 切到 SGP 后端** — macau 改 nginx 反代 SGP:3200 + 砍掉 macau 自己的 Node. 像 HK 横琴一样. 长期最干净, 但需重新部署.
+C. **macau 砍掉, 业务合并到 SGP** — macau 直接下线, 业务合并到 SGP 跑. 最简单但 macau 用户受影响.
+
+**目前状态**: A (保留 fork + 禁止 macau 改业务代码). macau 47 个 dist backups 已归档到 `.historical-bak-archive-20260815/`. 后端源码保留 (实际未动).
