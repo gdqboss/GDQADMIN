@@ -21,20 +21,11 @@
     --color-sidebar: #001529;
     --color-sidebar-header: #002140;
     --font-family-display: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
-    /* 繁体中文 (zh-HK/zh-TW) 字体: 优先苹方繁/思源黑体繁/Noto Sans CJK TC,失败兜底简体 */
-    --font-family-traditional: "PingFang TC", "PingFang HK", "Hiragino Sans TC", "Microsoft JhengHei", "Noto Sans TC", "Noto Sans CJK TC", "Source Han Sans TC", "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif;
   }
   
   body {
     font-family: var(--font-family-display);
     margin: 0;
-  }
-
-  /* 2026-08-06 港澳服务器 (profile 6/7 zh-HK) 触发繁体字体 */
-  /* 由 i18n/index.js setLocale 时给 <html> 加 .locale-zh-HK */
-  html.locale-zh-HK body,
-  html.locale-zh-HK {
-    font-family: var(--font-family-traditional);
   }
 }
 

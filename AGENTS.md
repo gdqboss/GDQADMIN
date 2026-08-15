@@ -272,3 +272,68 @@ profile 11 海丰大道庵 (寺庙)  (124.156.180.188, dda.gdqshop.cn)        �
 
 SGP 集中 = **1 个波哥 + 1 个 agent 维护 8 客户** 的唯一可行路径。
 违反 #20 = 8 倍 bug / 8 倍工作量 / 8 倍配置 / 不可持续。
+
+---
+
+## 九、#21 源码在 SGP + git + 危险档不混（2026-08-15 波哥立）
+
+> "以后不管开发什么，模块都需要再新加坡有才对，源码也应该存在新加坡和git"
+> "我们的开发原则是，代码在新加坡产生，测试，然后再根据目标服务器管理同步给其它服务器（并且是在我要求下或者同意下执行），但是需要注意的是，每个服务器的前后端域名不一样，title不一样，logo不一样，不要错误同步，更不能编辑目标服务器修改数据库记录"
+
+### 4 条铁律
+
+| # | 铁律 | 含义 |
+|---|------|------|
+| 1 | **代码在 SGP 产生 + 测试** | 跟 #20 同义, 强化: SGP = 唯一开发起点 |
+| 2 | **SGP → 其它 server 同步需授权** | 每次同步前必查 `server_profiles` 决定目标, 需波哥拍板才能执行 (不擅自 rsync) |
+| 3 | **不同 server 域名/title/logo 不混 (危险档)** | 见下方"危险档"清单 — 这些文件**不能直接覆盖**, 每个 server 必须保留自己的版本 |
+| 4 | **目标 server DB 现有记录不可改** | 可以 `ALTER TABLE ADD COLUMN` / `CREATE TABLE` (schema 演进), **不能 `UPDATE/DELETE` 业务数据** |
+
+### 危险档清单 (不能直接覆盖的)
+
+| 文件类型 | 为什么 | 处理 |
+|---------|-------|------|
+| `vite.config.js` | 含 build outDir / publicPath | 每个 server 独立 |
+| `main.js` / `App.vue` / `index.html` | 含 `<title>` / 入口 base | 每个 server 独立 |
+| `*.vue` 含 `logo` / `favicon` / `banner*` | 品牌资产 | 每个 server 独立 |
+| `components/Sidebar.vue` | 含 router base + 路由守卫 | 每个 server 独立 |
+| `constants/roles.js` | 含角色权限映射 (可能含 server id) | 每个 server 独立 |
+| `public-settings.js` | 含 server 标识 / 域名 | 每个 server 独立 |
+| `stores/system.js` | 含全局 state + server 上下文 | 每个 server 独立 |
+| `services/api.js` | 含 api baseUrl | 每个 server 独立 |
+| `Login.vue` / `Dashboard.vue` | 含 title 注入 + 品牌色 | 每个 server 独立 |
+| `router/index.js` | 含 router base / 守卫 | 每个 server 独立 |
+| `tailwind.config.js` / `postcss.config.js` | 含主题色 | 每个 server 独立 |
+| `.env` / `package.json` | 含 server 专属配置 | **禁止同步** |
+
+### 同步流程 (5 步)
+
+1. **波哥授权** (口头 / OUT-OF-BAND) — 这次同步哪个 profile 的哪些模块?
+2. **拉 server_modules 白名单**: `mysql -e "SELECT module_key FROM server_modules WHERE server_profile_id = N"`
+3. **SGP 端改代码 + 自测** (build 产物在 `dist-N/`)
+4. **diff 漂移** (目标 server 跟 SGP 同相对路径但 md5 不同) → 列出"真漂移 + 目标独有"
+5. **分类**:
+   - **真漂移 + 安全档** → scp 收回 SGP (SGP 缺漏)
+   - **真漂移 + 危险档** → 报告波哥手动处理 (不能覆盖)
+   - **目标独有 + 安全档** → 看是否要加进 SGP 模块库
+   - **目标独有 + 危险档** → 不动 (是目标 server 自己的 brand)
+
+### 历史教训 (2026-08-15 立)
+
+**macau fork 体检发现的 1160 文件对比结果**:
+- ✅ 1034 一致 (88%)
+- ⚠️ 70 真漂移 (安全档) — 已收回 SGP (v0.49.0)
+- ⚠️ 22 真漂移 (危险档) — 跳过 (sidebar/login/api 等)
+- 🆕 22 macau 独有 (安全档) — 评估中
+- 🆕 12 macau 独有 (危险档) — 不动 (banner/logo/favicon)
+
+**macau 端整改**: 47 个 dist backups 挪到 `.historical-bak-archive-20260815/` (释放 575M)
+- 私藏源码**未删** (macau `index.js` 引用 routes/ 127 处, 删 = 后端 crash), 改成"AGENTS.md #21 明确禁止 macau 再改源码"
+
+### 反模式 (永久禁止)
+
+- ❌ 直接 `rsync SGP/* root@macau:/opt/soc-server/` 全量覆盖 (会冲掉 macau 的 logo/title/域名)
+- ❌ 直接 `ssh root@macau "git pull"` 把 SGP 源码 push 到 macau (macau 没 git repo = 创建 ghost repo = 更乱)
+- ❌ 在目标 server 上 `vim routes/X.js` 改 bug 后忘了回传到 SGP (下次 sync 被覆盖)
+- ❌ 在 SGP 改 `routes/macau-xxx.js` 假设 macau 会自动拿到 (macau 是独立服务, 必须 rsync)
+- ❌ 给目标 server `UPDATE users SET password=...` (波哥 #21 #4 铁律禁止改 DB 现有记录)

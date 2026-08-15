@@ -166,7 +166,7 @@ function goNewOrder() {
 
 <template>
   <div class="min-h-screen bg-gray-50 p-6">
-    <PageHeader title="订单管理" subtitle="新加坡智能商业系统订单列表" />
+    <PageHeader title="订单管理" subtitle="新加坡彩美特商城订单列表" />
 
     <!-- Tabs -->
     <div class="bg-white rounded-xl shadow-sm mb-4 overflow-hidden">
