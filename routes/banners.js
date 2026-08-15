@@ -14,7 +14,16 @@ const router = express.Router()
 router.get('/', async (req, res) => {
   try {
     const { position, server_profile_id } = req.query
-    const profileId = parseInt(server_profile_id || req.headers['x-server-profile-id'] || 1)
+    // 2026-08-08 (江小鱼 fix): 未指定 profile 时, 根据 host 自动判断 (macau 中医学会)
+    let profileId = parseInt(server_profile_id || req.headers['x-server-profile-id'])
+    if (!profileId || isNaN(profileId)) {
+      const host = (req.headers.host || '').toLowerCase()
+      if (host.includes('aippmcm') || host.includes('101.33.32.177')) {
+        profileId = 7  // macau 中医学会
+      } else {
+        profileId = 1  // SGP 默认
+      }
+    }
 
     let sql = `SELECT * FROM banners WHERE server_profile_id = ? AND status = 'active'`
     const params = [profileId]
@@ -57,10 +66,19 @@ router.post('/:id/view', async (req, res) => {
 
 // ====== 管理接口 (需 auth + permission) ======
 
+// 2026-08-12 多租户: 显式查 DB 拿 server_profile_id (修复 auth() race bug)
+async function resolveProfileId(req) {
+  try {
+    const [rows] = await pool.execute('SELECT server_profile_id FROM users WHERE id = ?', [req.user.id])
+    if (rows.length && rows[0].server_profile_id) return rows[0].server_profile_id
+  } catch (_) { /* fallthrough */ }
+  return req.user.server_profile_id || 1
+}
+
 // GET /api/admin/banners — 客户后台列表
 router.get('/admin/list', auth, requirePermission(P.BANNERS_READ), async (req, res) => {
   try {
-    const profileId = req.user.server_profile_id || 1
+    const profileId = await resolveProfileId(req)
     const { position, status } = req.query
 
     let sql = `SELECT b.*, u.name as creator_name FROM banners b
@@ -83,7 +101,7 @@ router.get('/admin/list', auth, requirePermission(P.BANNERS_READ), async (req, r
 // POST /api/admin/banners — 新增
 router.post('/admin', auth, requirePermission(P.BANNERS_WRITE), async (req, res) => {
   try {
-    const profileId = req.user.server_profile_id || 1
+    const profileId = await resolveProfileId(req)
     const {
       position, title, subtitle, image_url, image_mobile_url,
       link_type = 'none', link_target, link_params,
@@ -116,7 +134,7 @@ router.post('/admin', auth, requirePermission(P.BANNERS_WRITE), async (req, res)
 // PATCH /api/admin/banners/:id — 编辑
 router.patch('/admin/:id', auth, requirePermission(P.BANNERS_WRITE), async (req, res) => {
   try {
-    const profileId = req.user.server_profile_id || 1
+    const profileId = await resolveProfileId(req)
     const id = req.params.id
 
     const [oldRows] = await pool.execute(
@@ -153,7 +171,7 @@ router.patch('/admin/:id', auth, requirePermission(P.BANNERS_WRITE), async (req,
 // DELETE /api/admin/banners/:id
 router.delete('/admin/:id', auth, requirePermission(P.BANNERS_DELETE), async (req, res) => {
   try {
-    const profileId = req.user.server_profile_id || 1
+    const profileId = await resolveProfileId(req)
     const [oldRows] = await pool.execute(`SELECT * FROM banners WHERE id = ? AND server_profile_id = ?`, [req.params.id, profileId])
     if (oldRows.length === 0) return res.status(404).json({ code: 404, message: '不存在或无权' })
 

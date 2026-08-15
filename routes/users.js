@@ -818,4 +818,32 @@ router.get('/responsibilities/list', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// === 2026-08-10 fixC: 前端 SPA admin 调用 /api/users/me + /api/users/profile (返回 404)
+//   解 JWT 拿 uid, 查 users 表返完整 user 对象
+router.get('/me', async (req, res, next) => {
+  try {
+    const uid = req.user?.id
+    if (!uid) return res.status(401).json({ code: 401, message: '未登录' })
+    const [rows] = await pool.query(
+      `SELECT id, name, email, role, phone, user_type, h5_user_id, customer_type, member_level, member_label, points, server_profile_id, avatar, created_at
+       FROM users WHERE id = ? LIMIT 1`, [uid])
+    if (!rows.length) return res.status(404).json({ code: 404, message: '用户不存在' })
+    res.json({ code: 0, data: rows[0] })
+  } catch (err) { next(err) }
+})
+
+// /profile = /me 的别名
+router.get('/profile', async (req, res, next) => {
+  try {
+    const uid = req.user?.id
+    if (!uid) return res.status(401).json({ code: 401, message: '未登录' })
+    const [rows] = await pool.query(
+      `SELECT id, name, email, role, phone, user_type, h5_user_id, customer_type, member_level, member_label, points, server_profile_id, avatar, created_at
+       FROM users WHERE id = ? LIMIT 1`, [uid])
+    if (!rows.length) return res.status(404).json({ code: 404, message: '用户不存在' })
+    res.json({ code: 0, data: rows[0] })
+  } catch (err) { next(err) }
+})
+
 export default router
+

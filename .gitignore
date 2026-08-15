@@ -34,3 +34,7 @@ sites-enabled.bak*/
 
 # Dependencies (8-09 加)
 node_modules/
+
+# Pre-merge backups (AGENTS.md #21)
+.pre-merge-*/
+

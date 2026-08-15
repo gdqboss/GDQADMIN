@@ -119,17 +119,31 @@ router.get('/public/home', async (req, res) => {
 })
 
 // GET /api/temple/public/services — 服务清单（匿名版）
+// 2026-07-24 修订: 删 donation/ceremony (违反业务规则"不出现捐款/收费"),
+//                 加 category 字段 (前端按 daily/senior 分组)
 router.get('/public/services', async (req, res) => {
   try {
     const services = [
-      { code: 'casket', icon: 'spa', title_zh: '骨灰盒供奉', title_en: 'Cinerary Casket',
-        short_zh: '为先人选择永久的安息之所', short_en: 'A permanent resting place for loved ones' },
-      { code: 'memorial', icon: 'local_florist', title_zh: '在线祭拜', title_en: 'Online Memorial',
-        short_zh: '请法师代劳祭拜，超度先人', short_en: 'Engage monks for ancestral rites' },
-      { code: 'donation', icon: 'volunteer_activism', title_zh: '功德捐赠', title_en: 'Merit Donation',
-        short_zh: '支持寺院维护与弘法事业', short_en: 'Support temple upkeep and Dharma work' },
-      { code: 'ceremony', icon: 'self_improvement', title_zh: '法会预约', title_en: 'Dharma Ceremony',
-        short_zh: '预约参与祈福、超度法会', short_en: 'Reserve blessing and memorial ceremonies' }
+      { code: 'casket', icon: 'spa', category: 'daily',
+        name_zh: '骨灰盒供奉', name_en: 'Cinerary Casket',
+        desc_zh: '为先人选择永久的安息之所(请联系寺院客堂办理)',
+        desc_en: 'A permanent resting place for loved ones. Please contact temple office.' },
+      { code: 'memorial', icon: 'local_florist', category: 'daily',
+        name_zh: '在线祭拜', name_en: 'Online Memorial',
+        desc_zh: '请法师代劳祭拜,超度先人(由客堂登记安排)',
+        desc_en: 'Engage monks for ancestral rites. Register at temple office.' },
+      { code: 'visit', icon: 'self_improvement', category: 'daily',
+        name_zh: '寺院参访', name_en: 'Temple Visit',
+        desc_zh: '开放时间 06:00-21:00,欢迎十方善信莅临',
+        desc_en: 'Visiting hours 06:00-21:00 daily. All devotees welcome.' },
+      { code: 'study', icon: 'menu_book', category: 'senior',
+        name_zh: '佛学讲座', name_en: 'Dharma Study',
+        desc_zh: '资深信众专享 · 周六上午定期开讲',
+        desc_en: 'Senior devotees only · Saturday mornings' },
+      { code: 'meditation', icon: 'spa', category: 'senior',
+        name_zh: '禅修共修', name_en: 'Meditation',
+        desc_zh: '资深信众专享 · 每周三晚静坐共修',
+        desc_en: 'Senior devotees only · Wednesday evenings' }
     ]
     res.json({ success: true, services })
   } catch (err) {
@@ -276,11 +290,12 @@ router.get('/me/caskets', auth, async (req, res) => {
 })
 
 // GET /api/temple/me/edit-requests
+// 2026-07-24 修订: 加 alias casket_name 兼容前端 + 列表用 requests 字段名兼容前端两种写法
 router.get('/me/edit-requests', auth, async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT r.id, r.casket_id, r.field_name, r.status, r.review_note, r.created_at, r.reviewed_at,
-              c.casket_code, a.name as ancestor_name
+              c.casket_code, c.casket_code as casket_name, a.name as ancestor_name
        FROM temple_edit_requests r
        JOIN temple_cinerary_caskets c ON r.casket_id = c.id
        LEFT JOIN temple_ancestors a ON c.ancestor_id = a.id
@@ -288,7 +303,58 @@ router.get('/me/edit-requests', auth, async (req, res) => {
        ORDER BY r.id DESC LIMIT 50`,
       [req.user.id]
     )
-    res.json({ success: true, list: rows })
+    res.json({ success: true, list: rows, requests: rows })
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+// GET /api/temple/family/edit-requests?casket_code=XXX
+// 2026-07-24 新增: 牌位详情页"编辑记录"用,按 casket_code + 当前用户过滤
+router.get('/family/edit-requests', auth, async (req, res) => {
+  try {
+    const { casket_code } = req.query
+    if (!casket_code) return res.status(400).json({ success: false, message: '缺少 casket_code' })
+    const [[casket]] = await pool.query(
+      'SELECT id FROM temple_cinerary_caskets WHERE casket_code = ?',
+      [casket_code]
+    )
+    if (!casket) return res.json({ success: true, list: [], requests: [] })
+    const [rows] = await pool.query(
+      `SELECT id, field_name, new_value, status, review_note, created_at, reviewed_at
+       FROM temple_edit_requests
+       WHERE casket_id = ? AND user_id = ?
+       ORDER BY id DESC LIMIT 50`,
+      [casket.id, req.user.id]
+    )
+    res.json({ success: true, list: rows, requests: rows })
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+// GET /api/temple/family/casket/:code/qrcode — 2026-07-24 新增
+//   牌位二维码生成端点(家属可见),返 data URL 供前端 img 渲染
+//   扫码目标 URL = 当前 SPA 的 /#/casket/:code (单页 hash 路由)
+router.get('/family/casket/:code/qrcode', auth, requireFamilyOfCasket, async (req, res) => {
+  try {
+    const QRCode = (await import('qrcode')).default
+    const { code } = req.params
+    const [[casket]] = await pool.query(
+      'SELECT id, casket_code FROM temple_cinerary_caskets WHERE casket_code = ?',
+      [code]
+    )
+    if (!casket) return res.status(404).json({ success: false, message: '牌位不存在' })
+    // 扫码目标 URL — 用当前 host(从 referer 取),访客无需登录也能扫码
+    const ref = req.headers.referer || req.headers.origin || ''
+    let base = ''
+    try { if (ref) base = new URL(ref).origin } catch { base = 'https://wecom.gdqshop.cn' }
+    const targetUrl = `${base}/temple/#/casket/${encodeURIComponent(code)}`
+    const dataUrl = await QRCode.toDataURL(targetUrl, {
+      width: 320, margin: 2, color: { dark: '#7a2c14', light: '#ffffff' },
+      errorCorrectionLevel: 'M'
+    })
+    res.json({ success: true, code, target_url: targetUrl, qrcode_data_url: dataUrl })
   } catch (err) {
     res.status(500).json({ success: false, message: err.message })
   }
@@ -359,12 +425,40 @@ router.get('/family/casket/:code', auth, requireFamilyOfCasket, async (req, res)
 })
 
 // POST /api/temple/family/casket/:code/edit-request
+// 2026-07-24 修订: 接受前端 showEditCasketSheet 整对象提交 (name/hall/eulogy)
+//                  同时兼容旧的按字段编辑 (field_name/new_value) — 弃用过渡
 router.post('/family/casket/:code/edit-request', auth, requireFamilyOfCasket, async (req, res) => {
   try {
     const { code } = req.params
-    const { field_name, new_value } = req.body
+    const body = req.body || {}
 
-    if (!['public_epitaph', 'private_epitaph', 'life_photos'].includes(field_name)) {
+    // 1) 新格式: 整对象提交 (前端 showEditCasketSheet)
+    if (body.name || body.hall !== undefined || body.eulogy !== undefined) {
+      const [[casket]] = await pool.query(
+        'SELECT id, ancestor_id FROM temple_cinerary_caskets WHERE casket_code = ?',
+        [code]
+      )
+      if (!casket) return res.status(404).json({ success: false, message: '牌位不存在' })
+      const userId = req.user.id
+      // 每条字段一条记录 (与 admin 审核界面字段粒度对齐)
+      const inserts = []
+      if (body.name) inserts.push(['name', body.name])
+      if (body.hall !== undefined) inserts.push(['hall', body.hall])
+      if (body.eulogy !== undefined) inserts.push(['public_epitaph', body.eulogy])
+      for (const [field_name, new_value] of inserts) {
+        await pool.query(
+          `INSERT INTO temple_edit_requests
+           (casket_id, user_id, field_name, new_value, status, created_at)
+           VALUES (?, ?, ?, ?, 'pending', NOW())`,
+          [casket.id, userId, field_name, String(new_value)]
+        )
+      }
+      return res.json({ success: true, message: '已提交,等待管理员审核', count: inserts.length })
+    }
+
+    // 2) 旧格式: 按字段编辑 (兼容保留)
+    const { field_name, new_value } = body
+    if (!['public_epitaph', 'private_epitaph', 'life_photos', 'name', 'hall'].includes(field_name)) {
       return res.status(400).json({ success: false, message: '不支持编辑的字段' })
     }
     if (new_value === undefined || new_value === null) {

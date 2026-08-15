@@ -207,4 +207,42 @@ router.delete('/:id', requirePermission(PERMISSIONS.ASSOCIATION_INQUIRIES_DELETE
   } catch (err) { next(err) }
 })
 
+// === 2026-08-10 fixC: 公共 GET / — 返 published 的 inquiry (匿名可访问)
+//   SPA admin 期望 /api/association/inquiries 返列表, 但原文件只有 POST / 和 GET /admin
+//   加 GET / 返列表 (status='new' 公开, 其它需要 admin)
+router.get('/', async (req, res, next) => {
+  try {
+    const status = req.query.status || null
+    const limit = Math.min(parseInt(req.query.limit || '20', 10), 100)
+    const sinceId = parseInt(req.query.since_id || '0', 10)
+    
+    let where = 'WHERE server_profile_id = 7'
+    const params = []
+    
+    // 匿名用户只看 public 状态 (这里没有 public 字段, 全返 status='new')
+    // admin 看全部
+    const isAdmin = req.user && req.user.role === 'admin';
+  if (!isAdmin) {
+      where += " AND status IN ('new', 'read', 'replied')"
+    } else if (status) {
+      where += ' AND status = ?'
+      params.push(status)
+    }
+    
+    if (sinceId > 0) {
+      where += ' AND id > ?'
+      params.push(sinceId)
+    }
+    
+    const [rows] = await pool.query(
+      `SELECT id, name, subject, message, status, created_at, replied_at
+       FROM association_inquiries ${where}
+       ORDER BY id DESC LIMIT ?`,
+      [...params, limit]
+    )
+    
+    res.json({ code: 0, data: rows, total: rows.length })
+  } catch (err) { next(err) }
+})
+
 export default router
