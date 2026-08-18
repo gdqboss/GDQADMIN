@@ -178,6 +178,9 @@ const pageToModule = {
   'SystemSettings':   'settings',
   'ServerProfiles':   'server_profiles',
 
+  // 寺庙管理 (2026-08-18 江小鱼立: SGP 缺, 从 macau/HK 补回后必须加入 manifest)
+  'Temple':           'temple',
+
   // 文章
   'ArticleList':      'article',
   'ArticleDetail':    'article',

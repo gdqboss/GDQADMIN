@@ -5,7 +5,7 @@ import moduleFilterPlugin from '../../vite-plugins/module-filter.js'
 // 2026-08-06: 自动注入 Material Symbols woff2 preload link (手机 FOIT 修复)
 import materialSymbolsPreloadPlugin from '../../vite-plugins/material-symbols-preload.js'
 
-const enabledModules = ["aftersale","ai-classroom","alerts","dashboard","dealers","excel-analyzer","finance","gift-approvals","in-out","job-responsibilities","oa","orders","products","qrcode","referral","reports","retail","returns","roles","server_profiles","settings","stores","suppliers","tasks","transfer","users","warehouses"]
+const enabledModules = ["aftersale","ai-classroom","alerts","dashboard","dealers","excel-analyzer","finance","gift-approvals","in-out","job-responsibilities","oa","orders","products","qrcode","referral","reports","retail","returns","roles","server_profiles","settings","stores","temple","suppliers","tasks","transfer","users","warehouses","association-info","association-announcements","association-activities","association-cards","association-members","association-academic","association-journals","association-downloads","association-org","association-inquiries"]
 
 export default defineConfig({
   plugins: [materialSymbolsPreloadPlugin(), vue(), moduleFilterPlugin(enabledModules)],
@@ -15,7 +15,14 @@ export default defineConfig({
     assetsDir: 'assets',
     sourcemap: false,
     minify: 'esbuild',
-    base: 'auto',
+    base: '/gdqadmin/',
+    // 2026-08-15 急修: base 'auto' 在 SGP/HK 部署时推断为 '/', 导致懒加载 chunk
+    //   (Login-xxx.js 等路由级 split chunk) 用相对路径 './Login-xxx.js' 被浏览器
+    //   解析为 '/assets/Login-xxx.js' 走 Caddy 根路径 (返回 portal HTML)
+    //   → 'Failed to load module script: MIME text/html' → SPA 整个初始化失败
+    //   → 表现为'新用户注册不正常 / 角色管理新增不行'
+    // 改 '/gdqadmin/' 后, 懒加载 chunk 会用 '/gdqadmin/assets/Login-xxx.js' 匹配
+    //   Caddyfile 的 @gdqadminAssets handler → 正常 200 application/javascript
     rollupOptions: {
       output: {
         manualChunks: (id) => {
