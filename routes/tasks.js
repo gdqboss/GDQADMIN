@@ -460,7 +460,7 @@ router.post('/', async (req, res, next) => {
     const [result] = await pool.query(
       `INSERT INTO tasks (title, description, jobsite_id, assigned_to, assigned_by, created_by, due_date, priority, status, is_new)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`,
-      [title, description || null, assigned_to, req.user.id, req.user.id, due_date || null, priority || 'medium']
+      [title, description || null, jobsite_id || null, assigned_to, req.user.id, req.user.id, due_date || null, priority || "medium"]
     )
 
     res.json({ code: 0, data: { id: result.insertId }, message: '任务创建成功' })
