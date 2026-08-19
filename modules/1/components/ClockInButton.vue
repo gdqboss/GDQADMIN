@@ -62,7 +62,7 @@ async function handleClock() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('caimeite_token')}`
+        'Authorization': `Bearer ${localStorage.getItem('admin_token')}`
       },
       body: JSON.stringify({
         type: props.type,

@@ -94,6 +94,7 @@ import laborAppealsRoutes from './routes/labor-appeals.js'
 import adminSchemaRoutes from './routes/admin-schema.js'
 import aiConfigRoutes from './routes/ai-config.js'
 import kbRoutes from './routes/kb.js'
+import jobsiteExtraRoutes from './routes/jobsite-extra.js'
 import jobResponsibilitiesRoutes from './routes/job-responsibilities.js'
 import workLogsRoutes from './routes/work-logs.js'
 import visitLogsRoutes from './routes/visit-logs.js'
@@ -612,6 +613,7 @@ app.use('/api/rbac/roles', auth, apiLimiter, rbacRoleRoutes)
 app.use('/api/rbac/users', auth, apiLimiter, rbacUserRoleRoutes)
 app.use('/api/labor-worker', auth, apiLimiter, laborWorkerRouter)
 app.use('/api/labor-jobsites', auth, apiLimiter, laborJobsiteRouter)
+app.use('/api/jobsite-extra', auth, apiLimiter, jobsiteExtraRoutes)
 app.use('/api/labor-dispatch', auth, apiLimiter, laborDispatchRouter)
 app.use('/api/labor-evaluations', auth, apiLimiter, laborEvalRouter)
 app.use('/api/labor-hr', auth, apiLimiter, laborHrRoutes)

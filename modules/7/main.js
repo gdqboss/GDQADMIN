@@ -5,6 +5,13 @@ import router from './router'
 import i18n from './i18n'
 import { loadSystemSettings } from './stores/system.js'
 import 'material-symbols/outlined.css'
+
+// 2026-08-15 江小鱼革命性强化 — 全局 <ui-icon> custom element + DOM Migrator
+// 自动把 100 个 view 里的 <span class="material-symbols-outlined">xxx</span> 
+// 实时改写成 <ui-icon name="xxx">, 渲染走内联 SVG (无 woff2 字体加载)
+// 命名严格匹配 Material Symbols Outlined → 未来切回字体方案零数据改动.
+// 见 ui-icon-element.js 顶部注释 + components/UiIcon.vue 同步实现.
+import './ui-icon-element.js'
 // 2026-08-06 BUG FIX: Material Symbols 默认 font-display: block (字体加载完前图标区域空白, 然后突然显示)
 // 手机 4G 用户加载 3.8MB woff2 太慢, 在加载完前看到空白方框 (体验差)
 // 改成 font-display: swap - 加载前显示 fallback (虽然空白, 但不会"突然跳出来")

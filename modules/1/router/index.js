@@ -128,6 +128,18 @@ const routes = [
       { path: 'kefu', name: 'Kefu', component: lazyLoad(() => import('../views/kefu/KefuChat.vue')), meta: { title: '客服消息', parent: '消息', permission: 'kefu:read' } },
       { path: 'ai-automation', name: 'AiAutomation', component: lazyLoad(() => import('../views/automation/AiAutomation.vue')), meta: { title: 'AI 自动化', parent: 'OpenClaw', permission: 'ai-automation:write' } },
 
+      // ── 协会中心 (SGP 是 source, 2026-07-30 波哥加 macau, 2026-08-15 江小鱼把 source 补齐)
+      { path: 'association', name: 'AssociationInfo', component: lazyLoad(() => import('../views/association/info/AssociationInfo.vue')), meta: { title: '协会介绍', parent: '协会', permission: 'association-info:read' } },
+      { path: 'association-announcements', name: 'AssociationAnnouncements', component: lazyLoad(() => import('../views/association/announcements/AnnouncementList.vue')), meta: { title: '信息发布', parent: '协会', permission: 'association-announcements:read' } },
+      { path: 'association-activities', name: 'AssociationActivities', component: lazyLoad(() => import('../views/association/activities/ActivityList.vue')), meta: { title: '活动报名', parent: '协会', permission: 'association-activities:read' } },
+      { path: 'association-cards', name: 'AssociationCards', component: lazyLoad(() => import('../views/association/cards/CardList.vue')), meta: { title: '会员名片', parent: '协会', permission: 'association-cards:read' } },
+      { path: 'association-members', name: 'AssociationMembers', component: lazyLoad(() => import('../views/association/members/MemberList.vue')), meta: { title: '会员管理', parent: '协会', permission: 'association-members:read' } },
+      { path: 'association-academic', name: 'AssociationAcademic', component: lazyLoad(() => import('../views/association/academic/AcademicList.vue')), meta: { title: '学术动态', parent: '协会', permission: 'association-academic:read' } },
+      { path: 'association-journals', name: 'AssociationJournals', component: lazyLoad(() => import('../views/association/journals/JournalList.vue')), meta: { title: '期刊管理', parent: '协会', permission: 'association-journals:read' } },
+      { path: 'association-downloads', name: 'AssociationDownloads', component: lazyLoad(() => import('../views/association/downloads/DownloadList.vue')), meta: { title: '资料下载', parent: '协会', permission: 'association-downloads:read' } },
+      { path: 'association-org', name: 'AssociationOrg', component: lazyLoad(() => import('../views/association/org/OrgList.vue')), meta: { title: '组织架构', parent: '协会', permission: 'association-org:read' } },
+      { path: 'association-inquiries', name: 'AssociationInquiries', component: lazyLoad(() => import('../views/association/inquiries/InquiriesManage.vue')), meta: { title: '在线咨询', parent: '协会', permission: 'association-inquiries:read' } },
+
       // ── OA 办公 ──────────────────────────────────────────────
       { path: 'oa', name: 'OaCenter', component: lazyLoad(() => import('../views/oa/OaCenter.vue')), meta: { title: 'OA 办公', permission: 'oa:read' } },
       { path: 'oa/attendance', name: 'AttendanceManage', component: lazyLoad(() => import('../views/oa/AttendanceManage.vue')), meta: { title: '考勤管理', permission: 'attendance:view' } },
@@ -204,9 +216,6 @@ const routes = [
       { path: 'hotel/orders', name: 'HotelOrderList', component: lazyLoad(() => import('../views/hotel/HotelOrderList.vue')), meta: { title: '酒店订单', parent: '酒店管理', permission: 'hotel:read' } },
       { path: 'hotel/orders/:id', name: 'HotelOrderDetail', component: lazyLoad(() => import('../views/hotel/HotelOrderDetail.vue')), meta: { title: '订单详情', parent: '酒店管理', permission: 'hotel:read' } },
       { path: 'hotel/reviews', name: 'HotelReviews', component: lazyLoad(() => import('../views/hotel/ReviewList.vue')), meta: { title: '评价管理', parent: '酒店管理', permission: 'hotel:read' } },
-
-      // ── 寺庙管理 (2026-08-06 BUG FIX: macau/HK 有 Temple.vue, SGP 之前缺, 现从 macau 补回) ──────
-      { path: 'temple', name: 'Temple', component: lazyLoad(() => import('../views/Temple.vue')), meta: { title: '寺庙管理', permission: 'temple:read' } },
 
       // ── 预订单 (2026-08-06 BUG FIX: macau/HK 有 preorder, SGP 之前缺, 现从 macau 补回) ────────────
       { path: 'preorder', name: 'PreorderSummary', component: lazyLoad(() => import('../views/preorder/PreorderSummary.vue')), meta: { title: '产品预订', parent: '库存管理', permission: 'preorder:read' } },

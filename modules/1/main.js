@@ -22,13 +22,36 @@ import {
   ElDivider, ElDrawer, ElDropdown, ElDropdownItem, ElDropdownMenu, ElEmpty,
   ElFooter, ElForm, ElFormItem, ElHeader, ElIcon, ElImage, ElInput, ElInputNumber,
   ElLink, ElLoading, ElMain, ElMenu, ElMenuItem, ElMessage, ElMessageBox,
-  ElNotification, ElOption, ElPageHeader, ElPagination, ElPopover, ElProgress,
+  ElNotification, ElOption, ElOverlay, ElPageHeader, ElPagination, ElPopover, ElProgress,
   ElRadio, ElRadioGroup, ElRate, ElResult, ElRow, ElScrollbar, ElSelect,
   ElSkeleton, ElSkeletonItem, ElSlider, ElSpace, ElStatistic, ElStep, ElSteps,
   ElSubMenu, ElSwitch, ElTabPane, ElTable, ElTableColumn, ElTabs, ElTag,
-  ElText, ElTextarea, ElTimeline, ElTimelineItem, ElTooltip, ElTransfer,
+  ElText, ElTimeline, ElTimelineItem, ElTooltip, ElTransfer,
   ElTree, ElUpload,
 } from 'element-plus'
+
+// 2026-08-15 BUG FIX: ElementPlus 组件未全局注册，导致某些 .vue 文件里 <el-dialog> 这类
+// 显式 import 名字的组件编译成 resolveComponent("el-dialog") 走全局查找，结果返回字符串
+// （找不到组件定义），render 出 <el-dialog> 标签而不是真正的 dialog。
+// 修复：把 main.js 已经按需引入的 51 个组件全部注册到 app，
+// 这样 `pe("el-dialog")` 这类调用就能拿到真正的 ElDialog 组件对象。
+// 注意: ElementPlus 2.5 没有 ElTextarea export, 跟原 import list 保持一致
+// 同时 PascalCase + kebab-case 双注册, 因为 Vue 3 app.component() 不会自动转 kebab→Pascal
+const epComponents = {
+  ElAlert, ElAside, ElAutocomplete, ElAvatar, ElBacktop, ElBadge,
+  ElBreadcrumb, ElBreadcrumbItem, ElButton, ElCard, ElCarousel, ElCarouselItem,
+  ElCascader, ElCheckbox, ElCheckboxGroup, ElCol, ElCollapse, ElCollapseItem,
+  ElColorPicker, ElContainer, ElDescriptions, ElDescriptionsItem, ElDialog,
+  ElDivider, ElDrawer, ElDropdown, ElDropdownItem, ElDropdownMenu, ElEmpty,
+  ElFooter, ElForm, ElFormItem, ElHeader, ElIcon, ElImage, ElInput, ElInputNumber,
+  ElLink, ElLoading, ElMain, ElMenu, ElMenuItem, ElMessage, ElMessageBox,
+  ElNotification, ElOption, ElOverlay, ElPageHeader, ElPagination, ElPopover, ElProgress,
+  ElRadio, ElRadioGroup, ElRate, ElResult, ElRow, ElScrollbar, ElSelect,
+  ElSkeleton, ElSkeletonItem, ElSlider, ElSpace, ElStatistic, ElStep, ElSteps,
+  ElSubMenu, ElSwitch, ElTabPane, ElTable, ElTableColumn, ElTabs, ElTag,
+  ElText, ElTimeline, ElTimelineItem, ElTooltip, ElTransfer,
+  ElTree, ElUpload,
+}
 
 // 按需引入 ElementPlus 基础样式（dark mode vars、reset、基础元素）
 // 组件样式由 unplugin-vue-components 自动注入；如未配置，手动引入需要的
@@ -116,9 +139,25 @@ import './style.css'
 // 创建应用实例
 const app = createApp(App)
 
+// 2026-08-15 BUG FIX: 启用 ElementPlus dark 主题
+//   EP CSS variables 全部定义在 html.dark 选择器下, 没有这个 class 时 --el-bg-color 等变量
+//   都是 undefined, 导致 el-dialog / el-overlay / el-button 等组件背景变 transparent,
+//   表现: 弹窗"无底色", 看起来透明。
+//   注意: 强制 dark 后, 客户想要的"明亮主题"用 Tailwind utility 自己实现, 不依赖 EP 默认
+document.documentElement.classList.add('dark')
+
 // 注册所有 ElementPlus 图标（体积小，可全量；按需注册亦可）
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
   app.component(key, component)
+}
+
+// 2026-08-15 BUG FIX: 注册 ElementPlus 组件到全局
+// （让 RoleManage.vue 等模板里 `<el-dialog>` 这种 resolveComponent 调用能拿到组件对象）
+// 注意: Vue 3 app.component() 不会自动 PascalCase <-> kebab-case 转换, 必须两个都注册
+for (const [name, comp] of Object.entries(epComponents)) {
+  app.component(name, comp)  // PascalCase: "ElDialog"
+  const kebab = name.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase()  // "el-dialog"
+  if (kebab !== name) app.component(kebab, comp)
 }
 
 app.use(createPinia())

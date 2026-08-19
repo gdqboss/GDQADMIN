@@ -31,6 +31,14 @@ async function loadServerModules() {
     const res = await api.get('/public-settings')
     if (res.code === 0 && res.data && res.data.modules) {
       serverModules.value = res.data.modules
+      // 2026-08-15 江小鱼 — 派生 'association' 标记:
+      // profile 7 (macau 中医学会) 勾选的是具体 module_key (association-academic 等),
+      // 但 sidebar group 用 'association' 单一 key 控制整组显示. 把任意 association-*
+      // 视为 association 整组可见.
+      const hasAnyAssoc = serverModules.value.some(m => m.startsWith('association-'))
+      if (hasAnyAssoc && !serverModules.value.includes('association')) {
+        serverModules.value = [...serverModules.value, 'association']
+      }
     }
   } catch { /* ignore */ }
 }
@@ -297,6 +305,28 @@ const menuGroups = computed(() => [
       { key: 'system:config', label: t('nav.serverProfiles'), to: '/settings/server-profiles' },
     ]
   },
+  // 2026-08-15 江小鱼 — SGP 是源头 — 协会后台 10 模块入口 (macau profile 7 主用)
+  // macau DB 勾选的是具体 association-* module_key (academic/activities/...),
+  // 这里用单一 'association' group 标记控制整组显示. loadServerModules 派生这条.
+  {
+    key: 'association',
+    icon: 'handshake',
+    label: '协会',
+    to: null,
+    moduleKeys: ['association'],
+    children: [
+      { key: 'association-info:read', label: '协会介绍', to: '/association' },
+      { key: 'association-announcements:read', label: '信息发布', to: '/association-announcements' },
+      { key: 'association-activities:read', label: '活动报名', to: '/association-activities' },
+      { key: 'association-cards:read', label: '会员名片', to: '/association-cards' },
+      { key: 'association-members:read', label: '会员管理', to: '/association-members' },
+      { key: 'association-academic:read', label: '学术动态', to: '/association-academic' },
+      { key: 'association-journals:read', label: '期刊管理', to: '/association-journals' },
+      { key: 'association-downloads:read', label: '资料下载', to: '/association-downloads' },
+      { key: 'association-org:read', label: '组织架构', to: '/association-org' },
+      { key: 'association-inquiries:read', label: '在线咨询', to: '/association-inquiries' },
+    ]
+  },
 ])
 
 // 路由路径 → module_key 映射（用于按服务器模块过滤）
@@ -350,6 +380,17 @@ const routeToModule = {
   '/articles': 'article',
   '/yuyue': 'yuyue',
   '/kefu': 'kefu',
+  // 2026-08-15 江小鱼 — SGP 协会 10 路由 → module_key 映射 (macau profile 7 派生显示)
+  '/association': 'association-info',
+  '/association-announcements': 'association-announcements',
+  '/association-activities': 'association-activities',
+  '/association-cards': 'association-cards',
+  '/association-members': 'association-members',
+  '/association-academic': 'association-academic',
+  '/association-journals': 'association-journals',
+  '/association-downloads': 'association-downloads',
+  '/association-org': 'association-org',
+  '/association-inquiries': 'association-inquiries',
   '/settings': 'settings',
   '/settings/users': 'users',
   '/settings/roles': 'roles',

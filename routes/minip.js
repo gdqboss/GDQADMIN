@@ -1176,4 +1176,703 @@ router.get('/rental/my-bookings', auth, async (req, res) => {
   return res.json({ code: 0, data: { list: [] } })
 })
 
+// ============================================================
+// OA 审批（整合 uni-app approval-list, 2026-08-19）
+// ============================================================
+//
+// mock 数据：3 条审批，覆盖 pending/approved/rejected 三种状态
+// 真实接 DB 后从 oa_submissions + oa_steps 联合查
+const APPROVAL_MOCK = [
+  {
+    id: 1,
+    flowId: 'leave',
+    flowName: '请假申请',
+    applicant: '李明',
+    submitTime: Date.now() - 1000 * 60 * 60 * 2,    // 2 小时前
+    status: 'pending',
+    formData: { leaveType: '年假', days: 2, reason: '家中有事' },
+    nodes: [
+      { name: '直属上级', state: 'current' },
+      { name: '部门主管', state: 'pending' }
+    ]
+  },
+  {
+    id: 2,
+    flowId: 'reimburse',
+    flowName: '报销申请',
+    applicant: '王芳',
+    submitTime: Date.now() - 1000 * 60 * 60 * 24,   // 1 天前
+    status: 'pending',
+    formData: { amount: 1280, reason: '客户接待' },
+    nodes: [
+      { name: '直属上级', state: 'approved' },
+      { name: '部门主管', state: 'current' }
+    ]
+  },
+  {
+    id: 3,
+    flowId: 'leave',
+    flowName: '请假申请',
+    applicant: '张丽',
+    submitTime: Date.now() - 1000 * 60 * 60 * 24 * 3,
+    status: 'approved',
+    formData: { leaveType: '病假', days: 1, reason: '感冒发烧' },
+    nodes: [
+      { name: '直属上级', state: 'approved', completedAt: Date.now() - 1000 * 60 * 60 * 24 * 3 + 1000 * 3600 },
+      { name: '部门主管', state: 'approved', completedAt: Date.now() - 1000 * 60 * 60 * 24 * 3 + 1000 * 3600 * 2 }
+    ]
+  },
+  {
+    id: 4,
+    flowId: 'overtime',
+    flowName: '加班申请',
+    applicant: '陈强',
+    submitTime: Date.now() - 1000 * 60 * 60 * 24 * 5,
+    status: 'rejected',
+    formData: { otType: '工作日', minutes: 120, reason: '项目上线' },
+    nodes: [
+      { name: '直属上级', state: 'rejected', completedAt: Date.now() - 1000 * 60 * 60 * 24 * 5 + 1000 * 3600, message: '未提前申请' }
+    ]
+  }
+]
+
+// GET /api/minip/oa/approvals - 拉审批列表（按 status 过滤）
+//   status: pending | approved | rejected | all（默认 all）
+router.get('/oa/approvals', auth, async (req, res, next) => {
+  try {
+    const status = (req.query.status || 'all').toLowerCase()
+    let list = APPROVAL_MOCK.slice()
+    if (status !== 'all') list = list.filter(a => a.status === status)
+    // 按 submitTime 倒序
+    list.sort((a, b) => b.submitTime - a.submitTime)
+    return res.json({ code: 0, data: { list, total: list.length } })
+  } catch (err) { next(err) }
+})
+
+// GET /api/minip/oa/approvals/:id - 单条审批详情
+router.get('/oa/approvals/:id', auth, async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id)
+    const item = APPROVAL_MOCK.find(a => a.id === id)
+    if (!item) return res.status(404).json({ code: 404, message: '审批记录不存在' })
+    return res.json({ code: 0, data: item })
+  } catch (err) { next(err) }
+})
+
+// POST /api/minip/oa/approvals/:id/approve - 通过审批
+router.post('/oa/approvals/:id/approve', auth, async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id)
+    const item = APPROVAL_MOCK.find(a => a.id === id)
+    if (!item) return res.status(404).json({ code: 404, message: '审批记录不存在' })
+    if (item.status !== 'pending') return res.status(409).json({ code: 409, message: '该申请已处理' })
+    item.status = 'approved'
+    item.approvedAt = new Date().toISOString()
+    item.approvedBy = req.user?.id || null
+    return res.json({ code: 0, data: item, message: '已通过' })
+  } catch (err) { next(err) }
+})
+
+// POST /api/minip/oa/approvals/:id/reject - 驳回审批
+router.post('/oa/approvals/:id/reject', auth, async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id)
+    const reason = req.body?.reason || ''
+    const item = APPROVAL_MOCK.find(a => a.id === id)
+    if (!item) return res.status(404).json({ code: 404, message: '审批记录不存在' })
+    if (item.status !== 'pending') return res.status(409).json({ code: 409, message: '该申请已处理' })
+    item.status = 'rejected'
+    item.rejectedAt = new Date().toISOString()
+    item.rejectedBy = req.user?.id || null
+    item.rejectReason = reason
+    return res.json({ code: 0, data: item, message: '已驳回' })
+  } catch (err) { next(err) }
+})
+
+// GET /api/minip/oa/categories - OA 流程分类（uni-app oa-flow-list 用）
+router.get('/oa/categories', async (req, res, next) => {
+  try {
+    // 内置 13 大类（来自 oa-categories.js 的 oaCategories）
+    // 这里只返回分类摘要，详细 fields 由前端 oa-categories.js 提供
+    return res.json({
+      code: 0,
+      data: {
+        list: [
+          { id: 'hr', name: '人事类', desc: '员工入离调转与考勤，最高频；内部用 + 平台标准模板。' },
+          { id: 'finance', name: '财务类', desc: '报销、付款、用款、发票管理 — 与财务系统对接。' },
+          { id: 'business', name: '业务类', desc: '招商、立项、合同、订单 — 核心业务流转。' },
+          { id: 'admin', name: '行政类', desc: '物资采购、车辆、用印、场地 — 后勤保障。' },
+          { id: 'travel', name: '差旅类', desc: '出差申请、行程报备、差旅报销 — 简化出行。' },
+          { id: 'asset', name: '资产类', desc: '资产领用、调拨、报废 — 实物资产管理。' },
+          { id: 'project', name: '项目类', desc: '项目立项、变更、验收 — 项目全周期。' },
+          { id: 'vendor', name: '供应商类', desc: '供应商准入、考核、退出 — 供应链管理。' },
+          { id: 'training', name: '培训类', desc: '培训申请、签到、效果评估 — 人才培养。' },
+          { id: 'meeting', name: '会议类', desc: '会议申请、纪要、决议执行 — 会议效率。' },
+          { id: 'event', name: '活动类', desc: '活动申请、签到、复盘 — 内外活动管理。' },
+          { id: 'customer', name: '客户类', desc: '客户准入、跟进、投诉 — 客户关系。' },
+          { id: 'other', name: '其它类', desc: '自定义流程与扩展。' }
+        ]
+      }
+    })
+  } catch (err) { next(err) }
+})
+
+// ============================================================
+// 会议邀请（整合 uni-app accept-invite, 2026-08-19）
+// ============================================================
+//
+// mock 数据：3 个邀请条目，按 id 路由分发到不同 mock
+// 真实接 DB 后从 invite 表 + meeting 表 join 读
+const INVITE_MOCK = {
+  'inv_001': {
+    invite_id: 'inv_001',
+    inviter: '张经理',
+    inviter_id: 'u_001',
+    time: '2026年4月14日 14:00',
+    duration: '1小时',
+    location: '中会议室 04-1302',
+    participantsLead: '张经理',
+    participantsRest: '、李*明、赵*琳、刘*强（我）',
+    title: '项目周会',
+    status: 'pending'
+  },
+  'inv_002': {
+    invite_id: 'inv_002',
+    inviter: '王总',
+    inviter_id: 'u_002',
+    time: '2026年4月15日 10:00',
+    duration: '2小时',
+    location: 'VIP 接待室 02-2201',
+    participantsLead: '王总',
+    participantsRest: '、张经理、刘*强（我）',
+    title: 'Q2 战略评审',
+    status: 'pending'
+  },
+  'inv_003': {
+    invite_id: 'inv_003',
+    inviter: '陈运营',
+    inviter_id: 'u_003',
+    time: '2026年4月16日 16:00',
+    duration: '30分钟',
+    location: '小会议室 04-1301',
+    participantsLead: '陈运营',
+    participantsRest: '（我）',
+    title: '场地预约协调',
+    status: 'pending'
+  }
+}
+
+// GET /api/minip/invite/:id - 获取邀请详情
+router.get('/invite/:id', async (req, res, next) => {
+  try {
+    const id = req.params.id
+    const data = INVITE_MOCK[id]
+    if (!data) return res.status(404).json({ code: 404, message: '邀请不存在或已过期' })
+    return res.json({ code: 0, data: { meeting: data } })
+  } catch (err) { next(err) }
+})
+
+// POST /api/minip/invite/:id/accept - 接受邀请
+router.post('/invite/:id/accept', auth, async (req, res, next) => {
+  try {
+    const id = req.params.id
+    const data = INVITE_MOCK[id]
+    if (!data) return res.status(404).json({ code: 404, message: '邀请不存在或已过期' })
+    if (data.status !== 'pending') {
+      return res.status(409).json({ code: 409, message: '该邀请已被处理' })
+    }
+    // mock: 标记为 accepted（真实接 DB 后写 invite_responses 表）
+    data.status = 'accepted'
+    data.accepted_at = new Date().toISOString()
+    data.accepted_by = req.user?.id || null
+    return res.json({ code: 0, data, message: '已接受邀请' })
+  } catch (err) { next(err) }
+})
+
+// POST /api/minip/invite/:id/decline - 拒绝邀请
+router.post('/invite/:id/decline', auth, async (req, res, next) => {
+  try {
+    const id = req.params.id
+    const data = INVITE_MOCK[id]
+    if (!data) return res.status(404).json({ code: 404, message: '邀请不存在或已过期' })
+    if (data.status !== 'pending') {
+      return res.status(409).json({ code: 409, message: '该邀请已被处理' })
+    }
+    data.status = 'declined'
+    data.declined_at = new Date().toISOString()
+    data.declined_by = req.user?.id || null
+    return res.json({ code: 0, data, message: '已拒绝邀请' })
+  } catch (err) { next(err) }
+})
+
+// ============================================================
+// "我的"页面 4 大模块 (favorites / reviews / addresses / orders)
+// 2026-08-19 新增 - 前端 me/ 全部接 API
+// 表用 favorites/reviews/addresses/orders（自动创建，不存在则空）
+// ============================================================
+
+// GET /api/minip/me/favorites - 我的收藏
+router.get('/me/favorites', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    const [rows] = await pool.query(
+      `SELECT id, target_type, target_id, title, subtitle, cover, created_at
+         FROM user_favorites WHERE user_id = ? ORDER BY created_at DESC LIMIT 100`,
+      [userId]
+    ).catch(() => [[]])
+    res.json({ code: 0, data: { list: rows } })
+  } catch (err) { next(err) }
+})
+
+// POST /api/minip/me/favorites - 添加收藏
+router.post('/me/favorites', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    const { target_type = 'product', target_id, title = '', subtitle = '', cover = '' } = req.body || {}
+    if (!target_id) return res.status(400).json({ code: 400, message: 'target_id 必填' })
+    await pool.query(
+      `INSERT IGNORE INTO user_favorites (user_id, target_type, target_id, title, subtitle, cover, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+      [userId, target_type, target_id, title, subtitle, cover]
+    ).catch(async () => {
+      // 表不存在则自动创建
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS user_favorites (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          user_id INT NOT NULL,
+          target_type VARCHAR(32) DEFAULT 'product',
+          target_id VARCHAR(64) NOT NULL,
+          title VARCHAR(255) DEFAULT '',
+          subtitle VARCHAR(255) DEFAULT '',
+          cover VARCHAR(512) DEFAULT '',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE KEY uniq_fav (user_id, target_type, target_id),
+          INDEX idx_user (user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `)
+      await pool.query(
+        `INSERT IGNORE INTO user_favorites (user_id, target_type, target_id, title, subtitle, cover, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+        [userId, target_type, target_id, title, subtitle, cover]
+      )
+    })
+    res.json({ code: 0, message: '已收藏' })
+  } catch (err) { next(err) }
+})
+
+// DELETE /api/minip/me/favorites/:id - 取消收藏
+router.delete('/me/favorites/:id', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    await pool.query('DELETE FROM user_favorites WHERE id = ? AND user_id = ?', [req.params.id, userId])
+    res.json({ code: 0, message: '已取消收藏' })
+  } catch (err) { next(err) }
+})
+
+// GET /api/minip/me/reviews - 我的评价
+router.get('/me/reviews', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    const [rows] = await pool.query(
+      `SELECT id, target_type, target_id, target_name, rating, content, images, created_at
+         FROM user_reviews WHERE user_id = ? ORDER BY created_at DESC LIMIT 50`,
+      [userId]
+    ).catch(() => [[]])
+    res.json({ code: 0, data: { list: rows } })
+  } catch (err) { next(err) }
+})
+
+// GET /api/minip/me/addresses - 收货地址列表
+router.get('/me/addresses', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    const [rows] = await pool.query(
+      `SELECT id, name, phone, province, city, district, detail, is_default, created_at
+         FROM user_addresses WHERE user_id = ? ORDER BY is_default DESC, id DESC LIMIT 50`,
+      [userId]
+    ).catch(() => [[]])
+    res.json({ code: 0, data: { list: rows } })
+  } catch (err) { next(err) }
+})
+
+// POST /api/minip/me/addresses - 新增地址
+router.post('/me/addresses', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    const { name, phone, province = '', city = '', district = '', detail = '', is_default = 0 } = req.body || {}
+    if (!name || !phone) return res.status(400).json({ code: 400, message: '姓名手机号必填' })
+    // 自动建表
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_addresses (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        name VARCHAR(64) NOT NULL,
+        phone VARCHAR(32) NOT NULL,
+        province VARCHAR(64) DEFAULT '',
+        city VARCHAR(64) DEFAULT '',
+        district VARCHAR(64) DEFAULT '',
+        detail VARCHAR(255) DEFAULT '',
+        is_default TINYINT DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_user (user_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `).catch(() => {})
+    if (is_default) await pool.query('UPDATE user_addresses SET is_default = 0 WHERE user_id = ?', [userId])
+    const [r] = await pool.query(
+      `INSERT INTO user_addresses (user_id, name, phone, province, city, district, detail, is_default)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [userId, name, phone, province, city, district, detail, is_default ? 1 : 0]
+    )
+    res.json({ code: 0, data: { id: r.insertId }, message: '地址已保存' })
+  } catch (err) { next(err) }
+})
+
+// DELETE /api/minip/me/addresses/:id - 删除地址
+router.delete('/me/addresses/:id', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    await pool.query('DELETE FROM user_addresses WHERE id = ? AND user_id = ?', [req.params.id, userId])
+    res.json({ code: 0, message: '已删除' })
+  } catch (err) { next(err) }
+})
+
+// PUT /api/minip/me/addresses/:id - 更新地址
+router.put('/me/addresses/:id', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    const { name, phone, province, city, district, detail, is_default } = req.body || {}
+    if (is_default) await pool.query('UPDATE user_addresses SET is_default = 0 WHERE user_id = ?', [userId])
+    await pool.query(
+      `UPDATE user_addresses SET
+         name = COALESCE(?, name),
+         phone = COALESCE(?, phone),
+         province = COALESCE(?, province),
+         city = COALESCE(?, city),
+         district = COALESCE(?, district),
+         detail = COALESCE(?, detail),
+         is_default = COALESCE(?, is_default)
+       WHERE id = ? AND user_id = ?`,
+      [name, phone, province, city, district, detail, is_default != null ? (is_default ? 1 : 0) : null, req.params.id, userId]
+    )
+    res.json({ code: 0, message: '已更新' })
+  } catch (err) { next(err) }
+})
+
+// PUT /api/minip/me/profile - 更新个人资料（name/email）
+router.put('/me/profile', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    const { name, email } = req.body || {}
+    if (name) await pool.query('UPDATE users SET name = ? WHERE id = ?', [name, userId])
+    if (email) await pool.query('UPDATE users SET email = ? WHERE id = ?', [email, userId])
+    const [[u]] = await pool.query(
+      `SELECT id, name, email, phone, role, user_type, department, points, member_level
+         FROM users WHERE id = ?`, [userId])
+    res.json({ code: 0, data: u, message: '资料已更新' })
+  } catch (err) { next(err) }
+})
+
+// POST /api/minip/me/feedback - 提交意见反馈
+router.post('/me/feedback', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    const { type = 'bug', content = '', contact = '' } = req.body || {}
+    if (!content.trim()) return res.status(400).json({ code: 400, message: '反馈内容不能为空' })
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_feedback (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        type VARCHAR(32) DEFAULT 'bug',
+        content TEXT,
+        contact VARCHAR(128) DEFAULT '',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_user (user_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `).catch(() => {})
+    await pool.query(
+      `INSERT INTO user_feedback (user_id, type, content, contact) VALUES (?, ?, ?, ?)`,
+      [userId, type, content, contact]
+    )
+    res.json({ code: 0, message: '感谢你的反馈' })
+  } catch (err) { next(err) }
+})
+
+// ============================================================
+// "我的"页面 4 大模块 (favorites / reviews / addresses / orders / feedback)
+// 2026-08-19 新增 - 前端 me/ 全部接 API
+// 表用 user_favorites / user_reviews / user_addresses / minip_orders / user_feedback（自动创建）
+// ============================================================
+
+// --- 意见反馈 ---
+router.get('/me/feedback', auth, async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT f.*, u.name as username, u.phone
+       FROM user_feedback f
+       LEFT JOIN users u ON f.user_id = u.id
+       ORDER BY f.created_at DESC LIMIT 200`
+    )
+    res.json({ code: 0, data: { list: rows } })
+  } catch (err) { next(err) }
+})
+
+router.post('/me/feedback', auth, async (req, res, next) => {
+  try {
+    const { type, content, contact } = req.body
+    if (!content) return res.status(400).json({ code: 400, message: '内容不能为空' })
+    await pool.query(
+      `INSERT INTO user_feedback (user_id, type, content, contact, created_at)
+       VALUES (?, ?, ?, ?, NOW())`,
+      [req.user.id, type || 'bug', content, contact || null]
+    )
+    res.json({ code: 0, message: '反馈已提交' })
+  } catch (err) { next(err) }
+})
+
+router.delete('/me/feedback/:id', auth, async (req, res, next) => {
+  try {
+    await pool.query('DELETE FROM user_feedback WHERE id = ?', [req.params.id])
+    res.json({ code: 0, message: '已删除' })
+  } catch (err) { next(err) }
+})
+
+// --- 收藏 ---
+router.get('/me/favorites', auth, async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT f.*, u.name as username, u.phone
+       FROM user_favorites f
+       LEFT JOIN users u ON f.user_id = u.id
+       ORDER BY f.created_at DESC LIMIT 200`
+    )
+    res.json({ code: 0, data: { list: rows } })
+  } catch (err) { next(err) }
+})
+
+router.post('/me/favorites', auth, async (req, res, next) => {
+  try {
+    const { title, target_type, target_id, image_url, price } = req.body
+    await pool.query(
+      `INSERT INTO user_favorites (user_id, title, target_type, target_id, image_url, price, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+      [req.user.id, title, target_type, target_id, image_url, price]
+    )
+    res.json({ code: 0, message: '收藏成功' })
+  } catch (err) { next(err) }
+})
+
+router.delete('/me/favorites/:id', auth, async (req, res, next) => {
+  try {
+    await pool.query('DELETE FROM user_favorites WHERE id = ?', [req.params.id])
+    res.json({ code: 0, message: '已取消收藏' })
+  } catch (err) { next(err) }
+})
+
+// --- 评价 ---
+router.get('/me/reviews', auth, async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT r.*, u.name as username, u.phone
+       FROM user_reviews r
+       LEFT JOIN users u ON r.user_id = u.id
+       ORDER BY r.created_at DESC LIMIT 200`
+    )
+    res.json({ code: 0, data: { list: rows } })
+  } catch (err) { next(err) }
+})
+
+router.post('/me/reviews', auth, async (req, res, next) => {
+  try {
+    const { target_type, target_id, rating, content, images } = req.body
+    if (!rating || !content) return res.status(400).json({ code: 400, message: '评分和内容不能为空' })
+    await pool.query(
+      `INSERT INTO user_reviews (user_id, target_type, target_id, rating, content, images, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+      [req.user.id, target_type, target_id, rating, content, images ? JSON.stringify(images) : null]
+    )
+    res.json({ code: 0, message: '评价成功' })
+  } catch (err) { next(err) }
+})
+
+// --- 地址 ---
+router.get('/me/addresses', auth, async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT a.*, u.name as username, u.phone
+       FROM user_addresses a
+       LEFT JOIN users u ON a.user_id = u.id
+       ORDER BY a.is_default DESC, a.created_at DESC LIMIT 200`
+    )
+    res.json({ code: 0, data: { list: rows } })
+  } catch (err) { next(err) }
+})
+
+router.post('/me/addresses', auth, async (req, res, next) => {
+  try {
+    const { name, phone, detail, is_default } = req.body
+    if (!name || !phone || !detail) return res.status(400).json({ code: 400, message: '姓名、电话、地址不能为空' })
+    if (is_default) await pool.query('UPDATE user_addresses SET is_default = 0 WHERE user_id = ?', [req.user.id])
+    await pool.query(
+      `INSERT INTO user_addresses (user_id, name, phone, detail, is_default, created_at)
+       VALUES (?, ?, ?, ?, ?, NOW())`,
+      [req.user.id, name, phone, detail, is_default ? 1 : 0]
+    )
+    res.json({ code: 0, message: '地址添加成功' })
+  } catch (err) { next(err) }
+})
+
+router.put('/me/addresses/:id', auth, async (req, res, next) => {
+  try {
+    const { name, phone, detail, is_default } = req.body
+    if (is_default) await pool.query('UPDATE user_addresses SET is_default = 0 WHERE user_id = ?', [req.user.id])
+    await pool.query(
+      `UPDATE user_addresses SET name = ?, phone = ?, detail = ?, is_default = ?
+       WHERE id = ?`,
+      [name, phone, detail, is_default ? 1 : 0, req.params.id]
+    )
+    res.json({ code: 0, message: '地址更新成功' })
+  } catch (err) { next(err) }
+})
+
+router.delete('/me/addresses/:id', auth, async (req, res, next) => {
+  try {
+    await pool.query('DELETE FROM user_addresses WHERE id = ?', [req.params.id])
+    res.json({ code: 0, message: '已删除' })
+  } catch (err) { next(err) }
+})
+
+// --- 订单 (minip 专属) ---
+router.get('/me/orders', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    const isAdmin = req.user.role === 'admin'
+    const { status = 'all' } = req.query
+    let where = isAdmin ? '' : 'WHERE o.user_id = ?'
+    const params = isAdmin ? [] : [userId]
+    const statusMap = {
+      pending_payment: ["pending", "awaiting_payment"],
+      pending_ship: ["paid", "awaiting_ship"],
+      pending_receive: ["shipped", "in_transit"],
+      pending_review: ["received", "completed_review_pending"],
+      completed: ["completed"]
+    }
+    if (status !== 'all' && statusMap[status]) {
+      where += (where ? ' AND ' : 'WHERE ') + `o.status IN (${statusMap[status].map(() => '?').join(',')})`
+      params.push(...statusMap[status])
+    }
+    const [rows] = await pool.query(
+      `SELECT o.*, u.name as username, u.phone
+       FROM minip_orders o
+       LEFT JOIN users u ON o.user_id = u.id
+       ${where}
+       ORDER BY o.created_at DESC LIMIT 200`,
+      params
+    )
+    const [[stats]] = await pool.query(
+      `SELECT
+         SUM(o.status IN ('pending','awaiting_payment')) as pending_payment,
+         SUM(o.status IN ('paid','awaiting_ship')) as pending_ship,
+         SUM(o.status IN ('shipped','in_transit')) as pending_receive,
+         SUM(o.status IN ('received','completed_review_pending')) as pending_review
+       FROM minip_orders o
+       ${isAdmin ? '' : 'WHERE o.user_id = ?'}`,
+      isAdmin ? [] : [userId]
+    )
+    res.json({ code: 0, data: { list: rows, stats } })
+  } catch (err) { next(err) }
+})
+
+router.post('/me/orders', auth, async (req, res, next) => {
+  try {
+    const { items, total_amount, address_id, remark } = req.body
+    if (!items || !items.length) return res.status(400).json({ code: 400, message: '订单商品不能为空' })
+    const orderNo = 'MP' + Date.now().toString().slice(-12)
+    await pool.query(
+      `INSERT INTO minip_orders (user_id, order_no, items, total_amount, address_id, remark, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', NOW())`,
+      [req.user.id, orderNo, JSON.stringify(items), total_amount || 0, address_id || null, remark || null]
+    )
+    res.json({ code: 0, data: { order_no: orderNo }, message: '订单创建成功' })
+  } catch (err) { next(err) }
+})
+
+router.put('/me/orders/:id/status', auth, async (req, res, next) => {
+  try {
+    const { status } = req.body
+    await pool.query('UPDATE minip_orders SET status = ?, updated_at = NOW() WHERE id = ?', [status, req.params.id])
+    res.json({ code: 0, message: '状态更新成功' })
+  } catch (err) { next(err) }
+})
+
+// --- 个人资料 ---
+router.get('/me/profile', auth, async (req, res, next) => {
+  try {
+    const [rows] = await pool.query('SELECT id, username, phone, email, avatar, role FROM users WHERE id = ?', [req.user.id])
+    res.json({ code: 0, data: rows[0] || null })
+  } catch (err) { next(err) }
+})
+
+router.put('/me/profile', auth, async (req, res, next) => {
+  try {
+    const { name, email, avatar } = req.body
+    await pool.query('UPDATE users SET username = ?, email = ?, avatar = ? WHERE id = ?', [name, email, avatar, req.user.id])
+    const [rows] = await pool.query('SELECT id, username, phone, email, avatar FROM users WHERE id = ?', [req.user.id])
+    res.json({ code: 0, data: rows[0] })
+  } catch (err) { next(err) }
+})
+
 export default router
+
+// 表结构说明（会在 server 启动时自动创建）：
+/*
+CREATE TABLE IF NOT EXISTS user_feedback (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  type VARCHAR(32) DEFAULT 'bug',
+  content TEXT NOT NULL,
+  contact VARCHAR(128),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS user_favorites (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  title VARCHAR(255),
+  target_type VARCHAR(64),
+  target_id INT,
+  image_url VARCHAR(512),
+  price DECIMAL(10,2),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS user_reviews (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  target_type VARCHAR(64),
+  target_id INT,
+  rating INT,
+  content TEXT,
+  images JSON,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS user_addresses (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  name VARCHAR(128),
+  phone VARCHAR(32),
+  detail TEXT,
+  is_default TINYINT DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS minip_orders (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  order_no VARCHAR(64) UNIQUE,
+  items JSON,
+  total_amount DECIMAL(12,2),
+  address_id INT,
+  remark TEXT,
+  status VARCHAR(32) DEFAULT 'pending',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+*/
+

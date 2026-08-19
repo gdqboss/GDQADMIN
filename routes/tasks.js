@@ -437,7 +437,7 @@ router.get('/:id', async (req, res, next) => {
 // POST /api/tasks - 创建任务
 router.post('/', async (req, res, next) => {
   try {
-    const { title, description, assigned_to, due_date, priority } = req.body
+    const { title, description, jobsite_id, assigned_to, due_date, priority } = req.body
 
     if (!title || !assigned_to) {
       return res.status(400).json({ code: 400, message: '标题和指派对象必填' })
@@ -458,8 +458,8 @@ router.post('/', async (req, res, next) => {
     }
 
     const [result] = await pool.query(
-      `INSERT INTO tasks (title, description, assigned_to, assigned_by, created_by, due_date, priority, status, is_new)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 1)`,
+      `INSERT INTO tasks (title, description, jobsite_id, assigned_to, assigned_by, created_by, due_date, priority, status, is_new)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`,
       [title, description || null, assigned_to, req.user.id, req.user.id, due_date || null, priority || 'medium']
     )
 
@@ -488,6 +488,7 @@ router.put('/:id', async (req, res, next) => {
     const values = []
 
     if (title !== undefined) { updates.push('title = ?'); values.push(title) }
+    if (jobsite_id !== undefined) { updates.push('jobsite_id = ?'); values.push(jobsite_id) }
     if (content !== undefined) { updates.push('description = ?'); values.push(content) }
     if (assigned_to !== undefined) { updates.push('assigned_to = ?'); values.push(assigned_to) }
     if (due_date !== undefined) { updates.push('due_date = ?'); values.push(due_date) }

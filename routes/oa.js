@@ -2565,6 +2565,181 @@ router.delete('/leave/:id', async (req, res, next) => {
 })
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// OVERTIME MODULE
+// �══════════════════════════════════════════════════════════════════════════════
+
+// POST /api/oa/overtime - Submit overtime request
+router.post('/overtime', async (req, res, next) => {
+  try {
+    const { start_time, end_time, hours, reason, jobsite_id } = req.body
+    const userId = req.user.id
+
+    if (!start_time || !end_time || !hours || !reason) {
+      return res.status(400).json({ code: 400, message: '请填写完整的加班信息' })
+    }
+
+    if (hours <= 0 || hours > 24) {
+      return res.status(400).json({ code: 400, message: '加班时长应在 0-24 小时之间' })
+    }
+
+    const [[user]] = await pool.query('SELECT supervisor_id FROM users WHERE id = ?', [userId])
+    if (!user || !user.supervisor_id) {
+      return res.status(400).json({ code: 400, message: '未设置上级，无法提交加班申请' })
+    }
+
+    const formData = JSON.stringify({
+      start_time,
+      end_time,
+      hours,
+      reason,
+      jobsite_id: jobsite_id || null
+    })
+
+    const [approvalResult] = await pool.query(
+      `INSERT INTO approvals (type_code, title, applicant_id, form_data, status, current_step, created_at)
+       VALUES ('overtime', ?, ?, ?, 'pending', 1, NOW())`,
+      [`加班申请 - ${hours}小时 - ${reason.slice(0, 30)}`, userId, formData]
+    )
+
+    const approvalId = approvalResult.insertId
+
+    const [result] = await pool.query(
+      `INSERT INTO overtime_records (user_id, jobsite_id, start_time, end_time, hours, reason, status, approver_id, approval_id)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+      [userId, jobsite_id || null, start_time, end_time, hours, reason, user.supervisor_id, approvalId]
+    )
+
+    res.json({ code: 0, data: { id: result.insertId, approval_id: approvalId }, message: '加班申请已提交' })
+  } catch (err) { next(err) }
+})
+
+// GET /api/oa/overtime - Query overtime records
+router.get('/overtime', async (req, res, next) => {
+  try {
+    const { user_id, status, start_date, end_date } = req.query
+    const { page, size } = parsePagination(req.query)
+    const currentUserId = req.user.id
+    const currentUserRole = req.user.role
+
+    let where = 'WHERE 1=1'
+    const params = []
+
+    if (currentUserRole === ROLES.ADMIN) {
+      if (user_id) { where += ' AND o.user_id = ?'; params.push(user_id) }
+    } else {
+      where += ' AND o.user_id = ?'
+      params.push(currentUserId)
+    }
+
+    if (status) { where += ' AND o.status = ?'; params.push(status) }
+    if (start_date) { where += ' AND o.start_time >= ?'; params.push(start_date) }
+    if (end_date) { where += ' AND o.start_time <= ?'; params.push(end_date) }
+
+    const sql = `
+      SELECT o.*,
+             u.name as user_name,
+             approver.name as approver_name
+      FROM overtime_records o
+      LEFT JOIN users u ON o.user_id = u.id
+      LEFT JOIN users approver ON o.approver_id = approver.id
+      ${where}
+      ORDER BY o.created_at DESC
+      LIMIT ? OFFSET ?
+    `
+    params.push(size, (page - 1) * size)
+
+    const countSql = `SELECT COUNT(*) as total FROM overtime_records o ${where}`
+    const [[{ total }]] = await pool.query(countSql, params.slice(0, -2))
+    const [rows] = await pool.query(sql, params)
+
+    res.json({ code: 0, data: { list: rows, total, page, size }, message: 'ok' })
+  } catch (err) { next(err) }
+})
+
+// PUT /api/oa/overtime/:id/approve - Approve or reject overtime request
+router.put('/overtime/:id/approve', async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const { action, reject_reason } = req.body
+    const approverId = req.user.id
+
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ code: 400, message: '无效的审批操作' })
+    }
+
+    if (action === 'reject' && !reject_reason) {
+      return res.status(400).json({ code: 400, message: '拒绝时必须填写原因' })
+    }
+
+    const [[ot]] = await pool.query('SELECT * FROM overtime_records WHERE id = ?', [id])
+    if (!ot) {
+      return res.status(404).json({ code: 404, message: '加班记录不存在' })
+    }
+
+    if (ot.approver_id !== approverId && !(await checkPerm(req, 'oa:write'))) {
+      return res.status(403).json({ code: 403, message: '无权审批此加班申请' })
+    }
+
+    if (ot.status !== 'pending') {
+      return res.status(400).json({ code: 400, message: '该加班申请已处理' })
+    }
+
+    const newStatus = action === 'approve' ? 'approved' : 'rejected'
+    await pool.query(
+      `UPDATE overtime_records
+       SET status = ?, reject_reason = ?, approved_at = NOW()
+       WHERE id = ?`,
+      [newStatus, reject_reason || null, id]
+    )
+
+    if (ot.approval_id) {
+      await pool.query(
+        `UPDATE approvals SET status = ?, updated_at = NOW() WHERE id = ?`,
+        [newStatus, ot.approval_id]
+      )
+    }
+
+    if (action === 'approve') {
+      const otDate = new Date(ot.start_time).toISOString().slice(0, 10)
+      await pool.query(
+        `UPDATE attendance SET overtime_hours = COALESCE(overtime_hours, 0) + ? WHERE user_id = ? AND date = ?`,
+        [ot.hours, ot.user_id, otDate]
+      )
+    }
+
+    res.json({ code: 0, message: action === 'approve' ? '加班已批准' : '加班已拒绝' })
+  } catch (err) { next(err) }
+})
+
+// DELETE /api/oa/overtime/:id - Delete overtime request (only pending)
+router.delete('/overtime/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const userId = req.user.id
+
+    const [[ot]] = await pool.query('SELECT * FROM overtime_records WHERE id = ?', [id])
+    if (!ot) {
+      return res.status(404).json({ code: 404, message: '加班记录不存在' })
+    }
+
+    if (ot.user_id !== userId && !(await checkPerm(req, 'oa:write'))) {
+      return res.status(403).json({ code: 403, message: '无权删除此加班申请' })
+    }
+
+    if (ot.status !== 'pending') {
+      return res.status(400).json({ code: 400, message: '只能删除待审批的加班申请' })
+    }
+
+    if (ot.approval_id) {
+      await pool.query('DELETE FROM approvals WHERE id = ?', [ot.approval_id])
+    }
+
+    await pool.query('DELETE FROM overtime_records WHERE id = ?', [id])
+    res.json({ code: 0, message: '加班申请已删除' })
+  } catch (err) { next(err) }
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // ATTENDANCE RULES
 // ═══════════════════════════════════════════════════════════════════════════════
 

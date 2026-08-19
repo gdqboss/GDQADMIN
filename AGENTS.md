@@ -117,6 +117,35 @@
 
 ---
 
+## 七、前端-后端-gdqadmin 三位一体对齐铁律
+
+> 2026-08-19 波立：**任何前端功能上线后，后端必须同步跟上，且 gdqadmin 后台必须能管理/互动**。
+
+### 三步必做
+
+```
+前端功能 → 后端 API → gdqadmin 后台管理/互动
+```
+
+1. **前端**：真接 API，不能纯 mock；处理登录/空数据/错误态
+2. **后端**：CRUD 路由 + 建表 + rbac_permissions + server_modules
+3. **gdqadmin**：管理员能查看/审核/配置/互动
+
+### 验收清单
+
+- [ ] 前端 build 通过
+- [ ] 后端 `curl` 9 200/401/403 验证
+- [ ] 新表已创建
+- [ ] `rbac_permissions` 已插入 read/write/delete
+- [ ] gdqadmin 后台入口已添加
+- [ ] gdqadmin 能正常查看/管理/互动
+
+### 禁止模式
+
+- ❌ 前端上线，后端 API 还在 "TODO"
+- ❌ 后端 API 有了，gdqadmin 后台没入口
+- ❌ 用户数据存了，管理员看不到
+
 ## 六、当前所有 profile 状态 (2026-07-21 更新,profile 6/7 上线)
 
 ```

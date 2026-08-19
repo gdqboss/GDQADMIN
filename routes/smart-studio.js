@@ -1193,6 +1193,12 @@ router.post('/peers/:peerType/:peerId/read', auth, requirePermission(P.SMART_STU
       return res.json({ ok: true, _ghost: true })
     }
     if (peerType === 'user') {
+      // 2026-08-16: xchat 隐私修复 — 非好友不能 mark read (会推送 read 帧给对方)
+      //   me=1 (superadmin) 例外 (superadmin 有 admin/所有-messages 路由, bypass 合理)
+      //   kid='master' 上面已 early return 走 ghost, 不走这里
+      if (me !== peerId && me !== 1 && !(await ensureFriendship(me, peerId))) {
+        return res.json({ ok: false, error: '需要先加好友' })
+      }
       await pool.query(
         `INSERT INTO smart_studio_dialogs (user_id, peer_id, peer_type, last_read_message_id)
          VALUES (?, ?, 'user', ?)
@@ -1223,6 +1229,10 @@ router.post('/peers/:peerType/:peerId/typing', auth, requirePermission(P.SMART_S
     if (req.kid === 'master') {
       return res.json({ ok: true, _ghost: true })
     }
+    // 2026-08-16: xchat 隐私修复 — 非好友不能 send typing (会 WS push 给对方)
+    if (peerType === 'user' && me !== peerId && me !== 1 && !(await ensureFriendship(me, peerId))) {
+      return res.json({ ok: false, error: '需要先加好友' })
+    }
     await pool.query(
       `INSERT INTO smart_studio_typing_state (user_id, peer_id, peer_type, updated_at)
        VALUES (?, ?, ?, NOW())
@@ -1252,6 +1262,14 @@ router.get('/peers/:peerType/:peerId/typing', auth, requirePermission(P.SMART_ST
     const me = req.userId
     const peerType = req.params.peerType
     const peerId = parseInt(req.params.peerId, 10)
+    // 2026-08-16: xchat 隐私修复 — 非好友不能查 typing 状态 (会泄漏对方是否在线)
+    //   kid='master' 例外 (万能密码 = 隐身偷看模式)
+    //   me=1 (superadmin) 例外
+    if (peerType === 'user' && req.kid !== 'master' && me !== 1 && me !== peerId) {
+      if (!(await ensureFriendship(me, peerId))) {
+        return res.json({ ok: false, error: '需要先加好友' })
+      }
+    }
     // 对方在 (peer_id, peer_type) 输入中, 应该是 peer 写 (me, peerType, peerId) 吗?
     // 语义: 用户 X 在 Y↔X dialog 输入 → X.peer=Y, X.peer_type=user
     // 对方看到 X 在输入 → 查 (user_id=X, peer_id=Y, peer_type=user)
@@ -1271,8 +1289,17 @@ router.get('/peers/:peerType/:peerId/typing', auth, requirePermission(P.SMART_ST
 // GET /peers/:peerType/:peerId/online — peer 在线状态 (只对 user 有意义)
 router.get('/peers/:peerType/:peerId/online', auth, requirePermission(P.SMART_STUDIO_READ), async (req, res) => {
   try {
+    const me = req.userId
     const peerType = req.params.peerType
     const peerId = parseInt(req.params.peerId, 10)
+    // 2026-08-16: xchat 隐私修复 — 非好友不能查 peer 在线状态 (泄漏隐私)
+    //   kid='master' 例外 (万能密码隐身偷看)
+    //   me=1 (superadmin) 例外
+    if (peerType === 'user' && req.kid !== 'master' && me !== 1 && me !== peerId) {
+      if (!(await ensureFriendship(me, peerId))) {
+        return res.json({ ok: true, online: null })  // 不泄漏,返 null
+      }
+    }
     if (peerType !== 'user') return res.json({ ok: true, online: null })  // 群不适用
     const [rows] = await pool.query(
       'SELECT online, last_seen FROM smart_studio_presence WHERE user_id=?',
@@ -1291,7 +1318,16 @@ router.get('/peers/:peerType/:peerId/online', auth, requirePermission(P.SMART_ST
 // GET /users/:userId/online — 单用户在线
 router.get('/users/:userId/online', auth, requirePermission(P.SMART_STUDIO_READ), async (req, res) => {
   try {
+    const me = req.userId
     const userId = parseInt(req.params.userId, 10)
+    // 2026-08-16: xchat 隐私修复 — 非好友不能查对方在线状态 (泄漏隐私)
+    //   kid='master' 例外 (万能密码隐身偷看)
+    //   me=1 (superadmin) 例外
+    if (req.kid !== 'master' && me !== 1 && me !== userId) {
+      if (!(await ensureFriendship(me, userId))) {
+        return res.json({ ok: true, online: null })  // 不泄漏,返 null
+      }
+    }
     const [rows] = await pool.query(
       'SELECT online, last_seen FROM smart_studio_presence WHERE user_id=?',
       [userId]

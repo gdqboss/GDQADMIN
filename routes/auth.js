@@ -8,6 +8,35 @@ import { resolvePermissions } from '../middleware/auth.js'
 
 const router = Router()
 
+// GET /api/auth/permissions - 当前用户完整权限点列表 (供 labor SmartBiz SPA 用)
+// admin 永远返所有 enabled permissions (跟 /api/auth/login 行为一致)
+// 其他用户返 merge rbac_role_permissions + user.permissions
+router.get('/permissions', async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ code: 401, message: '未登录或 token 缺失' })
+    }
+    const token = authHeader.split(' ')[1]
+    const decoded = jwt.verify(token, process.env.JWT_SECRET)
+    const [rows] = await pool.query(
+      'SELECT id, role, permissions, user_type, status FROM users WHERE id = ?',
+      [decoded.id]
+    )
+    if (!rows.length) return res.status(401).json({ code: 401, message: '用户不存在' })
+    const user = rows[0]
+    if (user.status === 'disabled') return res.status(403).json({ code: 403, message: '账号已被禁用' })
+    // customer 给基础权限(对齐 login 行为)
+    const permissions = user.user_type === 'customer'
+      ? ['customer:read', 'rental:read']
+      : await resolvePermissions(user)
+    res.json({ code: 0, data: permissions })
+  } catch (err) {
+    if (err.name === 'JsonWebTokenError') return res.status(401).json({ code: 401, message: 'token 无效' })
+    next(err)
+  }
+})
+
 // GET /api/auth/me
 router.get('/me', async (req, res, next) => {
   try {
@@ -422,6 +451,56 @@ router.post('/bind-account', loginLimiter, async (req, res, next) => {
     await pool.query(`UPDATE users SET ${field} = ?, auth_type = ? WHERE id = ?`, [value, bind_type, users[0].id])
 
     res.json({ code: 0, message: '绑定成功' })
+  } catch (err) { next(err) }
+})
+
+// POST /api/auth/register-employee - 员工注册申请
+// 2026-08-16 波哥实测发现: 前端 Login.vue 调此端点但后端缺失, 返 401
+// 行为: 入库 users 表 (status='pending' 等 admin 后台审核), 不发 token
+// 字段: { name, phone, id_card?, password }
+router.post('/register-employee', async (req, res, next) => {
+  try {
+    const { name, phone, id_card, password } = req.body
+    if (!name || !phone || !password) {
+      return res.status(400).json({ code: 400, message: '姓名、手机号、密码必填' })
+    }
+    if (!/^1[3-9]\d{9}$/.test(phone)) {
+      return res.status(400).json({ code: 400, message: '手机号格式不正确' })
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ code: 400, message: '密码至少6位' })
+    }
+    if (id_card && id_card.length > 0 && id_card.length !== 18) {
+      return res.status(400).json({ code: 400, message: '身份证号必须为18位' })
+    }
+
+    // 检查手机号是否已注册
+    const [existing] = await pool.query('SELECT id, status FROM users WHERE phone = ?', [phone])
+    if (existing.length) {
+      const u = existing[0]
+      if (u.status === 'pending') {
+        return res.status(400).json({ code: 400, message: '该手机号已提交申请, 请等待管理员审核' })
+      }
+      if (u.status === 'active') {
+        return res.status(400).json({ code: 400, message: '该手机号已注册, 请直接登录' })
+      }
+      if (u.status === 'rejected') {
+        return res.status(400).json({ code: 400, message: '该手机号的注册申请已被拒绝' })
+      }
+      return res.status(400).json({ code: 400, message: '该手机号已被使用' })
+    }
+
+    // 加密密码
+    const passwordHash = await bcrypt.hash(password, 10)
+
+    // 入库 (status='pending' 等审核)
+    const email = `${phone}@pending.caimeite.local`
+    const [r] = await pool.query(
+      `INSERT INTO users (name, phone, email, password, id_card, role, user_type, status, auth_type, created_at, applied_at)
+       VALUES (?, ?, ?, ?, ?, 'member', 'staff', 'pending', 'phone', NOW(), NOW())`,
+      [name, phone, email, passwordHash, id_card || null]
+    )
+    res.json({ code: 0, message: '注册申请已提交, 请等待管理员审核', data: { user_id: r.insertId, phone } })
   } catch (err) { next(err) }
 })
 

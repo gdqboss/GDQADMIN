@@ -66,7 +66,14 @@ export default defineConfig({
     assetsDir: 'assets',
     sourcemap: false,
     minify: 'esbuild',
-    base: 'auto',
+    base: '/gdqadmin/',
+    // 2026-08-15 急修: base 'auto' 在 SGP/HK 部署时推断为 '/', 导致懒加载 chunk
+    //   (Login-xxx.js 等路由级 split chunk) 用相对路径 './Login-xxx.js' 被浏览器
+    //   解析为 '/assets/Login-xxx.js' 走 Caddy 根路径 (返回 portal HTML)
+    //   → 'Failed to load module script: MIME text/html' → SPA 整个初始化失败
+    //   → 表现为'新用户注册不正常 / 角色管理新增不行'
+    // 改 '/gdqadmin/' 后, 懒加载 chunk 会用 '/gdqadmin/assets/Login-xxx.js' 匹配
+    //   Caddyfile 的 @gdqadminAssets handler → 正常 200 application/javascript
     rollupOptions: {
       output: {
         manualChunks: (id) => {
@@ -111,3 +118,30 @@ fi
 echo ""
 echo "=== Build Complete ==="
 echo "Profile $PROFILE_ID dist: $DIST_DIR ($(ls "$DIST_DIR/assets/"*.js 2>/dev/null | wc -l) chunks, $(du -sh "$DIST_DIR" | cut -f1))"
+
+# 2026-08-15 急修: Vite 5.4 的 build.base '/gdqadmin/' 在某些情况下会被 decodedBase='/' 覆盖,
+#   导致产物 index.html 里 <script src> 仍是 /assets/ 根路径, 懒加载 chunk 也用相对路径
+#   → Caddy 根路径 /assets/* 返回 portal HTML, 浏览器 'MIME text/html' 错
+# 暴力 sed 把 /assets/ → /gdqadmin/assets/ 写进产物 HTML, 保证 dist 部署在 /gdqadmin/* 下可用
+if [ "$PROFILE_ID" = "1" ] || [ "$PROFILE_ID" = "6" ] || [ "$PROFILE_ID" = "7" ]; then
+  # profile 1/6/7 用 /gdqadmin/ 前缀
+  # 2026-08-15 修复: base '/gdqadmin/' 时, vite 输出的 index.html 已经是 /gdqadmin/assets/
+  #   sed '/assets/' → '/gdqadmin/assets/' 会变成 /gdqadmin/gdqadmin/assets/ 双重前缀
+  #   改成只 sed "= "/assets/" (前面是 / 或开头, 前面不是字母数字), 跳过 /gdqadmin/assets/
+  if [ -f "$DIST_DIR/index.html" ]; then
+    sed -i 's|"/assets/|"/gdqadmin/assets/|g' "$DIST_DIR/index.html"
+    echo "Patched index.html: \"/assets/ → \"/gdqadmin/assets/ (skip /gdqadmin/assets/)"
+  fi
+  # 同步修 gdqadmin/index.html (build 脚本会复制一个备份的 admin/index.html)
+  if [ -f "$DIST_DIR/gdqadmin/index.html" ]; then
+    sed -i 's|"/assets/|"/gdqadmin/assets/|g' "$DIST_DIR/gdqadmin/index.html"
+    echo "Patched gdqadmin/index.html: same"
+  fi
+  # 2026-08-15: 修 vite 没处理的开发路径残留 (../node_modules/...)
+  # styles/material-symbols-font-display.css 里硬编了 ../node_modules/...
+  # 直接 sed 改成 /gdqadmin/assets/ 让 fallback 路径能命中
+  for css in "$DIST_DIR/assets/"*.css; do
+    sed -i 's|\.\./node_modules/material-symbols/[^)]*|/gdqadmin/assets/material-symbols-outlined-Bgl3Icaq.woff2|g' "$css"
+  done
+  echo "Patched CSS: ../node_modules/material-symbols/* → /gdqadmin/assets/..."
+fi

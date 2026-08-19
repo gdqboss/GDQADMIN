@@ -8,7 +8,11 @@ export const PROFILE_MODULES = {
     'job-responsibilities', 'oa', 'orders', 'products', 'qrcode',
     'referral', 'reports', 'retail', 'returns', 'roles',
     'server_profiles', 'settings', 'stores', 'suppliers', 'tasks',
-    'transfer', 'users', 'warehouses'
+    'transfer', 'users', 'warehouses',
+    'association-info', 'association-announcements', 'association-activities',
+    'association-cards', 'association-members', 'association-academic',
+    'association-journals', 'association-downloads', 'association-org',
+    'association-inquiries'
   ],
   2: [  // 北京 (id=2) - 相比新加坡少了 server_profiles
     'aftersale', 'ai-classroom', 'alerts', 'dashboard', 'dealers',
@@ -142,12 +146,46 @@ export const MODULE_ROUTE_MAP = {
   users: ['settings/users', 'UserManagement', 'settings/h5-users', 'H5UserManage', 'profile', 'UserProfile'],
 
   // warehouses
-  warehouses: ['warehouses', 'Warehouses', 'warehouses/:id', 'WarehouseDetail']
+  warehouses: ['warehouses', 'Warehouses', 'warehouses/:id', 'WarehouseDetail'],
+
+  // ── 协会中心 (SGP 是 source, 2026-07-30 波哥加 macau, 2026-08-15 江小鱼把 source 补齐)
+  'association-info': ['association', 'AssociationInfo'],
+  'association-announcements': ['association-announcements', 'AssociationAnnouncements'],
+  'association-activities': ['association-activities', 'AssociationActivities'],
+  'association-cards': ['association-cards', 'AssociationCards'],
+  'association-members': ['association-members', 'AssociationMembers'],
+  'association-academic': ['association-academic', 'AssociationAcademic'],
+  'association-journals': ['association-journals', 'AssociationJournals'],
+  'association-downloads': ['association-downloads', 'AssociationDownloads'],
+  'association-org': ['association-org', 'AssociationOrg'],
+  'association-inquiries': ['association-inquiries', 'AssociationInquiries'],
 }
 
 // module_key → 需要保留的 views 目录下文件/夹的映射
 // key 是 module_key，value 是相对于 views/目录的路径数组
 export const MODULE_FILE_MAP = {
+  // 协会中心 (SGP 是 source, 2026-07-30 波哥加 macau, 2026-08-15 江小鱼把 source 补齐)
+  'association-info': ['association/info/AssociationInfo.vue'],
+  'association-announcements': ['association/announcements/AnnouncementList.vue'],
+  'association-activities': ['association/activities/ActivityList.vue'],
+  'association-cards': ['association/cards/CardList.vue'],
+  'association-members': ['association/members/MemberList.vue'],
+  'association-academic': ['association/academic/AcademicList.vue'],
+  'association-journals': ['association/journals/JournalList.vue'],
+  'association-downloads': ['association/downloads/DownloadList.vue'],
+  'association-org': ['association/org/OrgList.vue'],
+  'association-inquiries': ['association/inquiries/InquiriesManage.vue'],
+  // 协会中心 (SGP 是 source, 2026-07-30 波哥加 macau, 2026-08-15 江小鱼把 source 补齐)
+  'association-info': ['association/info/AssociationInfo.vue'],
+  'association-announcements': ['association/announcements/AnnouncementList.vue'],
+  'association-activities': ['association/activities/ActivityList.vue'],
+  'association-cards': ['association/cards/CardList.vue'],
+  'association-members': ['association/members/MemberList.vue'],
+  'association-academic': ['association/academic/AcademicList.vue'],
+  'association-journals': ['association/journals/JournalList.vue'],
+  'association-downloads': ['association/downloads/DownloadList.vue'],
+  'association-org': ['association/org/OrgList.vue'],
+  'association-inquiries': ['association/inquiries/InquiriesManage.vue'],
   aftersale: ['aftersale/'],
   'ai-classroom': ['AiClassroom.vue'],
   alerts: ['alerts/'],

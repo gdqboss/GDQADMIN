@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useUserStore } from '../stores/user'
 import api from '../services/api.js'
+import UiIcon from '../components/UiIcon.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -404,8 +405,12 @@ onUnmounted(() => { stopCameraScanner() })
     <template v-else>
       <div class="flex justify-between items-center">
         <h2 class="text-xl sm:text-2xl font-bold text-text-primary">{{ $t('dashboard.title') }}</h2>
-        <button @click="refreshData" class="flex items-center gap-2 px-3 py-2 text-sm text-primary hover:bg-primary/10 rounded-lg transition-colors">
-          <span class="material-symbols-outlined text-lg">refresh</span>
+        <button
+          @click="refreshData"
+          :disabled="loading"
+          class="flex items-center gap-2 px-3 py-2 text-sm text-primary hover:bg-primary/10 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <UiIcon name="refresh" :size="18" :spin="loading" />
           <span class="hidden sm:inline">{{ $t('dashboard.refresh') }}</span>
         </button>
       </div>
@@ -414,7 +419,7 @@ onUnmounted(() => { stopCameraScanner() })
       <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 sm:p-5">
         <div class="flex justify-between items-center mb-3 sm:mb-4">
           <h4 class="text-sm sm:text-base font-bold text-text-primary flex items-center gap-2">
-            <span class="material-symbols-outlined text-primary text-base sm:text-lg">bolt</span>
+            <UiIcon name="bolt" :size="18" class="text-primary" />
             {{ $t('dashboard.quickActions') }}
           </h4>
         </div>
@@ -425,7 +430,9 @@ onUnmounted(() => { stopCameraScanner() })
             @click="handleQuickAction(action)"
             class="flex flex-col items-center gap-2 p-3 sm:p-4 rounded-lg border border-gray-200 hover:border-primary hover:bg-primary/5 hover:shadow-md transition-all duration-200 group"
           >
-            <span :class="['material-symbols-outlined text-2xl sm:text-3xl group-hover:scale-110 transition-transform', `text-${action.color}`]">{{ action.icon }}</span>
+            <span class="group-hover:scale-110 transition-transform">
+              <UiIcon :name="action.icon" :size="28" :class="`text-${action.color}`" />
+            </span>
             <span class="text-xs sm:text-sm font-medium text-text-primary text-center">{{ action.name() }}</span>
           </button>
         </div>
@@ -436,7 +443,7 @@ onUnmounted(() => { stopCameraScanner() })
         <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 hover:shadow-md transition-shadow">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
-              <span class="material-symbols-outlined text-blue-500">inventory_2</span>
+              <UiIcon name="inventory_2" :size="22" class="text-blue-500" />
             </div>
             <div>
               <p class="text-2xl font-bold text-text-primary">{{ stats.todayInbound }}</p>
@@ -447,7 +454,7 @@ onUnmounted(() => { stopCameraScanner() })
         <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 hover:shadow-md transition-shadow">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center">
-              <span class="material-symbols-outlined text-green-500">outbox</span>
+              <UiIcon name="outbox" :size="22" class="text-green-500" />
             </div>
             <div>
               <p class="text-2xl font-bold text-text-primary">{{ stats.todayOutbound }}</p>
@@ -458,7 +465,7 @@ onUnmounted(() => { stopCameraScanner() })
         <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 hover:shadow-md transition-shadow">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center">
-              <span class="material-symbols-outlined text-orange-500">pending_actions</span>
+              <UiIcon name="pending_actions" :size="22" class="text-orange-500" />
             </div>
             <div>
               <p class="text-2xl font-bold text-text-primary">{{ stats.pendingApprovals }}</p>
@@ -469,7 +476,7 @@ onUnmounted(() => { stopCameraScanner() })
         <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 hover:shadow-md transition-shadow">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
-              <span class="material-symbols-outlined text-red-500">warning</span>
+              <UiIcon name="warning" :size="22" class="text-red-500" />
             </div>
             <div>
               <p class="text-2xl font-bold text-text-primary">{{ stats.lowStockCount }}</p>
@@ -480,7 +487,7 @@ onUnmounted(() => { stopCameraScanner() })
         <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 hover:shadow-md transition-shadow">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center">
-              <span class="material-symbols-outlined text-purple-500">shopping_cart</span>
+              <UiIcon name="shopping_cart" :size="22" class="text-purple-500" />
             </div>
             <div>
               <p class="text-2xl font-bold text-text-primary">{{ stats.todayOrders }}</p>
@@ -491,7 +498,7 @@ onUnmounted(() => { stopCameraScanner() })
         <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 hover:shadow-md transition-shadow">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-full bg-cyan-50 flex items-center justify-center">
-              <span class="material-symbols-outlined text-cyan-500">task_alt</span>
+              <UiIcon name="task_alt" :size="22" class="text-cyan-500" />
             </div>
             <div>
               <p class="text-2xl font-bold text-text-primary">{{ stats.pendingTasks }}</p>
@@ -505,18 +512,18 @@ onUnmounted(() => { stopCameraScanner() })
       <div v-if="myResponsibilities.length > 0" class="bg-white rounded-lg border border-gray-100 shadow-card p-4 sm:p-5">
         <div class="flex justify-between items-center mb-3 sm:mb-4">
           <h4 class="text-sm sm:text-base font-bold text-text-primary flex items-center gap-2">
-            <span class="material-symbols-outlined text-primary text-base sm:text-lg">assignment</span>
+            <UiIcon name="assignment" :size="18" class="text-primary" />
             {{ $t('dashboard.myResponsibilities') }}
           </h4>
         </div>
         <div class="space-y-3">
           <div v-for="item in myResponsibilities.slice(0, 6)" :key="item.id"
                class="flex items-start gap-3 p-3 rounded-lg border border-gray-100 hover:border-primary/30 hover:bg-primary/5 transition-all">
-            <span :class="['material-symbols-outlined text-xl shrink-0',
-              item.category === 'duty' ? 'text-primary' : item.category === 'authority' ? 'text-success' : 'text-warning'
-            ]">
-              {{ item.category === 'duty' ? 'task' : item.category === 'authority' ? 'verified_user' : 'analytics' }}
-            </span>
+            <UiIcon
+              :name="item.category === 'duty' ? 'task' : item.category === 'authority' ? 'verified_user' : 'analytics'"
+              :size="22"
+              :class="item.category === 'duty' ? 'text-primary' : item.category === 'authority' ? 'text-success' : 'text-warning'"
+            />
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 mb-1">
                 <span class="text-sm font-medium text-text-primary">{{ item.title }}</span>

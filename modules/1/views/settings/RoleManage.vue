@@ -644,7 +644,7 @@ onMounted(async () => { await Promise.all([loadRoles(), loadAllPermissions()]) }
     </div>
 
     <!-- Add/Edit Role Modal -->
-    <el-dialog v-model="showRoleModal" :title="editingRole ? $t('settings.editRole') : $t('settings.addRole')" width="400px" :close-on-click-modal="false">
+    <el-dialog v-model="showRoleModal" :title="editingRole ? $t('settings.editRole') : $t('settings.addRole')" width="400px" :close-on-click-modal="false" :append-to-body="true">
       <div class="space-y-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('settings.roleName') }} *</label>
