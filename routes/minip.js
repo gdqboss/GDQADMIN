@@ -958,45 +958,79 @@ router.post('/office/work-logs', auth, async (req, res, next) => {
   }
 })
 
-// GET /api/minip/office/tasks - 我的任务列表
+// GET /api/minip/office/tasks - 任务列表 (2026-08-19 三端对齐)
+//   scope=mine: 我指派的; scope=assigned: 指派给我的; scope=all: 全部 (admin only); 默认 mine
+//   admin 看全部, 普通员工只能看自己被指派或自己指派的
 router.get('/office/tasks', auth, async (req, res, next) => {
   try {
     const userId = req.user.id
-    const { status, page = 1, pageSize = 20 } = req.query
+    const isAdmin = req.user.role === 'admin'
+    const { scope = 'mine', status, page = 1, pageSize = 20 } = req.query
     const offset = (Number(page) - 1) * Number(pageSize)
-    let sql = `SELECT t.id, t.title, t.description, t.status, t.priority, t.due_date, t.created_at, t.assigned_to, t.assigned_by,
-                      u.name as assignee_name, b.name as assigner_name
-               FROM tasks t
-               LEFT JOIN users u ON t.assigned_to = u.id
-               LEFT JOIN users b ON t.assigned_by = b.id
-               WHERE t.assigned_to = ?`
-    const params = [userId]
+    let where = 'WHERE 1=1'
+    const params = []
+    if (scope === 'mine' && !isAdmin) {
+      where += ' AND t.assigned_by = ?'
+      params.push(userId)
+    } else if (scope === 'assigned' && !isAdmin) {
+      where += ' AND t.assigned_to = ?'
+      params.push(userId)
+    } else if (scope === 'all' && !isAdmin) {
+      // 普通员工不能看 all, 退回 assigned
+      where += ' AND t.assigned_to = ?'
+      params.push(userId)
+    } else if (scope === 'mine' && isAdmin) {
+      where += ' AND t.assigned_by = ?'
+      params.push(userId)
+    } else if (scope === 'assigned' && isAdmin) {
+      where += ' AND t.assigned_to = ?'
+      params.push(userId)
+    } // scope='all' 且 isAdmin: 不加 user 过滤
     if (status) {
-      sql += ' AND t.status = ?'
+      where += ' AND t.status = ?'
       params.push(status)
     }
-    sql += ' ORDER BY (CASE t.priority WHEN \'high\' THEN 1 WHEN \'medium\' THEN 2 WHEN \'low\' THEN 3 ELSE 4 END), t.due_date ASC LIMIT ? OFFSET ?'
-    params.push(Number(pageSize), offset)
-    const [rows] = await pool.query(sql, params)
-    const [[{ total }]] = await pool.query(
-      'SELECT COUNT(*) as total FROM tasks WHERE assigned_to = ?' + (status ? ' AND status = ?' : ''),
-      status ? [userId, status] : [userId]
+    const [rows] = await pool.query(
+      `SELECT t.id, t.title, t.description, t.status, t.priority, t.due_date, t.created_at, t.assigned_to, t.assigned_by,
+              u.name as assignee_name, b.name as assigner_name
+       FROM tasks t
+       LEFT JOIN users u ON t.assigned_to = u.id
+       LEFT JOIN users b ON t.assigned_by = b.id
+       ${where}
+       ORDER BY (CASE t.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END), t.due_date ASC LIMIT ? OFFSET ?`,
+      [...params, Number(pageSize), offset]
     )
-    res.json({ code: 0, data: { list: rows, total: Number(total) } })
+    const [cntRows] = await pool.query(
+      `SELECT COUNT(*) as total FROM tasks t ${where}`,
+      params
+    )
+    res.json({ code: 0, data: { list: rows, total: Number(cntRows[0].total) } })
   } catch (err) { next(err) }
 })
 
-// POST /api/minip/office/tasks - 创建任务（任何人都能创建,可派给自己或他人）
-// 2026-07-17 对齐主站：支持 assigned_to 字段（受派人）,不传默认派给自己
+// POST /api/minip/office/tasks - 创建任务 (2026-08-19 三端对齐)
+//   admin 派给任意人; 普通员工只能派给自己或下属
 router.post('/office/tasks', auth, async (req, res, next) => {
   try {
     const userId = req.user.id
+    const isAdmin = req.user.role === 'admin'
     const { title, description, priority = 'medium', due_date, assigned_to } = req.body
     if (!title) return res.status(400).json({ code: 400, message: '任务标题不能为空' })
-    // assigned_to 不传或非数字 → 默认派给自己
-    const targetUser = Number.isInteger(Number(assigned_to)) && Number(assigned_to) > 0
-      ? Number(assigned_to)
-      : userId
+    let targetUser = (Number.isInteger(Number(assigned_to)) && Number(assigned_to) > 0)
+      ? Number(assigned_to) : userId
+    if (!isAdmin && targetUser !== userId) {
+      // 普通员工: 检查目标是否是下属
+      const [[sub]] = await pool.query(
+        `WITH RECURSIVE subordinate_tree AS (
+          SELECT id, supervisor_id FROM users WHERE supervisor_id = ?
+          UNION ALL
+          SELECT u.id, u.supervisor_id FROM users u
+          INNER JOIN subordinate_tree st ON u.supervisor_id = st.id
+        ) SELECT id FROM subordinate_tree WHERE id = ?`,
+        [userId, targetUser]
+      )
+      if (!sub) return res.status(403).json({ code: 403, message: '只能派给下属' })
+    }
     const [r] = await pool.query(
       `INSERT INTO tasks (title, description, priority, status, assigned_to, created_by, assigned_by, due_date, is_new)
        VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, 1)`,
