@@ -3,7 +3,6 @@ import jwt from 'jsonwebtoken'
 import { pool } from '../db/connection.js'
 import { auth } from '../middleware/auth.js'
 import { requireRole } from '../middleware/rbac.js'
-import oaRoutes from './oa.js'
 
 const router = Router()
 
@@ -1821,13 +1820,6 @@ router.put('/me/profile', auth, async (req, res, next) => {
     res.json({ code: 0, data: rows[0] })
   } catch (err) { next(err) }
 })
-
-// ============================================================
-// OA 路由代理 - 2026-08-19 修复
-// 把 /api/minip/oa/* 全部转给 oa.js 处理
-// minip 页面 (attendance-clock / task-list / work-log-list) 都是调 /api/minip/oa/... 但没 mount
-// ============================================================
-router.use('/oa', auth, oaRoutes)
 
 export default router
 
