@@ -21,11 +21,16 @@ import zh from './zh.js'
 const DEFAULT_LOCALE = 'zh'
 
 // 动态 import 字典: 决定哪些 locale 走 lazy load
-// 2026-08-06 删 SUPPORTED_LOCALES 后, setLocale 接受任意 key, 这里只决定"动态加载路径"
+// 2026-08-06 删 SUPPORTED_LOCALES 写死: setLocale 接受任意 locale, 这里只决定"动态加载路径"
+// 2026-08-21 加别名: macau profile 7 配 language=["zh-TW","zh-CN","en-US"]
+//   - zh-TW 跟 zh-HK 一样都是繁体, 复用 zh-HK.js
+//   - en-US 跟 en 一样, 复用 en.js
 const LOCALE_DYNAMIC_IMPORTS = {
   'en': () => import(/* @vite-ignore */ './en.js'),
+  'en-US': () => import(/* @vite-ignore */ './en.js'),   // macau 别名
   'ms': () => import(/* @vite-ignore */ './ms.js'),
   'zh-HK': () => import(/* @vite-ignore */ './zh-HK.js'),
+  'zh-TW': () => import(/* @vite-ignore */ './zh-HK.js'), // macau 别名 (繁体)
 }
 
 // 启动语言: 从 localStorage 读, 没存过就用 default
@@ -93,7 +98,53 @@ export async function setLocale(locale) {
     html.classList.remove('locale-zh', 'locale-en', 'locale-ms', 'locale-zh-HK')
     html.classList.add(`locale-${locale}`)
   } catch (e) {}
+  // 2026-08-21 同步更新 <title>: 读 /api/public-settings 的 site_name (zh/en 按 locale 切)
+  // 这样 macau (site_name_zh=澳門中醫藥學會) 切到英文时 title 也变 Macau Chinese Medicine Association
+  updateDocumentTitle()
   return true
+}
+
+// 2026-08-21: 监听 locale 变化 + 拉 public-settings 同步 title
+let _siteNameCache = null
+async function fetchSiteName() {
+  if (_siteNameCache) return _siteNameCache
+  try {
+    const res = await fetch('/api/public-settings')
+    const json = await res.json()
+    if (json?.code === 0 && json.data) {
+      _siteNameCache = {
+        zh: json.data.site_name_zh || json.data.site_name || '',
+        en: json.data.site_name_en || json.data.site_name || '',
+        bot: json.data.bot_name || ''
+      }
+    }
+  } catch (e) {
+    console.warn('[i18n] fetchSiteName failed:', e)
+  }
+  return _siteNameCache || { zh: '', en: '', bot: '' }
+}
+
+async function updateDocumentTitle() {
+  const site = await fetchSiteName()
+  const locale = i18n.global.locale.value
+  let title = ''
+  if (locale === 'en' || locale === 'en-US') {
+    title = site.en
+  } else if (locale === 'ms') {
+    title = site.zh  // ms 没 site_name, 用 zh 兜底
+  } else {
+    // zh / zh-CN / zh-TW / zh-HK 都用 site_name_zh (繁体优先)
+    title = site.zh
+  }
+  if (title) {
+    // 保留原 title 后缀逻辑: 如果原本是 "X · 后缀", 这里直接覆盖
+    document.title = title
+  }
+}
+
+// 启动时也跑一次 (页面刷新, locale 从 localStorage 恢复)
+if (typeof window !== 'undefined') {
+  updateDocumentTitle()
 }
 
 export default i18n

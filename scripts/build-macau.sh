@@ -99,6 +99,60 @@ VITEEOF
 echo "--- 5. Running Vite build for profile $PROFILE_ID ---"
 cd "$MODULE_DIR" && node ../../node_modules/vite/bin/vite.js build --emptyOutDir
 
+# 6. macau profile 专用 patch: 改 title + favicon (避免 vite 把 SGP 模板的 SmartBiz / favicon.svg 带过来)
+# 2026-08-21: SGP /root/server/index.html 是 SmartBiz 模板, build 时被复制到 dist-7/index.html
+#   - title 改 site_name_zh (从 server_profiles DB 读)
+#   - favicon 改 site_logo (从 server_profiles DB 读), 没设就保留 favicon.svg
+#   - 这保证首屏不闪 SmartBiz / 不显示 "彩" 字 favicon
+echo
+echo "--- 6. Patching dist-$PROFILE_ID/index.html for macau ---"
+PROFILE_TITLE_ZH=$(mysql -u$DB_USER -p"$DB_PASS" $DB -N -B -e \
+  "SELECT site_name_zh FROM server_profiles WHERE id = $PROFILE_ID;" 2>/dev/null)
+PROFILE_TITLE_EN=$(mysql -u$DB_USER -p"$DB_PASS" $DB -N -B -e \
+  "SELECT site_name_en FROM server_profiles WHERE id = $PROFILE_ID;" 2>/dev/null)
+PROFILE_SITE_LOGO=$(mysql -u$DB_USER -p"$DB_PASS" $DB -N -B -e \
+  "SELECT site_logo FROM server_profiles WHERE id = $PROFILE_ID;" 2>/dev/null)
+echo "site_name_zh: $PROFILE_TITLE_ZH"
+echo "site_name_en: $PROFILE_TITLE_EN"
+echo "site_logo:    $PROFILE_SITE_LOGO"
+
+# 用 python 做精确 sed 替换 (避免 sed 转义)
+python3 << PYEOF
+import re
+fp = "$DIST_DIR/index.html"
+with open(fp, 'r', encoding='utf-8') as f:
+    html = f.read()
+orig = html
+
+# title 改成 site_name_zh (首屏不闪 SmartBiz)
+zh_title = """$PROFILE_TITLE_ZH""".strip()
+if zh_title:
+    html = re.sub(r'<title>[^<]*</title>', f'<title>{zh_title}</title>', html, count=1)
+
+# favicon 改成 site_logo (PNG 优先) 或保留 svg
+logo = """$PROFILE_SITE_LOGO""".strip()
+if logo and logo.lower().endswith(('.png', '.webp', '.jpg', '.jpeg')):
+    html = re.sub(
+        r'<link rel="icon"[^>]*>',
+        f'<link rel="icon" type="image/png" href="{logo}" />',
+        html, count=1)
+    # apple-touch-icon 也换
+    html = re.sub(
+        r'<link rel="apple-touch-icon"[^>]*>',
+        f'<link rel="apple-touch-icon" href="{logo}" />',
+        html, count=1)
+    print(f"  favicon -> {logo}")
+else:
+    print("  favicon: keep original (no site_logo set or non-image)")
+
+if html != orig:
+    with open(fp, 'w', encoding='utf-8') as f:
+        f.write(html)
+    print(f"  title -> {zh_title}")
+    print(f"  patched: {fp}")
+else:
+    print("  no changes")
+PYEOF
 
 echo
 echo "=== Build Complete ==="
