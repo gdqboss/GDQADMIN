@@ -2,30 +2,30 @@
   <div class="min-h-screen bg-gray-50 p-6">
     <div class="flex items-center justify-between mb-6">
       <div>
-        <h1 class="text-2xl font-bold text-gray-800">资料下载</h1>
-        <p class="text-sm text-gray-500 mt-1">表格 / 模板 / 指南 / 规章 / 上传下载</p>
+        <h1 class="text-2xl font-bold text-gray-800">{{ $t('association.downloads.title') }}</h1>
+        <p class="text-sm text-gray-500 mt-1">{{ $t('association.downloads.subtitle') }}</p>
       </div>
-      <button @click="openEdit()" class="px-4 py-2 bg-primary text-white rounded-lg">+ 上传资料</button>
+      <button @click="openEdit()" class="px-4 py-2 bg-primary text-white rounded-lg">{{ $t("association.downloads.upload") }}</button>
     </div>
 
     <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mb-4">
       <div class="flex gap-3">
-        <input v-model="filter.keyword" placeholder="搜索标题/文件名" class="px-3 py-2 border rounded-lg flex-1" @keyup.enter="search" />
+        <input v-model="filter.keyword" :placeholder="$t('association.downloads.searchPlaceholder')" class="px-3 py-2 border rounded-lg flex-1" @keyup.enter="search" />
         <select v-model="filter.status" class="px-3 py-2 border rounded-lg">
-          <option value="">全部状态</option>
-          <option value="published">已发布</option>
-          <option value="draft">草稿</option>
-          <option value="archived">已归档</option>
+          <option value="">{{ $t('association.activities.allStatus') }}</option>
+          <option value="published">{{ $t('association.common.published') }}</option>
+          <option value="draft">{{ $t('association.common.draft') }}</option>
+          <option value="archived">{{ $t('association.common.archived') }}</option>
         </select>
         <select v-model="filter.category" class="px-3 py-2 border rounded-lg">
-          <option value="">全部分类</option>
-          <option value="general">综合</option>
-          <option value="form">表格</option>
-          <option value="template">模板</option>
-          <option value="guide">指南</option>
-          <option value="regulation">规章</option>
+          <option value="">{{ $t('association.announcements.allCategories') }}</option>
+          <option value="general">{{ $t('association.announcements.general') }}</option>
+          <option value="form">{{ $t('association.downloads.table') }}</option>
+          <option value="template">{{ $t('association.downloads.template') }}</option>
+          <option value="guide">{{ $t('association.downloads.guide') }}</option>
+          <option value="regulation">{{ $t('association.downloads.regulation') }}</option>
         </select>
-        <button @click="search" class="px-4 py-2 bg-primary text-white rounded-lg">搜索</button>
+        <button @click="search" class="px-4 py-2 bg-primary text-white rounded-lg">{{ $t('association.common.search') }}</button>
       </div>
     </div>
 
@@ -33,13 +33,13 @@
       <table class="w-full">
         <thead class="bg-gray-50 text-sm text-gray-600">
           <tr>
-            <th class="px-4 py-3 text-left">标题</th>
-            <th class="px-4 py-3 text-left">文件名</th>
-            <th class="px-4 py-3 text-left">类型</th>
-            <th class="px-4 py-3 text-left">分类</th>
-            <th class="px-4 py-3 text-left">状态</th>
-            <th class="px-4 py-3 text-left">下载数</th>
-            <th class="px-4 py-3 text-left">操作</th>
+            <th class="px-4 py-3 text-left">{{ $t('association.common.title') }}</th>
+            <th class="px-4 py-3 text-left">{{ $t('association.common.fileName') }}</th>
+            <th class="px-4 py-3 text-left">{{ $t('association.common.type') }}</th>
+            <th class="px-4 py-3 text-left">{{ $t('association.common.category') }}</th>
+            <th class="px-4 py-3 text-left">{{ $t('association.common.status') }}</th>
+            <th class="px-4 py-3 text-left">{{ $t("association.journals.downloads") }}</th>
+            <th class="px-4 py-3 text-left">{{ $t('association.common.operations') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -56,13 +56,13 @@
             </td>
             <td class="px-4 py-3 text-sm text-gray-500">{{ d.download_count || 0 }}</td>
             <td class="px-4 py-3">
-              <button @click="openEdit(d)" class="text-primary text-sm hover:underline mr-2">编辑</button>
-              <button @click="del(d.id)" class="text-red-500 text-sm hover:underline">删除</button>
+              <button @click="openEdit(d)" class="text-primary text-sm hover:underline mr-2">{{ $t('association.common.edit') }}</button>
+              <button @click="del(d.id)" class="text-red-500 text-sm hover:underline">{{ $t('association.common.delete') }}</button>
             </td>
           </tr>
         </tbody>
       </table>
-      <div v-if="!loading && list.length === 0" class="p-8 text-center text-gray-400">暂无资料</div>
+      <div v-if="!loading && list.length === 0" class="p-8 text-center text-gray-400">{{ $t('association.downloads.noData') }}</div>
 
       <div v-if="total > pageSize" class="p-4 flex justify-end">
         <el-pagination
@@ -75,42 +75,42 @@
       </div>
     </div>
 
-    <el-dialog v-model="dialogVisible" :title="form.id ? '编辑资料' : '上传资料'" width="700px" :close-on-click-modal="false">
+    <el-dialog v-model="dialogVisible" :title="form.id ? form.id ? $t('association.downloads.dialogTitle') : $t('association.downloads.upload') : $t('association.downloads.upload')" width="700px" :close-on-click-modal="false">
       <el-form :model="form" label-width="100px">
-        <el-form-item label="标题" required><el-input v-model="form.title" /></el-form-item>
-        <el-form-item label="分类">
+        <el-form-item :label="$t('association.common.title')" required><el-input v-model="form.title" /></el-form-item>
+        <el-form-item :label="$t('association.common.category')">
           <el-select v-model="form.category" class="w-full">
-            <el-option label="综合" value="general" />
-            <el-option label="表格" value="form" />
-            <el-option label="模板" value="template" />
-            <el-option label="指南" value="guide" />
-            <el-option label="规章" value="regulation" />
+            <el-option :label="$t('association.announcements.general')" value="general" />
+            <el-option :label="$t('association.downloads.table')" value="form" />
+            <el-option :label="$t('association.downloads.template')" value="template" />
+            <el-option :label="$t('association.downloads.guide')" value="guide" />
+            <el-option :label="$t('association.downloads.regulation')" value="regulation" />
           </el-select>
         </el-form-item>
-        <el-form-item label="文件 URL" required><el-input v-model="form.file_url" placeholder="/uploads/downloads/xxx.pdf" /></el-form-item>
-        <el-form-item label="文件名"><el-input v-model="form.file_name" /></el-form-item>
-        <el-form-item label="文件类型">
+        <el-form-item :label="$t('association.downloads.fileUrl')" required><el-input v-model="form.file_url" placeholder="/uploads/downloads/xxx.pdf" /></el-form-item>
+        <el-form-item :label="$t('association.common.fileName')"><el-input v-model="form.file_name" /></el-form-item>
+        <el-form-item :label="$t('association.common.fileType')">
           <el-select v-model="form.file_type" class="w-full">
             <el-option label="PDF" value="pdf" /><el-option label="Word" value="doc" />
             <el-option label="Excel" value="xls" /><el-option label="Zip" value="zip" />
-            <el-option label="图片" value="image" />
+            <el-option :label="$t('association.common.image')" value="image" />
           </el-select>
         </el-form-item>
-        <el-form-item label="文件大小(KB)"><el-input-number v-model="form.file_size" :min="0" /></el-form-item>
-        <el-form-item label="封面 URL"><el-input v-model="form.cover_image" /></el-form-item>
-        <el-form-item label="描述"><el-input v-model="form.description" type="textarea" :rows="2" /></el-form-item>
-        <el-form-item label="排序"><el-input-number v-model="form.sort_order" :min="0" :max="999" /></el-form-item>
-        <el-form-item label="状态">
+        <el-form-item :label="$t('association.downloads.fileSizeKb')"><el-input-number v-model="form.file_size" :min="0" /></el-form-item>
+        <el-form-item :label="$t('association.common.coverUrl')"><el-input v-model="form.cover_image" /></el-form-item>
+        <el-form-item :label="$t('association.activities.description')"><el-input v-model="form.description" type="textarea" :rows="2" /></el-form-item>
+        <el-form-item :label="$t('association.common.sort')"><el-input-number v-model="form.sort_order" :min="0" :max="999" /></el-form-item>
+        <el-form-item :label="$t('association.common.status')">
           <el-select v-model="form.status" class="w-full">
-            <el-option label="草稿" value="draft" />
-            <el-option label="已发布" value="published" />
-            <el-option label="已归档" value="archived" />
+            <el-option :label="$t('association.common.draft')" value="draft" />
+            <el-option :label="$t('association.common.published')" value="published" />
+            <el-option :label="$t('association.common.archived')" value="archived" />
           </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
-        <button @click="dialogVisible = false" class="px-4 py-2 border rounded-lg">取消</button>
-        <button @click="save" class="px-4 py-2 bg-primary text-white rounded-lg ml-2">保存</button>
+        <button @click="dialogVisible = false" class="px-4 py-2 border rounded-lg">{{ $t('association.common.cancel') }}</button>
+        <button @click="save" class="px-4 py-2 bg-primary text-white rounded-lg ml-2">{{ $t('association.common.save') }}</button>
       </template>
     </el-dialog>
   </div>
@@ -130,9 +130,9 @@ const filter = ref({ keyword: '', status: '', category: '' })
 const dialogVisible = ref(false)
 const form = ref({ title: '', description: '', file_url: '', file_name: '', file_size: 0, file_type: 'pdf', category: 'general', cover_image: '', status: 'draft', sort_order: 99 })
 
-function categoryLabel(c) { return { general: '综合', form: '表格', template: '模板', guide: '指南', regulation: '规章' }[c] || c }
+function categoryLabel(c) { return { general: $t('association.announcements.general'), form: $t('association.downloads.table'), template: $t('association.downloads.template'), guide: $t('association.downloads.guide'), regulation: $t('association.downloads.regulation') }[c] || c }
 function statusClass(s) { return { published: 'bg-green-100 text-green-700', draft: 'bg-yellow-100 text-yellow-700', archived: 'bg-gray-100 text-gray-500' }[s] || '' }
-function statusLabel(s) { return { published: '已发布', draft: '草稿', archived: '已归档' }[s] || s }
+function statusLabel(s) { return { published: $t('association.common.published'), draft: $t('association.common.draft'), archived: $t('association.common.archived') }[s] || s }
 
 async function load() {
   loading.value = true
@@ -157,23 +157,23 @@ function openEdit(d) {
 }
 
 async function save() {
-  if (!form.value.title) return ElMessage.error('标题必填')
-  if (!form.value.file_url) return ElMessage.error('文件 URL 必填')
+  if (!form.value.title) return ElMessage.error($t('association.common.titleRequired'))
+  if (!form.value.file_url) return ElMessage.error($t('association.downloads.fileUrlRequired'))
   try {
     const payload = { ...form.value, server_profile_id: form.value.server_profile_id || 1 }
     delete payload.id; delete payload.created_at; delete payload.updated_at; delete payload.download_count
     const res = form.value.id
       ? await api.put(`/association/downloads/${form.value.id}`, payload)
       : await api.post('/association/downloads', payload)
-    if (res.code === 0) { ElMessage.success('已保存'); dialogVisible.value = false; load() }
+    if (res.code === 0) { ElMessage.success($t('association.common.saved')); dialogVisible.value = false; load() }
   } catch (e) { ElMessage.error(e.message) }
 }
 
 async function del(id) {
   try {
-    await ElMessageBox.confirm('确认删除此资料?', '提示', { type: 'warning' })
+    await ElMessageBox.confirm($t('association.downloads.confirmDelete'), $t('association.common.hint'), { type: 'warning' })
     const res = await api.delete(`/association/downloads/${id}`)
-    if (res.code === 0) { ElMessage.success('已删除'); load() }
+    if (res.code === 0) { ElMessage.success($t('association.common.deleted')); load() }
   } catch (e) { if (e !== 'cancel') ElMessage.error(e.message) }
 }
 

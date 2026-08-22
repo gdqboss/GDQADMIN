@@ -2,24 +2,24 @@
   <div class="min-h-screen bg-gray-50 p-6">
     <div class="flex items-center justify-between mb-6">
       <div>
-        <h1 class="text-2xl font-bold text-gray-800">组织架构</h1>
-        <p class="text-sm text-gray-500 mt-1">理事会 / 委员会 / 部门层级（树形结构）</p>
+        <h1 class="text-2xl font-bold text-gray-800">{{ $t('association.org.title') }}</h1>
+        <p class="text-sm text-gray-500 mt-1">{{ $t('association.org.subtitle') }}</p>
       </div>
-      <button @click="openEdit(null, 0)" class="px-4 py-2 bg-primary text-white rounded-lg">+ 新增根节点</button>
+      <button @click="openEdit(null, 0)" class="px-4 py-2 bg-primary text-white rounded-lg">{{ $t("association.org.addRoot") }}</button>
     </div>
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-      <div v-if="loading" class="p-8 text-center text-gray-400">加载中...</div>
-      <div v-else-if="flat.length === 0" class="p-8 text-center text-gray-400">暂无组织架构，请先添加根节点</div>
+      <div v-if="loading" class="p-8 text-center text-gray-400">{{ $t('association.common.loading') }}</div>
+      <div v-else-if="flat.length === 0" class="p-8 text-center text-gray-400">{{ $t("association.org.noData") }}</div>
       <div v-else>
         <table class="w-full">
           <thead class="bg-gray-50 text-sm text-gray-600">
             <tr>
-              <th class="px-4 py-3 text-left">名称 / 职位</th>
-              <th class="px-4 py-3 text-left">层级</th>
-              <th class="px-4 py-3 text-left">可见</th>
-              <th class="px-4 py-3 text-left">排序</th>
-              <th class="px-4 py-3 text-left">操作</th>
+              <th class="px-4 py-3 text-left">{{ $t('association.org.namePosition') }}</th>
+              <th class="px-4 py-3 text-left">{{ $t('association.org.depth') }}</th>
+              <th class="px-4 py-3 text-left">{{ $t('association.org.visible') }}</th>
+              <th class="px-4 py-3 text-left">{{ $t('association.common.sort') }}</th>
+              <th class="px-4 py-3 text-left">{{ $t('association.common.operations') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -36,14 +36,14 @@
               <td class="px-4 py-3 text-sm text-gray-500">第 {{ n.depth + 1 }} 层</td>
               <td class="px-4 py-3">
                 <span :class="['px-2 py-0.5 rounded text-xs', n.is_visible ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500']">
-                  {{ n.is_visible ? '显示' : '隐藏' }}
+                  {{ n.is_visible ? $t('association.common.visible') : $t('association.common.hidden') }}
                 </span>
               </td>
               <td class="px-4 py-3 text-sm text-gray-500">{{ n.sort_order || 99 }}</td>
               <td class="px-4 py-3">
-                <button @click="openEdit(null, n.id)" class="text-primary text-sm hover:underline mr-2">+ 子节点</button>
-                <button @click="openEdit(n)" class="text-primary text-sm hover:underline mr-2">编辑</button>
-                <button @click="del(n.id, n.name)" class="text-red-500 text-sm hover:underline">删除</button>
+                <button @click="openEdit(null, n.id)" class="text-primary text-sm hover:underline mr-2">{{ $t("association.org.addChild") }}</button>
+                <button @click="openEdit(n)" class="text-primary text-sm hover:underline mr-2">{{ $t('association.common.edit') }}</button>
+                <button @click="del(n.id, n.name)" class="text-red-500 text-sm hover:underline">{{ $t('association.common.delete') }}</button>
               </td>
             </tr>
           </tbody>
@@ -51,24 +51,24 @@
       </div>
     </div>
 
-    <el-dialog v-model="dialogVisible" :title="form.id ? '编辑节点' : '新增节点'" width="600px" :close-on-click-modal="false">
+    <el-dialog v-model="dialogVisible" :title="form.id ? form.id ? $t('association.org.dialogTitle') : $t('association.org.addChild') : $t('association.org.addChild')" width="600px" :close-on-click-modal="false">
       <el-form :model="form" label-width="100px">
-        <el-form-item label="名称" required><el-input v-model="form.name" placeholder="姓名 / 部门名" /></el-form-item>
-        <el-form-item label="职位"><el-input v-model="form.title" placeholder="职位（选填）" /></el-form-item>
-        <el-form-item label="父节点">
+        <el-form-item :label="$t('association.common.name')" required><el-input v-model="form.name" :placeholder="$t('association.org.namePlaceholder')" /></el-form-item>
+        <el-form-item :label="$t('association.org.position')"><el-input v-model="form.title" :placeholder="$t('association.org.positionPlaceholder')" /></el-form-item>
+        <el-form-item :label="$t('association.org.parentNode')">
           <el-select v-model="form.parent_id" class="w-full" :disabled="!!form.id">
-            <el-option label="根节点" :value="0" />
+            <el-option :label="$t('association.org.rootNode')" :value="0" />
             <el-option v-for="n in flat" :key="n.id" :label="'└─ '.repeat(n.depth) + n.name" :value="n.id" :disabled="form.id === n.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="头像 URL"><el-input v-model="form.avatar" /></el-form-item>
-        <el-form-item label="简介"><el-input v-model="form.bio" type="textarea" :rows="3" /></el-form-item>
-        <el-form-item label="排序"><el-input-number v-model="form.sort_order" :min="0" :max="999" /></el-form-item>
-        <el-form-item label="显示"><el-switch v-model="form.is_visible" /></el-form-item>
+        <el-form-item :label="$t('association.cards.avatarUrl')"><el-input v-model="form.avatar" /></el-form-item>
+        <el-form-item :label="$t('association.common.description')"><el-input v-model="form.bio" type="textarea" :rows="3" /></el-form-item>
+        <el-form-item :label="$t('association.common.sort')"><el-input-number v-model="form.sort_order" :min="0" :max="999" /></el-form-item>
+        <el-form-item :label="$t('association.common.visible')"><el-switch v-model="form.is_visible" /></el-form-item>
       </el-form>
       <template #footer>
-        <button @click="dialogVisible = false" class="px-4 py-2 border rounded-lg">取消</button>
-        <button @click="save" class="px-4 py-2 bg-primary text-white rounded-lg ml-2">保存</button>
+        <button @click="dialogVisible = false" class="px-4 py-2 border rounded-lg">{{ $t('association.common.cancel') }}</button>
+        <button @click="save" class="px-4 py-2 bg-primary text-white rounded-lg ml-2">{{ $t('association.common.save') }}</button>
       </template>
     </el-dialog>
   </div>
@@ -130,20 +130,20 @@ function openEdit(node, parentId = null) {
 }
 
 async function save() {
-  if (!form.value.name) return ElMessage.error('名称必填')
+  if (!form.value.name) return ElMessage.error($t('association.common.nameRequired'))
   try {
     const payload = { ...form.value, server_profile_id: form.value.server_profile_id || 1, is_visible: form.value.is_visible ? 1 : 0 }
     delete payload.id
     const res = form.value.id
       ? await api.put(`/association/org/${form.value.id}`, payload)
       : await api.post('/association/org', payload)
-    if (res.code === 0) { ElMessage.success('已保存'); dialogVisible.value = false; load() }
+    if (res.code === 0) { ElMessage.success($t('association.common.saved')); dialogVisible.value = false; load() }
   } catch (e) { ElMessage.error(e.message) }
 }
 
 async function del(id, name) {
   try {
-    await ElMessageBox.confirm(`确认删除「${name}」及其所有子节点?\n(软删,is_visible=0,可恢复)`, '提示', { type: 'warning' })
+    await ElMessageBox.confirm(`确认删除「${name}」及其所有子节点?\n(软删,is_visible=0,可恢复)`, $t('association.common.hint'), { type: 'warning' })
     const res = await api.delete(`/association/org/${id}`)
     if (res.code === 0) { ElMessage.success(`已软删 ${res.data.affected || 1} 个节点`); load() }
   } catch (e) { if (e !== 'cancel') ElMessage.error(e.message) }

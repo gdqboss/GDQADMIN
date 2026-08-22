@@ -2,22 +2,22 @@
   <div class="min-h-screen bg-gray-50 p-6">
     <div class="flex items-center justify-between mb-6">
       <div>
-        <h1 class="text-2xl font-bold text-gray-800">会员名片墙</h1>
-        <p class="text-sm text-gray-500 mt-1">会员名片管理 / 公开可见性控制</p>
+        <h1 class="text-2xl font-bold text-gray-800">{{ $t('association.cards.title') }}</h1>
+        <p class="text-sm text-gray-500 mt-1">{{ $t('association.cards.subtitle') }}</p>
       </div>
-      <button @click="openEdit()" class="px-4 py-2 bg-primary text-white rounded-lg">+ 添加名片</button>
+      <button @click="openEdit()" class="px-4 py-2 bg-primary text-white rounded-lg">{{ $t("association.cards.add") }}</button>
     </div>
 
     <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mb-4">
       <div class="flex gap-3">
-        <input v-model="filter.keyword" placeholder="搜索姓名/公司" class="px-3 py-2 border rounded-lg flex-1" @keyup.enter="search" />
+        <input v-model="filter.keyword" :placeholder="$t('association.cards.searchPlaceholder')" class="px-3 py-2 border rounded-lg flex-1" @keyup.enter="search" />
         <select v-model="filter.card_level" class="px-3 py-2 border rounded-lg">
-          <option value="">全部等级</option>
-          <option value="member">普通会员</option>
-          <option value="senior">资深会员</option>
-          <option value="director">理事</option>
+          <option value="">{{ $t('association.members.allLevels') }}</option>
+          <option value="member">{{ $t('association.members.ordinary') }}</option>
+          <option value="senior">{{ $t("association.cards.seniorMember") }}</option>
+          <option value="director">{{ $t('association.cards.director') }}</option>
         </select>
-        <button @click="search" class="px-4 py-2 bg-primary text-white rounded-lg">搜索</button>
+        <button @click="search" class="px-4 py-2 bg-primary text-white rounded-lg">{{ $t('association.common.search') }}</button>
       </div>
     </div>
 
@@ -25,12 +25,12 @@
       <table class="w-full">
         <thead class="bg-gray-50 text-sm text-gray-600">
           <tr>
-            <th class="px-4 py-3 text-left">姓名</th>
-            <th class="px-4 py-3 text-left">公司/职位</th>
-            <th class="px-4 py-3 text-left">等级</th>
-            <th class="px-4 py-3 text-left">联系方式</th>
-            <th class="px-4 py-3 text-left">公开</th>
-            <th class="px-4 py-3 text-left">操作</th>
+            <th class="px-4 py-3 text-left">{{ $t('association.org.name') }}</th>
+            <th class="px-4 py-3 text-left">{{ $t('association.cards.companyPosition') }}</th>
+            <th class="px-4 py-3 text-left">{{ $t('association.common.level') }}</th>
+            <th class="px-4 py-3 text-left">{{ $t('association.cards.contact') }}</th>
+            <th class="px-4 py-3 text-left">{{ $t('association.cards.isVisible') }}</th>
+            <th class="px-4 py-3 text-left">{{ $t('association.common.operations') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -57,46 +57,46 @@
               <div v-if="c.wechat">💬 {{ c.wechat }}</div>
             </td>
             <td class="px-4 py-3">
-              <span :class="c.is_visible ? 'text-green-600' : 'text-gray-400'">{{ c.is_visible ? '公开' : '隐藏' }}</span>
+              <span :class="c.is_visible ? 'text-green-600' : 'text-gray-400'">{{ c.is_visible ? $t('association.cards.isVisible') : $t('association.common.hidden') }}</span>
             </td>
             <td class="px-4 py-3">
-              <button @click="openEdit(c)" class="text-primary text-sm hover:underline mr-2">编辑</button>
-              <button @click="del(c.id)" class="text-red-500 text-sm hover:underline">删除</button>
+              <button @click="openEdit(c)" class="text-primary text-sm hover:underline mr-2">{{ $t('association.common.edit') }}</button>
+              <button @click="del(c.id)" class="text-red-500 text-sm hover:underline">{{ $t('association.common.delete') }}</button>
             </td>
           </tr>
         </tbody>
       </table>
-      <div v-if="!loading && list.length === 0" class="p-8 text-center text-gray-400">暂无名片</div>
+      <div v-if="!loading && list.length === 0" class="p-8 text-center text-gray-400">{{ $t('association.cards.noData') }}</div>
 
       <div v-if="total > pageSize" class="p-4 flex justify-end">
         <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :total="total" layout="prev, pager, next" @current-change="load" />
       </div>
     </div>
 
-    <el-dialog v-model="dialogVisible" :title="form.id ? '编辑名片' : '添加名片'" width="600px" :close-on-click-modal="false">
+    <el-dialog v-model="dialogVisible" :title="form.id ? form.id ? $t('association.cards.dialogTitle') : $t('association.cards.add') : $t('association.cards.add')" width="600px" :close-on-click-modal="false">
       <el-form :model="form" label-width="100px">
-        <el-form-item label="姓名" required><el-input v-model="form.name" /></el-form-item>
-        <el-form-item label="头像 URL"><el-input v-model="form.avatar" /></el-form-item>
-        <el-form-item label="公司"><el-input v-model="form.company" /></el-form-item>
-        <el-form-item label="职位/头衔"><el-input v-model="form.title" /></el-form-item>
-        <el-form-item label="行业"><el-input v-model="form.industry" /></el-form-item>
-        <el-form-item label="等级">
+        <el-form-item :label="$t('association.org.name')" required><el-input v-model="form.name" /></el-form-item>
+        <el-form-item :label="$t('association.cards.avatarUrl')"><el-input v-model="form.avatar" /></el-form-item>
+        <el-form-item :label="$t('association.cards.company')"><el-input v-model="form.company" /></el-form-item>
+        <el-form-item :label="$t('association.cards.positionTitle')"><el-input v-model="form.title" /></el-form-item>
+        <el-form-item :label="$t('association.cards.industry')"><el-input v-model="form.industry" /></el-form-item>
+        <el-form-item :label="$t('association.common.level')">
           <el-select v-model="form.card_level" class="w-full">
-            <el-option label="普通会员" value="member" /><el-option label="资深会员" value="senior" />
-            <el-option label="理事" value="director" />
+            <el-option :label="$t('association.members.ordinary')" value="member" /><el-option :label="$t('association.cards.seniorMember')" value="senior" />
+            <el-option :label="$t('association.cards.director')" value="director" />
           </el-select>
         </el-form-item>
-        <el-form-item label="公开电话"><el-input v-model="form.phone" /></el-form-item>
-        <el-form-item label="邮箱"><el-input v-model="form.email" /></el-form-item>
-        <el-form-item label="微信"><el-input v-model="form.wechat" /></el-form-item>
-        <el-form-item label="个人简介"><el-input v-model="form.bio" type="textarea" :rows="3" /></el-form-item>
-        <el-form-item label="兴趣爱好"><el-input v-model="form.interests" placeholder="逗号分隔" /></el-form-item>
-        <el-form-item label="排序"><el-input-number v-model="form.sort_order" :min="0" /></el-form-item>
-        <el-form-item label="公开名片墙"><el-switch v-model="form.is_visible" /></el-form-item>
+        <el-form-item :label="$t('association.cards.publicPhone')"><el-input v-model="form.phone" /></el-form-item>
+        <el-form-item :label="$t('association.common.email')"><el-input v-model="form.email" /></el-form-item>
+        <el-form-item :label="$t('association.cards.wechat')"><el-input v-model="form.wechat" /></el-form-item>
+        <el-form-item :label="$t('association.cards.bio')"><el-input v-model="form.bio" type="textarea" :rows="3" /></el-form-item>
+        <el-form-item :label="$t('association.cards.hobbies')"><el-input v-model="form.interests" :placeholder="$t('association.cards.commaSeparated')" /></el-form-item>
+        <el-form-item :label="$t('association.common.sort')"><el-input-number v-model="form.sort_order" :min="0" /></el-form-item>
+        <el-form-item :label="$t('association.cards.publicWall')"><el-switch v-model="form.is_visible" /></el-form-item>
       </el-form>
       <template #footer>
-        <button @click="dialogVisible = false" class="px-4 py-2 border rounded-lg">取消</button>
-        <button @click="save" class="px-4 py-2 bg-primary text-white rounded-lg ml-2">保存</button>
+        <button @click="dialogVisible = false" class="px-4 py-2 border rounded-lg">{{ $t('association.common.cancel') }}</button>
+        <button @click="save" class="px-4 py-2 bg-primary text-white rounded-lg ml-2">{{ $t('association.common.save') }}</button>
       </template>
     </el-dialog>
   </div>
@@ -117,7 +117,7 @@ const dialogVisible = ref(false)
 const form = ref({})
 
 function levelClass(l) { return { member: 'bg-gray-100 text-gray-700', senior: 'bg-blue-100 text-blue-700', director: 'bg-primary/10 text-primary' }[l] || '' }
-function levelLabel(l) { return { member: '普通', senior: '资深', director: '理事' }[l] || l }
+function levelLabel(l) { return { member: $t('association.common.ordinary'), senior: $t('association.cards.seniorMember'), director: $t('association.cards.director') }[l] || l }
 
 async function load() {
   loading.value = true
@@ -142,22 +142,22 @@ function openEdit(c) {
 }
 
 async function save() {
-  if (!form.value.name) return ElMessage.error('姓名必填')
+  if (!form.value.name) return ElMessage.error($t('association.common.nameRequired'))
   try {
     const payload = { ...form.value, is_visible: form.value.is_visible ? 1 : 0, server_profile_id: form.value.server_profile_id || 1 }
     delete payload.id; delete payload.created_at; delete payload.updated_at
     const res = form.value.id
       ? await api.put(`/association/cards/${form.value.id}`, payload)
       : await api.post('/association/cards', payload)
-    if (res.code === 0) { ElMessage.success('已保存'); dialogVisible.value = false; load() }
+    if (res.code === 0) { ElMessage.success($t('association.common.saved')); dialogVisible.value = false; load() }
   } catch (e) { ElMessage.error(e.message) }
 }
 
 async function del(id) {
   try {
-    await ElMessageBox.confirm('确认删除此名片?', '提示', { type: 'warning' })
+    await ElMessageBox.confirm($t('association.cards.confirmDelete'), $t('association.common.hint'), { type: 'warning' })
     const res = await api.delete(`/association/cards/${id}`)
-    if (res.code === 0) { ElMessage.success('已删除'); load() }
+    if (res.code === 0) { ElMessage.success($t('association.common.deleted')); load() }
   } catch (e) { if (e !== 'cancel') ElMessage.error(e.message) }
 }
 
