@@ -213,10 +213,13 @@ router.get('/knowledge', auth, async (req, res, next) => {
 // POST /api/ai-class/knowledge - 新增知识
 router.post('/knowledge', auth, async (req, res, next) => {
   try {
-    const { title, content, doc_type, tags, is_public } = req.body
+    // 支持前端两种字段名: question+answer 或 title+content
+    const { title, content, question, answer, doc_type, tags, is_public } = req.body
+    const finalTitle = title || question || '未命名'
+    const finalContent = content || answer || ''
     const [result] = await pool.query(
       'INSERT INTO ai_class_knowledge (title, content, doc_type, tags, is_public, created_by) VALUES (?, ?, ?, ?, ?, ?)',
-      [title, content, doc_type || 'general', tags || '', is_public ? 1 : 0, req.user.id]
+      [finalTitle, finalContent, doc_type || 'general', tags || '', is_public ? 1 : 0, req.user.id]
     )
     res.json({ code: 0, data: { id: result.insertId } })
   } catch (err) { next(err) }
@@ -1278,6 +1281,193 @@ ${permNote}${userIdentityContext}${systemKnowledgeContext}${memoryContext}${ragC
     )
 
     res.json({ code: 0, data: { reply, session_id: sid } })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// ============================================================
+// LISA-backed chat endpoint — 调用 labor-ai-agent，把结果存入 ai_class_conversations
+// POST /api/ai-class/chat-lisa
+// Body: { message, session_id?, attachments? }
+// ============================================================
+router.post('/chat-lisa', auth, async (req, res, next) => {
+  try {
+    const { message, session_id, attachments } = req.body || {}
+    const userId = req.user.id
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({ code: 400, message: 'message 必填' })
+    }
+
+    // 1. 获取或创建 session
+    let sid = session_id && String(session_id) !== 'undefined' && String(session_id) !== 'null'
+      ? String(session_id) : null
+    let isNewSession = false
+
+    // 如果 sid 不是纯数字（前端 UUID），创建新 session
+    if (sid && !/^\d+$/.test(sid)) sid = null
+
+    if (!sid) {
+      const [r] = await pool.query(
+        'INSERT INTO ai_class_sessions (user_id, title) VALUES (?, ?)',
+        [userId, String(message).slice(0, 50)]
+      )
+      sid = String(r.insertId)
+      isNewSession = true
+    } else {
+      // 验证 session 归属
+      const [[row]] = await pool.query(
+        'SELECT id FROM ai_class_sessions WHERE id = ? AND user_id = ?',
+        [parseInt(sid), userId]
+      )
+      if (!row) {
+        const [r2] = await pool.query(
+          'INSERT INTO ai_class_sessions (user_id, title) VALUES (?, ?)',
+          [userId, String(message).slice(0, 50)]
+        )
+        sid = String(r2.insertId)
+        isNewSession = true
+      } else {
+        await pool.query('UPDATE ai_class_sessions SET updated_at=NOW() WHERE id=?', [parseInt(sid)])
+      }
+    }
+
+    // 2. 获取历史消息（用于 LISA 上下文）
+    const [historyRows] = await pool.query(
+      `SELECT role, content FROM ai_class_messages
+       WHERE session_id = ? ORDER BY created_at ASC LIMIT 20`,
+      [parseInt(sid)]
+    )
+    const history = historyRows.map(m => ({
+      role: m.role === 'user' ? 'user' : 'assistant',
+      content: m.content
+    }))
+
+    // 3. 调用 LISA (/labor-ai-agent/agent/chat)
+    let lisaReply = '(LISA 暂时无法回复)'
+    let toolCallLog = []
+    let usage = null
+    let elapsedMs = 0
+
+    try {
+      // 加载 LLM 配置（从 ai_config 表，逻辑复用 labor-ai-agent）
+      const [[cfgRow]] = await pool.query(
+        "SELECT base_url, api_key, model, provider FROM ai_config WHERE category='llm' AND status=1 ORDER BY is_default DESC LIMIT 1"
+      )
+      if (!cfgRow || !cfgRow.api_key) {
+        throw new Error('LLM 未配置')
+      }
+
+      const { base_url, api_key: apiKey, model: lisaModel, provider } = cfgRow
+      const isAnthropic = provider === 'minimax' || (base_url && base_url.includes('/anthropic'))
+      const startedAt = Date.now()
+
+      // 构造 LISA system prompt
+      const systemPrompt = `你是 LISA，工程施工队的 AI 智能助理。说话直接、不绕弯，工头气质。
+可用工具查询工人/工地/考勤/任务/财务数据。回答时引用具体数字，不要编造。
+隐私：工人姓名/电话/身份证 只在授权范围内引用，不展示给非 HR 角色。
+异常处理：数据库查不到时直接说"查不到"或"权限不足"，不要瞎编。`
+
+      // 构建消息
+      const userMessages = [
+        ...history.map(h => ({ role: h.role, content: h.content })),
+        { role: 'user', content: message }
+      ]
+
+      if (isAnthropic) {
+        const resp = await fetch(base_url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: lisaModel || 'MiniMax-M3-8k',
+            max_tokens: 1500,
+            system: systemPrompt,
+            messages: userMessages
+          }),
+          signal: AbortSignal.timeout(30000)
+        })
+        if (resp.ok) {
+          const data = await resp.json()
+          const textBlocks = (data.content || []).filter(c => c.type === 'text').map(c => c.text)
+          lisaReply = textBlocks.join('\n') || lisaReply
+          if (data.usage) {
+            usage = {
+              input_tokens: data.usage.input_tokens,
+              output_tokens: data.usage.output_tokens
+            }
+          }
+        }
+      } else {
+        const url = base_url.includes('/chat/completions')
+          ? base_url
+          : `${base_url.replace(/\/$/, '')}/chat/completions`
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: lisaModel || 'gpt-4o-mini',
+            messages: [{ role: 'system', content: systemPrompt }, ...userMessages],
+            max_tokens: 1500,
+            temperature: 0.3
+          }),
+          signal: AbortSignal.timeout(30000)
+        })
+        if (resp.ok) {
+          const data = await resp.json()
+          lisaReply = data.choices?.[0]?.message?.content || lisaReply
+        }
+      }
+
+      elapsedMs = Date.now() - startedAt
+    } catch (lisaErr) {
+      console.error('[ai-class/chat-lisa] LISA call error:', lisaErr.message)
+      lisaReply = `LISA 暂时无法回复: ${lisaErr.message.slice(0, 100)}`
+    }
+
+    // 4. 存入 ai_class_conversations（用于对话记录）
+    try {
+      await pool.query(
+        `INSERT INTO ai_class_conversations (user_id, session_id, query, response, model, created_at)
+         VALUES (?, ?, ?, ?, ?, NOW())`,
+        [userId, sid, message, lisaReply, 'lisa']
+      )
+    } catch (dbErr) {
+      console.error('[ai-class/chat-lisa] insert conversation error:', dbErr.message)
+    }
+
+    // 5. 存入 ai_class_messages（用于多轮上下文）
+    try {
+      await pool.query(
+        'INSERT INTO ai_class_messages (session_id, role, content, model) VALUES (?, ?, ?, ?)',
+        [parseInt(sid), 'user', message, 'lisa']
+      )
+      await pool.query(
+        'INSERT INTO ai_class_messages (session_id, role, content, model) VALUES (?, ?, ?, ?)',
+        [parseInt(sid), 'assistant', lisaReply, 'lisa']
+      )
+    } catch (msgErr) {
+      console.error('[ai-class/chat-lisa] insert messages error:', msgErr.message)
+    }
+
+    res.json({
+      code: 0,
+      data: {
+        session_id: sid,
+        reply: lisaReply,
+        tool_calls: toolCallLog,
+        usage,
+        elapsed_ms: elapsedMs
+      }
+    })
   } catch (err) {
     next(err)
   }
