@@ -13,164 +13,79 @@ function hashKey(rawKey) {
 }
 
 // ──────────────────────────────────────────────────────────────
-// Helper: check key validity and load its owner + quota info
-// ──────────────────────────────────────────────────────────────
-async function validateKey(rawKey) {
-  const keyHash = hashKey(rawKey)
-  const [rows] = await pool.query(
-    `SELECT k.*, u.id AS owner_user_id, u.email, u.balance, u.is_active AS user_active
-     FROM ai_token_keys k
-     JOIN ai_token_users u ON k.user_id = u.id
-     WHERE k.key_hash = ?`,
-    [keyHash]
-  )
-  if (!rows.length) return { error: 'Invalid API key', status: 401 }
-  const key = rows[0]
-
-  if (!key.is_active) return { error: 'API key is disabled', status: 401 }
-  if (!key.user_active) return { error: 'User account is disabled', status: 401 }
-
-  // Check expiry
-  if (key.expires_at && new Date(key.expires_at) < new Date()) {
-    return { error: 'API key has expired', status: 401 }
-  }
-
-  // Check IP whitelist
-  if (key.ip_whitelist) {
-    const clientIp = (req => {
-      return req.headers['x-forwarded-for']?.split(',')[0]?.trim()
-        || req.socket?.remoteAddress
-        || ''
-    })(null) // filled in below with req
-    // We need req — this is called from a function that has req
-  }
-
-  return key
-}
-
-// ──────────────────────────────────────────────────────────────
-// Helper: check balance and quota
-// ──────────────────────────────────────────────────────────────
-async function checkQuota(key, promptTokensEstimate) {
-  const user_id = key.owner_user_id
-  const [[user]] = await pool.query(
-    'SELECT balance FROM ai_token_users WHERE id = ?',
-    [user_id]
-  )
-
-  // Rough cost estimate: assume output = input * 2, use input_multiplier=1, output_multiplier=6
-  // This is an over-estimate so we don't over-charge. Real cost is computed after upstream response.
-  const estimatedCost = (promptTokensEstimate / 1_000_000) * 0.1 * 1.0
-                      + ((promptTokensEstimate * 2) / 1_000_000) * 0.6 * 6.0
-
-  if (user.balance < estimatedCost && estimatedCost > 0) {
-    return { error: 'Insufficient balance', status: 402 }
-  }
-
-  // Check day/month quota on key
-  if (key.quota_day > 0 || key.quota_month > 0) {
-    const now = new Date()
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-
-    const [[dayUsage]] = await pool.query(
-      `SELECT COALESCE(SUM(cost),0) AS day_cost FROM ai_token_usage
-       WHERE key_id = ? AND created_at >= ?`,
-      [key.id, startOfDay]
-    )
-    const [[monthUsage]] = await pool.query(
-      `SELECT COALESCE(SUM(cost),0) AS month_cost FROM ai_token_usage
-       WHERE key_id = ? AND created_at >= ?`,
-      [key.id, startOfMonth]
-    )
-
-    if (key.quota_day > 0 && parseFloat(dayUsage.day_cost) >= key.quota_day) {
-      return { error: 'Daily quota exceeded', status: 429 }
-    }
-    if (key.quota_month > 0 && parseFloat(monthUsage.month_cost) >= key.quota_month) {
-      return { error: 'Monthly quota exceeded', status: 429 }
-    }
-  }
-
-  return null // OK
-}
-
-// ──────────────────────────────────────────────────────────────
-// Helper: resolve model → channel
-// ──────────────────────────────────────────────────────────────
-async function resolveChannel(modelName) {
-  // Try exact match first
-  const [models] = await pool.query(
-    `SELECT m.*, c.base_url, c.api_key, c.provider, c.channel_name
-     FROM ai_token_models m
-     JOIN ai_token_channels c ON m.channel_id = c.id
-     WHERE m.provider_model_name = ? AND m.is_active = 1 AND c.is_active = 1
-     ORDER BY c.priority ASC LIMIT 1`,
-    [modelName]
-  )
-
-  if (!models.length) {
-    return { error: `Model '${modelName}' not found or not active`, status: 400 }
-  }
-  return models[0]
-}
-
-// ──────────────────────────────────────────────────────────────
-// Helper: compute cost from upstream usage
+// Helper: compute cost from upstream usage (yuan)
 // ──────────────────────────────────────────────────────────────
 function computeCost(modelRow, promptTokens, completionTokens) {
-  // Upstream prices per million tokens (DeepSeek defaults; per-channel overrides possible)
-  // Stored in model row via input_multiplier / output_multiplier which represent
-  // the ratio of user price to upstream price.
-  // For billing we need: user_price_per_1M = upstream_price_per_1M * multiplier
-  // Upstream DeepSeek: input=0.1元/M, output=0.6元/M
-  const upstreamInputPrice = 0.1   // yuan per million input tokens
-  const upstreamOutputPrice = 0.6  // yuan per million output tokens
-
-  const inputCost  = (promptTokens / 1_000_000) * upstreamInputPrice  * parseFloat(modelRow.input_multiplier)
+  // Upstream DeepSeek defaults: input=0.1元/M, output=0.6元/M
+  // User price = upstream * multiplier (admin-set margin per model)
+  const upstreamInputPrice = 0.1
+  const upstreamOutputPrice = 0.6
+  const inputCost  = (promptTokens / 1_000_000)     * upstreamInputPrice  * parseFloat(modelRow.input_multiplier)
   const outputCost = (completionTokens / 1_000_000) * upstreamOutputPrice * parseFloat(modelRow.output_multiplier)
   return parseFloat((inputCost + outputCost).toFixed(6))
 }
 
 // ──────────────────────────────────────────────────────────────
-// Helper: deduct balance
+// Helper: deduct balance (atomic with balance>=0 guard)
 // ──────────────────────────────────────────────────────────────
 async function deductBalance(userId, cost) {
-  await pool.query(
-    'UPDATE ai_token_users SET balance = balance - ? WHERE id = ?',
-    [cost, userId]
+  if (cost <= 0) return
+  const [result] = await pool.query(
+    'UPDATE ai_token_users SET balance = balance - ? WHERE id = ? AND balance >= ?',
+    [cost, userId, cost]
   )
+  if (result.affectedRows === 0) {
+    throw new Error('Insufficient balance during deduction')
+  }
 }
 
 // ──────────────────────────────────────────────────────────────
-// Helper: record usage log
+// Helper: record usage log (always called, even on failure → cost=0)
+// status: 'success' | 'failed'
 // ──────────────────────────────────────────────────────────────
-async function recordUsage(keyId, model, promptTokens, completionTokens, cost, responseTimeMs) {
+async function recordUsage(keyId, model, promptTokens, completionTokens, cost, responseTimeMs, status = 'success') {
   await pool.query(
     `INSERT INTO ai_token_usage (key_id, model, input_tokens, output_tokens, cost, response_time_ms)
      VALUES (?, ?, ?, ?, ?, ?)`,
     [keyId, model, promptTokens, completionTokens, cost, responseTimeMs]
   )
+  // status column not in Phase 2 schema; we only record cost=0 for failed calls.
+  // Keeping the param for future expansion.
+  void status
+}
+
+// ──────────────────────────────────────────────────────────────
+// Helper: get client IP from request (handles X-Forwarded-For)
+// ──────────────────────────────────────────────────────────────
+function getClientIp(req) {
+  return (req.headers['x-forwarded-for'] || '').split(',')[0]?.trim()
+      || req.socket?.remoteAddress?.replace(/^::ffff:/, '')
+      || ''
 }
 
 // ──────────────────────────────────────────────────────────────
 // POST /api/token/v1/chat/completions
-// OpenAI-compatible chat completions proxy
+// OpenAI-compatible chat completions proxy (supports streaming)
 // ──────────────────────────────────────────────────────────────
 router.post('/chat/completions', async (req, res, next) => {
   const startTime = Date.now()
+
+  // We need access to key/modelRow after upstream call — declare outside try
+  let key = null
+  let modelRow = null
+  let requestedModel = null
+  let promptTokens = 0
+  let completionTokens = 0
 
   try {
     // ── 1. Extract & validate Authorization header ──
     const authHeader = req.headers.authorization
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({
-        error: { message: 'Missing or invalid Authorization header' }
-      })
+      return res.status(401).json({ error: { message: 'Missing or invalid Authorization header' } })
     }
     const rawKey = authHeader.slice(7)
 
-    // ── 2. Validate API key ──
+    // ── 2. Validate API key + load owner ──
     const keyHash = hashKey(rawKey)
     const [keyRows] = await pool.query(
       `SELECT k.*, u.id AS owner_user_id, u.email, u.balance, u.is_active AS user_active
@@ -179,45 +94,38 @@ router.post('/chat/completions', async (req, res, next) => {
        WHERE k.key_hash = ?`,
       [keyHash]
     )
-
     if (!keyRows.length) {
       return res.status(401).json({ error: { message: 'Invalid API key' } })
     }
-    const key = keyRows[0]
+    key = keyRows[0]
 
-    if (!key.is_active) {
-      return res.status(401).json({ error: { message: 'API key is disabled' } })
-    }
-    if (!key.user_active) {
-      return res.status(401).json({ error: { message: 'User account is disabled' } })
-    }
+    if (!key.is_active)   return res.status(401).json({ error: { message: 'API key is disabled' } })
+    if (!key.user_active) return res.status(401).json({ error: { message: 'User account is disabled' } })
     if (key.expires_at && new Date(key.expires_at) < new Date()) {
       return res.status(401).json({ error: { message: 'API key has expired' } })
     }
 
-    // IP whitelist check
+    // ── 2b. IP whitelist check (Phase 3 fix: actually pass req) ──
     if (key.ip_whitelist) {
-      const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0]?.trim()
-                     || req.socket?.remoteAddress?.replace(/^::ffff:/, '') || ''
+      const clientIp = getClientIp(req)
       const allowed = key.ip_whitelist.split(',').map(ip => ip.trim())
       if (!allowed.includes(clientIp)) {
         return res.status(403).json({ error: { message: 'IP not allowed' } })
       }
     }
 
-    // ── 3. Parse request body ──
+    // ── 3. Parse body ──
     const {
-      model: requestedModel,
+      model: reqModel,
       messages,
       stream = false,
       max_tokens,
       temperature,
     } = req.body
+    requestedModel = reqModel
 
     if (!requestedModel || !messages) {
-      return res.status(400).json({
-        error: { message: 'model and messages are required' }
-      })
+      return res.status(400).json({ error: { message: 'model and messages are required' } })
     }
 
     // ── 4. Resolve model → channel ──
@@ -229,48 +137,163 @@ router.post('/chat/completions', async (req, res, next) => {
        ORDER BY c.priority ASC LIMIT 1`,
       [requestedModel]
     )
-
     if (!modelRows.length) {
-      return res.status(400).json({
-        error: { message: `Model '${requestedModel}' not found or not active` }
-      })
+      return res.status(400).json({ error: { message: `Model '${requestedModel}' not found or not active` } })
     }
-    const modelRow = modelRows[0]
+    modelRow = modelRows[0]
 
-    // ── 5. Rough balance pre-check (estimate 1:1 input tokens for this check) ──
-    // We estimate cost using prompt_tokens guess (just field count as rough proxy)
-    const promptTokensEstimate = messages.reduce((acc, m) => acc + (m.content || '').length / 4, 0) || 1
-    const estimatedCost = (promptTokensEstimate / 1_000_000) * 0.1 * parseFloat(modelRow.input_multiplier)
-                        + (promptTokensEstimate / 1_000_000) * 0.6 * parseFloat(modelRow.output_multiplier)
+    // ── 5. Rough balance pre-check ──
+    const promptTokensEstimate = messages.reduce(
+      (acc, m) => acc + (typeof m.content === 'string' ? m.content.length / 4 : 0), 0
+    ) || 1
+    const estimatedCost =
+        (promptTokensEstimate / 1_000_000) * 0.1 * parseFloat(modelRow.input_multiplier)
+      + (promptTokensEstimate / 1_000_000) * 0.6 * parseFloat(modelRow.output_multiplier)
 
     if (parseFloat(key.balance) < estimatedCost && estimatedCost > 0.000001) {
       return res.status(402).json({ error: { message: 'Insufficient balance' } })
     }
 
-    // ── 6. Check day/month quota ──
+    // ── 6. Day/Month quota check ──
     if (key.quota_day > 0 || key.quota_month > 0) {
       const now = new Date()
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
       const [[dayUsage]] = await pool.query(
-        `SELECT COALESCE(SUM(cost),0) AS day_cost FROM ai_token_usage WHERE key_id = ? AND created_at >= ?`,
+        `SELECT COALESCE(SUM(cost),0) AS day_cost FROM ai_token_usage
+         WHERE key_id = ? AND created_at >= ?`,
         [key.id, startOfDay]
       )
       const [[monthUsage]] = await pool.query(
-        `SELECT COALESCE(SUM(cost),0) AS month_cost FROM ai_token_usage WHERE key_id = ? AND created_at >= ?`,
+        `SELECT COALESCE(SUM(cost),0) AS month_cost FROM ai_token_usage
+         WHERE key_id = ? AND created_at >= ?`,
         [key.id, startOfMonth]
       )
-
-      if (key.quota_day > 0 && parseFloat(dayUsage.day_cost) >= key.quota_day) {
-        return res.status(429).json({ error: { message: 'Daily quota exceeded' } })
-      }
-      if (key.quota_month > 0 && parseFloat(monthUsage.month_cost) >= key.quota_month) {
-        return res.status(429).json({ error: { message: 'Monthly quota exceeded' } })
-      }
+      if (key.quota_day   > 0 && parseFloat(dayUsage.day_cost)   >= key.quota_day)   return res.status(429).json({ error: { message: 'Daily quota exceeded' } })
+      if (key.quota_month > 0 && parseFloat(monthUsage.month_cost) >= key.quota_month) return res.status(429).json({ error: { message: 'Monthly quota exceeded' } })
     }
 
-    // ── 7. Call upstream ──
+    // ── 7. STREAMING branch ──
+    if (stream) {
+      // Set headers BEFORE first write so client gets `text/event-stream`
+      res.setHeader('Content-Type', 'text/event-stream')
+      res.setHeader('Cache-Control', 'no-cache')
+      res.setHeader('Connection', 'keep-alive')
+      res.setHeader('X-Accel-Buffering', 'no')
+      res.flushHeaders()
+
+      let streamCost = 0
+      let streamInputTokens = 0
+      let streamOutputTokens = 0
+
+      try {
+        const upstream = await axios.post(
+          `${modelRow.base_url}/chat/completions`,
+          {
+            model: modelRow.provider_model_name,
+            messages,
+            stream: true,
+            ...(max_tokens   !== undefined && { max_tokens }),
+            ...(temperature  !== undefined && { temperature }),
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${modelRow.channel_api_key}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 120_000,
+            responseType: 'stream',
+            validateStatus: () => true,
+          }
+        )
+
+        if (upstream.status < 200 || upstream.status >= 300) {
+          // Bubble upstream error as SSE event so client sees it
+          let errBody = ''
+          upstream.data.on('data', c => { errBody += c.toString() })
+          upstream.data.on('end', () => {
+            const finalMsg = `Upstream error: ${upstream.status} ${errBody.substring(0, 200)}`
+            res.write(`data: ${JSON.stringify({ error: { message: finalMsg } })}\n\n`)
+            res.write('data: [DONE]\n\n')
+            res.end()
+            // Record zero-cost failure
+            recordUsage(key.id, requestedModel, 0, 0, 0, Date.now() - startTime, 'failed').catch(() => {})
+          })
+          return
+        }
+
+        let buffer = ''
+        let finalUsage = null
+
+        upstream.data.on('data', (chunk) => {
+          buffer += chunk.toString()
+          // OpenAI SSE streams come as `data: {json}\n\n`
+          const lines = buffer.split('\n')
+          buffer = lines.pop() // keep incomplete line
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const payload = line.slice(6).trim()
+              if (payload === '[DONE]') continue
+              try {
+                const obj = JSON.parse(payload)
+                if (obj.usage) finalUsage = obj.usage  // last chunk usually has usage
+                if (obj.choices?.[0]?.delta?.content) {
+                  streamOutputTokens += Math.ceil(obj.choices[0].delta.content.length / 4)
+                }
+              } catch { /* malformed SSE line, skip */ }
+            }
+            // Forward verbatim to client
+            res.write(line + '\n')
+          }
+        })
+
+        upstream.data.on('end', async () => {
+          // Flush any trailing buffer
+          if (buffer) res.write(buffer + '\n')
+          res.write('data: [DONE]\n\n')
+          res.end()
+
+          if (finalUsage) {
+            streamInputTokens = finalUsage.prompt_tokens || 0
+            streamOutputTokens = finalUsage.completion_tokens || streamOutputTokens
+          } else {
+            // Fallback: prompt from messages
+            streamInputTokens = Math.ceil(promptTokensEstimate)
+          }
+
+          const cost = computeCost(modelRow, streamInputTokens, streamOutputTokens)
+          try {
+            if (cost > 0) await deductBalance(key.owner_user_id, cost)
+            await recordUsage(key.id, requestedModel, streamInputTokens, streamOutputTokens, cost, Date.now() - startTime, 'success')
+          } catch (err) {
+            console.error('[ai-token-proxy] post-stream deduct/record failed:', err.message)
+          }
+        })
+
+        upstream.data.on('error', (err) => {
+          console.error('[ai-token-proxy] stream error:', err.message)
+          if (!res.writableEnded) {
+            res.write(`data: ${JSON.stringify({ error: { message: 'Stream interrupted' } })}\n\n`)
+            res.end()
+          }
+          recordUsage(key.id, requestedModel, 0, 0, 0, Date.now() - startTime, 'failed').catch(() => {})
+        })
+      } catch (err) {
+        const msg = err.code === 'ECONNABORTED' ? 'Upstream timeout' : 'Upstream error'
+        const code = err.code === 'ECONNABORTED' ? 504 : 502
+        if (!res.headersSent) {
+          return res.status(code).json({ error: { message: msg, detail: err.message } })
+        }
+        res.write(`data: ${JSON.stringify({ error: { message: msg } })}\n\n`)
+        res.end()
+        recordUsage(key.id, requestedModel, 0, 0, 0, Date.now() - startTime, 'failed').catch(() => {})
+      }
+      return
+    }
+
+    // ── 8. NON-STREAMING branch ──
     let upstreamResponse
     try {
       upstreamResponse = await axios.post(
@@ -278,8 +301,8 @@ router.post('/chat/completions', async (req, res, next) => {
         {
           model: modelRow.provider_model_name,
           messages,
-          stream,
-          ...(max_tokens !== undefined && { max_tokens }),
+          stream: false,
+          ...(max_tokens  !== undefined && { max_tokens }),
           ...(temperature !== undefined && { temperature }),
         },
         {
@@ -288,21 +311,26 @@ router.post('/chat/completions', async (req, res, next) => {
             'Content-Type': 'application/json',
           },
           timeout: 120_000,
-          validateStatus: () => true, // handle all statuses manually
+          validateStatus: () => true,
         }
       )
     } catch (err) {
-      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
-        return res.status(504).json({ error: { message: 'Upstream timeout' } })
-      }
-      return res.status(502).json({ error: { message: 'Upstream error', detail: err.message } })
+      const responseTimeMs = Date.now() - startTime
+      const isTimeout = err.code === 'ECONNABORTED' || err.message?.includes('timeout')
+      // Record failure (cost=0)
+      await recordUsage(key.id, requestedModel, 0, 0, 0, responseTimeMs, 'failed').catch(() => {})
+      return res.status(isTimeout ? 504 : 502).json({
+        error: { message: isTimeout ? 'Upstream timeout' : 'Upstream error', detail: err.message }
+      })
     }
 
     if (upstreamResponse.status === 429) {
+      await recordUsage(key.id, requestedModel, 0, 0, 0, Date.now() - startTime, 'failed').catch(() => {})
       return res.status(429).json({ error: { message: 'Rate limit exceeded' } })
     }
 
     if (upstreamResponse.status < 200 || upstreamResponse.status >= 300) {
+      await recordUsage(key.id, requestedModel, 0, 0, 0, Date.now() - startTime, 'failed').catch(() => {})
       return res.status(502).json({
         error: {
           message: 'Upstream error',
@@ -313,21 +341,22 @@ router.post('/chat/completions', async (req, res, next) => {
 
     const upstreamData = upstreamResponse.data
     const usage = upstreamData.usage || {}
-    const promptTokens = usage.prompt_tokens || 0
-    const completionTokens = usage.completion_tokens || 0
+    promptTokens     = usage.prompt_tokens     || 0
+    completionTokens = usage.completion_tokens || 0
 
-    // ── 8. Compute & deduct cost ──
     const cost = computeCost(modelRow, promptTokens, completionTokens)
     const responseTimeMs = Date.now() - startTime
 
-    if (cost > 0) {
-      await deductBalance(key.owner_user_id, cost)
+    try {
+      if (cost > 0) await deductBalance(key.owner_user_id, cost)
+      await recordUsage(key.id, requestedModel, promptTokens, completionTokens, cost, responseTimeMs, 'success')
+    } catch (deductErr) {
+      // Deduct failed (concurrent use drained balance) → still return response but log
+      console.error('[ai-token-proxy] post-response deduct failed:', deductErr.message)
+      // Don't re-record usage since recordUsage already inserted; balance just drifts
     }
 
-    // ── 9. Record usage ──
-    await recordUsage(key.id, requestedModel, promptTokens, completionTokens, cost, responseTimeMs)
-
-    // ── 10. Return OpenAI-compatible response ──
+    // ── 9. OpenAI-compatible response ──
     res.status(200).json({
       id: `chatcmpl-${crypto.randomUUID().replace(/-/g, '').substring(0, 12)}`,
       object: 'chat.completion',
@@ -335,8 +364,8 @@ router.post('/chat/completions', async (req, res, next) => {
       model: requestedModel,
       choices: upstreamData.choices || [{
         index: 0,
-        message: upstreamData.choices?.[0]?.message || { role: 'assistant', content: '' },
-        finish_reason: upstreamData.choices?.[0]?.finish_reason || 'stop',
+        message: { role: 'assistant', content: '' },
+        finish_reason: 'stop',
       }],
       usage: {
         prompt_tokens: promptTokens,
@@ -345,6 +374,11 @@ router.post('/chat/completions', async (req, res, next) => {
       },
     })
   } catch (err) {
+    // Top-level catch — record failure if we have key/model, then bubble
+    if (key && requestedModel) {
+      recordUsage(key.id, requestedModel, promptTokens, completionTokens, 0, Date.now() - startTime, 'failed')
+        .catch(() => {})
+    }
     next(err)
   }
 })

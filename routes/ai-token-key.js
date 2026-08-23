@@ -113,29 +113,4 @@ router.get('/balance', tokenAuth, async (req, res, next) => {
   }
 })
 
-// POST /api/token/recharge - 创建充值记录
-router.post('/recharge', tokenAuth, async (req, res, next) => {
-  try {
-    const { amount, payment_method, payment_ref } = req.body
-    const user_id = req.user.id
-
-    if (!amount || parseFloat(amount) <= 0) {
-      return res.status(400).json({ code: 400, message: '充值金额必须大于0' })
-    }
-
-    const [result] = await pool.query(
-      `INSERT INTO ai_token_recharges (user_id, amount, payment_method, payment_ref)
-       VALUES (?, ?, ?, ?)`,
-      [user_id, amount, payment_method || 'manual', payment_ref || null]
-    )
-
-    res.json({
-      code: 0,
-      data: { recharge_id: result.insertId, status: 'pending' }
-    })
-  } catch (err) {
-    next(err)
-  }
-})
-
 export default router

@@ -96,6 +96,9 @@ import aiConfigRoutes from './routes/ai-config.js'
 import aiTokenAuthRoutes from './routes/ai-token-auth.js'
 import aiTokenKeyRoutes from './routes/ai-token-key.js'
 import aiTokenProxyRoutes from './routes/ai-token-proxy.js'
+import aiTokenUsageRoutes from './routes/ai-token-usage.js'
+import aiTokenRechargeRoutes from './routes/ai-token-recharge.js'
+import aiTokenAdminRoutes from './routes/ai-token-admin.js'
 import kbRoutes from './routes/kb.js'
 import jobsiteExtraRoutes from './routes/jobsite-extra.js'
 import jobResponsibilitiesRoutes from './routes/job-responsibilities.js'
@@ -240,6 +243,9 @@ app.use('/api/boss', auth, bossChatRoutes)
 app.use('/api/ai-config', auth, aiConfigRoutes)
 app.use('/api/token/auth', aiTokenAuthRoutes)
 app.use('/api/token', aiTokenKeyRoutes)
+app.use('/api/token/usage', aiTokenUsageRoutes)
+app.use('/api/token/recharge', aiTokenRechargeRoutes)
+app.use('/api/token/admin', aiTokenAdminRoutes)
 app.use('/api/token/v1', aiTokenProxyRoutes)
 // AI 课堂 - 必须先挂 /public 子路径 (免登录), 再挂带 auth 的父前缀
 // 否则父前缀 auth 中间件会先匹配 /api/ai-class/public/* → 永远 401
