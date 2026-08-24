@@ -281,4 +281,34 @@ router.post('/chat', auth, requirePermission('workbuddy:write'), async (req, res
   }
 })
 
+/**
+ * GET /api/workbuddy/team - staff directory (users user_type='staff')
+ */
+router.get('/team', auth, requirePermission('workbuddy:read'), async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT id, name, email, role,
+        CASE WHEN role = 'admin' THEN 'admin' ELSE 'member' END AS kind
+      FROM users WHERE user_type = 'staff'
+      ORDER BY role = 'admin' DESC, id ASC LIMIT 20
+    `).catch(() => [[]])
+
+    res.json({
+      members: (rows || []).map(u => ({
+        id: u.id,
+        name: u.name || `User ${u.id}`,
+        contact: u.email || '',
+        role: u.role || 'member',
+        initials: (u.name || 'U')
+          .split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || 'U',
+        color: u.role === 'admin' ? 'blue' : 'green',
+      })),
+      updated_at: new Date().toISOString(),
+      source: 'live',
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
 export default router
