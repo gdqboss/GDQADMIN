@@ -104,31 +104,34 @@ router.get('/today-events', auth, requirePermission('workbuddy:read'), async (re
  */
 router.get('/email-summary', auth, requirePermission('workbuddy:read'), async (req, res, next) => {
   try {
-    const [rows] = await pool.query(`
-      SELECT id, sender, subject, preview, priority, status, created_at
-      FROM workflow_inbox
-      WHERE status IN ('pending', 'snoozed')
-        AND deleted_at IS NULL
-      ORDER BY priority DESC, created_at DESC
-      LIMIT 10
-    `).catch(() => [[]])
+    // Real INBOX via himalaya v2 (--json global flag); PATH needs /root/.local/bin for pm2
+    const { spawnSync } = await import('node:child_process')
+    const env = { ...process.env, PATH: `${process.env.PATH || ''}:/root/.local/bin` }
+    const py = spawnSync('himalaya', ['envelope', 'list', '--page-size', '10', '--json'],
+      { encoding: 'utf-8', timeout: 25000, env })
 
-    res.json({
-      items: (rows || []).map(r => ({
-        id: r.id,
-        sender: (r.sender || '??').slice(0, 2).toUpperCase(),
-        subject: r.subject || '()',
-        preview: r.preview || '',
-        tags: r.priority === 'high'
-          ? [{ text: 'Action', cls: 'green' }]
-          : r.priority === 'medium'
-          ? [{ text: 'Review', cls: 'amber' }]
-          : [{ text: 'Update', cls: 'gray' }],
-        received_at: r.created_at,
-      })),
-      updated_at: new Date().toISOString(),
-      source: 'live',
-    })
+    let items = []
+    let source = 'live'
+    try {
+      const data = JSON.parse(py.stdout || '{}')
+      const envs = data.envelopes || []
+      items = envs.map(e => ({
+        id: e.id,
+        sender: ((e.from?.[0]?.name || e.from?.[0]?.email || '??')).slice(0, 2).toUpperCase(),
+        subject: e.subject || '(no subject)',
+        preview: `From: ${e.from?.[0]?.name || e.from?.[0]?.email || '?'} <${e.from?.[0]?.email || ''}>`,
+        tags: e.flags?.includes('\u005cSeen')
+          ? [{ text: 'Read', cls: 'gray' }]
+          : [{ text: 'New', cls: 'green' }],
+        received_at: e.date,
+      }))
+    } catch {
+      source = 'empty'
+    }
+
+    if (!items.length) source = 'empty'
+
+    res.json({ items, updated_at: new Date().toISOString(), source })
   } catch (err) {
     next(err)
   }
