@@ -74,21 +74,47 @@ router.get('/stats', auth, requirePermission('workbuddy:read'), async (req, res,
  */
 router.get('/today-events', auth, requirePermission('workbuddy:read'), async (req, res, next) => {
   try {
-    const [rows] = await pool.query(`
-      SELECT id, title, start_time, end_time, location, type
-      FROM calendar_events
-      WHERE DATE(start_time) = CURDATE()
-      ORDER BY start_time ASC
-      LIMIT 20
-    `).catch(() => [[]])
+    // calendar_events table doesn't exist; real "today" = Hermes cron jobs firing today
+    let jobs = []
+    try { jobs = JSON.parse(readFileSync('/root/.hermes/cron/jobs.json', 'utf8')) } catch {}
+    if (!Array.isArray(jobs)) jobs = jobs.jobs || []
+
+    const now = new Date()
+    const events = []
+    for (const j of jobs) {
+      if (j.enabled === false) continue
+      const sched = j.schedule || {}
+      const name = j.name || (j.prompt || '').slice(0, 30) || 'job'
+      if (sched.kind === 'cron' && typeof sched.expr === 'string') {
+        // parse "m h * * *" style - only handle fixed hour lists / single hours
+        const parts = sched.expr.trim().split(/\s+/)
+        if (parts.length === 5 && /^[\d*,]+$/.test(parts[0]) && /^[\d*,]+$/.test(parts[1])) {
+          const doms = parts[2].split(',').filter(x => x !== '*')
+          if (!doms.length || doms.includes(String(now.getDate()))) {
+            const hours = parts[1] === '*' ? [] : parts[1].split(',').flatMap(h => {
+              if (h.includes('/')) return []
+              if (h.includes('-')) { const [a, b] = h.split('-').map(Number); return Array.from({length: b-a+1}, (_, i) => a+i) }
+              return [Number(h)]
+            })
+            const minutes = Number(parts[0]) || 0
+            for (const h of (hours.length ? hours : [])) {
+              const t = new Date(now); t.setHours(h, minutes, 0, 0)
+              if (t >= now) events.push({ id: j.id, time: t.toTimeString().slice(0,5), title: name, type: 'cron', color: 'blue' })
+            }
+          }
+        }
+      } else if (sched.kind === 'interval') {
+        events.push({ id: j.id, time: `every ${sched.minutes}m`, title: name, type: 'watchdog', color: 'amber' })
+      }
+    }
+    events.sort((a, b) => String(a.time).localeCompare(String(b.time)))
 
     res.json({
-      events: (rows || []).map(r => ({
-        id: r.id,
-        time: r.start_time,
-        title: r.title,
-        location: r.location || '',
-        type: r.type || 'meeting',
+      events: events.slice(0, 12).map(e => ({
+        id: e.id, time: e.time, title: e.title,
+        location: '', type: e.type,
+        duration: e.type === 'watchdog' ? e.time : `${e.time} slot`,
+        color: e.color,
       })),
       updated_at: new Date().toISOString(),
       source: 'live',
