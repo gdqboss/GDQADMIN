@@ -142,23 +142,34 @@ router.get('/email-summary', auth, requirePermission('workbuddy:read'), async (r
  */
 router.get('/task-summary', auth, requirePermission('workbuddy:read'), async (req, res, next) => {
   try {
-    const [[row]] = await pool.query(`
+    // approvals table has no assigned_to - use global status counts + recent items as the task list
+    const [rows] = await pool.query(`
       SELECT
-        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
-        SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
+        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS completed,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS in_progress,
+        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected,
         COUNT(*) AS total
       FROM approvals
-      WHERE assigned_to = ?
-    `, [req.user.id]).catch(() => [[{ completed: 0, in_progress: 0, pending: 0, total: 0 }]])
+    `).catch(() => [[]])
 
-    const r = row || { completed: 0, in_progress: 0, pending: 0, total: 0 }
-    const total = r.total || 1
+    const agg = rows?.[0] || { completed: 0, in_progress: 0, rejected: 0, total: 0 }
+    const recent = await pool.query(`
+      SELECT id, title, urgency, status, created_at
+      FROM approvals ORDER BY created_at DESC LIMIT 6
+    `).then(([rs]) => rs).catch(() => [])
+
+    const total = agg.total || 1
     res.json({
-      completed: r.completed,
-      inProgress: r.in_progress,
-      pending: r.pending,
-      pctDone: Math.round((r.completed / total) * 100),
+      completed: Number(agg.completed) || 0,
+      inProgress: Number(agg.in_progress) || 0,
+      pending: Number(agg.rejected) || 0,
+      pctDone: Math.round(((Number(agg.completed) || 0) / total) * 100),
+      tasks: (recent || []).map(t => ({
+        id: t.id,
+        title: t.title || '(untitled)',
+        due: t.created_at ? String(t.created_at).slice(5, 10) : '',
+        status: t.status === 'approved' ? 'completed' : t.status === 'pending' ? 'in-progress' : 'rejected',
+      })),
       updated_at: new Date().toISOString(),
       source: 'live',
     })
