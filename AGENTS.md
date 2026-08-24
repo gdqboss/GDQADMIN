@@ -367,6 +367,9 @@ SGP 集中 = **1 个波哥 + 1 个 agent 维护 8 客户** 的唯一可行路径
 - ❌ 在 SGP 改 `routes/macau-xxx.js` 假设 macau 会自动拿到 (macau 是独立服务, 必须 rsync)
 - ❌ 给目标 server `UPDATE users SET password=...` (波哥 #21 #4 铁律禁止改 DB 现有记录)
 
+> **正解 (2026-08-25 立)**: 按 `server_modules` 白名单精准同步 → `scripts/sync-modules-by-profile.sh <profile_id>`
+> (配套 alias 表 `scripts/module-key-aliases.json`, 旧 `sync-macau.sh` / `sync-sgp-dist.sh` 已废弃)
+
 
 ### 例外: macau (profile 7) 是完整后端 fork, 不在 #21 标准范围内
 

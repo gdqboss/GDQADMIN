@@ -3,7 +3,7 @@
 # ║ sync-modules-by-profile.sh — 一键按白名单精准同步 (2026-08-25 B 拍板立)  ║
 # ║                                                                           ║
 # ║ 替代已 deprecated 的 sync-macau.sh / sync-sgp-dist.sh                    ║
-# ║ 实现 AGENTS.md #1.7: "其它服务器绝对不允许全量同步 SGP"                   ║
+# ║ 实现 AGENTS.md #21 反模式红线 (永久禁止 第 1 条: 禁止全量覆盖)          ║
 # ║                                                                           ║
 # ║ 用法:                                                                     ║
 # ║   bash scripts/sync-modules-by-profile.sh <profile_id> [--execute]        ║
