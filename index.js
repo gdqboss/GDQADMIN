@@ -75,6 +75,7 @@ import laborAiAgentRoutes from './routes/labor-ai-agent.js'
 import laborAiSupervisorRoutes from './routes/labor-ai-supervisor.js'
 import healthRoutes from './routes/health.js'
 import autoOpsRoutes from './routes/auto-ops.js'
+import workbuddyRoutes from './routes/workbuddy.js'  // 2026-08-25 WorkBuddy V6 staging
 import minipAiAssistantRoutes from './routes/minip-ai-assistant.js'
 import minipAiFinanceRoutes from './routes/minip-ai-finance.js'
 import minipAiHrRoutes from './routes/minip-ai-hr.js'
@@ -148,6 +149,7 @@ import quoteRoutes from './routes/quote.js'
 import rentalRoutes from './routes/rental.js'
 import rentalPublicRoutes from './routes/rental-public.js'
 import sidebarRoutes from './routes/sidebar.js'
+import materialPurchaseRoutes from './routes/material-purchase.js'  // 2026-08-24 物料采购
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -266,6 +268,7 @@ app.use('/api/ai-domains', auth, aiKnowledgeDomainsRoutes)
 app.use('/api/ai-assistant', auth, aiAssistantRoutes)
 app.use('/api/admin/schema', auth, adminSchemaRoutes)
 app.use('/api/kb', auth, kbRoutes)
+app.use('/api/workbuddy', workbuddyRoutes)  // 2026-08-25 WorkBuddy V6 staging - per-route auth+rbac inside (health stays public)
 app.use('/api/scan', scanRoutes)
 // Rental 公开端点（游客可访问）—— 必须放在 inventory 的 /api catch-all 之前
 app.use('/api/rental-public', rentalPublicRoutes)
@@ -467,6 +470,7 @@ app.use('/api/kefu', auth, apiLimiter, kefuRoutes)
 app.use('/api/products', auth, apiLimiter, productRoutes)
 app.use('/api/materials', materialRoutes)
 app.use('/api/warehouses', auth, apiLimiter, warehouseRoutes)
+app.use('/api/material-purchase', auth, apiLimiter, materialPurchaseRoutes)  // 2026-08-24 物料采购
 app.use('/api/stock-alerts', auth, apiLimiter, alertRoutes)
 app.use('/api/approvals', auth, apiLimiter, approvalRoutes)
 app.use('/api/dashboard', auth, apiLimiter, dashboardRoutes)

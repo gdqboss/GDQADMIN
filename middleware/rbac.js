@@ -25,6 +25,12 @@ const PERMISSIONS = {
   INVENTORY_WRITE: 'inventory:write',
   INVENTORY_DELETE: 'inventory:delete',
 
+  // 物料采购 (2026-08-24 新增)
+  MATERIAL_PURCHASE_READ: 'material_purchase:read',
+  MATERIAL_PURCHASE_WRITE: 'material_purchase:write',
+  MATERIAL_PURCHASE_APPROVE: 'material_purchase:approve',
+  MATERIAL_PURCHASE_DELETE: 'material_purchase:delete',
+
   // 产品相关
   PRODUCTS_READ: 'products:read',
   PRODUCTS_WRITE: 'products:write',
@@ -160,7 +166,12 @@ const PERMISSIONS = {
   TEMPLE_READ:     'temple:read',     // 浏览寺庙内容、牌位、家属信息
   TEMPLE_WRITE:    'temple:write',    // 编辑审核、信众标注
   TEMPLE_DELETE:   'temple:delete',   // 删除牌位/活动/轮播
-  TEMPLE_DISPATCH: 'temple:dispatch', // 派单 (QR 扫码触发)
+  TEMPLE_DISPATCH: 'temple:dispatch', // QR 入口扫码
+
+  // WorkBuddy (2026-08-25)
+  WORKBUDDY_READ:   'workbuddy:read',
+  WORKBUDDY_WRITE:  'workbuddy:write',
+  WORKBUDDY_DELETE: 'workbuddy:delete',
 }
 
 // 角色常量
