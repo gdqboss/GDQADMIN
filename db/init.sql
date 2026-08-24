@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS products (
   purchase_price DECIMAL(10,2),
   sale_price DECIMAL(10,2),
   stock INT DEFAULT 0,
-  safe_stock INT DEFAULT 0,
+  alert_stock INT DEFAULT 0,
   status ENUM('active','discontinued') DEFAULT 'active',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -122,7 +122,7 @@ CREATE TABLE IF NOT EXISTS stock_alerts (
   product_id INT NOT NULL,
   warehouse_id INT,
   current_stock INT,
-  safe_stock INT,
+  alert_stock INT,
   suggest_qty INT,
   level ENUM('low','critical') DEFAULT 'low',
   handled BOOLEAN DEFAULT FALSE,
@@ -359,7 +359,7 @@ INSERT INTO users (name, email, password, role, department) VALUES
 ON DUPLICATE KEY UPDATE name=VALUES(name);
 
 -- Sample products
-INSERT INTO products (sku, name, category, spec, unit, supplier, purchase_price, sale_price, stock, safe_stock) VALUES
+INSERT INTO products (sku, name, category, spec, unit, supplier, purchase_price, sale_price, stock, alert_stock) VALUES
 ('SKU-001', '蓝牙耳机 Pro', '电子产品', '蓝牙5.3 主动降噪', '个', '深圳科技有限公司', 89.00, 199.00, 150, 30),
 ('SKU-002', '无线充电器', '电子产品', '15W快充 Qi协议', '个', '深圳科技有限公司', 35.00, 79.00, 80, 20),
 ('SKU-003', '保温杯 500ml', '日用品', '316不锈钢 真空保温', '个', '浙江优品制造', 25.00, 59.00, 200, 50),

@@ -110,7 +110,7 @@ router.get('/all', async (req, res, next) => {
 
 router.post('/', requirePermission(PERMISSIONS.PRODUCTS_WRITE), async (req, res, next) => {
   try {
-    let { sku, name, category, category_id, spec, unit, supplier, purchase_price, sale_price, stock, safe_stock, image_main, images, external_links, require_qrcode, group_qr_url, group_qr_type } = req.body
+    let { sku, name, category, category_id, spec, unit, supplier, purchase_price, sale_price, stock, alert_stock, image_main, images, external_links, require_qrcode, group_qr_url, group_qr_type } = req.body
     if (!sku) {
       const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
       // 查找当前日期最大的SKU序号
@@ -126,12 +126,12 @@ router.post('/', requirePermission(PERMISSIONS.PRODUCTS_WRITE), async (req, res,
     const cleanPurchasePrice = purchase_price === '' || purchase_price === null ? null : purchase_price
     const cleanSalePrice = sale_price === '' || sale_price === null ? null : sale_price
     const cleanStock = stock === '' || stock === null ? 0 : stock
-    const cleanSafeStock = safe_stock === '' || safe_stock === null ? 0 : safe_stock
+    const cleanAlertStock = alert_stock === '' || alert_stock === null ? 0 : alert_stock
 
     const [result] = await pool.query(
-      'INSERT INTO products (sku, name, category, category_id, spec, unit, supplier, purchase_price, sale_price, stock, safe_stock, image_main, images, external_links, require_qrcode, group_qr_url, group_qr_type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+      'INSERT INTO products (sku, name, category, category_id, spec, unit, supplier, purchase_price, sale_price, stock, alert_stock, image_main, images, external_links, require_qrcode, group_qr_url, group_qr_type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
       [sku, name || null, category || null, category_id || null, spec || null, unit || '个', supplier || null,
-       cleanPurchasePrice, cleanSalePrice, cleanStock, cleanSafeStock,
+       cleanPurchasePrice, cleanSalePrice, cleanStock, cleanAlertStock,
        image_main || null,
        images ? JSON.stringify(images) : null,
        external_links ? JSON.stringify(external_links) : null,

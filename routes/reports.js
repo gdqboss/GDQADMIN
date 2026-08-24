@@ -145,9 +145,9 @@ router.get('/dashboard-top-warehouses', async (req, res, next) => {
          COALESCE((
            SELECT COUNT(*)
            FROM products p2
-           WHERE p2.stock IS NOT NULL
-           AND p2.safe_stock IS NOT NULL
-           AND p2.stock <= p2.safe_stock
+           AND p2.stock IS NOT NULL
+           AND p2.alert_stock IS NOT NULL
+           AND p2.stock <= p2.alert_stock
            AND p2.id IN (
              SELECT DISTINCT product_id FROM warehouse_stock WHERE warehouse_id = w.id
            )
