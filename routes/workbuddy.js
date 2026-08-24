@@ -4,6 +4,7 @@
  * : **staging** -  mount  SGP, INSERT rbac, INSERT server_modules
  */
 import { Router } from 'express'
+import { readFileSync } from 'node:fs'
 import { pool } from '../db/connection.js'
 import { auth } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/rbac.js'
@@ -184,15 +185,56 @@ router.post('/chat', auth, requirePermission('workbuddy:write'), async (req, res
     ], { encoding: 'utf-8', timeout: 8000 })
 
     const hits = py.stdout ? py.stdout.slice(0, 1500) : ''
-    res.json({
-      user_text: text,
-      assistant:
+
+    // GLM-4-flash : KB +  LLM (2-5s);  KB raw
+    let assistant = ''
+    let source = 'live'
+    try {
+      let glmKey = process.env.GLM_API_KEY || ''
+      if (!glmKey) {
+        for (const line of readFileSync('/root/jxy-os/.env', 'utf8').split('\n')) {
+          if (line.startsWith('AI_APIKEY=')) { glmKey = line.split('=')[1].trim(); break }
+        }
+      }
+      if (glmKey) {
+        const prompt = `WorkBuddy AI\n\nKB:\n${hits || ''}\n\nQ: ${text}\n\nA 200-300 char answer in the user's language.`
+        const body = JSON.stringify({ model: 'glm-4-flash', messages: [{ role: 'user', content: prompt }], max_tokens: 500 })
+        const { writeFileSync } = await import('node:fs')
+        const bodyFile = `/tmp/wb_glm_body_${Date.now()}.json`
+        writeFileSync(bodyFile, body)
+        try {
+          const out = spawnSync('curl', ['-s', '-m', '25',
+            'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+            '-H', `Authorization: Bearer ${glmKey}`,
+            '-H', 'Content-Type: application/json',
+            '--data-binary', `@${bodyFile}`],
+            { encoding: 'utf-8', timeout: 30000 })
+          var data = JSON.parse(out.stdout || '{}')
+        } finally {
+          try { require('node:fs').unlinkSync && null } catch {}
+          spawnSync('rm', ['-f', bodyFile])
+        }
+        const content = data.choices?.[0]?.message?.content
+        if (content && content.trim()) {
+          assistant = content.trim() + (hits ? `\n\n📎 来源: ${hits.split('\u2605')[1]?.split('\n')[0] || 'KB'}` : '')
+          source = 'live+llm'
+        }
+      }
+    } catch { /* fall through to raw KB */ }
+
+    if (!assistant) {
+      assistant =
         (hits.includes('\u2605')
           ? ` KB  ${hits.split('\u2605')[1]?.split('\n')[0] || ''}\n\n`
           : ',KB \n\n') +
-        (hits || ''),
+        (hits || '')
+    }
+
+    res.json({
+      user_text: text,
+      assistant,
       kb_hits_raw: hits,
-      source: 'live',
+      source,
     })
   } catch (err) {
     next(err)
