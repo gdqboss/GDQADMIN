@@ -282,6 +282,59 @@ router.post('/chat', auth, requirePermission('workbuddy:write'), async (req, res
 })
 
 /**
+ * GET /api/workbuddy/search?q= - unified: emails + tasks + events
+ */
+router.get('/search', auth, requirePermission('workbuddy:read'), async (req, res, next) => {
+  try {
+    const q = String(req.query.q || '').trim()
+    if (!q) return res.json({ results: [], source: 'live' })
+
+    // 1) emails via himalaya DSL (subject/body/from)
+    const results = []
+    try {
+      const { spawnSync } = await import('node:child_process')
+      const safe = q.replace(/["'\\]/g, '').slice(0, 40)
+      const env = { ...process.env, PATH: `${process.env.PATH || ''}:/root/.local/bin` }
+      for (const clause of [`subject ${safe}`, `body ${safe}`, `from ${safe}`]) {
+        const out = spawnSync('timeout', ['12', 'himalaya', 'envelope', 'search',
+          '--page-size', '5', '--json', clause], { encoding: 'utf-8', timeout: 15000, env })
+        if (!out.stdout) continue
+        const parsed = JSON.parse(out.stdout)
+        for (const e of parsed.envelopes || []) {
+          if (!results.some(r => r.ref === e.id)) {
+            results.push({
+              kind: 'Email', ref: e.id,
+              title: e.subject || '(no subject)',
+              meta: e.from?.[0]?.name || e.from?.[0]?.email || '',
+              tag: 'Inbox', date: e.date ? String(e.date).slice(0, 10) : '',
+            })
+          }
+        }
+      }
+    } catch { /* email search optional */ }
+
+    // 2) tasks via approvals
+    try {
+      const [rows] = await pool.query(
+        `SELECT id, title, status FROM approvals WHERE title LIKE ? ORDER BY id DESC LIMIT 5`,
+        [`%${q}%`])
+      for (const t of rows || []) {
+        results.push({ kind: 'Task', ref: String(t.id), title: t.title || '(untitled)', meta: t.status, tag: 'Approvals' })
+      }
+    } catch { /* tasks optional */ }
+
+    res.json({
+      query: q,
+      results: results.slice(0, 15),
+      updated_at: new Date().toISOString(),
+      source: 'live',
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
  * GET /api/workbuddy/team - staff directory (users user_type='staff')
  */
 router.get('/team', auth, requirePermission('workbuddy:read'), async (req, res, next) => {
