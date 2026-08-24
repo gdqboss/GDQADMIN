@@ -1,0 +1,70 @@
+#!/bin/bash
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+# ║ ⚠️ DEPRECATED 2026-08-25 — DO NOT RUN                                     ║
+# ║                                                                           ║
+# ║ 原因: 此脚本是 dist 全量同步,违反 AGENTS.md #1.7 红线:                   ║
+# ║       "其它服务器绝对不允许全量同步 SGP"                                  ║
+# ║                                                                           ║
+# ║ 当前用法是 sync dist-N 到本地 /home/gdq/dist/ (SGP 自身). SGP 本机       ║
+# ║ 用没问题, 但若 cron / CI 误把此脚本用来 sync 到客户服务器, 会             ║
+# ║ 把 SGP 全量模块推到客户 DB 未注册的白名单外模块.                         ║
+# ║                                                                           ║
+# ║ 替代脚本: scripts/sync-modules-by-profile.v2.mjs (alias-aware)           ║
+# ║ 替代流程: scripts/sync-modules-by-profile.sh (B 拍板 2026-08-25)          ║
+# ║                                                                           ║
+# ║ 重命名时间: 2026-08-25 江小鱼 (波哥 B 拍板)                               ║
+# ║ 原始脚本: sync-sgp-dist.sh (2026-08-06 立)                                ║
+# ╚═══════════════════════════════════════════════════════════════════════════╝
+#
+# 用法 (历史): bash scripts/sync-sgp-dist.sh [PROFILE_ID]
+# 2026-08-06 BUG FIX: sync SGP build dist 到 /home/gdq/dist/, 但不删 minip/labor 子目录
+# 之前的 rsync -a --delete 会把 /home/gdq/dist/minip/ /home/gdq/dist/labor/ 等
+# 独立部署的前端 dist 目录一起删掉, 导致 /minip 500
+
+set -e
+PROFILE_ID=${1:-1}
+SRC_DIR="/root/server"
+DIST_SRC="$SRC_DIR/dist-$PROFILE_ID"
+DIST_DST="/home/gdq/dist"
+
+echo "🚨 ABORT: 此脚本已 deprecated (见顶部警告块)"
+echo "🚨 请用: scripts/sync-modules-by-profile.v2.mjs --profile=${PROFILE_ID}"
+echo "🚨 或运行: scripts/sync-modules-by-profile.sh (B 拍板已立)"
+exit 99
+
+if [ ! -d "$DIST_SRC" ]; then
+  echo "ERROR: $DIST_SRC 不存在, 先跑 scripts/build-for-profile.sh $PROFILE_ID"
+  exit 1
+fi
+
+if [ ! -d "$DIST_DST" ]; then
+  echo "ERROR: $DIST_DST 不存在"
+  exit 1
+fi
+
+echo "Syncing $DIST_SRC -> $DIST_DST (excluding minip/labor 等独立前端 dist)..."
+
+# 关键: rsync --exclude 保留独立前端的子目录
+# AGENTS.md 提到的独立 dist:
+#   - minip (小程序 H5)
+#   - labor (SmartBiz Labor)
+#   - h5-shop (历史 H5)
+#   - finance (历史财务)
+# 我们用 --exclude 排除这些子目录, 让它们在 sync 时不被覆盖
+rsync -a \
+  --exclude='minip/' \
+  --exclude='labor/' \
+  --exclude='h5-shop/' \
+  --exclude='finance/' \
+  --exclude='chat/' \
+  "$DIST_SRC/" "$DIST_DST/"
+
+echo "Sync complete:"
+ls -la "$DIST_DST" | head -10
+echo ""
+echo "保留的独立前端 dist:"
+for sub in minip labor h5-shop finance; do
+  if [ -d "$DIST_DST/$sub" ]; then
+    echo "  ✓ $sub/ ($(du -sh "$DIST_DST/$sub" | cut -f1))"
+  fi
+done

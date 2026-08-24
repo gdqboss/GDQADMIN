@@ -1,0 +1,50 @@
+{
+  "_comment": "MODULE_KEY → views/ 路径映射 (2026-08-25 江小鱼建, B 拍板 follow-up)",
+  "_purpose": "DB server_modules.module_key 不一定等于 views/<name>/, 反向映射",
+  "_scope": "前端 views/ 目录同步用 (跟 routes/server-profiles.js 的 MODULE_KEY_ALIASES 后端 alias 是两套)",
+  "_convention": [
+    "value = 'views/...' 形式的相对路径",
+    "value = null 表示 DB 注册但源码无对应 (死权限, 可清理)",
+    "value = ['a', 'b'] 数组表示一对多 (DB 一个 key 对应源码多个 view)",
+    "path 必须用 forward slash, 不要 trailing slash"
+  ],
+  "_source": "实测 modules/7/views/ (profile 7 macau fork 2026-08-25)",
+  "aliases": {
+    "ai-classroom":              "views/AiClassroom.vue",
+    "approvals":                 "views/approval/",
+    "article":                   "views/articles/",
+    "association-academic":      "views/association/academic/",
+    "association-activities":    "views/association/activities/",
+    "association-announcements": "views/association/announcements/",
+    "association-cards":         "views/association/cards/",
+    "association-downloads":     "views/association/downloads/",
+    "association-info":          "views/association/info/",
+    "association-inquiries":     "views/association/inquiries/",
+    "association-journals":      "views/association/journals/",
+    "association-members":       "views/association/members/",
+    "association-org":           "views/association/org/",
+    "attendance":                "views/attendance/",
+    "banner-manage":             null,
+    "banner-management":         null,
+    "dashboard":                 "views/Dashboard.vue",
+    "finance":                   "views/finance/",
+    "finance-simple":            "views/finance-simple/",
+    "in-out":                    "views/in-out/",
+    "job-responsibilities":      "views/settings/JobResponsibilities.vue",
+    "logistics":                 "views/logistics/",
+    "oa":                        "views/oa/",
+    "rbac":                      "views/settings/RoleManage.vue",
+    "returns":                   "views/returns/",
+    "roles":                     "views/settings/RoleManage.vue",
+    "settings":                  "views/settings/",
+    "tasks":                     "views/tasks/",
+    "temple":                    "views/temple/",
+    "users":                     "views/settings/UserManagement.vue",
+    "warehouses":                "views/warehouses/",
+    "work-logs":                 "views/logs/"
+  },
+  "_unknown_or_todo": {
+    "banner-manage":     "SGP 源码无 banner 目录, 疑纯后端 perm 标识, 待波哥确认是否清理",
+    "banner-management": "同 banner-manage, 重复 perm 名"
+  }
+}
