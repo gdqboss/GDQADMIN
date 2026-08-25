@@ -46,10 +46,26 @@ ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$HK_HOST" \
 # **但**网络抓包看:浏览器先发 /assets/X-Y.js(404)再发 /gdqadmin/assets/X-Y.js(200)双倍请求
 # 第一次的 404 chunk 被 vue-error-handler 捕获 → 触发 "加载失败" dialog
 # 解法:把所有 lazy chunk 引用强制改成绝对路径 "/gdqadmin/assets/X-Y.js"
-# 注意:必须用 '","assets/' 避免误伤 baseURL 里的 /api
+# 必须同时匹配:["assets/ (数组首项) , ","assets/ (中间/结尾项)
 echo "--- 2d. Patch lazy chunk paths to absolute /gdqadmin/assets/ ---"
-ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$HK_HOST" \
-  "find $HK_DIR/assets -name '*.js' -exec sed -i 's|\\\"\\\",\\\"assets/|\\\"\\\",\\\"/gdqadmin/assets/|g' {} \; && grep -c 'gdqadmin/assets' $HK_DIR/assets/index-*.js | head -3"
+# 用 python 代替 sed — 避免嵌套引号 + 反斜杠 escape 把 sed 模式搞废
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$HK_HOST" "python3 - << 'PYEOF'
+import os, glob
+fixed = remaining = 0
+for path in glob.glob('$HK_DIR/assets/*.js'):
+    with open(path) as f: src = f.read()
+    new = src.replace('[\"assets/', '[\"/gdqadmin/assets/').replace(',\"assets/', ',\"/gdqadmin/assets/')
+    if new != src:
+        with open(path, 'w') as f: f.write(new)
+        fixed += 1
+# 验证
+import re
+with open('$HK_DIR/assets/index-CUOwwhEt.js') as f:
+    content = f.read()
+remaining = len(re.findall(r'[\"\\[,]assets/[A-Za-z0-9_-]+\\.[a-z]+\"', content))
+fixed_count = len(re.findall(r'\"/gdqadmin/assets/[A-Za-z0-9_-]+\\.[a-z]+\"', content))
+print(f'  files_changed={fixed} unprefixed_remaining={remaining} fixed={fixed_count}')
+PYEOF"
 
 echo "--- 3. Reload Caddy ---"
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$HK_HOST" "systemctl reload caddy || true"
