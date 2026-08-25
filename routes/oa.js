@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { pool } from '../db/connection.js'
+import { requirePermission } from '../middleware/rbac.js'
 import { parsePagination } from '../utils/pagination.js'
 import { requireRole, ROLES } from '../middleware/rbac.js'
 import { checkPerm } from '../utils/permission.js'
@@ -27,10 +28,13 @@ router.get('/dashboard', async (req, res, next) => {
     const today = new Date().toISOString().slice(0, 10)
 
     // Get today's attendance
-    const [[attendance]] = await pool.query(
-      'SELECT clock_in, clock_out FROM attendance WHERE user_id = ? AND date = ?',
-      [userId, today]
-    )
+    const [[att]] = await pool.query(
+          `SELECT a.*, u.name as user_name, u.department, u.worker_category, u.require_attendance
+           FROM attendance a
+           LEFT JOIN users u ON a.user_id = u.id
+           WHERE a.user_id = ? AND a.date = ?`,
+          [req.user.id, today]
+        )
 
     // Get pending approvals count (approvals waiting for this user)
     const [[{ pending_approvals }]] = await pool.query(
@@ -59,8 +63,14 @@ router.get('/dashboard', async (req, res, next) => {
         pending_approvals: pending_approvals || 0,
         my_approvals: my_approvals || 0,
         attendance: {
-          clock_in: attendance?.clock_in || null,
-          clock_out: attendance?.clock_out || null
+          clock_in: att?.clock_in || null,
+          clock_out: att?.clock_out || null,
+          status: att?.status || null,
+          late_minutes: att?.late_minutes || 0,
+          early_minutes: att?.early_minutes || 0,
+          worker_category: att?.worker_category || 'office',
+          require_attendance: att?.require_attendance || 0,
+          silent: att?.abnormal_reason?.startsWith('non-required') || false
         },
         work_logs: work_logs || 0
       },
@@ -318,20 +328,25 @@ router.post('/attendance/clock', async (req, res, next) => {
         return res.status(400).json({ code: 400, message: '今日已打卡上班' })
       }
       // 检查是否需要考勤（只有必打卡员工才算迟到）
-      const [[user]] = await pool.query('SELECT require_attendance FROM users WHERE id = ?', [userId])
+      // 2026-08-25 silent 模式:没勾选员工 status 锁 normal + 异常字段全 0
+      const [[user]] = await pool.query('SELECT require_attendance, worker_category FROM users WHERE id = ?', [userId])
       const isRequired = user && user.require_attendance === 1
-      // 只有必打卡员工才算迟到
+      const silent = !isRequired
+      const workerCategory = user?.worker_category || 'office'
       const status = isRequired ? (timeStr > '09:00:00' ? 'late' : 'normal') : 'normal'
 
       await pool.query(
-        `INSERT INTO attendance (user_id, date, clock_in, status, location,
-         gps_lat, gps_lng, gps_accuracy, device_info, ip_address, is_auto_clock)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-        [userId, today, timeStr, status, req.body.location || null,
-         lat || null, lng || null, accuracy || null, device_info || null, ip || null, autoClock]
+        `INSERT INTO attendance (user_id, date, clock_in, status, late_minutes, early_minutes,
+         location, gps_lat, gps_lng, gps_accuracy, device_info, ip_address, is_auto_clock, abnormal_reason)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [userId, today, timeStr, status,
+         silent ? 0 : (timeStr > '09:00:00' ? Math.floor((new Date(`2000-01-01 ${timeStr}`) - new Date('2000-01-01 09:00:00')) / 60000) : 0),
+         0, req.body.location || null, lat || null, lng || null, accuracy || null,
+         device_info || null, ip || null, autoClock,
+         silent ? 'non-required: silent record (not counted in attendance stats)' : null]
       )
 
-      res.json({ code: 0, data: { status, time: timeStr, is_auto_clock: autoClock }, message: '上班打卡成功' })
+      res.json({ code: 0, data: { status, time: timeStr, is_auto_clock: autoClock, silent, worker_category: workerCategory }, message: silent ? '打卡成功(本次不计入考勤统计)' : '上班打卡成功' })
     } else {
       // Clock out
       if (!existing) {
@@ -341,17 +356,23 @@ router.post('/attendance/clock', async (req, res, next) => {
         return res.status(400).json({ code: 400, message: '今日已打卡下班' })
       }
 
-      // 只有必打卡员工才算早退
-      const [[user]] = await pool.query('SELECT require_attendance FROM users WHERE id = ?', [userId])
+      // 检查是否需要考勤（只有必打卡员工才算早退）
+      // 2026-08-25 silent 模式:没勾选员工 status 锁 normal + 早退清零
+      const [[user]] = await pool.query('SELECT require_attendance, worker_category FROM users WHERE id = ?', [userId])
       const isRequired = user && user.require_attendance === 1
+      const silent = !isRequired
+      const workerCategory = user?.worker_category || 'office'
       const status = isRequired ? (timeStr < '18:00:00' ? 'early' : existing.status) : 'normal'
 
       await pool.query(
-        'UPDATE attendance SET clock_out = ?, status = ?, is_auto_clock = ? WHERE id = ?',
-        [timeStr, status, autoClock, existing.id]
+        'UPDATE attendance SET clock_out = ?, status = ?, early_minutes = ?, abnormal_reason = ?, is_auto_clock = ? WHERE id = ?',
+        [timeStr, status,
+         silent ? 0 : (timeStr < '18:00:00' ? Math.floor((new Date('2000-01-01 18:00:00') - new Date(`2000-01-01 ${timeStr}`)) / 60000) : 0),
+         silent ? 'non-required: silent record (not counted in attendance stats)' : null,
+         autoClock, existing.id]
       )
 
-      res.json({ code: 0, data: { status, time: timeStr, is_auto_clock: autoClock }, message: '下班打卡成功' })
+      res.json({ code: 0, data: { status, time: timeStr, is_auto_clock: autoClock, silent, worker_category: workerCategory }, message: silent ? '打卡成功(本次不计入考勤统计)' : '下班打卡成功' })
     }
   } catch (err) { next(err) }
 })
@@ -419,7 +440,7 @@ router.get('/attendance', async (req, res, next) => {
     if (status) { where += ' AND a.status = ?'; params.push(status) }
 
     const sql = `
-      SELECT a.*, u.name as user_name, u.department
+      SELECT a.*, u.name as user_name, u.department, u.worker_category, u.require_attendance
       FROM attendance a
       LEFT JOIN users u ON a.user_id = u.id
       ${where}
@@ -1668,7 +1689,7 @@ router.get('/employees', async (req, res, next) => {
     const { page, size } = parsePagination(req.query)
 
     let sql = `SELECT u.id, u.name, u.email, u.phone, u.role, u.department,
-               u.status, u.created_at, u.last_login
+               u.status, u.created_at, u.last_login, u.worker_category, u.require_attendance
                FROM users u
                WHERE 1=1`
     const params = []
@@ -2744,7 +2765,7 @@ router.delete('/overtime/:id', async (req, res, next) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // GET /api/oa/attendance-rules - List all rules
-router.get('/attendance-rules', async (req, res, next) => {
+router.get('/attendance-rules', requirePermission('attendance:view'), async (req, res, next) => {
   try {
     const [rules] = await pool.query(
       'SELECT * FROM attendance_rules ORDER BY created_at DESC'
@@ -2753,10 +2774,13 @@ router.get('/attendance-rules', async (req, res, next) => {
     // Fetch members for each rule
     for (const rule of rules) {
       const [members] = await pool.query(
-        'SELECT arm.user_id, u.name as user_name FROM attendance_rule_members arm LEFT JOIN users u ON arm.user_id = u.id WHERE arm.rule_id = ?',
+        'SELECT arm.user_id, u.name as user_name, u.worker_category FROM attendance_rule_members arm LEFT JOIN users u ON arm.user_id = u.id WHERE arm.rule_id = ?',
         [rule.id]
       )
       rule.members = members
+      // 2026-08-25 取规则内成员的最常见 worker_category(给前端默认值用)
+      const cats = members.map(m => m.worker_category).filter(Boolean)
+      rule.worker_category = cats.length ? cats.sort((a, b) => cats.filter(c => c === a).length - cats.filter(c => c === b).length).pop() : 'office'
       if (typeof rule.weekdays === 'string') {
         try { rule.weekdays = JSON.parse(rule.weekdays) } catch { rule.weekdays = [] }
       }
@@ -2767,9 +2791,9 @@ router.get('/attendance-rules', async (req, res, next) => {
 })
 
 // POST /api/oa/attendance-rules - Create rule
-router.post('/attendance-rules', async (req, res, next) => {
+router.post('/attendance-rules', requirePermission('attendance:manage'), async (req, res, next) => {
   try {
-    const { name, weekdays, start_time, end_time, member_ids } = req.body
+    const { name, weekdays, start_time, end_time, member_ids, worker_category } = req.body
     if (!name) return res.status(400).json({ code: 400, message: '规则名称必填' })
 
     const [result] = await pool.query(
@@ -2782,6 +2806,11 @@ router.post('/attendance-rules', async (req, res, next) => {
     if (member_ids?.length) {
       const values = member_ids.map(uid => [ruleId, uid])
       await pool.query('INSERT INTO attendance_rule_members (rule_id, user_id) VALUES ?', [values])
+      // 2026-08-25 同步:勾选员工 = 必须考勤 + 记录身份分类
+      const validCats = ['engineering', 'office', 'both']
+      const cat = validCats.includes(worker_category) ? worker_category : 'office'
+      const placeholders = member_ids.map(() => '?').join(',')
+      await pool.query(`UPDATE users SET require_attendance = 1, worker_category = ? WHERE id IN (${placeholders})`, [cat, ...member_ids])
     }
 
     res.json({ code: 0, data: { id: ruleId }, message: '创建成功' })
@@ -2789,10 +2818,10 @@ router.post('/attendance-rules', async (req, res, next) => {
 })
 
 // PUT /api/oa/attendance-rules/:id - Update rule
-router.put('/attendance-rules/:id', async (req, res, next) => {
+router.put('/attendance-rules/:id', requirePermission('attendance:manage'), async (req, res, next) => {
   try {
     const { id } = req.params
-    const { name, weekdays, start_time, end_time, status, member_ids } = req.body
+    const { name, weekdays, start_time, end_time, status, member_ids, worker_category } = req.body
 
     const [[existing]] = await pool.query('SELECT * FROM attendance_rules WHERE id = ?', [id])
     if (!existing) return res.status(404).json({ code: 404, message: '规则不存在' })
@@ -2813,10 +2842,40 @@ router.put('/attendance-rules/:id', async (req, res, next) => {
 
     // Update members if provided
     if (member_ids !== undefined) {
+      // 2026-08-25 同步逻辑:计算差集 — 被取消勾选的人 require_attendance 改 0,新增勾选的人改 1
+      const [oldRows] = await pool.query(
+        'SELECT user_id FROM attendance_rule_members WHERE rule_id = ?', [id]
+      )
+      const oldSet = new Set(oldRows.map(r => r.user_id))
+      const newSet = new Set(member_ids)
+      const added = [...newSet].filter(x => !oldSet.has(x))
+      const removed = [...oldSet].filter(x => !newSet.has(x))
+
       await pool.query('DELETE FROM attendance_rule_members WHERE rule_id = ?', [id])
       if (member_ids.length) {
         const values = member_ids.map(uid => [id, uid])
         await pool.query('INSERT INTO attendance_rule_members (rule_id, user_id) VALUES ?', [values])
+      }
+      // added → require_attendance=1 + worker_category
+      if (added.length) {
+        const validCats = ['engineering', 'office', 'both']
+        const cat = validCats.includes(worker_category) ? worker_category : 'office'
+        const ph = added.map(() => '?').join(',')
+        await pool.query(`UPDATE users SET require_attendance = 1, worker_category = ? WHERE id IN (${ph})`, [cat, ...added])
+      }
+      // removed → require_attendance=0 (silent 模式) — 但要排除同时属于其它 active 规则的员工
+      if (removed.length) {
+        const ph2 = removed.map(() => '?').join(',')
+        await pool.query(
+          `UPDATE users u
+           SET u.require_attendance = 0
+           WHERE u.id IN (${ph2}) AND u.id NOT IN (
+             SELECT arm.user_id FROM attendance_rule_members arm
+             INNER JOIN attendance_rules ar ON arm.rule_id = ar.id
+             WHERE arm.user_id IN (${ph2}) AND ar.status = 'active' AND ar.id != ?
+           )`,
+          [...removed, ...removed, id]
+        )
       }
     }
 
@@ -2825,13 +2884,32 @@ router.put('/attendance-rules/:id', async (req, res, next) => {
 })
 
 // DELETE /api/oa/attendance-rules/:id - Delete rule
-router.delete('/attendance-rules/:id', async (req, res, next) => {
+router.delete('/attendance-rules/:id', requirePermission('attendance:delete'), async (req, res, next) => {
   try {
     const { id } = req.params
     const [[existing]] = await pool.query('SELECT * FROM attendance_rules WHERE id = ?', [id])
     if (!existing) return res.status(404).json({ code: 404, message: '规则不存在' })
 
+    // 2026-08-25 同步:删规则前先取成员,删完成员后只剩这条规则的员工改 silent
+    const [members] = await pool.query(
+      'SELECT user_id FROM attendance_rule_members WHERE rule_id = ?', [id]
+    )
     await pool.query('DELETE FROM attendance_rules WHERE id = ?', [id])
+    if (members.length) {
+      const uids = members.map(m => m.user_id)
+      const ph3 = uids.map(() => '?').join(',')
+      await pool.query(
+        `UPDATE users u
+         SET u.require_attendance = 0
+         WHERE u.id IN (${ph3}) AND u.id NOT IN (
+           SELECT arm.user_id FROM attendance_rule_members arm
+           INNER JOIN attendance_rules ar ON arm.rule_id = ar.id
+           WHERE arm.user_id IN (${ph3}) AND ar.status = 'active'
+         )`,
+        [...uids, ...uids]
+      )
+    }
+
     res.json({ code: 0, message: '删除成功' })
   } catch (err) { next(err) }
 })

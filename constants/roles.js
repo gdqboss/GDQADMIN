@@ -50,9 +50,13 @@ export const PERMS = Object.freeze({
   WORK_LOG_DELETE:     'work_log:delete',
   WORK_LOG_TEMPLATE:   'work_log_template:manage',
 
-  // OA / 考勤
-  ATTENDANCE_VIEW:     'attendance:view',
-  ATTENDANCE_MANAGE:   'attendance:manage',
+  // OA / 考勤 (AGENTS.md 三件套铁律 2026-08-25 对齐)
+  ATTENDANCE_VIEW:    'attendance:view',
+  ATTENDANCE_MANAGE:  'attendance:manage',
+  ATTENDANCE_DELETE:  'attendance:delete',
+  OA_VIEW:            'oa:view',
+  OA_MANAGE:          'oa:manage',
+  OA_DELETE:          'oa:delete',
 
   // 报表
   REPORT_VIEW:         'report:view',

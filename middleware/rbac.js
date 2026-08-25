@@ -75,6 +75,11 @@ const PERMISSIONS = {
   // OA办公
   OA_READ: 'oa:read',
   OA_WRITE: 'oa:write',
+  OA_DELETE: 'oa:delete',
+  // 考勤 (AGENTS.md 三件套铁律 2026-08-25 对齐)
+  ATTENDANCE_VIEW: 'attendance:view',
+  ATTENDANCE_MANAGE: 'attendance:manage',
+  ATTENDANCE_DELETE: 'attendance:delete',
 
   // === Labor / SmartBiz 模块 (2026-07-12 新增) ===
   // 工地 (jobsites)
@@ -128,6 +133,10 @@ const PERMISSIONS = {
 
   // 任务
   TASKS_READ: 'task:read',
+  TASKS_WRITE: 'task:write',
+  TASKS_CREATE: 'task:create',
+  TASKS_APPROVE: 'task:approve',
+  TASKS_DELETE: 'task:delete',
 
   // 售后
   AFTERSALE_READ: 'aftersale:read',
