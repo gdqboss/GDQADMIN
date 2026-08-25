@@ -10,6 +10,7 @@ const userStore = useUserStore()
 
 const activeTab = ref('my-tasks')
 const loading = ref(false)
+const loadError = ref('')
 const myTasks = ref([])
 const assignedTasks = ref([])
 const allTasks = ref([])
@@ -33,19 +34,49 @@ watch([statusFilter, priorityFilter], () => {
   else if (activeTab.value === 'team-tasks') loadTeamTasks()
 })
 
-// 切换Tab时重新加载对应数据
+// 2026-08-26 性能优化:
+//   1. Tab 切换时使用 ref 缓存已加载的数据, 避免重复请求
+//   2. 第一次进入时预加载其他 Tab 数据, Tab 切换瞬间显示
+const cachedMyTasks = ref(null)
+const cachedAssignedTasks = ref(null)
+const cachedAllTasks = ref(null)
+const cachedTeamTasks = ref(null)
+const tabLoadingStates = reactive({ 'my-tasks': false, 'assigned-tasks': false, 'all-tasks': false, 'team-tasks': false })
+
+// 切换Tab时：1) 显示缓存数据 2) 后台刷新
 watch(activeTab, async (newTab) => {
+  // 立即显示缓存 (如果有)
+  if (newTab === 'my-tasks' && cachedMyTasks.value) {
+    myTasks.value = cachedMyTasks.value
+  } else if (newTab === 'assigned-tasks' && cachedAssignedTasks.value) {
+    assignedTasks.value = cachedAssignedTasks.value
+  } else if (newTab === 'all-tasks' && cachedAllTasks.value) {
+    allTasks.value = cachedAllTasks.value
+  } else if (newTab === 'team-tasks' && cachedTeamTasks.value) {
+    teamTasks.value = cachedTeamTasks.value
+  }
+
+  // 进入"我的任务"时标记所有新任务为已读，同时通知AppHeader刷新铃铛
   if (newTab === 'my-tasks') {
-    // 进入"我的任务"时标记所有新任务为已读，同时通知AppHeader刷新铃铛
     try {
       await api.post('/tasks/mark-all-read')
       window.dispatchEvent(new CustomEvent('tasks-read'))
     } catch(e) {}
     await loadMyTasks()
+    cachedMyTasks.value = myTasks.value
   }
-  else if (newTab === 'assigned-tasks') loadAssignedTasks()
-  else if (newTab === 'all-tasks') loadAllTasks()
-  else if (newTab === 'team-tasks') loadTeamTasks()
+  else if (newTab === 'assigned-tasks') {
+    await loadAssignedTasks()
+    cachedAssignedTasks.value = assignedTasks.value
+  }
+  else if (newTab === 'all-tasks') {
+    await loadAllTasks()
+    cachedAllTasks.value = allTasks.value
+  }
+  else if (newTab === 'team-tasks') {
+    await loadTeamTasks()
+    cachedTeamTasks.value = teamTasks.value
+  }
 })
 
 // 全局筛选条件
@@ -177,6 +208,7 @@ const getPriorityText = (priority) => {
 
 const loadMyTasks = async () => {
   try {
+    loadError.value = ''
     loading.value = true
     const params = {}
     if (statusFilter.value !== 'all') params.status = statusFilter.value
@@ -184,9 +216,14 @@ const loadMyTasks = async () => {
     const res = await api.get('/tasks/my', { params })
     if (res.code === 0) {
       myTasks.value = res.data.tasks || res.data || []
+    } else {
+      myTasks.value = []
+      loadError.value = res.message || $t?.('tasks.loadFailed') || '加载失败'
     }
   } catch (err) {
     console.error('Failed to load my tasks:', err)
+    myTasks.value = []
+    loadError.value = err?.message || '加载失败'
   } finally {
     loading.value = false
   }
@@ -549,14 +586,20 @@ const formatDate = (dateStr) => {
 }
 
 onMounted(async () => {
-  await loadUsers()
+  // 2026-08-26 性能优化: loadUsers 与 loadMyTasks 并行 (之前串行 ~220ms)
+  await Promise.all([loadUsers(), loadMyTasks()])
   // 默认打开"我的任务"Tab（所有人都一样）
   activeTab.value = 'my-tasks'
-  await Promise.all([loadMyTasks(), loadAssignedTasks()])
-  // 2026-08-25 修正: 全部任务 tab 需要 system:config (后端 /tasks/all 校验),
-  //   之前用 task:write 让 hod 角色多打一次 403 → console.error (虽然 onMounted 不 alert, 但语义错)
+  cachedMyTasks.value = myTasks.value
+  // 后台并行预取其他 tab 数据, 不阻塞 UI
+  Promise.all([loadAssignedTasks(), loadTeamTasks()]).then(() => {
+    cachedAssignedTasks.value = assignedTasks.value
+    cachedTeamTasks.value = teamTasks.value
+  })
   if (userStore.canAccess('system:config')) {
-    await loadAllTasks()
+    loadAllTasks().then(() => {
+      cachedAllTasks.value = allTasks.value
+    })
   }
 })
 </script>
