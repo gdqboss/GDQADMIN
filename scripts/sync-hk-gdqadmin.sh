@@ -32,6 +32,14 @@ echo "--- 2b. Patch base path in HK gdqadmin/index.html ---"
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$HK_HOST" \
   "sed -i 's|/assets/|/gdqadmin/assets/|g' $HK_DIR/index.html && grep -c 'gdqadmin/assets' $HK_DIR/index.html"
 
+# 2026-08-25: axios baseURL patch
+# dist 出来的 JS 里 axios.create({baseURL:"/api"}) 写死,HK SPA 挂在 /gdqadmin/ 子路径
+# 必须改成 /gdqadmin/api,否则前端请求落到主域 /api/* → 主站后端没有 phone/password 路由 → 白屏
+# (index.html sed 改不到 JS bundle 内的字符串,必须独立一步)
+echo "--- 2c. Patch axios baseURL in all JS chunks ---"
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$HK_HOST" \
+  "sed -i 's|baseURL:\"/api\"|baseURL:\"/gdqadmin/api\"|g; s|baseURL:s\?\"/api\"|baseURL:\"/gdqadmin/api\"|g' $HK_DIR/assets/*.js && grep -c 'gdqadmin/api' $HK_DIR/assets/index-*.js | head -3"
+
 echo "--- 3. Reload Caddy ---"
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$HK_HOST" "systemctl reload caddy || true"
 
