@@ -38,7 +38,18 @@ ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$HK_HOST" \
 # (index.html sed 改不到 JS bundle 内的字符串,必须独立一步)
 echo "--- 2c. Patch axios baseURL in all JS chunks ---"
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$HK_HOST" \
-  "sed -i 's|baseURL:\"/api\"|baseURL:\"/gdqadmin/api\"|g; s|baseURL:s\?\"/api\"|baseURL:\"/gdqadmin/api\"|g' $HK_DIR/assets/*.js && grep -c 'gdqadmin/api' $HK_DIR/assets/index-*.js | head -3"
+  "sed -i 's|baseURL:\"/api\"|baseURL:\"/gdqadmin/api\"|g; s|baseURL:s?\"/api\"|baseURL:\"/gdqadmin/api\"|g' $HK_DIR/assets/*.js && grep -c 'gdqadmin/api' $HK_DIR/assets/index-*.js | head -3"
+
+# 2026-08-25: lazy chunk path patch (Vite 5 关键陷阱)
+# Vite build 出来的 chunk map 用的是相对路径 '","assets/X-Y.js","'(无前导 /)
+# 浏览器解析时基于 entry 的 base path,entry 在 /gdqadmin/assets/ 下 → 应该解析成 /gdqadmin/assets/
+# **但**网络抓包看:浏览器先发 /assets/X-Y.js(404)再发 /gdqadmin/assets/X-Y.js(200)双倍请求
+# 第一次的 404 chunk 被 vue-error-handler 捕获 → 触发 "加载失败" dialog
+# 解法:把所有 lazy chunk 引用强制改成绝对路径 "/gdqadmin/assets/X-Y.js"
+# 注意:必须用 '","assets/' 避免误伤 baseURL 里的 /api
+echo "--- 2d. Patch lazy chunk paths to absolute /gdqadmin/assets/ ---"
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$HK_HOST" \
+  "find $HK_DIR/assets -name '*.js' -exec sed -i 's|\\\"\\\",\\\"assets/|\\\"\\\",\\\"/gdqadmin/assets/|g' {} \; && grep -c 'gdqadmin/assets' $HK_DIR/assets/index-*.js | head -3"
 
 echo "--- 3. Reload Caddy ---"
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$HK_HOST" "systemctl reload caddy || true"
