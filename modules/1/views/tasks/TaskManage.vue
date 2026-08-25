@@ -555,7 +555,9 @@ onMounted(async () => {
   // 默认打开"我的任务"Tab（所有人都一样）
   activeTab.value = 'my-tasks'
   await Promise.all([loadMyTasks(), loadAssignedTasks()])
-  if (userStore.canAccess('task:write')) {
+  // 2026-08-25 修正: 全部任务 tab 需要 system:config (后端 /tasks/all 校验),
+  //   之前用 task:write 让 hod 角色多打一次 403 → console.error (虽然 onMounted 不 alert, 但语义错)
+  if (userStore.canAccess('system:config')) {
     await loadAllTasks()
   }
 })
