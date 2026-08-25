@@ -13,6 +13,7 @@ const loading = ref(false)
 const myTasks = ref([])
 const assignedTasks = ref([])
 const allTasks = ref([])
+const teamTasks = ref([])
 const allTasksTotal = ref(0)
 const allTasksPage = ref(1)
 const allTasksPageSize = ref(20)
@@ -29,6 +30,7 @@ const priorityFilter = ref('all')
 watch([statusFilter, priorityFilter], () => {
   if (activeTab.value === 'my-tasks') loadMyTasks()
   else if (activeTab.value === 'assigned-tasks') loadAssignedTasks()
+  else if (activeTab.value === 'team-tasks') loadTeamTasks()
 })
 
 // 切换Tab时重新加载对应数据
@@ -43,6 +45,7 @@ watch(activeTab, async (newTab) => {
   }
   else if (newTab === 'assigned-tasks') loadAssignedTasks()
   else if (newTab === 'all-tasks') loadAllTasks()
+  else if (newTab === 'team-tasks') loadTeamTasks()
 })
 
 // 全局筛选条件
@@ -80,8 +83,13 @@ const tabs = computed(() => {
     { key: 'my-tasks', label: t('tasks.myTasks'), icon: 'task_alt' },
     { key: 'assigned-tasks', label: t('tasks.assignedTasks'), icon: 'assignment_ind' }
   ]
-  if (userStore.canAccess('task:write')) {
+  // 全部任务 tab:对齐后端 /tasks/all 的 system:config 权限(仅 super_admin)
+  if (userStore.canAccess('system:config')) {
     baseTabs.push({ key: 'all-tasks', label: t('tasks.allTasks'), icon: 'list_alt' })
+  }
+  // 团队任务 tab:对齐后端 /tasks/team 的 task:read_team 权限 (hod / 团队负责人)
+  if (userStore.canAccess('task:read_team')) {
+    baseTabs.push({ key: 'team-tasks', label: t('tasks.teamTasks') || '团队任务', icon: 'groups' })
   }
   baseTabs.push({ key: 'create-task', label: t('tasks.createTask'), icon: 'add_task' })
   return baseTabs
@@ -196,6 +204,27 @@ const loadAssignedTasks = async () => {
     }
   } catch (err) {
     console.error('Failed to load assigned tasks:', err)
+  } finally {
+    loading.value = false
+  }
+}
+
+// 加载团队任务 (本人 + 所有下级 + 本人在派),需 task:read_team 权限
+const loadTeamTasks = async () => {
+  try {
+    loading.value = true
+    const params = {}
+    if (statusFilter.value !== 'all') params.status = statusFilter.value
+    if (priorityFilter.value !== 'all') params.priority = priorityFilter.value
+    const res = await api.get('/tasks/team', { params })
+    if (res.code === 0) {
+      teamTasks.value = res.data.tasks || res.data || []
+    } else {
+      teamTasks.value = []
+    }
+  } catch (err) {
+    console.error('Failed to load team tasks:', err)
+    teamTasks.value = []
   } finally {
     loading.value = false
   }
@@ -591,7 +620,7 @@ onMounted(async () => {
               <div class="flex gap-2">
                 <button @click="handleViewDetail(task)" class="text-primary hover:underline">{{ $t('tasks.viewDetail') }}</button>
                 <button
-                  v-if="task.status === 'pending' || task.status === 'in_progress'"
+                  v-if="(task.status === 'pending' || task.status === 'in_progress') && userStore.canAccess('task:write')"
                   @click="handleSubmitTask(task)"
                   class="px-3 py-1 bg-success text-white rounded hover:bg-success/90 font-medium"
                 >
@@ -637,7 +666,7 @@ onMounted(async () => {
               <div class="flex gap-2">
                 <button @click="handleViewDetail(task)" class="text-primary hover:underline">{{ $t('tasks.viewDetail') }}</button>
                 <button
-                  v-if="task.status === 'submitted'"
+                  v-if="task.status === 'submitted' && userStore.canAccess('task:approve')"
                   @click="handleReviewTask(task)"
                   class="text-warning hover:underline"
                 >
@@ -799,6 +828,50 @@ onMounted(async () => {
           >
             {{ $t('tasks.nextPage') }}
           </button>
+        </div>
+      </div>
+
+      <!-- 团队任务 (hod / 团队负责人) - 需 task:read_team -->
+      <div v-if="activeTab === 'team-tasks'" class="p-3 sm:p-6">
+        <div class="flex gap-2 sm:gap-4 mb-4">
+          <select v-model="statusFilter" class="flex-1 sm:flex-none px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <option value="all">{{ $t('common.allStatus') }}</option>
+            <option value="pending">{{ $t('tasks.pending') }}</option>
+            <option value="in_progress">{{ $t('tasks.inProgress') }}</option>
+            <option value="submitted">{{ $t('tasks.submitted') }}</option>
+            <option value="completed">{{ $t('tasks.completed') }}</option>
+            <option value="rejected">{{ $t('tasks.rejected') }}</option>
+          </select>
+          <select v-model="priorityFilter" class="flex-1 sm:flex-none px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <option value="all">{{ $t('tasks.allPriority') }}</option>
+            <option value="low">{{ $t('tasks.low') }}</option>
+            <option value="medium">{{ $t('tasks.medium') }}</option>
+            <option value="high">{{ $t('tasks.high') }}</option>
+            <option value="urgent">{{ $t('tasks.urgent') }}</option>
+          </select>
+        </div>
+        <div v-if="loading" class="text-center py-8 text-text-secondary">{{ $t('common.loading') }}</div>
+        <div v-else-if="teamTasks.length === 0" class="text-center py-8 text-text-secondary">{{ $t('tasks.noTasks') }}</div>
+        <div v-else class="space-y-3">
+          <div v-for="task in teamTasks" :key="task.id" class="border border-gray-200 rounded-lg p-3 sm:p-4 hover:border-primary/50 hover:bg-primary/5 transition-all">
+            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-2 gap-2">
+              <div class="flex-1 min-w-0">
+                <h4 class="font-medium text-text-primary mb-1 text-sm sm:text-base">{{ task.title }}</h4>
+                <p class="text-xs sm:text-sm text-text-secondary line-clamp-2">{{ task.description }}</p>
+              </div>
+              <div class="flex gap-2 flex-shrink-0">
+                <StatusTag :type="getStatusColor(task.status)" :text="getStatusText(task.status)" />
+                <StatusTag :type="getPriorityColor(task.priority)" :text="getPriorityText(task.priority)" />
+              </div>
+            </div>
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-text-secondary mt-3 gap-2">
+              <span>{{ $t('tasks.assignedToLabel') }}: {{ task.assigned_to_name }} | {{ $t('tasks.dueLabel') }}: {{ formatDate(task.due_date) }}</span>
+              <div class="flex gap-2">
+                <button @click="handleViewDetail(task)" class="text-primary hover:underline">{{ $t('tasks.viewDetail') }}</button>
+                <button v-if="task.status === 'submitted' && userStore.canAccess('task:approve') && task.assigned_by === userStore.user.id" @click="handleReviewTask(task)" class="text-warning hover:underline">{{ $t('tasks.review') }}</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

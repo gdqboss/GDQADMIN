@@ -46,11 +46,17 @@ router.get('/me', async (req, res, next) => {
     }
     const token = authHeader.split(' ')[1]
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
-    const [rows] = await pool.query('SELECT id, name, email, phone, role, user_type, h5_user_id, customer_type, member_level, member_label, points, is_internal, customer_store_id, department, supplier_id, status, permissions, job_level_id, department_id, avatar FROM users WHERE id = ?', [decoded.id])
+    const [rows] = await pool.query('SELECT id, name, email, phone, role, user_type, h5_user_id, customer_type, member_level, member_label, points, is_internal, customer_store_id, department, supplier_id, status, job_level_id, department_id, avatar FROM users WHERE id = ?', [decoded.id])
     if (!rows.length) return res.status(401).json({ code: 401, message: '用户不存在' })
     const user = rows[0]
     if (user.status === 'disabled') return res.status(403).json({ code: 403, message: '账号已被禁用' })
-    res.json({ code: 0, data: user })
+    // 2026-08-25 修复: 用 resolvePermissions 动态算权限, 而不是 SELECT users.permissions 列
+    // 原因: users.permissions 列历史上很多用户是 NULL, 但用户其实有 role + role_permissions 关联
+    // login 路由已经用 resolvePermissions, /me 必须保持一致, 否则刷新后 userStore.canAccess 失效
+    const permissions = user.user_type === 'customer'
+      ? ['customer:read', 'rental:read']
+      : await resolvePermissions(user)
+    res.json({ code: 0, data: { ...user, permissions } })
   } catch (err) {
     if (err.name === 'JsonWebTokenError') return res.status(401).json({ code: 401, message: 'token 无效' })
     next(err)
