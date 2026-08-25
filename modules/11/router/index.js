@@ -2,9 +2,6 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 
 const MainLayout = () => import('../layouts/MainLayout.vue')
-// 2026-08-27 回退: lazyLoad 自定义 Promise wrapper 导致 vue-router 4 组件解析失败
-// (TaskManage 等 lazy chunk 渲染空 <!---->) — 回退成官方 () => import()
-// chunk 加载失败的白屏保护由 vite 自有机制 + 下方 SCSS chunk 处理承担
 const lazyLoad = (loader) => () => loader()
 
 const routes = [
@@ -241,11 +238,6 @@ const routes = [
       // ── 寺庙管理 (2026-08-06 BUG FIX: macau/HK 有 Temple.vue, SGP 之前缺, 现从 macau 补回) ──────
       { path: 'temple', name: 'Temple', component: lazyLoad(() => import('../views/Temple.vue')), meta: { title: '寺庙管理', permission: 'temple:read' } },
 
-      // ── admin 后端 寺内容管理 (2026-08-23 波哥: admin 加菜单, 内容管理 UI 后续逐表实装) ──────
-      // profile 11 海丰大道庵 (dda.gdqshop.cn) — 管理牌位/僧侣/经文/活动/供奉/相册等
-      // 当前是骨架入口页 TempleContent.vue (13 个表清单), 后续按波哥指示加 CRUD UI
-      { path: 'admin/temple', name: 'AdminTempleContent', component: lazyLoad(() => import('../views/admin/TempleContent.vue')), meta: { title: '寺内容管理', parent: '系统管理', permission: 'temple:read' } },
-
       // ── 预订单 (2026-08-06 BUG FIX: macau/HK 有 preorder, SGP 之前缺, 现从 macau 补回) ────────────
       { path: 'preorder', name: 'PreorderSummary', component: lazyLoad(() => import('../views/preorder/PreorderSummary.vue')), meta: { title: '产品预订', parent: '库存管理', permission: 'preorder:read' } },
 
@@ -264,28 +256,8 @@ const router = createRouter({
 })
 
 // Catch-all for failed chunk loads → reload page once
-// 2026-08-25 BUG FIX: 加 reload lock — 第二次再失败就停 reload + 清 token 跳 /login
-//   之前: hash chunk immutable max-age=31536000, 旧浏览器缓存的 chunk hash 与新 build 不匹配
-//         → router.onError 无限 reload → 死循环 → 白屏卡死
-let _chunkReloadCount = 0
 router.onError((err) => {
   if (err.message && err.message.includes('Failed to fetch dynamically imported module')) {
-    _chunkReloadCount++
-    if (_chunkReloadCount >= 2) {
-      console.warn('[router] chunk reload 超过 2 次, 停止 reload, 清 token 跳 /login')
-      _chunkReloadCount = 0
-      try {
-        localStorage.removeItem('caimeite_token')
-        localStorage.removeItem('caimeite_user')
-        localStorage.removeItem('caimeite_permissions')
-      } catch {}
-      if (window.location.hash !== '#/login') {
-        window.location.hash = '#/login'
-      }
-      // 强制 reload 一次让守卫生效
-      window.location.reload()
-      return
-    }
     window.location.reload()
   }
 })
@@ -308,28 +280,13 @@ router.beforeEach((to, from, next) => {
   }
 
   // 未登录引导到登录页
-  // 2026-08-26 BUG FIX: 之前 next('/login') 在 from 已经是 /login 时抛 NavigationDuplicated
-  //   → 显示 "已取消登录" 弹窗 (vue-router 4 unhandled rejection)
-  //   修法: 用 next(true) 留在当前路由, 如果当前就是 /login 则天然显示登录页
-  //         如果当前是 #/dashboard 等非 /login 路径但用户未登录, 用 redirect:true 替换而非 push
   if (to.path !== '/login' && !userStore.isLoggedIn) {
-    return next({ path: '/login', replace: true })
+    return next('/login')
   }
 
-  // 2026-08-25 BUG FIX: 移除"已登录访问 /login 跳 /"
-  //   旧逻辑: if (to.path === '/login' && userStore.isLoggedIn) return next('/')
-  //   问题: gbaw.cn/gdqadmin 是登录入口, 已登录用户访问时不应该自动进系统
-  //         而应该显示登录页让用户重新输密码确认 (微信式 SSO)
-  //   修复: /login 是登录入口, 已登录用户访问时主动清 token, 让其显示登录页要求重新输密码
-  //         SSO 后端会通过 force_login=1 踢旧 session, 实现"再次输入密码登录"
+  // 已登录访问登录页则跳转首页
   if (to.path === '/login' && userStore.isLoggedIn) {
-    // 主动清 token (不调后端, 因为是页面级 re-auth, 不是真 logout)
-    userStore.$patch({ token: '', user: null })
-    try {
-      localStorage.removeItem('caimeite_token')
-      localStorage.removeItem('caimeite_user')
-      localStorage.removeItem('caimeite_permissions')
-    } catch {}
+    return next('/')
   }
 
   // 权限检查 — 无权限时给用户友好提示（按波哥"出现就能操作"原则）
