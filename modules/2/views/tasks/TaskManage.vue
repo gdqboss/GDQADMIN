@@ -80,7 +80,10 @@ const tabs = computed(() => {
     { key: 'my-tasks', label: t('tasks.myTasks'), icon: 'task_alt' },
     { key: 'assigned-tasks', label: t('tasks.assignedTasks'), icon: 'assignment_ind' }
   ]
-  if (userStore.canAccess('tasks_admin')) {
+  // 全部任务 tab:对齐后端 /tasks/all 的 system:config 权限 (admin only)
+  // 2026-08-25 修正: 之前用 tasks_admin 是 modules/2 旧命名, 后端 routes/tasks.js 只认 system:config
+  //   跟 modules/1/3/6/7/11 对齐, 避免 hod 等非 admin 角色 403
+  if (userStore.canAccess('system:config')) {
     baseTabs.push({ key: 'all-tasks', label: t('tasks.allTasks'), icon: 'list_alt' })
   }
   baseTabs.push({ key: 'create-task', label: t('tasks.createTask'), icon: 'add_task' })
@@ -209,7 +212,7 @@ const loadUsers = async () => {
       allUsers.value = userData // 保存所有用户用于筛选
 
       // 如果是超级管理员，显示所有用户
-      if (userStore.canAccess('tasks_admin')) {
+      if (userStore.canAccess('system:config')) {
         users.value = userData
       } else {
         // 否则只显示当前用户的下级（通过递归查找supervisor_id链条）
@@ -524,7 +527,7 @@ onMounted(async () => {
   // 默认打开"我的任务"Tab（所有人都一样）
   activeTab.value = 'my-tasks'
   await Promise.all([loadMyTasks(), loadAssignedTasks()])
-  if (userStore.canAccess('tasks_admin')) {
+  if (userStore.canAccess('system:config')) {
     await loadAllTasks()
   }
 })
@@ -770,7 +773,7 @@ onMounted(async () => {
               <span>{{ $t('tasks.assignedToLabel') }}: {{ task.assigned_to_name }}</span>
               <span>{{ $t('tasks.dueLabel') }}: {{ formatDate(task.due_date) }}</span>
               <button
-                v-if="task.assigned_by === userStore.user.id || userStore.canAccess('tasks_admin')"
+                v-if="task.assigned_by === userStore.user.id || userStore.canAccess('system:config')"
                 @click.stop="handleDeleteTask(task)"
                 class="text-red-500 hover:text-red-700 hover:underline ml-auto"
               >
