@@ -1,9 +1,11 @@
 #!/bin/bash
 # build-hk-gdqadmin.sh — SGP build HK 横琴孵化器 gdqadmin (profile 6)
 # 2026-08-23 by JXY
-# HK gdqadmin 跟 macau 同源 (SGP /root/server modules/7)
-# 负责: SGP build dist-6-gdqadmin 产物, 后续同步到 HK /var/www/hatch/gdqadmin/
-#
+# 2026-08-26 by JXY: base '/' (北京方式) — 废弃 /gdqadmin/ 子路径 + sed 补丁链
+#   - 根因: base='/gdqadmin/' + sync step 2b/2c/2d sed 补丁链 + Vite 5 manualChunks
+#           运行时拼出裸 host https://gdqadmin/assets/... 404 (HK Playwright 铁证)
+#   - 修复: base='/', nginx /gdqadmin/ → / (root base), 旧路径 301 兼容
+#   - 跟北京 (root base '/') 完全一致,不再走子路径补丁链
 # 关键原则:
 # - 源码始终在 SGP (参照 AGENTS.md #20)
 # - HK 不再独立 build gdqadmin, 只拉 SGP 产物
@@ -77,7 +79,10 @@ export default defineConfig({
     assetsDir: 'assets',
     sourcemap: false,
     minify: 'esbuild',
-    base: '/gdqadmin/',
+    // 2026-08-26 by JXY: 改用 root base '/' (北京方式)
+    //   - 旧 base='/gdqadmin/' + sync step 2b/2c/2d sed 补丁链会拼出裸 host 404
+    //   - 新方案: nginx /gdqadmin/* → / 301 redirect 兼容旧链接
+    base: '/',
     rollupOptions: {
       output: {
         manualChunks: (id) => {
