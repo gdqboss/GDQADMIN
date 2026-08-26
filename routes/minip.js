@@ -2,8 +2,10 @@ import { Router } from 'express'
 import jwt from 'jsonwebtoken'
 import { pool } from '../db/connection.js'
 import { auth } from '../middleware/auth.js'
-import { requireRole } from '../middleware/rbac.js'
+import { requireRole, requirePermission, PERMISSIONS, ROLES } from '../middleware/rbac.js'
+import { checkPerm } from '../utils/permission.js'
 import oaRoutes from './oa.js'
+import { listTabsForUser as listDbTabs } from './minip-tabbar-config.js'
 
 const router = Router()
 
@@ -444,15 +446,23 @@ router.get('/enterprise/budget', auth, async (req, res, next) => {
 router.get('/enterprise/attendance', auth, async (req, res, next) => {
   try {
     const userId = req.user.id
+    // 2026-08-25 加 worker_category + silent 字段 — 多端对齐
     const [rows] = await pool.query(
-      `SELECT id, date as check_date, clock_in as check_in_time, clock_out as check_out_time, status, overtime_hours as work_hours FROM attendance WHERE user_id = ? AND MONTH(date) = MONTH(CURDATE()) AND YEAR(date) = YEAR(CURDATE()) ORDER BY date DESC LIMIT 30`,
+      `SELECT a.id, a.date as check_date, a.clock_in as check_in_time, a.clock_out as check_out_time,
+              a.status, a.overtime_hours as work_hours, a.late_minutes, a.early_minutes,
+              u.worker_category, u.require_attendance,
+              (a.abnormal_reason LIKE 'non-required%') as silent
+       FROM attendance a
+       LEFT JOIN users u ON a.user_id = u.id
+       WHERE a.user_id = ? AND MONTH(a.date) = MONTH(CURDATE()) AND YEAR(a.date) = YEAR(CURDATE())
+       ORDER BY a.date DESC LIMIT 30`,
       [userId]
     )
     const [[stats]] = await pool.query(
       `SELECT SUM(CASE WHEN status='normal' THEN 1 ELSE 0 END) as normal_days, SUM(CASE WHEN status='late' THEN 1 ELSE 0 END) as late_days, SUM(CASE WHEN status='absent' THEN 1 ELSE 0 END) as absent_days, SUM(overtime_hours) as total_hours FROM attendance WHERE user_id = ? AND MONTH(date) = MONTH(CURDATE()) AND YEAR(date) = YEAR(CURDATE())`,
       [userId]
     )
-    res.json({ code: 0, data: { list: rows, stats } })
+    res.json({ code: 0, data: { list: rows, stats, worker_category: rows[0]?.worker_category || 'office' } })
   } catch (err) { next(err) }
 })
 
@@ -772,26 +782,44 @@ router.get('/config', async (req, res, next) => {
     } catch {}
 
     // 6. 底部 tabbar 配置（按 user_type + role 动态返回，零硬编码）
-    //    规则：所有 tab 必须存在 office_menus 表或 fallback 默认
-    //    customer/未登录/guest → 游客态；staff → 员工态；admin 多一个审批 tab
+    //    2026-08-27 江小鱼重构: 优先从 minip_tabbar_config 表读, 表空 fallback 硬编码
+    //    gdqadmin 后台可管理, 改后立即生效
     let tabbar = []
-    if (userType === 'guest' || userType === 'customer' || userRole === 'guest') {
-      // 客户/游客：主页/服务/活动/我的
-      tabbar = [
-        { path: '/enterprise/home', icon: 'home', label: '主页' },
-        { path: '/visitor/services', icon: 'workspace_premium', label: '服务' },
-        { path: '/visitor/activities', icon: 'campaign', label: '活动' },
-        { path: '/me', icon: 'person', label: '我的' }
-      ]
-    } else {
-      // 员工：主页/办公/我的（admin 看 4 个 tab 加消息）
-      tabbar = [
-        { path: '/enterprise/home', icon: 'home', label: '主页' },
-        { path: '/office', icon: 'business_center', label: '办公' },
-        { path: '/me', icon: 'person', label: '我的' }
-      ]
-      if (userRole === 'admin') {
-        tabbar.splice(2, 0, { path: '/oa/approvals', icon: 'pending_actions', label: '审批' })
+    try {
+      const dbTabs = await listDbTabs(userType, userRole)
+      if (dbTabs.length > 0) {
+        // DB 驱动 - 转换字段名匹配前端预期
+        tabbar = dbTabs.map(t => ({
+          key: t.key,
+          path: t.pagePath,
+          icon: t.icon,
+          label: t.label,
+        }))
+      }
+    } catch (e) {
+      console.warn('[minip-config] tabbar from DB failed, fallback hardcode:', e.message)
+    }
+
+    // Fallback (DB 表空 或 异常): 硬编码
+    if (tabbar.length === 0) {
+      if (userType === 'guest' || userType === 'customer' || userRole === 'guest') {
+        // 客户/游客：主页/服务/活动/我的
+        tabbar = [
+          { path: '/enterprise/home', icon: 'home', label: '主页' },
+          { path: '/visitor/services', icon: 'workspace_premium', label: '服务' },
+          { path: '/visitor/activities', icon: 'campaign', label: '活动' },
+          { path: '/me', icon: 'person', label: '我的' }
+        ]
+      } else {
+        // 员工：主页/办公/我的（admin 看 4 个 tab 加消息）
+        tabbar = [
+          { path: '/enterprise/home', icon: 'home', label: '主页' },
+          { path: '/office', icon: 'business_center', label: '办公' },
+          { path: '/me', icon: 'person', label: '我的' }
+        ]
+        if (userRole === 'admin') {
+          tabbar.splice(2, 0, { path: '/oa/approvals', icon: 'pending_actions', label: '审批' })
+        }
       }
     }
 
@@ -886,28 +914,85 @@ router.get('/config', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
-// GET /api/minip/office/work-logs - 我的工作日志列表（抄主站 work-logs.js，统一返回结构 + creator_* 字段）
+// GET /api/minip/office/users/candidates - 参与人/接收人候选 (对齐 gdqadmin /users/subordinates + /users/list 兜底)
+//   优先返回下属(递归), 顶置自己; 无下属则返回全部活跃用户
+router.get('/office/users/candidates', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    let list = []
+    try {
+      const [sub] = await pool.query(`
+        WITH RECURSIVE subordinate_tree AS (
+          SELECT id, name, avatar, department, role FROM users
+          WHERE supervisor_id = ? AND status = 'active'
+          UNION ALL
+          SELECT u.id, u.name, u.avatar, u.department, u.role FROM users u
+          INNER JOIN subordinate_tree st ON u.supervisor_id = st.id
+        )
+        SELECT * FROM subordinate_tree ORDER BY name`, [userId])
+      list = sub || []
+    } catch (e) { console.error('[minip] candidates sub err', e?.message || e) }
+    const [[me]] = await pool.query('SELECT id, name, avatar, department, role FROM users WHERE id = ?', [userId])
+    if (list.length === 0) {
+      const [all] = await pool.query(`SELECT id, name, avatar, department, role FROM users WHERE status='active' ORDER BY name LIMIT 300`)
+      list = all || []
+    }
+    res.json({ code: 0, data: me ? [{ ...me, is_self: true }, ...list] : list, message: 'ok' })
+  } catch (err) { next(err) }
+})
+
+// GET /api/minip/office/work-log-templates - 工作日志模板列表（抄 oa.js.bak work-log-templates）
+//   修复: 活跃 oa.js 无此路由, minip work-log-form 调它一直 404, 模板选择加载失败
+router.get('/office/work-log-templates', auth, async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT t.*, u.name as creator_name
+       FROM work_log_templates t
+       LEFT JOIN users u ON t.creator_id = u.id
+       WHERE t.status = 'active'
+       ORDER BY t.is_default DESC, t.created_at DESC`
+    )
+    res.json({ code: 0, data: rows, message: 'ok' })
+  } catch (err) { next(err) }
+})
+
+// GET /api/minip/office/work-logs - 工作日志列表 (抄主站 work-logs.js: 支持 type/互动计数/模板名/审核状态)
+//   type: mine(自己的) | received(需要我处理的) | all(全员, 管理员) — 对齐 gdqadmin WorkLogManage 的 my/received/templates
 router.get('/office/work-logs', auth, async (req, res, next) => {
   try {
     const userId = req.user.id
-    const { page = 1, pageSize = 20, type, status, date_from, date_to } = req.query
+    const userRole = req.user.role
+    const isAdmin = ['admin', 'manager', 'director'].includes(userRole)
+    const { page = 1, pageSize = 20, type = 'mine', status, date_from, date_to } = req.query
     const offset = (Number(page) - 1) * Number(pageSize)
-    // 与主站 work-logs.js 保持一致：creator_name + creator_avatar + attachments (JSON 数组)
+    let where = 'WHERE 1=1'
+    const params = []
+    if (type === 'mine') { where += ' AND w.user_id = ?'; params.push(userId) }
+    else if (type === 'received') { where += ' AND JSON_CONTAINS(w.recipients, ?)'; params.push(JSON.stringify(userId)) }
+    else if (type === 'all' && isAdmin) { /* 全部 */ }
+    else { where += ' AND w.user_id = ?'; params.push(userId) }
+    if (status) { where += ' AND w.status = ?'; params.push(status) }
     const [rows] = await pool.query(
       `SELECT w.id, w.user_id, w.log_type, w.submit_date, w.content, w.today_work, w.tomorrow_plan, w.issues, w.status,
-              w.attachments, w.created_at,
-              u.name as creator_name, u.avatar as creator_avatar, u.department as creator_department
+              w.attachments, w.recipients, w.created_at,
+              u.name as creator_name, u.avatar as creator_avatar, u.department as creator_department,
+              wlt.name as template_name,
+              (SELECT COUNT(*) FROM work_log_interactions WHERE log_id = w.id AND type = 'like') as like_count,
+              (SELECT COUNT(*) FROM work_log_interactions WHERE log_id = w.id AND type = 'comment') as comment_count,
+              (SELECT COUNT(*) FROM work_log_interactions WHERE log_id = w.id AND type = 'dislike') as dislike_count,
+              (SELECT COUNT(*) FROM work_log_interactions WHERE log_id = w.id AND type = 'forward') as forward_count,
+              EXISTS(SELECT 1 FROM work_log_interactions WHERE log_id = w.id AND user_id = ? AND type = 'like') as liked_by_me,
+              EXISTS(SELECT 1 FROM work_log_interactions WHERE log_id = w.id AND user_id = ? AND type = 'dislike') as disliked_by_me,
+              EXISTS(SELECT 1 FROM work_log_interactions WHERE log_id = w.id AND user_id = ? AND type = 'forward') as forwarded_by_me
        FROM work_logs w
        LEFT JOIN users u ON w.user_id = u.id
-       WHERE w.user_id = ?
+       LEFT JOIN work_log_templates wlt ON w.template_id = wlt.id
+       ${where}
        ORDER BY w.submit_date DESC, w.id DESC
        LIMIT ? OFFSET ?`,
-      [userId, Number(pageSize), offset]
+      [userId, userId, userId, ...params, Number(pageSize), offset]
     )
-    const [[{ total }]] = await pool.query(
-      'SELECT COUNT(*) as total FROM work_logs WHERE user_id = ?',
-      [userId]
-    )
+    const [cntRows] = await pool.query(`SELECT COUNT(*) as total FROM work_logs w ${where}`, params)
     // 解析 attachments 为 images 数组 (抄主站 WorkLogManage-Dg-nx-L1.js 渲染逻辑: e.url || e)
     const logs = rows.map(r => {
       let images = []
@@ -915,19 +1000,19 @@ router.get('/office/work-logs', auth, async (req, res, next) => {
       return {
         ...r,
         attachments: images,
-        images,                                  // 主站 WorkLogManage 用 images 字段
-        image_url: images.length ? (images[0].url || images[0]) : '',  // 兼容前端 image 字段
-        user_name: r.creator_name || `用户#${r.user_id}`,              // 兼容前端 user_name 字段
-        avatar_url: r.creator_avatar || '',                             // 兼容前端 avatar_url 字段
+        images,
+        image_url: images.length ? (images[0].url || images[0]) : '',
+        user_name: r.creator_name || `用户#${r.user_id}`,
+        avatar_url: r.creator_avatar || '',
         creator_name: r.creator_name || `用户#${r.user_id}`
       }
     })
     res.json({
       code: 0,
       data: {
-        list: logs,                  // 兼容 minip 原 list 字段
-        logs: logs,                  // 兼容主站 logs 字段
-        total: Number(total),
+        list: logs,
+        logs: logs,
+        total: Number(cntRows[0].total),
         page: Number(page),
         limit: Number(pageSize)
       }
@@ -935,21 +1020,246 @@ router.get('/office/work-logs', auth, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
-// POST /api/minip/office/work-logs - 提交工作日志（抄主站 work-logs.js: 存 attachments JSON 数组）
+// ════════════════════════════════════════════════════════════════════
+// 工作日志完整版 (抄 gdqadmin 主站 work-logs.js, 用 minip auth)
+//  模板列表 / 详情 / 收阅 / 点赞 / 评论 / 互动列表 / 审核 — 让移动端具备完整能力
+// ════════════════════════════════════════════════════════════════════
+function wlSafeParse(str, defaultVal = {}) {
+  if (!str) return defaultVal
+  try { return typeof str === 'object' ? str : JSON.parse(str) } catch (e) { return defaultVal }
+}
+
+// GET /office/work-logs/:id - 日志详情
+router.get('/office/work-logs/:id', auth, async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const [logs] = await pool.query(
+      `SELECT wl.*, u.name as creator_name, u.avatar as creator_avatar, wlt.name as template_name
+       FROM work_logs wl
+       LEFT JOIN users u ON wl.user_id = u.id
+       LEFT JOIN work_log_templates wlt ON wl.template_id = wlt.id
+       WHERE wl.id = ?`,
+      [id]
+    )
+    if (logs.length === 0) return res.status(404).json({ code: 404, message: '日志不存在' })
+    res.json({ code: 0, data: logs[0], message: 'ok' })
+  } catch (err) { next(err) }
+})
+
+// POST /office/work-logs/:id/read - 标记已读 (仅接收人)
+router.post('/office/work-logs/:id/read', auth, async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const [logs] = await pool.query('SELECT recipients FROM work_logs WHERE id = ?', [id])
+    if (logs.length === 0) return res.status(404).json({ code: 404, message: '日志不存在' })
+    const recipients = wlSafeParse(logs[0].recipients)
+    if (!recipients.includes(req.user.id)) return res.status(403).json({ code: 403, message: '仅接收人可标记已读' })
+    const [existing] = await pool.query('SELECT id FROM work_log_interactions WHERE log_id = ? AND user_id = ? AND type = ?', [id, req.user.id, 'read'])
+    if (existing.length === 0) {
+      await pool.query('INSERT INTO work_log_interactions (log_id, user_id, type) VALUES (?, ?, ?)', [id, req.user.id, 'read'])
+    }
+    res.json({ code: 0, data: { read: true }, message: '已标记已读' })
+  } catch (err) { next(err) }
+})
+
+// POST /office/work-logs/:id/like - 点赞/取消 (toggle)
+router.post('/office/work-logs/:id/like', auth, async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const [logs] = await pool.query('SELECT user_id, recipients FROM work_logs WHERE id = ?', [id])
+    if (logs.length === 0) return res.status(404).json({ code: 404, message: '日志不存在' })
+    const log = logs[0]
+    const recipients = wlSafeParse(log.recipients)
+    if (log.user_id !== req.user.id && !recipients.includes(req.user.id)) return res.status(403).json({ code: 403, message: '无权点赞' })
+    const [existing] = await pool.query('SELECT id FROM work_log_interactions WHERE log_id = ? AND user_id = ? AND type = ?', [id, req.user.id, 'like'])
+    if (existing.length > 0) {
+      await pool.query('DELETE FROM work_log_interactions WHERE id = ?', [existing[0].id])
+      return res.json({ code: 0, data: { liked: false }, message: '已取消点赞' })
+    }
+    await pool.query('INSERT INTO work_log_interactions (log_id, user_id, type) VALUES (?, ?, ?)', [id, req.user.id, 'like'])
+    res.json({ code: 0, data: { liked: true }, message: '已点赞' })
+  } catch (err) { next(err) }
+})
+
+// POST /office/work-logs/:id/comment - 发表评论
+router.post('/office/work-logs/:id/comment', auth, async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const { content } = req.body
+    if (!content) return res.status(400).json({ code: 400, message: '评论内容不能为空' })
+    const [logs] = await pool.query('SELECT user_id, recipients FROM work_logs WHERE id = ?', [id])
+    if (logs.length === 0) return res.status(404).json({ code: 404, message: '日志不存在' })
+    const log = logs[0]
+    const recipients = wlSafeParse(log.recipients)
+    if (log.user_id !== req.user.id && !recipients.includes(req.user.id)) return res.status(403).json({ code: 403, message: '无权评论' })
+    const [result] = await pool.query('INSERT INTO work_log_interactions (log_id, user_id, type, content) VALUES (?, ?, ?, ?)', [id, req.user.id, 'comment', content])
+    res.json({ code: 0, data: { id: result.insertId }, message: '评论成功' })
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ code: 400, message: '已评论过此日志' })
+    next(err)
+  }
+})
+
+// GET /office/work-logs/:id/interactions - 互动列表(评论/点赞人/已读)
+router.get('/office/work-logs/:id/interactions', auth, async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const [logs] = await pool.query('SELECT id FROM work_logs WHERE id = ?', [id])
+    if (logs.length === 0) return res.status(404).json({ code: 404, message: '日志不存在' })
+    const [interactions] = await pool.query(
+      `SELECT wli.*, u.name
+       FROM work_log_interactions wli
+       LEFT JOIN users u ON wli.user_id = u.id
+       WHERE wli.log_id = ?
+       ORDER BY wli.created_at ASC`,
+      [id]
+    )
+    res.json({ code: 0, data: interactions, message: 'ok' })
+  } catch (err) { next(err) }
+})
+
+// PATCH /office/work-logs/:id/review - 审核日志 (admin/manager/director)
+router.patch('/office/work-logs/:id/review', auth, requireRole(ROLES.ADMIN, ROLES.MANAGER, ROLES.DIRECTOR), async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const { status, comment } = req.body
+    const allowedStatus = ['approved', 'rejected', 'submitted']
+    if (!allowedStatus.includes(status)) return res.status(400).json({ code: 400, message: 'status 必须是 approved / rejected / submitted' })
+    const [logs] = await pool.query('SELECT id FROM work_logs WHERE id = ?', [id])
+    if (logs.length === 0) return res.status(404).json({ code: 404, message: '日志不存在' })
+    await pool.query('UPDATE work_logs SET status = ?, review_comment = ?, reviewed_at = NOW(), reviewed_by = ? WHERE id = ?', [status, comment || null, req.user.id, id])
+    res.json({ code: 0, data: { id: Number(id), status }, message: '审核完成' })
+  } catch (err) { next(err) }
+})
+
+// POST /office/work-logs/:id/dislike - 踩/取消踩 (toggle, 对齐 gdqadmin work-logs dislike)
+router.post('/office/work-logs/:id/dislike', auth, async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const [logs] = await pool.query('SELECT user_id, recipients FROM work_logs WHERE id = ?', [id])
+    if (logs.length === 0) return res.status(404).json({ code: 404, message: '日志不存在' })
+    const log = logs[0]
+    const recipients = wlSafeParse(log.recipients)
+    if (log.user_id !== req.user.id && !recipients.includes(req.user.id))
+      return res.status(403).json({ code: 403, message: '无权操作' })
+    const [existing] = await pool.query(
+      'SELECT id FROM work_log_interactions WHERE log_id = ? AND user_id = ? AND type = ?',
+      [id, req.user.id, 'dislike']
+    )
+    if (existing.length > 0) {
+      await pool.query('DELETE FROM work_log_interactions WHERE id = ?', [existing[0].id])
+      return res.json({ code: 0, data: { disliked: false }, message: '已取消踩' })
+    }
+    await pool.query(
+      'INSERT INTO work_log_interactions (log_id, user_id, type) VALUES (?, ?, ?)',
+      [id, req.user.id, 'dislike']
+    )
+    res.json({ code: 0, data: { disliked: true }, message: '已踩' })
+  } catch (err) { next(err) }
+})
+
+// POST /office/work-logs/:id/forward - 转发日志 (对齐 gdqadmin work-logs forward)
+router.post('/office/work-logs/:id/forward', auth, async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const [logs] = await pool.query('SELECT user_id, recipients FROM work_logs WHERE id = ?', [id])
+    if (logs.length === 0) return res.status(404).json({ code: 404, message: '日志不存在' })
+    const log = logs[0]
+    const recipients = wlSafeParse(log.recipients)
+    if (log.user_id !== req.user.id && !recipients.includes(req.user.id))
+      return res.status(403).json({ code: 403, message: '无权操作' })
+    const [existing] = await pool.query(
+      'SELECT id FROM work_log_interactions WHERE log_id = ? AND user_id = ? AND type = ?',
+      [id, req.user.id, 'forward']
+    )
+    if (existing.length > 0) return res.json({ code: 0, data: { forwarded: true }, message: '已转发' })
+    await pool.query(
+      'INSERT INTO work_log_interactions (log_id, user_id, type) VALUES (?, ?, ?)',
+      [id, req.user.id, 'forward']
+    )
+    res.json({ code: 0, data: { forwarded: true }, message: '已转发' })
+  } catch (err) { next(err) }
+})
+
+// PUT /office/work-logs/:id - 编辑日志 (对齐 gdqadmin work-logs put/:id; 有互动仅管理员, 无互动创建者可改)
+router.put('/office/work-logs/:id', auth, async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const { content, recipients, attachments, status } = req.body
+    const isAdmin = req.user.role === ROLES.ADMIN || req.user.role === 'admin'
+    const [logs] = await pool.query('SELECT user_id FROM work_logs WHERE id = ?', [id])
+    if (logs.length === 0) return res.status(404).json({ code: 404, message: '日志不存在' })
+    const log = logs[0]
+    // 有互动仅管理员可编辑
+    const [interactions] = await pool.query(
+      `SELECT COUNT(*) as cnt FROM work_log_interactions WHERE log_id = ? AND type IN ('comment','like','dislike','forward')`,
+      [id]
+    )
+    if (interactions[0].cnt > 0 && !isAdmin)
+      return res.status(403).json({ code: 403, message: '此日志已有互动，仅管理员可编辑' })
+    if (log.user_id !== req.user.id && !isAdmin)
+      return res.status(403).json({ code: 403, message: '仅创建者或管理员可编辑' })
+    const updates = []
+    const params = []
+    if (content !== undefined) { updates.push('content = ?'); params.push(typeof content === 'string' ? content : JSON.stringify(content)) }
+    if (recipients !== undefined) { updates.push('recipients = ?'); params.push(JSON.stringify(recipients)) }
+    if (attachments !== undefined) { updates.push('attachments = ?'); params.push(JSON.stringify(attachments)) }
+    if (status !== undefined) { updates.push('status = ?'); params.push(status) }
+    if (updates.length === 0) return res.status(400).json({ code: 400, message: '没有要更新的字段' })
+    params.push(id)
+    await pool.query(`UPDATE work_logs SET ${updates.join(', ')} WHERE id = ?`, params)
+    res.json({ code: 0, data: { id: Number(id) }, message: '更新成功' })
+  } catch (err) { next(err) }
+})
+
+// DELETE /office/work-logs/:id - 删除日志 (对齐 gdqadmin work-logs delete/:id; 有互动仅管理员, 无互动创建者或管理员)
+router.delete('/office/work-logs/:id', auth, async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const isAdmin = req.user.role === ROLES.ADMIN || req.user.role === 'admin'
+    const [logs] = await pool.query('SELECT user_id FROM work_logs WHERE id = ?', [id])
+    if (logs.length === 0) return res.status(404).json({ code: 404, message: '日志不存在' })
+    // 有互动仅管理员可删除
+    const [interactions] = await pool.query(
+      `SELECT COUNT(*) as cnt FROM work_log_interactions WHERE log_id = ? AND type IN ('comment','like','dislike','forward')`,
+      [id]
+    )
+    if (interactions[0].cnt > 0 && !isAdmin)
+      return res.status(403).json({ code: 403, message: '此日志已有互动，仅管理员可删除' })
+    if (logs[0].user_id !== req.user.id && !isAdmin)
+      return res.status(403).json({ code: 403, message: '仅创建者或管理员可删除' })
+    await pool.query('DELETE FROM work_logs WHERE id = ?', [id])
+    res.json({ code: 0, message: '删除成功' })
+  } catch (err) { next(err) }
+})
+
+
+// POST /api/minip/office/work-logs - 提交工作日志（抄主站 work-logs.js, 支持模板字段/收阅人/参与者/附件/审核状态）
+//   对齐 gdqadmin WorkLogManage 提交: template_id + content(对象) + recipients + participants + attachments + status
 router.post('/office/work-logs', auth, async (req, res, next) => {
   try {
     const userId = req.user.id
-    const { submit_date, content, today_work, tomorrow_plan, issues, log_type = 'work', attachments, cover_image, images } = req.body
-    if (!content && !today_work) return res.status(400).json({ code: 400, message: '日志内容不能为空' })
+    const { template_id, submit_date, date, content, today_work, tomorrow_plan, issues,
+            log_type = 'work', attachments, cover_image, images, recipients, participants,
+            status = 'submitted', location, gps_lat, gps_lng } = req.body
+    if (!content && !today_work && !template_id) return res.status(400).json({ code: 400, message: '日志内容不能为空' })
     // 兼容多种图片字段名: attachments 数组 / images 数组 / cover_image 单图
     let normalizedAttachments = []
     if (Array.isArray(attachments)) normalizedAttachments = attachments
     else if (Array.isArray(images)) normalizedAttachments = images
     else if (cover_image) normalizedAttachments = [{ url: cover_image }]
+    // content 支持对象(模板字段)或字符串; 对象则 JSON.stringify 存储(同 work-logs.js)
+    const contentStr = (content && typeof content === 'object') ? JSON.stringify(content) : (content || today_work || '')
     const [r] = await pool.query(
-      `INSERT INTO work_logs (user_id, log_type, submit_date, content, today_work, tomorrow_plan, issues, attachments, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'submitted')`,
-      [userId, log_type, submit_date || new Date().toISOString().slice(0, 10), content || today_work, today_work || content, tomorrow_plan || null, issues || null, JSON.stringify(normalizedAttachments)]
+      `INSERT INTO work_logs (user_id, template_id, log_type, submit_date, content, today_work, tomorrow_plan, issues,
+                              recipients, participants, attachments, location, gps_lat, gps_lng, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [userId, template_id || null, log_type,
+       submit_date || date || new Date().toISOString().slice(0, 10),
+       contentStr, today_work || null, tomorrow_plan || null, issues || null,
+       JSON.stringify(recipients || []), JSON.stringify(participants || []),
+       JSON.stringify(normalizedAttachments), location || null, gps_lat || null, gps_lng || null,
+       status]
     )
     res.json({ code: 0, data: { id: r.insertId } })
   } catch (err) {
@@ -1084,10 +1394,151 @@ router.delete('/office/tasks/:id', auth, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// ════════════════════════════════════════════════════════════════════
+// 任务完整版 (抄 gdqadmin 主站 tasks.js, 用 minip auth)
+//  统计 / 团队 / 未读红点 / 标记已读 / 提交 / 确认完成 / 驳回 / 审核
+// ════════════════════════════════════════════════════════════════════
 
+// GET /office/tasks/stats - 任务统计 (注意: 必须在 /office/tasks/:id 之前定义, 避免 ':id' 吞掉 'stats')
+router.get('/office/tasks/stats', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    const userRole = req.user.role
+    let whereClause = ''
+    let params = []
+    if (userRole === 'admin') whereClause = 'WHERE 1=1'
+    else { whereClause = 'WHERE (assigned_to = ? OR assigned_by = ?)'; params = [userId, userId] }
+    const [[myStats]] = await pool.query(
+      `SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress,
+        SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END) as submitted,
+        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
+        SUM(CASE WHEN priority = 'urgent' THEN 1 ELSE 0 END) as urgent,
+        SUM(CASE WHEN due_date < CURDATE() AND status NOT IN ('completed', 'rejected') THEN 1 ELSE 0 END) as overdue
+      FROM tasks WHERE assigned_to = ?`,
+      [userId]
+    )
+    const [[assignedStats]] = await pool.query(
+      `SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress,
+        SUM(CASE WHEN status = 'submitted' THEN 1 ELSE 0 END) as submitted,
+        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected
+      FROM tasks WHERE assigned_by = ?`,
+      [userId]
+    )
+    res.json({ code: 0, data: { myTasks: myStats, assignedTasks: assignedStats }, message: 'ok' })
+  } catch (err) { next(err) }
+})
 
-// ════════════════════════════════════════════════════════════════════════
-// 2026-08-11 融合: HK 横琴 hatch AI 需求 placeholder routes
+// GET /office/tasks/unread-count - 未读任务数 (红点)
+router.get('/office/tasks/unread-count', auth, async (req, res, next) => {
+  try {
+    const [[{ count }]] = await pool.query('SELECT COUNT(*) as count FROM tasks WHERE assigned_to = ? AND is_new = 1 AND status IN ("pending", "in_progress")', [req.user.id])
+    res.json({ code: 0, data: { count } })
+  } catch (err) { next(err) }
+})
+
+// POST /office/tasks/mark-all-read - 全部标记已读
+router.post('/office/tasks/mark-all-read', auth, async (req, res, next) => {
+  try {
+    await pool.query('UPDATE tasks SET is_new = 0 WHERE assigned_to = ?', [req.user.id])
+    res.json({ code: 0, message: 'ok' })
+  } catch (err) { next(err) }
+})
+
+// POST /office/tasks/:id/mark-read - 单条标记已读
+router.post('/office/tasks/:id/mark-read', auth, async (req, res, next) => {
+  try {
+    await pool.query('UPDATE tasks SET is_new = 0 WHERE id = ? AND assigned_to = ?', [req.params.id, req.user.id])
+    res.json({ code: 0, message: 'ok' })
+  } catch (err) { next(err) }
+})
+
+// GET /office/tasks/team - 团队成员 (指派用)
+router.get('/office/tasks/team', auth, async (req, res, next) => {
+  try {
+    const isAdmin = await checkPerm(req, 'system:config')
+    const allowedTeam = await checkPerm(req, 'task:read_team')
+    if (!isAdmin && !allowedTeam) return res.status(403).json({ code: 403, message: '无权限查看团队' })
+    const [rows] = await pool.query('SELECT u.id, u.name, u.department FROM users u ORDER BY u.name ASC')
+    res.json({ code: 0, data: rows })
+  } catch (err) { next(err) }
+})
+
+// PUT /office/tasks/:id/submit - 被分派人提交完成
+router.put('/office/tasks/:id/submit', auth, async (req, res, next) => {
+  try {
+    const taskId = req.params.id
+    const { completion_notes, completion_note, attachments } = req.body
+    const finalNote = completion_notes || completion_note || ''
+    const [[task]] = await pool.query('SELECT assigned_to, status FROM tasks WHERE id = ?', [taskId])
+    if (!task) return res.status(404).json({ code: 404, message: '任务不存在' })
+    if (task.assigned_to !== req.user.id) return res.status(403).json({ code: 403, message: '只能提交指派给自己的任务' })
+    if (task.status === 'completed') return res.status(400).json({ code: 400, message: '任务已完成' })
+    if (task.status === 'submitted') return res.status(400).json({ code: 400, message: '任务已提交，等待审核' })
+    await pool.query("UPDATE tasks SET status = 'submitted', completion_note = ?, submitted_at = NOW() WHERE id = ?", [finalNote || null, taskId])
+    if (attachments) {
+      let attList = []
+      try { attList = typeof attachments === 'string' ? JSON.parse(attachments) : attachments } catch (e) { attList = [] }
+      if (Array.isArray(attList) && attList.length) {
+        const values = attList.map(url => [taskId, url, url.split('/').pop(), req.user.id])
+        await pool.query('INSERT INTO task_attachments (task_id, file_path, file_name, uploaded_by) VALUES ?', [values])
+      }
+    }
+    res.json({ code: 0, data: null, message: '任务已提交，等待审核' })
+  } catch (err) { next(err) }
+})
+
+// PUT /office/tasks/:id/complete - 指派人确认完成
+router.put('/office/tasks/:id/complete', auth, async (req, res, next) => {
+  try {
+    const taskId = req.params.id
+    const { review_note } = req.body
+    const [[task]] = await pool.query('SELECT assigned_by, status FROM tasks WHERE id = ?', [taskId])
+    if (!task) return res.status(404).json({ code: 404, message: '任务不存在' })
+    if (task.assigned_by !== req.user.id && !(await checkPerm(req, 'system:config'))) return res.status(403).json({ code: 403, message: '只能审核自己指派的任务' })
+    if (task.status !== 'submitted') return res.status(400).json({ code: 400, message: '只能审核已提交的任务' })
+    await pool.query("UPDATE tasks SET status = 'completed', review_note = ?, completed_at = NOW() WHERE id = ?", [review_note || null, taskId])
+    res.json({ code: 0, data: null, message: '任务已确认完成' })
+  } catch (err) { next(err) }
+})
+
+// PUT /office/tasks/:id/reject - 指派人驳回
+router.put('/office/tasks/:id/reject', auth, async (req, res, next) => {
+  try {
+    const taskId = req.params.id
+    const { review_note } = req.body
+    if (!review_note) return res.status(400).json({ code: 400, message: '请填写驳回原因' })
+    const [[task]] = await pool.query('SELECT assigned_by, status FROM tasks WHERE id = ?', [taskId])
+    if (!task) return res.status(404).json({ code: 404, message: '任务不存在' })
+    if (task.assigned_by !== req.user.id && !(await checkPerm(req, 'system:config'))) return res.status(403).json({ code: 403, message: '只能驳回自己指派的任务' })
+    if (task.status !== 'submitted') return res.status(400).json({ code: 400, message: '只能驳回已提交的任务' })
+    await pool.query("UPDATE tasks SET status = 'rejected', review_note = ? WHERE id = ?", [review_note, taskId])
+    res.json({ code: 0, data: null, message: '任务已驳回' })
+  } catch (err) { next(err) }
+})
+
+// PUT /office/tasks/:id/review - 审核 (approve/reject)
+router.put('/office/tasks/:id/review', auth, async (req, res, next) => {
+  try {
+    const taskId = req.params.id
+    const { action, review_notes } = req.body
+    if (!['approve', 'reject'].includes(action)) return res.status(400).json({ code: 400, message: '无效审核操作' })
+    const [[task]] = await pool.query('SELECT * FROM tasks WHERE id = ?', [taskId])
+    if (!task) return res.status(404).json({ code: 404, message: '任务不存在' })
+    if (task.status !== 'submitted') return res.status(400).json({ code: 400, message: '只能审核已提交的任务' })
+    if (task.assigned_by !== req.user.id && !(await checkPerm(req, 'system:config'))) return res.status(403).json({ code: 403, message: '无权审核此任务' })
+    const newStatus = action === 'approve' ? 'completed' : 'rejected'
+    await pool.query('UPDATE tasks SET status = ?, review_note = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?', [newStatus, review_notes || null, req.user.id, new Date(), taskId])
+    res.json({ code: 0, data: { id: Number(taskId), status: newStatus }, message: newStatus === 'completed' ? '任务已通过' : '任务已驳回' })
+  } catch (err) { next(err) }
+})
 // 波哥原话: "把这个内容融合到 hatch.gdqshop.cn/minip"
 // 这些 routes 是占位实现, 让前端不报错. 完整业务逻辑后续迭代.
 // ════════════════════════════════════════════════════════════════════════
