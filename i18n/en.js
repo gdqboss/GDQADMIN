@@ -3137,6 +3137,7 @@ export default {
     myTasks: 'My Tasks',
     assignedTasks: 'Tasks I Assigned',
     createTask: 'Create Task',
+    createTaskBtn: 'Create Task',
     taskTitle: 'Task Title',
     taskContent: 'Task Content',
     assignedTo: 'Assigned To',

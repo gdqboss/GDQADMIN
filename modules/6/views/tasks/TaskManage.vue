@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUserStore } from '../../stores/user'
 import api from '../../services/api.js'
@@ -10,6 +10,7 @@ const userStore = useUserStore()
 
 const activeTab = ref('my-tasks')
 const loading = ref(false)
+const loadError = ref('')
 const myTasks = ref([])
 const assignedTasks = ref([])
 const allTasks = ref([])
@@ -33,19 +34,98 @@ watch([statusFilter, priorityFilter], () => {
   else if (activeTab.value === 'team-tasks') loadTeamTasks()
 })
 
-// 切换Tab时重新加载对应数据
+// 2026-08-26 性能优化:
+//   1. Tab 切换时使用 ref 缓存已加载的数据, 避免重复请求
+//   2. 第一次进入时预加载其他 Tab 数据, Tab 切换瞬间显示
+const cachedMyTasks = ref(null)
+const cachedAssignedTasks = ref(null)
+const cachedAllTasks = ref(null)
+const cachedTeamTasks = ref(null)
+const tabLoadingStates = reactive({ 'my-tasks': false, 'assigned-tasks': false, 'all-tasks': false, 'team-tasks': false })
+
+// ============== 2026-08-26 UI 改造: 优先级 + 截止日期视觉化 ==============
+const now = ref(Date.now())
+let nowTimer = null
+
+function priorityBorder(task) {
+  if (task.priority === 'high' || task.priority === 'urgent') return 'border-l-red-500'
+  if (task.priority === 'medium') return 'border-l-amber-400'
+  return 'border-l-slate-300'
+}
+
+function priorityBadgeClass(task) {
+  if (task.priority === 'high' || task.priority === 'urgent') return 'bg-red-50 text-red-700 border border-red-200'
+  if (task.priority === 'medium') return 'bg-amber-50 text-amber-700 border border-amber-200'
+  return 'bg-slate-50 text-slate-600 border border-slate-200'
+}
+
+function dueDateInfo(task) {
+  if (!task.due_date) return { label: '', color: 'text-text-secondary', icon: 'event', overdue: false }
+  const due = new Date(task.due_date).getTime()
+  const diff = due - now.value
+  const dayMs = 86400000
+  const dateStr = new Date(task.due_date).toISOString().slice(0, 10)
+  if (diff < 0) {
+    const days = Math.floor(-diff / dayMs)
+    return { label: `逾期 ${days} 天 · ${dateStr}`, color: 'text-red-600 font-medium', icon: 'warning', overdue: true }
+  }
+  if (diff < dayMs) {
+    return { label: `今日截止 · ${dateStr}`, color: 'text-orange-600 font-medium', icon: 'schedule', overdue: false }
+  }
+  if (diff < 3 * dayMs) {
+    return { label: `剩 ${Math.ceil(diff / dayMs)} 天 · ${dateStr}`, color: 'text-amber-600', icon: 'schedule', overdue: false }
+  }
+  return { label: `${dateStr}`, color: 'text-text-secondary', icon: 'event', overdue: false }
+}
+
+function formatDateShort(iso) {
+  if (!iso) return ''
+  return new Date(iso).toISOString().slice(0, 10)
+}
+
+function tabCount(tabKey) {
+  if (tabKey === 'my-tasks') return myTasks.value.length
+  if (tabKey === 'assigned-tasks') return assignedTasks.value.length
+  if (tabKey === 'all-tasks') return allTasksTotal.value
+  if (tabKey === 'team-tasks') return teamTasks.value.length
+  return 0
+}
+// ========================================================================
+
+// 切换Tab时：1) 显示缓存数据 2) 后台刷新
 watch(activeTab, async (newTab) => {
+  // 立即显示缓存 (如果有)
+  if (newTab === 'my-tasks' && cachedMyTasks.value) {
+    myTasks.value = cachedMyTasks.value
+  } else if (newTab === 'assigned-tasks' && cachedAssignedTasks.value) {
+    assignedTasks.value = cachedAssignedTasks.value
+  } else if (newTab === 'all-tasks' && cachedAllTasks.value) {
+    allTasks.value = cachedAllTasks.value
+  } else if (newTab === 'team-tasks' && cachedTeamTasks.value) {
+    teamTasks.value = cachedTeamTasks.value
+  }
+
+  // 进入"我的任务"时标记所有新任务为已读，同时通知AppHeader刷新铃铛
   if (newTab === 'my-tasks') {
-    // 进入"我的任务"时标记所有新任务为已读，同时通知AppHeader刷新铃铛
     try {
       await api.post('/tasks/mark-all-read')
       window.dispatchEvent(new CustomEvent('tasks-read'))
     } catch(e) {}
     await loadMyTasks()
+    cachedMyTasks.value = myTasks.value
   }
-  else if (newTab === 'assigned-tasks') loadAssignedTasks()
-  else if (newTab === 'all-tasks') loadAllTasks()
-  else if (newTab === 'team-tasks') loadTeamTasks()
+  else if (newTab === 'assigned-tasks') {
+    await loadAssignedTasks()
+    cachedAssignedTasks.value = assignedTasks.value
+  }
+  else if (newTab === 'all-tasks') {
+    await loadAllTasks()
+    cachedAllTasks.value = allTasks.value
+  }
+  else if (newTab === 'team-tasks') {
+    await loadTeamTasks()
+    cachedTeamTasks.value = teamTasks.value
+  }
 })
 
 // 全局筛选条件
@@ -177,6 +257,7 @@ const getPriorityText = (priority) => {
 
 const loadMyTasks = async () => {
   try {
+    loadError.value = ''
     loading.value = true
     const params = {}
     if (statusFilter.value !== 'all') params.status = statusFilter.value
@@ -184,9 +265,14 @@ const loadMyTasks = async () => {
     const res = await api.get('/tasks/my', { params })
     if (res.code === 0) {
       myTasks.value = res.data.tasks || res.data || []
+    } else {
+      myTasks.value = []
+      loadError.value = res.message || $t?.('tasks.loadFailed') || '加载失败'
     }
   } catch (err) {
     console.error('Failed to load my tasks:', err)
+    myTasks.value = []
+    loadError.value = err?.message || '加载失败'
   } finally {
     loading.value = false
   }
@@ -549,14 +635,20 @@ const formatDate = (dateStr) => {
 }
 
 onMounted(async () => {
-  await loadUsers()
+  // 2026-08-26 性能优化: loadUsers 与 loadMyTasks 并行 (之前串行 ~220ms)
+  await Promise.all([loadUsers(), loadMyTasks()])
   // 默认打开"我的任务"Tab（所有人都一样）
   activeTab.value = 'my-tasks'
-  await Promise.all([loadMyTasks(), loadAssignedTasks()])
-  // 2026-08-25 修正: 全部任务 tab 需要 system:config (后端 /tasks/all 校验),
-  //   之前用 task:write 让 hod 角色多打一次 403 → console.error (虽然 onMounted 不 alert, 但语义错)
+  cachedMyTasks.value = myTasks.value
+  // 后台并行预取其他 tab 数据, 不阻塞 UI
+  Promise.all([loadAssignedTasks(), loadTeamTasks()]).then(() => {
+    cachedAssignedTasks.value = assignedTasks.value
+    cachedTeamTasks.value = teamTasks.value
+  })
   if (userStore.canAccess('system:config')) {
-    await loadAllTasks()
+    loadAllTasks().then(() => {
+      cachedAllTasks.value = allTasks.value
+    })
   }
 })
 </script>
@@ -565,6 +657,14 @@ onMounted(async () => {
   <div class="space-y-4">
     <div class="flex justify-between items-center">
       <h2 class="text-2xl font-bold text-text-primary">{{ $t('tasks.title') }}</h2>
+      <button
+        v-if="userStore.canAccess('task:write')"
+        @click="activeTab = 'create-task'"
+        class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover text-sm font-medium shadow-sm"
+      >
+        <span class="material-symbols-outlined text-base">add</span>
+        {{ $t('tasks.createTaskBtn') }}
+      </button>
     </div>
 
     <!-- Tabs -->
@@ -584,6 +684,7 @@ onMounted(async () => {
           >
             <span class="material-symbols-outlined text-base sm:text-lg">{{ tab.icon }}</span>
             {{ tab.label }}
+            <span v-if="tab.key !== 'create-task'" class="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-slate-100 text-slate-600">{{ tabCount(tab.key) }}</span>
           </button>
         </nav>
       </div>
@@ -599,32 +700,36 @@ onMounted(async () => {
           </select>
         </div>
 
-        <div v-if="loading" class="text-center py-8 text-text-secondary">{{ $t('common.loading') }}</div>
-        <div v-else-if="filteredMyTasks.length === 0" class="text-center py-8 text-text-secondary">{{ $t('tasks.noTasks') }}</div>
-        <div v-else class="space-y-3">
+        <div v-if="loading" class="text-center py-12 text-text-secondary">{{ $t('common.loading') }}</div>
+        <div v-else-if="filteredMyTasks.length === 0" class="text-center py-16 text-text-secondary">
+          <span class="material-symbols-outlined text-5xl text-slate-300">inbox</span>
+          <p class="mt-2">{{ $t('tasks.noTasks') }}</p>
+        </div>
+        <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
           <div
             v-for="task in filteredMyTasks"
             :key="task.id"
-            class="border border-gray-200 rounded-lg p-3 sm:p-4 hover:border-primary/50 hover:bg-primary/5 transition-all"
+            :class="['group bg-white border border-slate-200 hover:border-primary hover:shadow-md border-l-4 transition-all rounded-lg p-4 sm:p-5', priorityBorder(task)]"
           >
-            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-2 gap-2">
-              <div class="flex-1 min-w-0">
-                <h4 class="font-medium text-text-primary mb-1 text-sm sm:text-base">{{ task.title }}</h4>
-                <p class="text-xs sm:text-sm text-text-secondary line-clamp-2">{{ task.description }}</p>
-              </div>
-              <div class="flex gap-2 flex-shrink-0">
+            <div class="flex items-start justify-between gap-3 mb-3">
+              <h4 class="font-semibold text-text-primary text-base sm:text-lg leading-snug flex-1 min-w-0">{{ task.title }}</h4>
+              <div class="flex flex-col items-end gap-1.5 flex-shrink-0">
                 <StatusTag :type="getStatusColor(task.status)" :text="getStatusText(task.status)" />
-                <StatusTag :type="getPriorityColor(task.priority)" :text="getPriorityText(task.priority)" />
+                <span :class="['px-2 py-0.5 rounded text-xs font-medium', priorityBadgeClass(task)]">{{ getPriorityText(task.priority) }}</span>
               </div>
             </div>
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-text-secondary mt-3 gap-2">
-              <span>{{ $t('tasks.dueDate') }}: {{ formatDate(task.due_date) }}</span>
-              <div class="flex gap-2">
-                <button @click="handleViewDetail(task)" class="text-primary hover:underline">{{ $t('tasks.viewDetail') }}</button>
+            <p v-if="task.description" class="text-sm text-text-secondary line-clamp-2 mb-3 leading-relaxed">{{ task.description }}</p>
+            <div class="flex items-center justify-between text-xs mt-3 pt-3 border-t border-slate-100">
+              <span :class="['inline-flex items-center gap-1', dueDateInfo(task).color]">
+                <span class="material-symbols-outlined text-[14px]">{{ dueDateInfo(task).icon }}</span>
+                {{ dueDateInfo(task).label }}
+              </span>
+              <div class="flex gap-2 items-center">
+                <button @click="handleViewDetail(task)" class="text-primary hover:underline text-xs">{{ $t('tasks.viewDetail') }}</button>
                 <button
                   v-if="(task.status === 'pending' || task.status === 'in_progress') && userStore.canAccess('task:write')"
                   @click="handleSubmitTask(task)"
-                  class="px-3 py-1 bg-success text-white rounded hover:bg-success/90 font-medium"
+                  class="px-3 py-1 bg-success text-white rounded text-xs font-medium hover:bg-success/90"
                 >
                   {{ $t('tasks.completeTaskBtn') }}
                 </button>
@@ -645,32 +750,40 @@ onMounted(async () => {
           </select>
         </div>
 
-        <div v-if="loading" class="text-center py-8 text-text-secondary">{{ $t('common.loading') }}</div>
-        <div v-else-if="filteredAssignedTasks.length === 0" class="text-center py-8 text-text-secondary">{{ $t('tasks.noTasks') }}</div>
-        <div v-else class="space-y-3">
+        <div v-if="loading" class="text-center py-12 text-text-secondary">{{ $t('common.loading') }}</div>
+        <div v-else-if="filteredAssignedTasks.length === 0" class="text-center py-16 text-text-secondary">
+          <span class="material-symbols-outlined text-5xl text-slate-300">inbox</span>
+          <p class="mt-2">{{ $t('tasks.noTasks') }}</p>
+        </div>
+        <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
           <div
             v-for="task in filteredAssignedTasks"
             :key="task.id"
-            class="border border-gray-200 rounded-lg p-3 sm:p-4 hover:border-primary/50 hover:bg-primary/5 transition-all"
+            :class="['group bg-white border border-slate-200 hover:border-primary hover:shadow-md border-l-4 transition-all rounded-lg p-4 sm:p-5', priorityBorder(task)]"
           >
-            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-2 gap-2">
-              <div class="flex-1 min-w-0">
-                <h4 class="font-medium text-text-primary mb-1 text-sm sm:text-base">{{ task.title }}</h4>
-                <p class="text-xs sm:text-sm text-text-secondary line-clamp-2">{{ task.description }}</p>
-              </div>
-              <div class="flex gap-2 flex-shrink-0">
+            <div class="flex items-start justify-between gap-3 mb-3">
+              <h4 class="font-semibold text-text-primary text-base sm:text-lg leading-snug flex-1 min-w-0">{{ task.title }}</h4>
+              <div class="flex flex-col items-end gap-1.5 flex-shrink-0">
                 <StatusTag :type="getStatusColor(task.status)" :text="getStatusText(task.status)" />
-                <StatusTag :type="getPriorityColor(task.priority)" :text="getPriorityText(task.priority)" />
+                <span :class="['px-2 py-0.5 rounded text-xs font-medium', priorityBadgeClass(task)]">{{ getPriorityText(task.priority) }}</span>
               </div>
             </div>
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-text-secondary mt-3 gap-2">
-              <span>{{ $t('tasks.assignedToLabel') }}: {{ task.assigned_to_name }} | {{ $t('tasks.dueLabel') }}: {{ formatDate(task.due_date) }}</span>
-              <div class="flex gap-2">
-                <button @click="handleViewDetail(task)" class="text-primary hover:underline">{{ $t('tasks.viewDetail') }}</button>
+            <p v-if="task.description" class="text-sm text-text-secondary line-clamp-2 mb-3 leading-relaxed">{{ task.description }}</p>
+            <div class="text-xs text-text-secondary mb-3 flex items-center gap-1">
+              <span class="material-symbols-outlined text-[14px]">person</span>
+              {{ task.assigned_to_name }}
+            </div>
+            <div class="flex items-center justify-between text-xs mt-3 pt-3 border-t border-slate-100">
+              <span :class="['inline-flex items-center gap-1', dueDateInfo(task).color]">
+                <span class="material-symbols-outlined text-[14px]">{{ dueDateInfo(task).icon }}</span>
+                {{ dueDateInfo(task).label }}
+              </span>
+              <div class="flex gap-2 items-center">
+                <button @click="handleViewDetail(task)" class="text-primary hover:underline text-xs">{{ $t('tasks.viewDetail') }}</button>
                 <button
                   v-if="task.status === 'submitted' && userStore.canAccess('task:approve')"
                   @click="handleReviewTask(task)"
-                  class="text-warning hover:underline"
+                  class="px-3 py-1 bg-warning text-white rounded text-xs font-medium hover:bg-warning/90"
                 >
                   {{ $t('tasks.review') }}
                 </button>
@@ -777,33 +890,45 @@ onMounted(async () => {
         </div>
 
         <!-- 任务列表 -->
-        <div v-if="loading" class="text-center py-8 text-text-secondary">{{ $t('common.loading') }}</div>
-        <div v-else-if="allTasks.length === 0" class="text-center py-8 text-text-secondary">{{ $t('tasks.noTasks') }}</div>
-        <div v-else class="space-y-3">
+        <div v-if="loading" class="text-center py-12 text-text-secondary">{{ $t('common.loading') }}</div>
+        <div v-else-if="allTasks.length === 0" class="text-center py-16 text-text-secondary">
+          <span class="material-symbols-outlined text-5xl text-slate-300">inbox</span>
+          <p class="mt-2">{{ $t('tasks.noTasks') }}</p>
+        </div>
+        <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
           <div
             v-for="task in allTasks"
             :key="task.id"
-            class="border border-gray-200 rounded-lg p-3 sm:p-4 hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer"
+            :class="['group bg-white border border-slate-200 hover:border-primary hover:shadow-md border-l-4 transition-all rounded-lg p-4 sm:p-5 cursor-pointer', priorityBorder(task)]"
             @click="handleViewDetail(task)"
           >
-            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-2 gap-2">
-              <div class="flex-1 min-w-0">
-                <h4 class="font-medium text-text-primary mb-1 text-sm sm:text-base">{{ task.title }}</h4>
-                <p class="text-xs sm:text-sm text-text-secondary line-clamp-2">{{ task.content || task.description }}</p>
-              </div>
-              <div class="flex gap-2 flex-shrink-0">
+            <div class="flex items-start justify-between gap-3 mb-3">
+              <h4 class="font-semibold text-text-primary text-base sm:text-lg leading-snug flex-1 min-w-0">{{ task.title }}</h4>
+              <div class="flex flex-col items-end gap-1.5 flex-shrink-0">
                 <StatusTag :type="getStatusColor(task.status)" :text="getStatusText(task.status)" />
-                <StatusTag :type="getPriorityColor(task.priority)" :text="getPriorityText(task.priority)" />
+                <span :class="['px-2 py-0.5 rounded text-xs font-medium', priorityBadgeClass(task)]">{{ getPriorityText(task.priority) }}</span>
               </div>
             </div>
-            <div class="flex flex-col sm:flex-row sm:items-center text-xs text-text-secondary mt-3 gap-1 sm:gap-4">
-              <span>{{ $t('tasks.assignedByLabel') }}: {{ task.assigned_by_name }}</span>
-              <span>{{ $t('tasks.assignedToLabel') }}: {{ task.assigned_to_name }}</span>
-              <span>{{ $t('tasks.dueLabel') }}: {{ formatDate(task.due_date) }}</span>
+            <p v-if="task.content || task.description" class="text-sm text-text-secondary line-clamp-2 mb-3 leading-relaxed">{{ task.content || task.description }}</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-xs text-text-secondary mb-3">
+              <div class="flex items-center gap-1 min-w-0">
+                <span class="material-symbols-outlined text-[14px]">person</span>
+                <span class="truncate">→ {{ task.assigned_to_name }}</span>
+              </div>
+              <div class="flex items-center gap-1 min-w-0">
+                <span class="material-symbols-outlined text-[14px]">edit_note</span>
+                <span class="truncate">{{ task.assigned_by_name }}</span>
+              </div>
+            </div>
+            <div class="flex items-center justify-between text-xs mt-3 pt-3 border-t border-slate-100">
+              <span :class="['inline-flex items-center gap-1', dueDateInfo(task).color]">
+                <span class="material-symbols-outlined text-[14px]">{{ dueDateInfo(task).icon }}</span>
+                {{ dueDateInfo(task).label }}
+              </span>
               <button
                 v-if="task.assigned_by === userStore.user.id || userStore.canAccess('task:write')"
                 @click.stop="handleDeleteTask(task)"
-                class="text-red-500 hover:text-red-700 hover:underline ml-auto"
+                class="text-red-500 hover:text-red-700 hover:underline text-xs"
               >
                 {{ $t('common.delete') }}
               </button>
@@ -852,25 +977,43 @@ onMounted(async () => {
             <option value="urgent">{{ $t('tasks.urgent') }}</option>
           </select>
         </div>
-        <div v-if="loading" class="text-center py-8 text-text-secondary">{{ $t('common.loading') }}</div>
-        <div v-else-if="teamTasks.length === 0" class="text-center py-8 text-text-secondary">{{ $t('tasks.noTasks') }}</div>
-        <div v-else class="space-y-3">
-          <div v-for="task in teamTasks" :key="task.id" class="border border-gray-200 rounded-lg p-3 sm:p-4 hover:border-primary/50 hover:bg-primary/5 transition-all">
-            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-2 gap-2">
-              <div class="flex-1 min-w-0">
-                <h4 class="font-medium text-text-primary mb-1 text-sm sm:text-base">{{ task.title }}</h4>
-                <p class="text-xs sm:text-sm text-text-secondary line-clamp-2">{{ task.description }}</p>
-              </div>
-              <div class="flex gap-2 flex-shrink-0">
+        <div v-if="loading" class="text-center py-12 text-text-secondary">{{ $t('common.loading') }}</div>
+        <div v-else-if="teamTasks.length === 0" class="text-center py-16 text-text-secondary">
+          <span class="material-symbols-outlined text-5xl text-slate-300">inbox</span>
+          <p class="mt-2">{{ $t('tasks.noTasks') }}</p>
+        </div>
+        <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+          <div
+            v-for="task in teamTasks"
+            :key="task.id"
+            :class="['group bg-white border border-slate-200 hover:border-primary hover:shadow-md border-l-4 transition-all rounded-lg p-4 sm:p-5', priorityBorder(task)]"
+          >
+            <div class="flex items-start justify-between gap-3 mb-3">
+              <h4 class="font-semibold text-text-primary text-base sm:text-lg leading-snug flex-1 min-w-0">{{ task.title }}</h4>
+              <div class="flex flex-col items-end gap-1.5 flex-shrink-0">
                 <StatusTag :type="getStatusColor(task.status)" :text="getStatusText(task.status)" />
-                <StatusTag :type="getPriorityColor(task.priority)" :text="getPriorityText(task.priority)" />
+                <span :class="['px-2 py-0.5 rounded text-xs font-medium', priorityBadgeClass(task)]">{{ getPriorityText(task.priority) }}</span>
               </div>
             </div>
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-text-secondary mt-3 gap-2">
-              <span>{{ $t('tasks.assignedToLabel') }}: {{ task.assigned_to_name }} | {{ $t('tasks.dueLabel') }}: {{ formatDate(task.due_date) }}</span>
-              <div class="flex gap-2">
-                <button @click="handleViewDetail(task)" class="text-primary hover:underline">{{ $t('tasks.viewDetail') }}</button>
-                <button v-if="task.status === 'submitted' && userStore.canAccess('task:approve') && task.assigned_by === userStore.user.id" @click="handleReviewTask(task)" class="text-warning hover:underline">{{ $t('tasks.review') }}</button>
+            <p v-if="task.description" class="text-sm text-text-secondary line-clamp-2 mb-3 leading-relaxed">{{ task.description }}</p>
+            <div class="text-xs text-text-secondary mb-3 flex items-center gap-1">
+              <span class="material-symbols-outlined text-[14px]">person</span>
+              {{ task.assigned_to_name }}
+            </div>
+            <div class="flex items-center justify-between text-xs mt-3 pt-3 border-t border-slate-100">
+              <span :class="['inline-flex items-center gap-1', dueDateInfo(task).color]">
+                <span class="material-symbols-outlined text-[14px]">{{ dueDateInfo(task).icon }}</span>
+                {{ dueDateInfo(task).label }}
+              </span>
+              <div class="flex gap-2 items-center">
+                <button @click="handleViewDetail(task)" class="text-primary hover:underline text-xs">{{ $t('tasks.viewDetail') }}</button>
+                <button
+                  v-if="task.status === 'submitted' && userStore.canAccess('task:approve') && task.assigned_by === userStore.user.id"
+                  @click="handleReviewTask(task)"
+                  class="px-3 py-1 bg-warning text-white rounded text-xs font-medium hover:bg-warning/90"
+                >
+                  {{ $t('tasks.review') }}
+                </button>
               </div>
             </div>
           </div>
@@ -1160,8 +1303,19 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+/* 2026-08-26 UI 改造: 优先级彩条 + 卡片 hover shadow */
+.task-card {
+  border-left-width: 4px;
+  border-left-style: solid;
+  transition: all 0.18s ease;
+}
+.task-card.priority-high { border-left-color: #ef4444; }
+.task-card.priority-medium { border-left-color: #fbbf24; }
+.task-card.priority-low, .task-card.priority-urgent-default { border-left-color: #cbd5e1; }
+
 /* 手机适配 */
 @media (max-width: 768px) {
+  /* 状态标签 */
   /* 页面容器内边距 */
   .task-container {
     padding: 0.75rem;

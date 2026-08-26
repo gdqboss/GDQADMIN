@@ -3248,6 +3248,7 @@ export default {
     myTasks: '我的任务',
     assignedTasks: '我指派的任务',
     createTask: '创建任务',
+    createTaskBtn: '创建任务',
     taskTitle: '任务标题',
     taskContent: '任务内容',
     assignedTo: '指派给',
