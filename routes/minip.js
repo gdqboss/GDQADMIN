@@ -919,19 +919,27 @@ router.get('/config', async (req, res, next) => {
 router.get('/office/users/candidates', auth, async (req, res, next) => {
   try {
     const userId = req.user.id
+    const userRole = req.user.role
+    const isBroad = ['admin', 'superadmin', 'manager', 'director'].includes(userRole)
     let list = []
-    try {
-      const [sub] = await pool.query(`
-        WITH RECURSIVE subordinate_tree AS (
-          SELECT id, name, avatar, department, role, supervisor_id FROM users
-          WHERE supervisor_id = ? AND status = 'active'
-          UNION ALL
-          SELECT u.id, u.name, u.avatar, u.department, u.role, u.supervisor_id FROM users u
-          INNER JOIN subordinate_tree st ON u.supervisor_id = st.id
-        )
-        SELECT * FROM subordinate_tree ORDER BY name`, [userId])
-      list = sub || []
-    } catch (e) { console.error('[minip] candidates sub err', e?.message || e) }
+    if (isBroad) {
+      // 管理角色: 直接返回全部 active 用户 (对齐 gdqadmin 任务指派可全选)
+      const [all] = await pool.query(`SELECT id, name, avatar, department, role, supervisor_id FROM users WHERE status='active' ORDER BY name LIMIT 300`)
+      list = all || []
+    } else {
+      try {
+        const [sub] = await pool.query(`
+          WITH RECURSIVE subordinate_tree AS (
+            SELECT id, name, avatar, department, role, supervisor_id FROM users
+            WHERE supervisor_id = ? AND status = 'active'
+            UNION ALL
+            SELECT u.id, u.name, u.avatar, u.department, u.role, u.supervisor_id FROM users u
+            INNER JOIN subordinate_tree st ON u.supervisor_id = st.id
+          )
+          SELECT * FROM subordinate_tree ORDER BY name`, [userId])
+        list = sub || []
+      } catch (e) { console.error('[minip] candidates sub err', e?.message || e) }
+    }
     const [[me]] = await pool.query('SELECT id, name, avatar, department, role, supervisor_id FROM users WHERE id = ?', [userId])
     if (list.length === 0) {
       const [all] = await pool.query(`SELECT id, name, avatar, department, role, supervisor_id FROM users WHERE status='active' ORDER BY name LIMIT 300`)
