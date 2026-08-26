@@ -923,18 +923,18 @@ router.get('/office/users/candidates', auth, async (req, res, next) => {
     try {
       const [sub] = await pool.query(`
         WITH RECURSIVE subordinate_tree AS (
-          SELECT id, name, avatar, department, role FROM users
+          SELECT id, name, avatar, department, role, supervisor_id FROM users
           WHERE supervisor_id = ? AND status = 'active'
           UNION ALL
-          SELECT u.id, u.name, u.avatar, u.department, u.role FROM users u
+          SELECT u.id, u.name, u.avatar, u.department, u.role, u.supervisor_id FROM users u
           INNER JOIN subordinate_tree st ON u.supervisor_id = st.id
         )
         SELECT * FROM subordinate_tree ORDER BY name`, [userId])
       list = sub || []
     } catch (e) { console.error('[minip] candidates sub err', e?.message || e) }
-    const [[me]] = await pool.query('SELECT id, name, avatar, department, role FROM users WHERE id = ?', [userId])
+    const [[me]] = await pool.query('SELECT id, name, avatar, department, role, supervisor_id FROM users WHERE id = ?', [userId])
     if (list.length === 0) {
-      const [all] = await pool.query(`SELECT id, name, avatar, department, role FROM users WHERE status='active' ORDER BY name LIMIT 300`)
+      const [all] = await pool.query(`SELECT id, name, avatar, department, role, supervisor_id FROM users WHERE status='active' ORDER BY name LIMIT 300`)
       list = all || []
     }
     res.json({ code: 0, data: me ? [{ ...me, is_self: true }, ...list] : list, message: 'ok' })
