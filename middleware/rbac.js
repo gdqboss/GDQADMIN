@@ -163,6 +163,11 @@ const PERMISSIONS = {
   ARTICLES_WRITE: 'articles:write',
   ARTICLES_DELETE: 'articles:delete',
 
+  // 协会活动管理 (gbaw.cn 首页"活动报名"模块配套, 2026-08-27 补)
+  ASSOCIATION_ACTIVITIES_READ: 'association-activities:read',
+  ASSOCIATION_ACTIVITIES_WRITE: 'association-activities:write',
+  ASSOCIATION_ACTIVITIES_DELETE: 'association-activities:delete',
+
   // Dashboard 组件可见性
   DASHBOARD_WAREHOUSE_SUMMARY: 'dashboard:warehouse_summary',
 
@@ -181,6 +186,16 @@ const PERMISSIONS = {
   WORKBUDDY_READ:   'workbuddy:read',
   WORKBUDDY_WRITE:  'workbuddy:write',
   WORKBUDDY_DELETE: 'workbuddy:delete',
+
+  // 管家工单 (2026-08-26) — 企业用户提单 / 管家处理 / 后台管理
+  BUTLER_ORDERS_READ:   'butler-orders:read',
+  BUTLER_ORDERS_WRITE:  'butler-orders:write',
+  BUTLER_ORDERS_DELETE: 'butler-orders:delete',
+
+  // 资源对接 (2026-08-26) — 企业发布供需 / 后台审核匹配
+  RESOURCE_MATCH_READ:   'resource-match:read',
+  RESOURCE_MATCH_WRITE:  'resource-match:write',
+  RESOURCE_MATCH_DELETE: 'resource-match:delete',
 }
 
 // 角色常量
