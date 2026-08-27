@@ -318,34 +318,21 @@ const loadTeamTasks = async () => {
 
 const loadUsers = async () => {
   try {
-    const res = await api.get('/users')
+    // 2026-08-27 修复: 派任务可选人列表
+    //   根因: 之前一律调 GET /users (index.js 里 admin 专属路由) → 非 admin (hod等)
+    //         403 → 拉不到用户 → 派任务下拉空/只有自己
+    //   修复: admin 用 /users (全部用户); 非 admin 用 /users/subordinates
+    //         (开放接口, 递归返回 自己+所有下级, 含 is_self 标记)
+    const endpoint = userStore.isAdmin ? '/users' : '/users/subordinates'
+    const res = await api.get(endpoint)
     if (res.code === 0) {
       const userData = res.data || []
-      allUsers.value = userData // 保存所有用户用于筛选
-
-      // 如果是超级管理员，显示所有用户
-      if (userStore.canAccess('task:write')) {
-        users.value = userData
-      } else {
-        // 否则只显示当前用户的下级（通过递归查找supervisor_id链条）
-        const currentUserId = userStore.user.id
-        const subordinates = []
-
-        // 递归查找所有下级
-        const findSubordinates = (supervisorId) => {
-          const directSubordinates = userData.filter(u => u.supervisor_id === supervisorId)
-          directSubordinates.forEach(sub => {
-            subordinates.push(sub)
-            findSubordinates(sub.id) // 递归查找下下级
-          })
-        }
-
-        findSubordinates(currentUserId)
-        users.value = subordinates
-      }
+      allUsers.value = userData // 保存所有可见用户用于筛选
+      users.value = userData    // subordinates 已含自己+全部下级, 直接用作可指派对象
     }
   } catch (err) {
     console.error('Failed to load users:', err)
+    users.value = []
   }
 }
 
