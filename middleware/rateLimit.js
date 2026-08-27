@@ -1,4 +1,4 @@
-import rateLimit from 'express-rate-limit'
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
 
 export const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -40,6 +40,6 @@ export const uploadLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.userId ? `upload:${req.userId}` : `upload:${req.ip}`,
+  keyGenerator: (req) => req.userId ? `upload:${req.userId}` : `upload:${ipKeyGenerator(req.ip)}`,
   message: { code: 429, message: '上传过于频繁，请稍后再试' }
 })
