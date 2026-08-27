@@ -568,33 +568,58 @@ router.delete('/:id', async (req, res, next) => {
       return res.status(404).json({ code: 404, message: '用户不存在' })
     }
 
-    // 只能删除停用状态的用户
-    if (user.status !== 'disabled') {
+    // 只能删除停用或待审核状态的用户 ('disabled' 停用 / 'pending' 待审核/测试账号)
+    // 2026-08-27 修复: pending 测试账号删不掉 — 加容 pending, 在职 active 仍需先停用
+    if (user.status !== 'disabled' && user.status !== 'pending') {
       await conn.release()
-      return res.status(400).json({ code: 400, message: '只能删除已停用的用户' })
+      return res.status(400).json({ code: 400, message: '只能删除已停用或待审核的用户' })
     }
 
     await conn.beginTransaction()
 
     // 禁用外键检查，删除用户及其所有关联
     await conn.query("SET FOREIGN_KEY_CHECKS = 0")
-    
-    // 删除所有关联表数据
-    await conn.query("DELETE FROM user_suppliers WHERE user_id = ?", [userId])
-    await conn.query("DELETE FROM reminder_settings WHERE user_id = ?", [userId])
-    await conn.query("DELETE FROM wecom_contacts WHERE user_id = ?", [userId])
-    await conn.query("DELETE FROM attendance WHERE user_id = ?", [userId])
-    await conn.query("DELETE FROM leave_records WHERE user_id = ?", [userId])
-    await conn.query("DELETE FROM share_logs WHERE user_id = ?", [userId])
-    await conn.query("DELETE FROM visit_logs WHERE user_id = ?", [userId])
-    await conn.query("DELETE FROM work_logs WHERE user_id = ?", [userId])
-    await conn.query("DELETE FROM work_log_interactions WHERE user_id = ?", [userId])
-    await conn.query("DELETE FROM work_log_participants WHERE user_id = ?", [userId])
-    await conn.query("DELETE FROM tasks WHERE assigned_to = ? OR assigned_by = ?", [userId, userId])
-    
+
+    // 删除所有关联表数据 — 2026-08-23 江小鱼: 加容错, 关联表不存在 (旧版 DB schema) 时不报错
+    // 用 DELETE IGNORE + try-catch 双重保护, 确保 user 主体总能被删除
+    const relatedTables = [
+      ['user_suppliers', 'user_id'],
+      ['reminder_settings', 'user_id'],
+      ['wecom_contacts', 'user_id'],
+      ['attendance', 'user_id'],
+      ['leave_records', 'user_id'],
+      ['share_logs', 'user_id'],
+      ['visit_logs', 'user_id'],
+      ['work_logs', 'user_id'],
+      ['work_log_interactions', 'user_id'],
+      ['work_log_participants', 'user_id'],
+    ]
+    for (const [tbl, col] of relatedTables) {
+      try {
+        await conn.query(`DELETE FROM ${tbl} WHERE ${col} = ?`, [userId])
+      } catch (e) {
+        // 表不存在 (老版 DB schema) — 跳过, 不影响 user 删除
+        if (e.code === 'ER_NO_SUCH_TABLE' || e.errno === 1146) {
+          console.warn(`[users DELETE] table ${tbl} not found, skipped`)
+        } else {
+          throw e  // 其它错误往上抛
+        }
+      }
+    }
+    // tasks 是双字段 WHERE, 单独处理
+    try {
+      await conn.query("DELETE FROM tasks WHERE assigned_to = ? OR assigned_by = ?", [userId, userId])
+    } catch (e) {
+      if (e.code === 'ER_NO_SUCH_TABLE' || e.errno === 1146) {
+        console.warn('[users DELETE] table tasks not found, skipped')
+      } else {
+        throw e
+      }
+    }
+
     // 删除用户
     await conn.query("DELETE FROM users WHERE id = ?", [userId])
-    
+
     // 恢复外键检查
     await conn.query("SET FOREIGN_KEY_CHECKS = 1")
 
