@@ -176,6 +176,17 @@ const menuGroups = computed(() => [
     children: []
   },
   {
+    key: 'ai-hr',
+    icon: 'group_add',
+    label: t('nav.aiHrRecruitment'),
+    to: '/ai-hr/reports',
+    permission: 'ai_hr:read',
+    children: [
+      { key: 'ai_hr:read', label: t('nav.aiHRReports') || '招聘报告', to: '/ai-hr/reports' },
+      { key: 'ai_hr:write', label: t('nav.aiHRJobPresets') || '岗位配置', to: '/ai-hr/job-presets' },
+    ]
+  },
+  {
     key: 'operations',
     icon: 'business',
     label: t('nav.operations'),
@@ -334,6 +345,9 @@ const menuGroups = computed(() => [
 const routeToModule = {
   '/': 'dashboard',
   '/ai-classroom': 'ai-classroom',
+  '/ai-hr': 'ai-hr',
+  '/ai-hr/reports': 'ai-hr',
+  '/ai-hr/job-presets': 'ai-hr',
   '/tasks': 'tasks',
   '/logs/work-logs': 'tasks',
   '/logs/visit-logs': 'tasks',

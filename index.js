@@ -81,6 +81,7 @@ import minipAiFinanceRoutes from './routes/minip-ai-finance.js'
 import minipAiHrRoutes from './routes/minip-ai-hr.js'
 import minipAiMarketingRoutes from './routes/minip-ai-marketing.js'
 import minipAiBrainRoutes from './routes/minip-ai-brain.js'
+import aiHrRoutes from './routes/ai-hr.js'  // 2026-08-27 AI HR 招聘（新模块：应聘者对话 + HR 报告管理）
 import laborAiRoutes from './routes/labor-ai.js'
 import templeRoutes from './routes/temple.js'
 import templeKaraokeRoutes, { attachKaraokeWS } from './routes/temple-karaoke.js'
@@ -112,6 +113,9 @@ import returnsRoutes from './routes/returns.js'
 import logInteractionsRoutes from './routes/log-interactions.js'
 import tasksRoutes from './routes/tasks.js'
 import minipRoutes from './routes/minip.js'
+import minipTabbarConfigRoutes from './routes/minip-tabbar-config.js'  // 2026-08-27 江小鱼新建: tabbar 配置 + gdqadmin CRUD
+import butlerOrdersRoutes from './routes/butler-orders.js'   // 2026-08-26 企业管家工单
+import resourceMatchRoutes from './routes/resource-match.js'  // 2026-08-26 资源对接供需
 import responsibilitiesRoutes from './routes/responsibilities.js'
 import giftApprovalRoutes from './routes/gift-approvals.js'
 import preorderRoutes from './routes/preorder.js'
@@ -254,6 +258,8 @@ app.use('/api/token/v1', aiTokenProxyRoutes)
 app.use('/api/ai-class/public', aiClassPublicRoutes)
 app.use('/api/ai-class', auth, aiClassRoutes)
 app.use('/api/ai-class', auth, aiClassReactRoutes)
+// AI HR 招聘 (2026-08-27) - 公共端点不挂 auth（应聘者匿名），HR 路由内部 router.use(auth)
+app.use('/api/ai-hr', aiHrRoutes)
 app.use('/api/labor-ai-agent', auth, laborAiAgentRoutes)
 app.use('/api/labor-ai-supervisor', auth, laborAiSupervisorRoutes)
 app.use('/api/system-health', auth, healthRoutes)
@@ -619,6 +625,9 @@ app.use('/api/feedback', feedbackRoutes) // Mixed auth (some public, some protec
 // inventory.js L406 app.use('/api', inventoryRoutes) 内的 /returns 路由接管
 app.use('/api/tasks', auth, apiLimiter, tasksRoutes)
 app.use('/api/minip', apiLimiter, minipRoutes)
+app.use('/api/minip', apiLimiter, minipTabbarConfigRoutes)  // tabbar-config + admin CRUD
+app.use('/api/butler-orders', auth, apiLimiter, butlerOrdersRoutes)   // 2026-08-26 企业管家工单
+app.use('/api/resource-match', auth, apiLimiter, resourceMatchRoutes) // 2026-08-26 资源对接供需
 app.use('/api/wallet', auth, apiLimiter, walletRoutes)
 app.use('/api/invite', auth, apiLimiter, inviteRoutes)
 app.use('/api/member-level', auth, apiLimiter, memberLevelRoutes)

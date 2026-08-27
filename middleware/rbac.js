@@ -107,6 +107,10 @@ const PERMISSIONS = {
   AI_ASSISTANT_READ: 'ai-assistant:read',
   AI_ASSISTANT_WRITE: 'ai-assistant:write',
   AI_ASSISTANT_DELETE: 'ai-assistant:delete',
+  // AI HR 招聘 (2026-08-27 江小鱼加)
+  AI_HR_READ: 'ai_hr:read',
+  AI_HR_WRITE: 'ai_hr:write',
+  AI_HR_DELETE: 'ai_hr:delete',
   // 首页工作台
   DASHBOARD_VIEW: 'dashboard:view',
   DASHBOARD_STATS: 'dashboard:stats',

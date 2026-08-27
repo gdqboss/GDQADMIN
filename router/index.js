@@ -59,6 +59,8 @@ const routes = [
       { path: 'wallet', name: 'H5Wallet', component: lazyLoad(() => import('../views/h5/H5Wallet.vue')), meta: { public: true } },
       { path: 'settings', name: 'H5Settings', component: lazyLoad(() => import('../views/h5/H5Settings.vue')), meta: { public: true } },
       { path: 'profile/edit', name: 'H5ProfileEdit', component: lazyLoad(() => import('../views/h5/H5ProfileEdit.vue')), meta: { public: true } },
+      // AI HR 招聘 (2026-08-27) - 应聘者匿名访问
+      { path: 'ai-hr', name: 'AiHrChat', component: lazyLoad(() => import('../views/ai-hr/AiHrChat.vue')), meta: { public: true } },
       { path: 'password', name: 'H5Password', component: lazyLoad(() => import('../views/h5/H5Password.vue')), meta: { public: true } },
       { path: 'bind-phone', name: 'H5BindPhone', component: lazyLoad(() => import('../views/h5/H5BindPhone.vue')), meta: { public: true } },
     ],
@@ -137,6 +139,10 @@ const routes = [
 
       // ── AI / BI ─────────────────────────────────────────────
       { path: 'ai-classroom', name: 'AiClassroom', component: lazyLoad(() => import('../views/AiClassroom.vue')), meta: { title: 'AI 课堂', permission: 'ai-classroom' } },
+      // AI HR 招聘 (2026-08-27) - gdqadmin 后台
+      { path: 'ai-hr/reports', name: 'AiHrReportList', component: lazyLoad(() => import('../views/ai-hr/AiHrReportList.vue')), meta: { title: 'AI 招聘报告', parent: 'AI 招聘', permission: 'ai_hr:read' } },
+      { path: 'ai-hr/reports/:id', name: 'AiHrReportDetail', component: lazyLoad(() => import('../views/ai-hr/AiHrReportDetail.vue')), meta: { title: '报告详情', parent: 'AI 招聘', permission: 'ai_hr:read' } },
+      { path: 'ai-hr/job-presets', name: 'AiHrJobPresets', component: lazyLoad(() => import('../views/ai-hr/AiHrJobPresets.vue')), meta: { title: '岗位招聘配置', parent: 'AI 招聘', permission: 'ai_hr:write' } },
       { path: 'excel-analyzer', name: 'ExcelAnalyzer', component: lazyLoad(() => import('../views/bi/ExcelAnalyzer.vue')), meta: { title: 'Excel 分析器', parent: 'BI', permission: 'bi:excel' } },
       { path: 'excel-report-manage', name: 'ExcelReportManage', component: lazyLoad(() => import('../views/bi/ExcelReportManage.vue')), meta: { title: '报告管理', parent: 'BI', permission: 'bi:report' } },
       { path: 'import-records', name: 'ImportRecords', component: lazyLoad(() => import('../views/import/ImportRecords.vue')), meta: { title: '导入记录', parent: 'BI', permission: 'bi:excel' } },
@@ -153,6 +159,9 @@ const routes = [
       { path: 'association', name: 'AssociationInfo', component: lazyLoad(() => import('../views/association/info/AssociationInfo.vue')), meta: { title: '协会介绍', parent: '协会', permission: 'association-info:read' } },
       { path: 'association-announcements', name: 'AssociationAnnouncements', component: lazyLoad(() => import('../views/association/announcements/AnnouncementList.vue')), meta: { title: '信息发布', parent: '协会', permission: 'association-announcements:read' } },
       { path: 'association-activities', name: 'AssociationActivities', component: lazyLoad(() => import('../views/association/activities/ActivityList.vue')), meta: { title: '活动报名', parent: '协会', permission: 'association-activities:read' } },
+
+      // ── 入驻审核 (gbaw.cn 首页"企业入驻"板块配套, 2026-08-27) ──
+      { path: 'application-review', name: 'ApplicationReview', component: lazyLoad(() => import('../views/portal/ApplicationReviewList.vue')), meta: { title: '入驻审核', parent: '协会', permission: 'minip-applications:read' } },
       { path: 'association-cards', name: 'AssociationCards', component: lazyLoad(() => import('../views/association/cards/CardList.vue')), meta: { title: '会员名片', parent: '协会', permission: 'association-cards:read' } },
       { path: 'association-members', name: 'AssociationMembers', component: lazyLoad(() => import('../views/association/members/MemberList.vue')), meta: { title: '会员管理', parent: '协会', permission: 'association-members:read' } },
       { path: 'association-academic', name: 'AssociationAcademic', component: lazyLoad(() => import('../views/association/academic/AcademicList.vue')), meta: { title: '学术动态', parent: '协会', permission: 'association-academic:read' } },
