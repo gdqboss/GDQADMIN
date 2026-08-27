@@ -24,6 +24,7 @@
  */
 
 import jwt from 'jsonwebtoken'
+import 'dotenv/config'
 import { pool } from '../db/connection.js'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'gdq-default-secret'
@@ -370,6 +371,7 @@ export function attachChatWS(wss) {
         }
       } catch (e) {
         // token 无效 → 关闭连接
+        console.error('[chat-ws] verify FAIL:', e.message, '| secret len:', JWT_SECRET ? JWT_SECRET.length : 0)
         ws.send(JSON.stringify({ type: 'error', error: 'invalid token' }))
         ws.close(4001, 'invalid token')
         return
