@@ -6,7 +6,7 @@
   :root {
     --color-primary: #409eff;
     --color-primary-light: #ecf5ff;
-    --color-primary-hover: #2b8be0;
+    --color-primary-hover: #2b8be6;
     --color-success: #67c23a;
     --color-warning: #e6a23c;
     --color-danger: #f56c6c;
@@ -20,23 +20,86 @@
     --color-dingtalk: #0089FF;
     --color-sidebar: #001529;
     --color-sidebar-header: #002140;
+
+    /* 2026-08-23 弹窗输入框底色修复 — ElementPlus el-input 默认 .el-input__inner { background: 0 0; }
+       视觉上 input 看起来"底色透明, 文字像重叠"
+       这里在 :root 强制 EP input 变量为 #fff, 优于 EP dark theme 时的 #141414
+       (我们当前已经是 light theme 了, 但留这一行保险) */
+    --el-input-bg-color: #fff;
+    --el-input-border-color: #dcdfe6;
+    --el-textarea-bg-color: #fff;
+
     --font-family-display: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
     /* 繁体中文 (zh-HK/zh-TW) 字体: 优先苹方繁/思源黑体繁/Noto Sans CJK TC,失败兜底简体 */
     --font-family-traditional: "PingFang TC", "PingFang HK", "Hiragino Sans TC", "Microsoft JhengHei", "Noto Sans TC", "Noto Sans CJK TC", "Source Han Sans TC", "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif;
   }
-  
+
   body {
     font-family: var(--font-family-display);
     margin: 0;
   }
 
   /* 2026-08-06 港澳服务器 (profile 6/7 zh-HK) 触发繁体字体 */
-  /* 由 i18n/index.js setLocale 时给 <html> 加 .locale-zh-HK */
   html.locale-zh-HK body,
   html.locale-zh-HK {
     font-family: var(--font-family-traditional);
   }
 }
+
+/* 2026-08-23 弹窗里的 el-input / el-textarea / el-input-number — 给 wrapper 强制白底 + 边框 + 圆角 + focus 蓝色光环
+   只针对 .el-dialog 内部, 不影响普通页面 input (那些用 Tailwind 自己控制) */
+.el-dialog .el-input,
+.el-dialog .el-textarea {
+  background-color: #fff !important;
+  border: 1px solid #dcdfe6 !important;
+  border-radius: 4px !important;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.el-dialog .el-input:hover,
+.el-dialog .el-textarea:hover {
+  border-color: #409eff !important;
+}
+.el-dialog .el-input.is-focus,
+.el-dialog .el-textarea.is-focus {
+  border-color: #409eff !important;
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2) !important;
+}
+/* 弹窗里的 el-input 真正输入区强制白底 (覆盖 EP 默认 background:0 0) */
+.el-dialog .el-input__inner,
+.el-dialog .el-textarea__inner {
+  background-color: #fff !important;
+}
+.el-dialog .el-input-number {
+  background-color: #fff !important;
+  border: 1px solid #dcdfe6 !important;
+  border-radius: 4px !important;
+}
+
+/* 2026-08-27 全局兜底: 所有裸原生 input/textarea/select 强制白底黑字
+   根因: main.js 强制 html.dark + 移动端系统 dark 模式 → 原生控件无显式底色
+   跟随系统变深色背景+深色文字 (黑底黑字), 人眼看不清
+   修复: 全局兜底, 排除 EP 的 .el-input__inner/.el-textarea__inner
+   (EP 组件自己已有 dark 处理, 不重复覆盖)
+   作用域: 不只弹窗, 页面所有原生表单控件都覆盖 → 波哥要求"全部都完善" */
+input:not(.el-input__inner):not(.el-textarea__inner),
+textarea:not(.el-textarea__inner),
+select {
+  background-color: #fff !important;
+  color: #303133 !important;
+  -webkit-text-fill-color: #303133 !important;
+  caret-color: #409eff !important;
+}
+input:not(.el-input__inner):not(.el-textarea__inner)::placeholder,
+textarea:not(.el-textarea__inner)::placeholder {
+  color: #909399 !important;
+  opacity: 1 !important;
+}
+/* radio/checkbox inner control — dark 下也可见 */
+input[type="radio"],
+input[type="checkbox"] {
+  accent-color: #409eff;
+}
+
 
 /* i18n 翻译闪烁修复 */
 [v-cloak] {
@@ -98,18 +161,3 @@
 }
 
 /* Pulse animation for alerts */
-@keyframes pulse-red {
-  0% { box-shadow: 0 0 0 0 rgba(245, 108, 108, 0.4); }
-  70% { box-shadow: 0 0 0 10px rgba(245, 108, 108, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(245, 108, 108, 0); }
-}
-.animate-pulse-red {
-  animation: pulse-red 2s infinite;
-}
-
-.shadow-card {
-  box-shadow: 0 1px 4px 0 rgba(0, 0, 0, 0.05);
-}
-.shadow-card-hover {
-  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.1);
-}
