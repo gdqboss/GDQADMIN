@@ -26,7 +26,7 @@
 import jwt from 'jsonwebtoken'
 import { pool } from '../db/connection.js'
 
-const JWT_SECRET = process.env.SMART_STUDIO_JWT_SECRET || 'ss-default-secret-change-me-2026'
+const JWT_SECRET = process.env.JWT_SECRET || 'gdq-default-secret'
 
 // 所有在线 ws 连接: user_id (master=0) → Set<ws>
 const clients = new Map() // userId → Set<ws>
