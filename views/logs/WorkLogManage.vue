@@ -1705,6 +1705,28 @@ async function initDefaultTemplates() {
   overflow: hidden;
 }
 
+/* 2026-08-27 模板编辑弹窗: 原生 input/textarea/select 强制白底黑字
+   根因: main.js 强制 html.dark (EP dark 变量生效), 手机系统 dark 模式下
+   原生 <input> 无显式 bg/text 色 → 跟随系统变深色 → 黑底黑字, 人眼看不清
+   修复: 弹窗内所有原生表单控件强制白底黑字, 不跟随系统/EP dark */
+.fixed.inset-0 input,
+.fixed.inset-0 textarea,
+.fixed.inset-0 select {
+  background-color: #fff !important;
+  color: #303133 !important;
+  -webkit-text-fill-color: #303133 !important;
+  caret-color: #409eff !important;
+}
+.fixed.inset-0 input::placeholder,
+.fixed.inset-0 textarea::placeholder {
+  color: #909399 !important;
+}
+/* radio/checkbox 内在节点 (accent-color 保证在 dark 下也可见) */
+.fixed.inset-0 input[type="radio"],
+.fixed.inset-0 input[type="checkbox"] {
+  accent-color: #409eff;
+}
+
 @media (max-width: 768px) {
   /* Tab Buttons */
   .flex.gap-2.mb-4 {
