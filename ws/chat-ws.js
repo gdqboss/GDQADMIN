@@ -348,6 +348,42 @@ export async function broadcastPresence(userId, online) {
 }
 
 /**
+ * pushToUser — 直推一个对象给单个用户的所有 WS 连接 (通用底层, shim 用)
+ * @param userId {number}
+ * @param payload {object} 已序列化的推送对象
+ */
+export function pushToUser(userId, payload) {
+  const set = clients.get(userId)
+  if (!set || set.size === 0) return 0
+  let sent = 0
+  const p = JSON.stringify(payload)
+  set.forEach(ws => { if (safeSend(ws, p)) sent++ })
+  return sent
+}
+
+/**
+ * broadcastTyping — 输入中状态实时推送 (P1, 2026-07-24; 补 shim 修复 2026-08-28)
+ * @param targetUserId {number} 接收方 (正在被看着输入的人)
+ * @param data {object} { user_id: 输入者, typing: boolean }
+ */
+export function broadcastTyping(targetUserId, data) {
+  const set = clients.get(targetUserId)
+  if (!set || set.size === 0) return
+  if (clients.has(0)) data._master = true
+  const payload = JSON.stringify({
+    type: 'typing',
+    user_id: data.user_id,
+    peer_id: data.user_id,             // 前端 case 'typing' 期望 peer_id = 输入者 id
+    peer_type: 'user',
+    typing: data.typing !== false,
+    ts: Date.now()
+  })
+  let sent = 0
+  set.forEach(ws => { if (safeSend(ws, payload)) sent++ })
+  console.log(`[chat-ws] broadcast typing → user ${targetUserId} (${sent} sockets)`)
+}
+
+/**
  * WebSocket connection handler
  * /ws/chat?token=xxx
  */
