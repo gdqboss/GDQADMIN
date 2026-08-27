@@ -168,6 +168,11 @@ const PERMISSIONS = {
   ASSOCIATION_ACTIVITIES_WRITE: 'association-activities:write',
   ASSOCIATION_ACTIVITIES_DELETE: 'association-activities:delete',
 
+  // 企业入驻审核 (gbaw.cn 首页"企业入驻"板块配套, 2026-08-27 补)
+  MINIP_APPLICATIONS_READ: 'minip-applications:read',
+  MINIP_APPLICATIONS_WRITE: 'minip-applications:write',
+  MINIP_APPLICATIONS_DELETE: 'minip-applications:delete',
+
   // Dashboard 组件可见性
   DASHBOARD_WAREHOUSE_SUMMARY: 'dashboard:warehouse_summary',
 
@@ -196,7 +201,242 @@ const PERMISSIONS = {
   RESOURCE_MATCH_READ:   'resource-match:read',
   RESOURCE_MATCH_WRITE:  'resource-match:write',
   RESOURCE_MATCH_DELETE: 'resource-match:delete',
-}
+
+  // admin
+  SERVER_PROFILES_DELETE: 'server_profiles:delete',
+  SERVER_PROFILES_HEALTH: 'server_profiles:health',
+  SERVER_PROFILES_HEALTH_LOG: 'server_profiles:health_log',
+  SERVER_PROFILES_READ: 'server_profiles:read',
+  SERVER_PROFILES_WRITE: 'server_profiles:write',
+
+  // aftersale
+  SCAN_AFTERSALE: 'scan:aftersale',
+  SCAN_REPAIR: 'scan:repair',
+
+  // ai
+  AI_CLASSROOM: 'ai-classroom',
+  AI_CHAT: 'ai:chat',
+  EDU_MANAGE: 'edu:manage',
+  // AI 课堂子模块 (2026-08-27 补, 前端 AiClassroom.vue 使用, 待 P3 重命名为 knowledge_base:read)
+  KNOWLEDGE_BASE: 'knowledge-base',
+  MEMORY_MANAGEMENT: 'memory-management',
+
+  // ai-automation
+  AI_AUTOMATION_READ: 'ai-automation:read',
+  AI_AUTOMATION_WRITE: 'ai-automation:write',
+
+  // ai_class_learning
+  AI_CLASS_LEARNING_DELETE: 'ai_class_learning:delete',
+  AI_CLASS_LEARNING_READ: 'ai_class_learning:read',
+  AI_CLASS_LEARNING_WRITE: 'ai_class_learning:write',
+
+  // approval
+  APPROVAL_GIFT: 'approval:gift',
+
+  // association
+  ASSOCIATION_ACADEMIC_DELETE: 'association-academic:delete',
+  ASSOCIATION_ACADEMIC_READ: 'association-academic:read',
+  ASSOCIATION_ACADEMIC_WRITE: 'association-academic:write',
+  ASSOCIATION_ANNOUNCEMENTS_DELETE: 'association-announcements:delete',
+  ASSOCIATION_ANNOUNCEMENTS_READ: 'association-announcements:read',
+  ASSOCIATION_ANNOUNCEMENTS_WRITE: 'association-announcements:write',
+  ASSOCIATION_CARDS_DELETE: 'association-cards:delete',
+  ASSOCIATION_CARDS_READ: 'association-cards:read',
+  ASSOCIATION_CARDS_WRITE: 'association-cards:write',
+  ASSOCIATION_DOWNLOADS_DELETE: 'association-downloads:delete',
+  ASSOCIATION_DOWNLOADS_READ: 'association-downloads:read',
+  ASSOCIATION_DOWNLOADS_WRITE: 'association-downloads:write',
+  ASSOCIATION_INFO_READ: 'association-info:read',
+  ASSOCIATION_INFO_WRITE: 'association-info:write',
+  ASSOCIATION_INQUIRIES_DELETE: 'association-inquiries:delete',
+  ASSOCIATION_INQUIRIES_READ: 'association-inquiries:read',
+  ASSOCIATION_INQUIRIES_WRITE: 'association-inquiries:write',
+  ASSOCIATION_JOURNALS_DELETE: 'association-journals:delete',
+  ASSOCIATION_JOURNALS_READ: 'association-journals:read',
+  ASSOCIATION_JOURNALS_WRITE: 'association-journals:write',
+  ASSOCIATION_MEMBERS_DELETE: 'association-members:delete',
+  ASSOCIATION_MEMBERS_READ: 'association-members:read',
+  ASSOCIATION_MEMBERS_WRITE: 'association-members:write',
+  ASSOCIATION_ORG_DELETE: 'association-org:delete',
+  ASSOCIATION_ORG_READ: 'association-org:read',
+  ASSOCIATION_ORG_WRITE: 'association-org:write',
+
+  // bi
+  BI_EXCEL: 'bi:excel',
+  BI_READ: 'bi:read',
+  BI_REPORT: 'bi:report',
+
+  // coupon
+  COUPON_READ: 'coupon:read',
+  COUPON_WRITE: 'coupon:write',
+
+  // finance
+  FINANCE_EXPENSE: 'finance:expense',
+  FINANCE_INVOICE: 'finance:invoice',
+  FINANCE_PAYMENT: 'finance:payment',
+  FINANCE_PURCHASE: 'finance:purchase',
+  FINANCE_RECEIPT: 'finance:receipt',
+  FINANCE_REMINDER: 'finance:reminder',
+  FINANCE_SALES: 'finance:sales',
+  FINANCE_WRITE: 'finance:write',
+
+  // hqh5
+  HQH5_READ: 'hqh5:read',
+  HQH5_WRITE: 'hqh5:write',
+
+  // inventory
+  INVENTORY_RETURN: 'inventory:return',
+  TRANSFER_READ: 'transfer:read',
+  TRANSFER_WRITE: 'transfer:write',
+
+  // kefu
+  KEFU_READ: 'kefu:read',
+  KEFU_WRITE: 'kefu:write',
+
+  // leave
+  LEAVE_READ: 'leave:read',
+  LEAVE_WRITE: 'leave:write',
+
+  // marketing
+  MARKETING_READ: 'marketing:read',
+
+  // minip
+  MINIP_DELETE: 'minip:delete',
+  MINIP_READ: 'minip:read',
+  MINIP_WRITE: 'minip:write',
+
+  // minip_me
+  MINIP_ME_ADDRESS_READ: 'minip_me_address:read',
+  MINIP_ME_FAVORITE_DELETE: 'minip_me_favorite:delete',
+  MINIP_ME_FAVORITE_READ: 'minip_me_favorite:read',
+  MINIP_ME_FEEDBACK_DELETE: 'minip_me_feedback:delete',
+  MINIP_ME_FEEDBACK_READ: 'minip_me_feedback:read',
+  MINIP_ME_ORDER_READ: 'minip_me_order:read',
+  MINIP_ME_ORDER_WRITE: 'minip_me_order:write',
+  MINIP_ME_REVIEW_DELETE: 'minip_me_review:delete',
+  MINIP_ME_REVIEW_READ: 'minip_me_review:read',
+
+  // order
+  ORDER_READ: 'order:read',
+  ORDER_WRITE: 'order:write',
+
+  // other
+  CHANNEL_READ: 'channel_read',
+  CHANNEL_WRITE: 'channel_write',
+  COLLAGE_READ: 'collage:read',
+  COLLAGE_WRITE: 'collage:write',
+  EXPRESS_READ: 'express_read',
+  EXPRESS_WRITE: 'express_write',
+  FREIGHT_READ: 'freight_read',
+  FREIGHT_WRITE: 'freight_write',
+  HOTEL_READ: 'hotel:read',
+  HOTEL_WRITE: 'hotel:write',
+  LOGISTICS_READ: 'logistics:read',
+  PORTAL_READ: 'portal:read',
+  PORTAL_WRITE: 'portal:write',
+
+  // preorder
+  PREORDER_CONFIRM_SHOPKEEPER: 'preorder:confirm_shopkeeper',
+  PREORDER_CONFIRM_WAREHOUSE: 'preorder:confirm_warehouse',
+  PREORDER_DELETE: 'preorder:delete',
+  PREORDER_WRITE: 'preorder:write',
+
+  // product
+  PRODUCT_READ: 'product:read',
+  PRODUCT_WRITE: 'product:write',
+
+  // quick-action
+  QUICK_ACTION_ATTENDANCE: 'quick-action-attendance',
+  QUICK_ACTION_EXPENSE: 'quick-action-expense',
+  QUICK_ACTION_PROFILE: 'quick-action-profile',
+  QUICK_ACTION_QRCODE: 'quick-action-qrcode',
+  QUICK_ACTION_RESPONSIBILITY: 'quick-action-responsibility',
+  QUICK_ACTION_SCAN: 'quick-action-scan',
+  QUICK_ACTION_TASK: 'quick-action-task',
+  QUICK_ACTION_WORKLOG: 'quick-action-worklog',
+
+  // referral
+  REFERRAL_READ: 'referral:read',
+  REFERRAL_WRITE: 'referral:write',
+
+  // rental
+  QUOTE_READ: 'quote:read',
+  QUOTE_WRITE: 'quote:write',
+  WAREHOUSE_VISUAL: 'warehouse:visual',
+
+  // report
+  REPORT_EXPORT: 'report:export',
+
+  // restaurant
+  RESTAURANT_READ: 'restaurant:read',
+  RESTAURANT_WRITE: 'restaurant:write',
+
+  // retail
+  RETAIL_READ: 'retail:read',
+  RETAIL_WRITE: 'retail:write',
+
+  // schedule
+  SCHEDULE_READ: 'schedule:read',
+  SCHEDULE_WRITE: 'schedule:write',
+
+  // score_shop
+  SCORE_SHOP_READ: 'score_shop:read',
+  SCORE_SHOP_WRITE: 'score_shop:write',
+
+  // shift
+  SHIFT_READ: 'shift:read',
+  SHIFT_WRITE: 'shift:write',
+
+  // stock
+  STOCK_READ: 'stock:read',
+  STOCK_WRITE: 'stock:write',
+
+  // stock_movements
+  STOCK_MOVEMENTS_READ: 'stock_movements:read',
+  STOCK_MOVEMENTS_WRITE: 'stock_movements:write',
+
+  // system
+  MENU_READ: 'menu:read',
+  MENU_WRITE: 'menu:write',
+  PERMISSION_READ: 'permission:read',
+  PERMISSION_WRITE: 'permission:write',
+  ROLE_READ: 'role:read',
+  ROLE_WRITE: 'role:write',
+  SYSTEM_CONFIG: 'system:config',
+
+  // task
+  TASK_READ_TEAM: 'task:read_team',
+  TASK_STATS: 'task:stats',
+
+  // warehouse
+  SCAN_SUPPLY_CHAIN: 'scan:supply_chain',
+
+  // wecom
+  WECOM_READ: 'wecom:read',
+
+  // work_log
+  WORK_LOG_READ: 'work_log:read',
+  WORK_LOG_WRITE: 'work_log:write',
+  WORK_LOG_TEMPLATE_MANAGE: 'work_log_template:manage',
+  WORK_LOG_TEMPLATE_READ: 'work_log_template:read',
+
+  // workflow
+  WORKFLOW_READ: 'workflow:read',
+  WORKFLOW_WRITE: 'workflow:write',
+
+  // worklog
+  WORKLOG_DELETE: 'worklog:delete',
+  WORKLOG_READ: 'worklog:read',
+  WORKLOG_WRITE: 'worklog:write',
+
+  // wxapp
+  WXAPP_DELETE: 'wxapp:delete',
+  WXAPP_READ: 'wxapp:read',
+  WXAPP_WRITE: 'wxapp:write',
+
+  // yuyue
+  YUYUE_READ: 'yuyue:read',
+  YUYUE_WRITE: 'yuyue:write',}
 
 // 角色常量
 // ⚠️ 实际生产只用 admin/member，其它角色保留作为 ROLE_PERMISSION_MAP 兜底
@@ -359,9 +599,33 @@ async function getUserPermissions(userId, role) {
 
   // 4. 如果有动态权限就返回，否则用旧硬编码回退
   if (dynamicPerms.length > 0) {
-    return dynamicPerms
+    return applyPermAliases(dynamicPerms)
   }
-  return ROLE_PERMISSION_MAP[role] || []
+  return applyPermAliases(ROLE_PERMISSION_MAP[role] || [])
+}
+
+// P1 alias 兼容层 (2026-08-27 波哥 "权限完善" 优化)
+// 让历史权限名 (worklog:read / product:read / 复数单数分裂) 继续可用,
+// 不强制改名, 避免一次性大爆炸
+const PERM_ALIASES = {
+  // worklog ↔ work_log (历史问题: skill 选 work_log 为 canonical)
+  'worklog:read':   'work_log:read',
+  'worklog:write':  'work_log:write',
+  'worklog:delete': 'work_log:delete',
+  // product ↔ products (字典用复数)
+  'product:read':   'products:read',
+  'product:write':  'products:write',
+  // quick_action 下划线 → quick-action 短横 (skill 已选短横)
+  'quick_action:sales':     'quick-action-sales',  // legacy alias (实际 DB 暂无此perm)
+  'quick_action:inventory': 'quick-action-inventory',
+}
+
+function applyPermAliases(perms) {
+  const out = new Set(perms)
+  for (const p of perms) {
+    if (PERM_ALIASES[p]) out.add(PERM_ALIASES[p])
+  }
+  return [...out]
 }
 
 /**
@@ -447,4 +711,4 @@ export function requireAnyPermission(...anyPerms) {
 }
 
 // 导出权限常量供路由使用
-export { PERMISSIONS, ROLES }
+export { PERMISSIONS, ROLES, applyPermAliases, PERM_ALIASES, getUserPermissions }
