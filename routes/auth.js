@@ -1,12 +1,43 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import crypto from 'crypto'
 import { pool } from '../db/connection.js'
 import { loginLimiter } from '../middleware/rateLimit.js'
 import { sendSmsCode, generateCode } from '../utils/sms.js'
 import { resolvePermissions } from '../middleware/auth.js'
 
 const router = Router()
+
+// SHA256(token) — 不存明文, 用于 SSO session revoke
+export function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex')
+}
+
+// 提取客户端 device 指纹 (frontend 在 header 传 X-Device-Label, 否则 fallback to ua)
+function extractDevice(req) {
+  const ua = req.headers['user-agent'] || ''
+  const label = req.headers['x-device-label'] || ''
+  // 简易 fingerprint: ua 前 60 字符 + accept-language
+  const fp = crypto.createHash('sha256')
+    .update(ua.slice(0, 60) + (req.headers['accept-language'] || ''))
+    .digest('hex')
+  let autoLabel = ''
+  if (/iPhone/.test(ua)) autoLabel = 'iPhone'
+  else if (/iPad/.test(ua)) autoLabel = 'iPad'
+  else if (/Android/.test(ua)) autoLabel = /Mobile/.test(ua) ? 'Android' : 'Android Tablet'
+  else if (/Edg\//.test(ua)) autoLabel = 'Edge'
+  else if (/Chrome\//.test(ua)) autoLabel = 'Chrome'
+  else if (/Firefox\//.test(ua)) autoLabel = 'Firefox'
+  else if (/Safari\//.test(ua)) autoLabel = 'Safari'
+  else autoLabel = 'Unknown'
+  return {
+    fingerprint: fp,
+    label: label || autoLabel,
+    ip: req.ip || req.headers['x-forwarded-for'] || '',
+    ua
+  }
+}
 
 // GET /api/auth/permissions - 当前用户完整权限点列表 (供 labor SmartBiz SPA 用)
 // admin 永远返所有 enabled permissions (跟 /api/auth/login 行为一致)
@@ -46,6 +77,18 @@ router.get('/me', async (req, res, next) => {
     }
     const token = authHeader.split(' ')[1]
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
+
+    // 2026-08-25 SSO: 检查 token 是否已被踢 (session invalidated)
+    const [sessRows] = await pool.query(
+      'SELECT invalidated FROM user_sessions WHERE token_hash = ? LIMIT 1',
+      [hashToken(token)]
+    )
+    if (sessRows.length > 0 && sessRows[0].invalidated === 1) {
+      return res.status(401).json({ code: 401, message: '登录已失效, 账号在另一设备登录' })
+    }
+    // 更新 last_active_at (fire-and-forget)
+    pool.query('UPDATE user_sessions SET last_active_at = NOW() WHERE token_hash = ?', [hashToken(token)]).catch(() => {})
+
     const [rows] = await pool.query('SELECT id, name, email, phone, role, user_type, h5_user_id, customer_type, member_level, member_label, points, is_internal, customer_store_id, department, supplier_id, status, job_level_id, department_id, avatar FROM users WHERE id = ?', [decoded.id])
     if (!rows.length) return res.status(401).json({ code: 401, message: '用户不存在' })
     const user = rows[0]
@@ -63,11 +106,68 @@ router.get('/me', async (req, res, next) => {
   }
 })
 
+// PUT /api/auth/profile - 更新当前用户个人资料（含名片字段）
+// 2026-08-28 JXY: 名片数据源 = users 表, gdqadmin 个人信息页编辑此处即联动电子名片
+// 白名单更新, 未传字段不覆盖
+const PROFILE_UPDATABLE = [
+  'avatar', 'life_photos',                  // 头像 + 生活照
+  'name', 'title', 'department',            // 姓名 / 职位 / 部门
+  'company_name', 'company_name_en',        // 公司名(中/英) — 名片
+  'company_address', 'company_address_en',  // 公司地址(中/英)
+  'company_phone', 'wechat',                // 公司电话 / 微信(名片)
+  'bio', 'bio_en',                          // 简介(中/英) — 名片
+  'card_bg', 'images',                      // 名片背景图 / 名片图片集
+]
+router.put('/profile', async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ code: 401, message: '未登录或 token 缺失' })
+    }
+    const token = authHeader.split(' ')[1]
+    const decoded = jwt.verify(token, process.env.JWT_SECRET)
+    const uid = decoded.id
+    if (!uid) return res.status(401).json({ code: 401, message: '未登录' })
+
+    const body = req.body || {}
+    const set = []
+    const params = []
+    for (const field of PROFILE_UPDATABLE) {
+      if (!(field in body)) continue
+      let val = body[field]
+      if ((field === 'life_photos' || field === 'images') && Array.isArray(val)) {
+        val = JSON.stringify(val.slice(0, 9))
+      }
+      set.push(`\`${field}\` = ?`)
+      params.push(val === undefined ? null : val)
+    }
+    if (!set.length) return res.status(400).json({ code: 400, message: '没有可更新的字段' })
+    params.push(uid)
+    const sql = `UPDATE users SET ${set.join(', ')} WHERE id = ?`
+    await pool.query(sql, params)
+
+    const [rows] = await pool.query(
+      'SELECT id, name, email, phone, role, user_type, avatar, title, department, company_name, company_name_en, company_address, company_phone, wechat, bio, bio_en, card_bg, images, life_photos, endorsements, card_views FROM users WHERE id = ?', [uid])
+    const user = rows[0]
+    if (user) {
+      if (user.images) { try { user.images = JSON.parse(user.images) } catch { user.images = [] } }
+      if (user.life_photos) { try { user.life_photos = JSON.parse(user.life_photos) } catch { user.life_photos = [] } }
+    }
+    res.json({ code: 0, data: user, message: 'ok' })
+  } catch (err) {
+    if (err.name === 'JsonWebTokenError') return res.status(401).json({ code: 401, message: 'token 无效' })
+    next(err)
+  }
+})
+
 // POST /api/auth/login - 手机号+密码登录
+// 2026-08-25 gbaw.cn/gdqadmin SSO: 同账号已有 active session → 返 409 needConfirm
+//  - 前端弹"该账号已在 [设备] 于 [时间] 登录，是否强制登录？"
+//  - 强制登录: 客户端带 force_login=1 重发, 后端将旧 session 标记 invalidated=1 再签新 token
 router.post('/login', loginLimiter, async (req, res, next) => {
   try {
     // 兼容旧版前端 email 字段
-    const { phone, email, password } = req.body
+    const { phone, email, password, force_login } = req.body
     const loginKey = phone || email
     if (!loginKey || !password) {
       return res.status(400).json({ code: 400, message: '请输入手机号和密码' })
@@ -88,6 +188,47 @@ router.post('/login', loginLimiter, async (req, res, next) => {
     if (!valid) {
       return res.status(401).json({ code: 401, message: '手机号或密码错误' })
     }
+
+    // ─── SSO: 检查同账号是否有 active session ───
+    const device = extractDevice(req)
+    const [activeSessions] = await pool.query(
+      `SELECT id, device_label, ip, created_at, device_fingerprint
+       FROM user_sessions
+       WHERE user_id = ? AND invalidated = 0
+       ORDER BY created_at DESC`,
+      [user.id]
+    )
+    // 同设备 (fingerprint 相同) → 静默踢掉旧 session, 直接放行 (典型场景: 用户清缓存重登)
+    // 不同设备 → 返 409 让前端弹确认框
+    const sameDeviceSessions = activeSessions.filter(s => s.device_fingerprint === device.fingerprint)
+    const otherDeviceSessions = activeSessions.filter(s => s.device_fingerprint !== device.fingerprint)
+
+    if (otherDeviceSessions.length > 0 && !force_login) {
+      const s = otherDeviceSessions[0]
+      return res.status(409).json({
+        code: 409,
+        message: '该账号已在其他设备登录',
+        data: {
+          needConfirm: true,
+          activeSession: {
+            deviceLabel: s.device_label,
+            ip: s.ip,
+            loginAt: s.created_at
+          },
+          activeSessionCount: otherDeviceSessions.length
+        }
+      })
+    }
+
+    // force_login 或 同设备 或 首次登录 → 先踢掉所有旧 session (同账号)
+    if (activeSessions.length > 0) {
+      await pool.query(
+        `UPDATE user_sessions SET invalidated = 1, invalidated_at = NOW(), invalidated_reason = ?
+         WHERE user_id = ? AND invalidated = 0`,
+        [force_login ? 'new_login_force' : 'new_login_same_device', user.id]
+      )
+    }
+
     await pool.query('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id])
 
     const token = jwt.sign(
@@ -105,6 +246,14 @@ router.post('/login', loginLimiter, async (req, res, next) => {
       process.env.JWT_SECRET,
       { expiresIn: '9999d' }
     )
+
+    // 写新 session
+    await pool.query(
+      `INSERT INTO user_sessions (user_id, token_hash, device_fingerprint, device_label, ip, user_agent)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [user.id, hashToken(token), device.fingerprint, device.label, device.ip, device.ua.slice(0, 250)]
+    )
+
     const { password: _, ...userData } = user
     // 解析权限并附加到返回（customer 只返回基础权限）
     const permissions = user.user_type === 'customer'
@@ -146,7 +295,19 @@ router.post('/sms-login', loginLimiter, async (req, res, next) => {
 })
 
 // POST /api/auth/logout
-router.post('/logout', (req, res) => {
+// 2026-08-25 SSO: 标记当前 token 对应 session 为 invalidated=1
+router.post('/logout', async (req, res) => {
+  try {
+    const header = req.headers.authorization
+    if (header && header.startsWith('Bearer ')) {
+      const token = header.slice(7)
+      await pool.query(
+        `UPDATE user_sessions SET invalidated = 1, invalidated_at = NOW(), invalidated_reason = 'logout'
+         WHERE token_hash = ? AND invalidated = 0`,
+        [hashToken(token)]
+      )
+    }
+  } catch (e) { /* 静默失败, 前端无感知 */ }
   res.json({ code: 0, message: '已退出' })
 })
 
