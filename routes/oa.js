@@ -705,7 +705,17 @@ router.post('/approvals', async (req, res, next) => {
 
     // Auto-generate approval steps from default_flow
     if (approvalType.default_flow) {
-      const flow = JSON.parse(approvalType.default_flow)
+      // 兼容: default_flow 可能是字符串 JSON 或已被驱动解析成对象
+      let flowRaw = approvalType.default_flow
+      if (typeof flowRaw === 'string') {
+        try {
+          flowRaw = JSON.parse(flowRaw)
+        } catch (e) {
+          flowRaw = []
+        }
+      }
+      if (!Array.isArray(flowRaw)) { flowRaw = [] }
+      const flow = flowRaw
       for (let i = 0; i < flow.length; i++) {
         const step = flow[i]
         // Find approver based on role (simplified: use first user with that role)
@@ -877,9 +887,39 @@ router.post('/approvals/:id/approve', async (req, res, next) => {
 
       // 获取审批单信息，如果是财务相关审批，调用财务系统回调
       const [[approval]] = await conn.query(
-        'SELECT type_code, form_data FROM approvals WHERE id = ?',
+        'SELECT type_code, form_data, applicant_id FROM approvals WHERE id = ?',
         [approvalId]
       )
+
+      // 2026-08-28 出差审批通过 → 自动为申请人写出差期间的考勤记录 (trip 出勤)
+      if (approval && approval.type_code === 'trip') {
+        const formData = typeof approval.form_data === 'string' ? JSON.parse(approval.form_data) : approval.form_data
+        const dest = formData.destination || '出差'
+        const start = formData.start_date ? String(formData.start_date).slice(0, 10) : null
+        const end = formData.end_date ? String(formData.end_date).slice(0, 10) : start
+        if (start && approval.applicant_id) {
+          // 遍历出差日期区间，为每个工作日写一条 normal + clock_type=trip 考勤 (出差视为出勤)
+          let cur = new Date(start)
+          const last = new Date(end)
+          while (cur <= last) {
+            const dateStr = cur.toISOString().slice(0, 10)
+            // 已存在则跳过，不覆盖真实打卡
+            const [[ex]] = await conn.query(
+              'SELECT id FROM attendance WHERE user_id = ? AND date = ?',
+              [approval.applicant_id, dateStr]
+            )
+            if (!ex) {
+              await conn.query(
+                `INSERT INTO attendance (user_id, date, status, clock_type, abnormal_reason)
+                 VALUES (?,?,?,?,?)`,
+                [approval.applicant_id, dateStr, 'normal', 'trip',
+                 `出差审批通过: ${dest} (免打卡)`.slice(0, 200)]
+              )
+            }
+            cur.setDate(cur.getDate() + 1)
+          }
+        }
+      }
 
       if (approval && approval.type_code === 'expense') {
         const formData = typeof approval.form_data === 'string' ? JSON.parse(approval.form_data) : approval.form_data
@@ -1519,6 +1559,9 @@ router.get('/attendance/summary', async (req, res, next) => {
                SUM(CASE WHEN a.status = 'late' THEN 1 ELSE 0 END) as late_days,
                SUM(CASE WHEN a.status = 'early' THEN 1 ELSE 0 END) as early_days,
                SUM(CASE WHEN a.status = 'absent' THEN 1 ELSE 0 END) as absent_days,
+               SUM(CASE WHEN a.clock_type = 'trip' THEN 1 ELSE 0 END) as trip_days,
+               SUM(CASE WHEN a.clock_type = 'overtime' THEN 1 ELSE 0 END) as overtime_days,
+               SUM(CASE WHEN a.clock_type = 'free' THEN 1 ELSE 0 END) as free_days,
                SUM(a.overtime_hours) as total_overtime,
                SUM(a.late_minutes) as total_late_minutes,
                SUM(a.early_minutes) as total_early_minutes

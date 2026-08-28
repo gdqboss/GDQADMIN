@@ -112,6 +112,17 @@
               {{ $t('oa.requiredHint') }}
             </p>
 
+            <!-- 2026-08-25:身份分类(工程/办公室/两者都是) -->
+            <div class="mb-3 flex items-center gap-2 text-sm">
+              <span class="text-gray-600">{{ $t('oa.workerCategory') || '人员身份' }}:</span>
+              <select v-model="form.worker_category" class="border rounded px-2 py-1 text-sm">
+                <option value="engineering">{{ $t('oa.engineeringWorker') || '工程工人' }}</option>
+                <option value="office">{{ $t('oa.officeWorker') || '办公室工人' }}</option>
+                <option value="both">{{ $t('oa.bothWorker') || '两者都是' }}</option>
+              </select>
+              <span class="text-xs text-gray-400">({{ $t('oa.workerCategoryHint') || '勾选后自动同步到该分类' }})</span>
+            </div>
+
             <!-- 搜索 -->
             <input v-model="employeeSearch" :placeholder="$t('oa.searchEmployee') || '搜索员工'" class="w-full border rounded-lg px-3 py-2 text-sm mb-2" />
 
@@ -133,6 +144,15 @@
                 <div class="flex-1 min-w-0">
                   <span class="text-sm">{{ emp.name }}</span>
                   <span v-if="emp.department" class="text-xs text-gray-400 ml-1">({{ emp.department }})</span>
+                  <!-- 2026-08-25 显示 worker_category 标签 -->
+                  <span v-if="emp.worker_category" class="ml-1 px-1.5 py-0.5 rounded text-[10px]"
+                    :class="{
+                      'bg-orange-100 text-orange-700': emp.worker_category === 'engineering',
+                      'bg-blue-100 text-blue-700': emp.worker_category === 'office',
+                      'bg-purple-100 text-purple-700': emp.worker_category === 'both'
+                    }">
+                    {{ workerCategoryLabel(emp.worker_category) }}
+                  </span>
                 </div>
               </div>
               <div v-if="filteredEmployees.length === 0" class="text-center py-4 text-gray-400 text-sm">
@@ -175,7 +195,8 @@ const form = ref({
   weekdays: [1, 2, 3, 4, 5],
   start_time: '09:00',
   end_time: '18:00',
-  member_ids: []
+  member_ids: [],
+  worker_category: 'office'
 })
 
 const weekDayLabels = computed(() => [
@@ -243,7 +264,8 @@ function openEdit(rule) {
     weekdays: rule.weekdays ? [...rule.weekdays] : [],
     start_time: rule.start_time || '09:00',
     end_time: rule.end_time || '18:00',
-    member_ids: rule.members ? rule.members.map(m => m.user_id) : []
+    member_ids: rule.members ? rule.members.map(m => m.user_id) : [],
+    worker_category: rule.worker_category || 'office'
   }
   employeeSearch.value = ''
   showDialog.value = true
@@ -263,6 +285,10 @@ function toggleMember(uid) {
   }
 }
 
+function workerCategoryLabel(cat) {
+  return { engineering: '工程', office: '办公室', both: '双重' }[cat] || cat
+}
+
 function removeMember(uid) {
   form.value.member_ids = form.value.member_ids.filter(id => id !== uid)
 }
@@ -279,7 +305,8 @@ async function saveRule() {
       weekdays: form.value.weekdays,
       start_time: form.value.start_time,
       end_time: form.value.end_time,
-      member_ids: form.value.member_ids
+      member_ids: form.value.member_ids,
+      worker_category: form.value.worker_category
     }
 
     if (editingRule.value) {

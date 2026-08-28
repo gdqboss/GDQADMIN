@@ -7,6 +7,12 @@
       </button>
     </div>
 
+    <!-- 提示:管理员看"今日全员"请去独立页面 -->
+    <div v-if="userStore.canAccess('attendance:manage')" class="mb-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
+      {{ $t('oa.seeTodayAllHint') }}
+      <router-link to="/oa/attendance-today" class="font-semibold underline ml-1">{{ $t('nav.attendanceToday') }} →</router-link>
+    </div>
+
     <!-- Filters -->
     <div class="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
       <div>

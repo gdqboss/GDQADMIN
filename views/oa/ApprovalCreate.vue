@@ -81,6 +81,11 @@
           <TransferForm v-model="form.form_data" />
         </template>
 
+        <!-- Business Trip Application (2026-08-28) -->
+        <template v-else-if="form.type_code === 'trip'">
+          <TripForm v-model="form.form_data" />
+        </template>
+
         <!-- Attachments -->
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t('oa.attachmentUpload') }}</label>
@@ -135,6 +140,7 @@ import LeaveForm from '../../components/oa/forms/LeaveForm.vue'
 import HireForm from '../../components/oa/forms/HireForm.vue'
 import ResignForm from '../../components/oa/forms/ResignForm.vue'
 import TransferForm from '../../components/oa/forms/TransferForm.vue'
+import TripForm from '../../components/oa/forms/TripForm.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -195,7 +201,8 @@ function getTypeDescription(code) {
     leave: t('oa.leaveDesc'),
     hire: t('oa.hireDesc'),
     resign: t('oa.resignDesc'),
-    transfer: t('oa.transferDesc')
+    transfer: t('oa.transferDesc'),
+    trip: t('oa.tripDesc')
   }
   return descriptions[code] || ''
 }
@@ -301,6 +308,16 @@ function validateForm() {
     case 'transfer':
       if (!data.employee_id || !data.new_department || !data.new_position || !data.transfer_date || !data.reason) {
         alert(t('oa.pleaseFillRequired'))
+        return false
+      }
+      break
+    case 'trip':
+      if (!data.destination || !data.start_date || !data.end_date || !data.reason) {
+        alert(t('oa.pleaseFillRequired'))
+        return false
+      }
+      if (new Date(data.end_date) <= new Date(data.start_date)) {
+        alert(t('oa.endDateAfterStart'))
         return false
       }
       break
