@@ -153,6 +153,7 @@ const routes = [
       // ── 消息 ────────────────────────────────────────────────
       { path: 'wecom', name: 'WeCom', component: lazyLoad(() => import('../views/wecom/WeComChat.vue')), meta: { title: '企业微信', parent: '消息', permission: 'wecom:read' } },
       { path: 'kefu', name: 'Kefu', component: lazyLoad(() => import('../views/kefu/KefuChat.vue')), meta: { title: '客服消息', parent: '消息', permission: 'kefu:read' } },
+      { path: 'wechat-agent', name: 'WechatAgent', component: lazyLoad(() => import('../views/WechatAgent.vue')), meta: { title: '微信Agent服务', parent: '消息', permission: 'wechat_agent:read' } },
       { path: 'ai-automation', name: 'AiAutomation', component: lazyLoad(() => import('../views/automation/AiAutomation.vue')), meta: { title: 'AI 自动化', parent: 'OpenClaw', permission: 'ai-automation:write' } },
 
       // ── 协会中心 (SGP 是 source, 2026-07-30 波哥加 macau, 2026-08-15 江小鱼把 source 补齐)

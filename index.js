@@ -82,6 +82,7 @@ import minipAiHrRoutes from './routes/minip-ai-hr.js'
 import minipAiMarketingRoutes from './routes/minip-ai-marketing.js'
 import minipAiBrainRoutes from './routes/minip-ai-brain.js'
 import aiHrRoutes from './routes/ai-hr.js'  // 2026-08-27 AI HR 招聘（新模块：应聘者对话 + HR 报告管理）
+import wechatAgentServer from './routes/wechat-agent-server.js'  // 2026-08-29 微信 Agent 服务（多用户多 agent 个人微信）
 import laborAiRoutes from './routes/labor-ai.js'
 import templeRoutes from './routes/temple.js'
 import templeKaraokeRoutes, { attachKaraokeWS } from './routes/temple-karaoke.js'
@@ -260,6 +261,9 @@ app.use('/api/ai-class', auth, aiClassRoutes)
 app.use('/api/ai-class', auth, aiClassReactRoutes)
 // AI HR 招聘 (2026-08-27) - 公共端点不挂 auth（应聘者匿名），HR 路由内部 router.use(auth)
 app.use('/api/ai-hr', aiHrRoutes)
+// 微信 Agent 服务 (2026-08-29) - webhook 不挂 auth（外部通道回调），admin 带 auth
+app.use('/api/wechat-agent', wechatAgentServer.router)
+app.use('/api/wechat-agent/admin', wechatAgentServer.adminRouter)
 app.use('/api/labor-ai-agent', auth, laborAiAgentRoutes)
 app.use('/api/labor-ai-supervisor', auth, laborAiSupervisorRoutes)
 app.use('/api/system-health', auth, healthRoutes)

@@ -31,6 +31,7 @@ const MODULE_KEY_ALIASES = {
   'labor-ai':           'labor-ai.js',  // 2026-07-13: 鼓励/成长/知识库/健康 (复用既有表)
   'smart-studio':       'smart-studio.js',  // 2026-07-17: 私聊模块,只在新加坡 profile 1 启用
   'ai-assistant':       'ai-assistant.js',  // 2026-07-18: 横琴湾 AI 助手迁移（原 /root/backend/src/services/ai/assistant.js）,只 profile 1
+  'wechat-agent-server':'wechat-agent-server.js',  // 2026-08-29: 多用户多 Agent 个人微信服务
 }
 
 // ============================================================
@@ -78,6 +79,7 @@ async function buildModuleRouteMap() {
     'labor-hr': ['routes/labor-hr.js'],
     'labor-appeals': ['routes/labor-appeals.js'],
     'labor-ai': ['routes/labor-ai.js'],  // 2026-07-13: 鼓励/成长/知识库/健康
+    'wechat-agent-server': ['routes/wechat-agent-server.js'],  // 2026-08-29: 多用户多 Agent 个人微信服务
   }
   return _moduleRouteMap
 }
@@ -413,6 +415,10 @@ router.post('/', async (req, res) => {
       let v = b[f]
       if (f === 'build_date' && v) v = new Date(v).toISOString().slice(0, 10)
       if (f === 'language' && Array.isArray(v)) v = JSON.stringify(v)
+      // 长文本字段: array/object 转 JSON 字符串 (mysql2 把 JS array 直接当 placeholder 会出 'WHERE' syntax error)
+      if ((f === 'extra_dists' || f === 'pem_content') && v && typeof v === 'object') v = JSON.stringify(v)
+      // build_date 空字符串会让 MariaDB DATE 列报错, 转 null
+      if (f === 'build_date' && v === '') v = null
       return v
     })
     const placeholders = cols.map(() => '?').join(',')
@@ -459,6 +465,10 @@ router.put('/:id', async (req, res) => {
       let v = b[f]
       if (f === 'build_date' && v) v = new Date(v).toISOString().slice(0, 10)
       if (f === 'language' && Array.isArray(v)) v = JSON.stringify(v)
+      // 长文本字段: array/object 转 JSON 字符串 (mysql2 把 JS array 直接当 placeholder 会出 'WHERE' syntax error)
+      if ((f === 'extra_dists' || f === 'pem_content') && v && typeof v === 'object') v = JSON.stringify(v)
+      // build_date 空字符串会让 MariaDB DATE 列报错, 转 null
+      if (f === 'build_date' && v === '') v = null
       return v
     })
     const setClause = cols.map(f => `${f}=?`).join(',')

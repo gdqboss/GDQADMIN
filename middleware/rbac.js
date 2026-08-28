@@ -111,6 +111,10 @@ const PERMISSIONS = {
   AI_HR_READ: 'ai_hr:read',
   AI_HR_WRITE: 'ai_hr:write',
   AI_HR_DELETE: 'ai_hr:delete',
+  // 微信 Agent 服务 (2026-08-29 江小鱼加) — 多用户多 agent 个人微信服务模块
+  WECHAT_AGENT_READ: 'wechat_agent:read',
+  WECHAT_AGENT_WRITE: 'wechat_agent:write',
+  WECHAT_AGENT_DELETE: 'wechat_agent:delete',
   // 首页工作台
   DASHBOARD_VIEW: 'dashboard:view',
   DASHBOARD_STATS: 'dashboard:stats',
