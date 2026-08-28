@@ -197,6 +197,7 @@ const menuGroups = computed(() => [
       { key: 'attendance:manage', label: t('nav.qaAttendance'), to: '/oa/attendance' },
       { key: 'attendance:today', label: t('nav.attendanceToday'), to: '/oa/attendance-today', permission: 'attendance:manage' },
       { key: 'attendance:summary', label: t('nav.attendanceSummary'), to: '/oa/attendance-summary' },
+      { key: 'attendance:trip', label: t('nav.tripRecords'), to: '/oa/attendance-trip-records', permission: 'attendance:view' },
       { key: 'schedule:view', label: t('nav.scheduleCalendar'), to: '/oa/schedule' },
       { key: 'attendance:rules', label: t('nav.attendanceRules'), to: '/oa/attendance-rules' },
       { key: 'approval:read', label: t('nav.approvals'), to: '/approvals' },

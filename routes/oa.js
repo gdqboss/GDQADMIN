@@ -252,6 +252,61 @@ router.put('/auto-clock/permission/:id', requireRole(ROLES.ADMIN), async (req, r
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // POST /api/oa/attendance/clock - Clock in/out with GPS
+// ===== 动态上班时间段: 按员工排班/所属规则判定 (支持多种班次) =====
+function fmtWorkTime(t) {
+  if (!t) return null
+  const s = String(t)
+  // time 类型: 'HH:MM' 或 'HH:MM:SS'
+  if (s.includes(':')) {
+    const parts = s.split(':')
+    const h = parts[0].padStart(2, '0'), m = (parts[1] || '00').padStart(2, '0'), sec = (parts[2] || '00').padStart(2, '0')
+    return `${h}:${m}:${sec}`
+  }
+  return null
+}
+// 优先级: 1) 当天排班 shift_schedules→shifts  2) 员工所属规则 attendance_rule_members→rules  3) 全局默认规则  4) 09:00/18:00 兜底
+async function getWorkTimeWindow(userId) {
+  const defaultIn = '09:00:00', defaultOut = '18:00:00'
+  const today = new Date().toISOString().slice(0, 10)
+  try {
+    // 1. 当天排班
+    const [sched] = await pool.query(
+      `SELECT s.start_time, s.end_time FROM shift_schedules ss
+       LEFT JOIN shifts s ON ss.shift_id = s.id
+       WHERE ss.user_id = ? AND ss.schedule_date = ? AND s.status = 'active' LIMIT 1`,
+      [userId, today]
+    )
+    if (sched && sched[0]) {
+      const si = fmtWorkTime(sched[0].start_time)
+      const so = fmtWorkTime(sched[0].end_time)
+      if (si) return { in: si, out: so || defaultOut }
+    }
+    // 2. 员工所属出勤规则
+    const [rules] = await pool.query(
+      `SELECT ar.start_time, ar.end_time FROM attendance_rule_members arm
+       LEFT JOIN attendance_rules ar ON arm.rule_id = ar.id
+       WHERE arm.user_id = ? AND ar.status = 'active' ORDER BY ar.id LIMIT 1`,
+      [userId]
+    )
+    if (rules && rules[0]) {
+      const ri = fmtWorkTime(rules[0].start_time)
+      const ro = fmtWorkTime(rules[0].end_time)
+      if (ri) return { in: ri, out: ro || defaultOut }
+    }
+    // 3. 全局默认规则
+    const [def] = await pool.query(
+      `SELECT start_time, end_time FROM attendance_rules WHERE status = 'active' ORDER BY id ASC LIMIT 1`
+    )
+    if (def && def[0]) {
+      const di = fmtWorkTime(def[0].start_time)
+      const doo = fmtWorkTime(def[0].end_time)
+      if (di) return { in: di, out: doo || defaultOut }
+    }
+  } catch (e) { /* 任何异常兜底, 不影响打卡 */ }
+  return { in: defaultIn, out: defaultOut }
+}
+// ===== end 动态时间段 =====
+
 router.post('/attendance/clock', async (req, res, next) => {
   try {
     const { type, lat, lng, accuracy, device_info, ip, is_auto_clock = false } = req.body
@@ -259,6 +314,9 @@ router.post('/attendance/clock', async (req, res, next) => {
     const today = new Date().toISOString().slice(0, 10)
     const now = new Date()
     const timeStr = now.toTimeString().slice(0, 8)
+    // 动态上班时间段 (多班次支持)
+    const win = await getWorkTimeWindow(userId)
+    const winIn = win.in, winOut = win.out
     // 自动打卡时标记
     const autoClock = is_auto_clock ? 1 : 0
 
@@ -299,14 +357,14 @@ router.post('/attendance/clock', async (req, res, next) => {
       const isRequired = user && user.require_attendance === 1
       const silent = !isRequired
       const workerCategory = user?.worker_category || 'office'
-      const status = isRequired ? (timeStr > '09:00:00' ? 'late' : 'normal') : 'normal'
+      const status = isRequired ? (timeStr > winIn ? 'late' : 'normal') : 'normal'
 
       await pool.query(
         `INSERT INTO attendance (user_id, date, clock_in, status, late_minutes, early_minutes,
          location, gps_lat, gps_lng, gps_accuracy, device_info, ip_address, is_auto_clock, abnormal_reason)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [userId, today, timeStr, status,
-         silent ? 0 : (timeStr > '09:00:00' ? Math.floor((new Date(`2000-01-01 ${timeStr}`) - new Date('2000-01-01 09:00:00')) / 60000) : 0),
+         silent ? 0 : (timeStr > winIn ? Math.floor((new Date(`2000-01-01 ${timeStr}`) - new Date(`2000-01-01 ${winIn}`)) / 60000) : 0),
          0, req.body.location || null, lat || null, lng || null, accuracy || null,
          device_info || null, ip || null, autoClock,
          silent ? 'non-required: silent record (not counted in attendance stats)' : null]
@@ -328,12 +386,12 @@ router.post('/attendance/clock', async (req, res, next) => {
       const isRequired = user && user.require_attendance === 1
       const silent = !isRequired
       const workerCategory = user?.worker_category || 'office'
-      const status = isRequired ? (timeStr < '18:00:00' ? 'early' : existing.status) : 'normal'
+      const status = isRequired ? (timeStr < winOut ? 'early' : existing.status) : 'normal'
 
       await pool.query(
         'UPDATE attendance SET clock_out = ?, status = ?, early_minutes = ?, abnormal_reason = ?, is_auto_clock = ? WHERE id = ?',
         [timeStr, status,
-         silent ? 0 : (timeStr < '18:00:00' ? Math.floor((new Date('2000-01-01 18:00:00') - new Date(`2000-01-01 ${timeStr}`)) / 60000) : 0),
+         silent ? 0 : (timeStr < winOut ? Math.floor((new Date(`2000-01-01 ${winOut}`) - new Date(`2000-01-01 ${timeStr}`)) / 60000) : 0),
          silent ? 'non-required: silent record (not counted in attendance stats)' : null,
          autoClock, existing.id]
       )
@@ -372,7 +430,10 @@ router.get('/attendance/trip-logs', async (req, res, next) => {
     const userId = user_id || req.user.id
     const isAdmin = ['admin', 'manager'].includes(req.user.role)
     const params = []
-    let sql = `SELECT tl.*, u.name as user_name, u.department
+    let sql = `SELECT tl.id, tl.user_id, DATE_FORMAT(tl.trip_date, '%Y-%m-%d') as trip_date,
+               DATE_FORMAT(tl.log_time, '%H:%i') as log_time, tl.location, tl.gps_lat, tl.gps_lng,
+               tl.gps_accuracy, tl.device_info, tl.ip_address, tl.remark, tl.created_at,
+               u.name as user_name, u.department
                FROM attendance_trip_logs tl
                LEFT JOIN users u ON tl.user_id = u.id
                WHERE 1=1`
