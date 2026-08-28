@@ -6,8 +6,18 @@ import { requireRole, requirePermission, PERMISSIONS, ROLES } from '../middlewar
 import { checkPerm } from '../utils/permission.js'
 import oaRoutes from './oa.js'
 import { listTabsForUser as listDbTabs } from './minip-tabbar-config.js'
+import QRCode from 'qrcode'
+import sharp from 'sharp'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const router = Router()
+
+// business-card 名片海报/二维码目录 (2026-08-28 修复恢复)
+const bcQrDir = path.join(__dirname, '../uploads/business-cards')
+if (!fs.existsSync(bcQrDir)) fs.mkdirSync(bcQrDir, { recursive: true })
 
 // ============================================================
 // 公开接口（游客可访问，无需登录）
@@ -1291,18 +1301,19 @@ router.get('/office/tasks', auth, async (req, res, next) => {
       where += ' AND t.assigned_by = ?'
       params.push(userId)
     } else if (scope === 'assigned' && !isAdmin) {
-      where += ' AND t.assigned_to = ?'
-      params.push(userId)
+      // 分配给我 = 主负责人 或 附加负责人(task_assignees)
+      where += ' AND (t.assigned_to = ? OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ?))'
+      params.push(userId, userId)
     } else if (scope === 'all' && !isAdmin) {
       // 普通员工不能看 all, 退回 assigned
-      where += ' AND t.assigned_to = ?'
-      params.push(userId)
+      where += ' AND (t.assigned_to = ? OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ?))'
+      params.push(userId, userId)
     } else if (scope === 'mine' && isAdmin) {
       where += ' AND t.assigned_by = ?'
       params.push(userId)
     } else if (scope === 'assigned' && isAdmin) {
-      where += ' AND t.assigned_to = ?'
-      params.push(userId)
+      where += ' AND (t.assigned_to = ? OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ?))'
+      params.push(userId, userId)
     } // scope='all' 且 isAdmin: 不加 user 过滤
     if (status) {
       where += ' AND t.status = ?'
@@ -1310,7 +1321,8 @@ router.get('/office/tasks', auth, async (req, res, next) => {
     }
     const [rows] = await pool.query(
       `SELECT t.id, t.title, t.description, t.status, t.priority, t.due_date, t.created_at, t.assigned_to, t.assigned_by,
-              u.name as assignee_name, b.name as assigner_name
+              u.name as assignee_name, b.name as assigner_name,
+              COALESCE((SELECT GROUP_CONCAT(x.name SEPARATOR '、') FROM task_assignees ta2 JOIN users x ON ta2.user_id = x.id WHERE ta2.task_id = t.id), '') AS extra_assignee_names
        FROM tasks t
        LEFT JOIN users u ON t.assigned_to = u.id
        LEFT JOIN users b ON t.assigned_by = b.id
@@ -1334,27 +1346,50 @@ router.post('/office/tasks', auth, async (req, res, next) => {
     const isAdmin = req.user.role === 'admin'
     const { title, description, priority = 'medium', due_date, assigned_to } = req.body
     if (!title) return res.status(400).json({ code: 400, message: '任务标题不能为空' })
-    let targetUser = (Number.isInteger(Number(assigned_to)) && Number(assigned_to) > 0)
-      ? Number(assigned_to) : userId
-    if (!isAdmin && targetUser !== userId) {
-      // 普通员工: 检查目标是否是下属
+    // 归一化指派对象为数组 (多选支持) — 首个为主负责人(assigned_to), 其余写 task_assignees
+    let targetsRaw = Array.isArray(assigned_to)
+      ? assigned_to.map(String).filter(v => /^\d+$/.test(v)).map(Number)
+      : ((Number.isInteger(Number(assigned_to)) && Number(assigned_to) > 0) ? [Number(assigned_to)] : [userId])
+    targetsRaw = [...new Set(targetsRaw)]  // 去重
+    if (!targetsRaw.length) targetsRaw = [userId]
+    if (!isAdmin) {
+      // 普通员工: 每个目标都必须是自己或下属
       const [[sub]] = await pool.query(
         `WITH RECURSIVE subordinate_tree AS (
           SELECT id, supervisor_id FROM users WHERE supervisor_id = ?
           UNION ALL
           SELECT u.id, u.supervisor_id FROM users u
           INNER JOIN subordinate_tree st ON u.supervisor_id = st.id
-        ) SELECT id FROM subordinate_tree WHERE id = ?`,
-        [userId, targetUser]
+        ) SELECT COUNT(*) AS cnt FROM subordinate_tree WHERE id IN (?)`,
+        [userId, targetsRaw]
       )
-      if (!sub) return res.status(403).json({ code: 403, message: '只能派给下属' })
+      const okCnt = (sub?.cnt || 0) + (targetsRaw.includes(userId) ? 1 : 0)
+      if (okCnt < targetsRaw.length) return res.status(403).json({ code: 403, message: '只能派给自己或下属' })
     }
-    const [r] = await pool.query(
-      `INSERT INTO tasks (title, description, priority, status, assigned_to, created_by, assigned_by, due_date, is_new)
-       VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, 1)`,
-      [title, description || null, priority, targetUser, userId, userId, due_date || null]
-    )
-    res.json({ code: 0, data: { id: r.insertId } })
+    // 插入任务(主负责人) + 附加负责人
+    const conn = await pool.getConnection()
+    try {
+      await conn.beginTransaction()
+      const [r] = await conn.query(
+        `INSERT INTO tasks (title, description, priority, status, assigned_to, created_by, assigned_by, due_date, is_new)
+         VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, 1)`,
+        [title, description || null, priority, targetsRaw[0], userId, userId, due_date || null]
+      )
+      const extra = targetsRaw.slice(1)
+      if (extra.length) {
+        await conn.query(
+          `INSERT IGNORE INTO task_assignees (task_id, user_id) VALUES ${extra.map(() => '(?, ?)').join(',')}`,
+          extra.flatMap(uid => [r.insertId, uid])
+        )
+      }
+      await conn.commit()
+      res.json({ code: 0, data: { id: r.insertId } })
+      conn.release()
+    } catch (e) {
+      await conn.rollback().catch(() => {})
+      conn.release()
+      throw e
+    }
   } catch (err) {
     console.error('[minip] tasks create error:', err?.message || err)
     res.status(500).json({ code: 500, message: err?.message || '创建任务失败' })
@@ -1369,7 +1404,9 @@ router.put('/office/tasks/:id', auth, async (req, res, next) => {
     const { status, completion_note, title, description, priority, due_date } = req.body
     const [[task]] = await pool.query('SELECT * FROM tasks WHERE id = ?', [taskId])
     if (!task) return res.status(404).json({ code: 404, message: '任务不存在' })
-    if (task.assigned_to !== userId && task.assigned_by !== userId) {
+    // 权限: 主负责人 / 创建者 / 附加负责人 均可操作
+    const [[rel]] = await pool.query('SELECT 1 FROM task_assignees WHERE task_id = ? AND user_id = ?', [taskId, userId])
+    if (task.assigned_to !== userId && task.assigned_by !== userId && !rel) {
       return res.status(403).json({ code: 403, message: '无权操作此任务' })
     }
     const updates= []
@@ -1394,7 +1431,8 @@ router.delete('/office/tasks/:id', auth, async (req, res, next) => {
     const taskId = Number(req.params.id)
     const [[task]] = await pool.query('SELECT * FROM tasks WHERE id = ?', [taskId])
     if (!task) return res.status(404).json({ code: 404, message: '任务不存在' })
-    if (task.assigned_to !== userId && task.assigned_by !== userId) {
+    const [[rel]] = await pool.query('SELECT 1 FROM task_assignees WHERE task_id = ? AND user_id = ?', [taskId, userId])
+    if (task.assigned_to !== userId && task.assigned_by !== userId && !rel) {
       return res.status(403).json({ code: 403, message: '无权删除' })
     }
     await pool.query('DELETE FROM tasks WHERE id = ?', [taskId])
@@ -1415,7 +1453,7 @@ router.get('/office/tasks/stats', auth, async (req, res, next) => {
     let whereClause = ''
     let params = []
     if (userRole === 'admin') whereClause = 'WHERE 1=1'
-    else { whereClause = 'WHERE (assigned_to = ? OR assigned_by = ?)'; params = [userId, userId] }
+    else { whereClause = 'WHERE (assigned_to = ? OR assigned_by = ? OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = tasks.id AND ta.user_id = ?))'; params = [userId, userId, userId] }
     const [[myStats]] = await pool.query(
       `SELECT
         COUNT(*) as total,
@@ -1426,8 +1464,8 @@ router.get('/office/tasks/stats', auth, async (req, res, next) => {
         SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
         SUM(CASE WHEN priority = 'urgent' THEN 1 ELSE 0 END) as urgent,
         SUM(CASE WHEN due_date < CURDATE() AND status NOT IN ('completed', 'rejected') THEN 1 ELSE 0 END) as overdue
-      FROM tasks WHERE assigned_to = ?`,
-      [userId]
+      FROM tasks WHERE assigned_to = ? OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = tasks.id AND ta.user_id = ?)`,
+      [userId, userId]
     )
     const [[assignedStats]] = await pool.query(
       `SELECT
@@ -1447,7 +1485,7 @@ router.get('/office/tasks/stats', auth, async (req, res, next) => {
 // GET /office/tasks/unread-count - 未读任务数 (红点)
 router.get('/office/tasks/unread-count', auth, async (req, res, next) => {
   try {
-    const [[{ count }]] = await pool.query('SELECT COUNT(*) as count FROM tasks WHERE assigned_to = ? AND is_new = 1 AND status IN ("pending", "in_progress")', [req.user.id])
+    const [[{ count }]] = await pool.query('SELECT COUNT(*) as count FROM tasks WHERE (assigned_to = ? OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = tasks.id AND ta.user_id = ?)) AND is_new = 1 AND status IN ("pending", "in_progress")', [req.user.id, req.user.id])
     res.json({ code: 0, data: { count } })
   } catch (err) { next(err) }
 })
@@ -1455,7 +1493,7 @@ router.get('/office/tasks/unread-count', auth, async (req, res, next) => {
 // POST /office/tasks/mark-all-read - 全部标记已读
 router.post('/office/tasks/mark-all-read', auth, async (req, res, next) => {
   try {
-    await pool.query('UPDATE tasks SET is_new = 0 WHERE assigned_to = ?', [req.user.id])
+    await pool.query('UPDATE tasks SET is_new = 0 WHERE (assigned_to = ? OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = tasks.id AND ta.user_id = ?))', [req.user.id, req.user.id])
     res.json({ code: 0, message: 'ok' })
   } catch (err) { next(err) }
 })
@@ -1463,7 +1501,7 @@ router.post('/office/tasks/mark-all-read', auth, async (req, res, next) => {
 // POST /office/tasks/:id/mark-read - 单条标记已读
 router.post('/office/tasks/:id/mark-read', auth, async (req, res, next) => {
   try {
-    await pool.query('UPDATE tasks SET is_new = 0 WHERE id = ? AND assigned_to = ?', [req.params.id, req.user.id])
+    await pool.query('UPDATE tasks SET is_new = 0 WHERE id = ? AND (assigned_to = ? OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = tasks.id AND ta.user_id = ?))', [req.params.id, req.user.id, req.user.id])
     res.json({ code: 0, message: 'ok' })
   } catch (err) { next(err) }
 })
@@ -1487,7 +1525,8 @@ router.put('/office/tasks/:id/submit', auth, async (req, res, next) => {
     const finalNote = completion_notes || completion_note || ''
     const [[task]] = await pool.query('SELECT assigned_to, status FROM tasks WHERE id = ?', [taskId])
     if (!task) return res.status(404).json({ code: 404, message: '任务不存在' })
-    if (task.assigned_to !== req.user.id) return res.status(403).json({ code: 403, message: '只能提交指派给自己的任务' })
+    const [[rel]] = await pool.query('SELECT 1 FROM task_assignees WHERE task_id = ? AND user_id = ?', [taskId, req.user.id])
+    if (task.assigned_to !== req.user.id && !rel) return res.status(403).json({ code: 403, message: '只能提交指派给自己的任务' })
     if (task.status === 'completed') return res.status(400).json({ code: 400, message: '任务已完成' })
     if (task.status === 'submitted') return res.status(400).json({ code: 400, message: '任务已提交，等待审核' })
     await pool.query("UPDATE tasks SET status = 'submitted', completion_note = ?, submitted_at = NOW() WHERE id = ?", [finalNote || null, taskId])
@@ -2312,6 +2351,393 @@ router.put('/me/profile', auth, async (req, res, next) => {
     await pool.query('UPDATE users SET username = ?, email = ?, avatar = ? WHERE id = ?', [name, email, avatar, req.user.id])
     const [rows] = await pool.query('SELECT id, username, phone, email, avatar FROM users WHERE id = ?', [req.user.id])
     res.json({ code: 0, data: rows[0] })
+  } catch (err) { next(err) }
+})
+
+// 电子名片 (business-card) - 2026-08-20
+// 数据复用 users 表的员工名片字段
+// ============================================================
+
+// GET /api/minip/business-card/me - 我的名片
+router.get('/business-card/me', auth, async (req, res, next) => {
+  try {
+    const [[employee]] = await pool.query(
+      `SELECT id, name, email, phone, role, department, avatar, images, title, bio, bio_en, wechat,
+              card_bg, company_name, company_name_en, company_address, company_address_en, company_phone,
+              status, created_at, employee_code, card_views, endorsements
+       FROM users WHERE id = ? AND status = 'active'`,
+      [req.user.id]
+    )
+    if (!employee) return res.status(404).json({ code: 404, message: '名片不存在' })
+
+    const images = employee.images ? (typeof employee.images === 'string' ? JSON.parse(employee.images) : employee.images) : []
+    const host = req.headers.host || 'localhost'
+    res.json({
+      code: 0,
+      data: {
+        ...employee,
+        images,
+        card_views: employee.card_views || 0,
+        endorsements: employee.endorsements || 0,
+        card_url: `https://${host}/minip/#/pages/business-card/index?id=${req.user.id}`,
+        can_edit: true
+      },
+      message: 'ok'
+    })
+  } catch (err) { next(err) }
+})
+
+// PUT /api/minip/business-card/me - 编辑我的名片
+router.put('/business-card/me', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    const { avatar, images, title, bio, bio_en, wechat, email, card_bg, company_name, company_name_en, company_address, company_address_en, company_phone } = req.body
+
+    const updates = []
+    const params = []
+    const add = (field, val) => {
+      if (val !== undefined) {
+        updates.push(`${field} = ?`)
+        params.push(val === '' ? null : val)
+      }
+    }
+
+    add('avatar', avatar)
+    if (images !== undefined) {
+      updates.push('images = ?')
+      params.push(Array.isArray(images) ? JSON.stringify(images) : images)
+    }
+    add('title', title)
+    add('bio', bio)
+    add('bio_en', bio_en)
+    add('wechat', wechat)
+    add('email', email)
+    add('card_bg', card_bg)
+    add('company_name', company_name)
+    add('company_name_en', company_name_en)
+    add('company_address', company_address)
+    add('company_address_en', company_address_en)
+    add('company_phone', company_phone)
+
+    if (!updates.length) return res.status(400).json({ code: 400, message: '没有要更新的字段' })
+
+    params.push(userId)
+    await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params)
+
+    // 返回更新后的数据
+    const [[row]] = await pool.query(
+      `SELECT id, name, email, phone, role, department, avatar, images, title, bio, bio_en, wechat,
+              card_bg, company_name, company_name_en, company_address, company_address_en, company_phone,
+              card_views, endorsements FROM users WHERE id = ?`,
+      [userId]
+    )
+    res.json({ code: 0, data: { ...row, images: row.images ? (typeof row.images === 'string' ? JSON.parse(row.images) : row.images) : [] }, message: '名片更新成功' })
+  } catch (err) { next(err) }
+})
+
+// GET /api/minip/business-card/favorites/list - 我的收藏列表 (auth)
+router.get('/business-card/favorites/list', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    const [rows] = await pool.query(
+      `SELECT f.id AS fav_id, f.created_at AS fav_at,
+              u.id, u.name, u.title, u.department, u.phone, u.email, u.avatar, u.card_bg, u.company_name
+       FROM business_card_favorites f
+       JOIN users u ON u.id = f.card_user_id AND u.status = 'active'
+       WHERE f.user_id = ?
+       ORDER BY f.created_at DESC`,
+      [userId]
+    )
+    res.json({ code: 0, data: { list: rows, total: rows.length }, message: 'ok' })
+  } catch (err) { next(err) }
+})
+
+// GET /api/minip/business-card/:id - 公开查看名片
+router.get('/business-card/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const [[employee]] = await pool.query(
+      `SELECT id, name, email, phone, role, department, avatar, images, title, bio, bio_en, wechat,
+              card_bg, company_name, company_name_en, company_address, company_address_en, company_phone,
+              status, created_at, employee_code, card_views, endorsements
+       FROM users WHERE id = ? AND status = 'active'`,
+      [id]
+    )
+    if (!employee) return res.status(404).json({ code: 404, message: '名片不存在' })
+
+    const images = employee.images ? (typeof employee.images === 'string' ? JSON.parse(employee.images) : employee.images) : []
+    const host = req.headers.host || 'localhost'
+    res.json({
+      code: 0,
+      data: {
+        ...employee,
+        images,
+        card_views: employee.card_views || 0,
+        endorsements: employee.endorsements || 0,
+        card_url: `https://${host}/minip/#/pages/business-card/index?id=${id}`,
+        can_edit: !!(req.user && req.user.id == id)
+      },
+      message: 'ok'
+    })
+  } catch (err) { next(err) }
+})
+
+// POST /api/minip/business-card/:id/view - 浏览量+1
+router.post('/business-card/:id/view', async (req, res, next) => {
+  try {
+    await pool.query('UPDATE users SET card_views = COALESCE(card_views, 0) + 1 WHERE id = ?', [req.params.id])
+    res.json({ code: 0, message: 'ok' })
+  } catch (err) { next(err) }
+})
+
+// POST /api/minip/business-card/:id/endorse - 点赞/赞赏
+router.post('/business-card/:id/endorse', async (req, res, next) => {
+  try {
+    await pool.query('UPDATE users SET endorsements = COALESCE(endorsements, 0) + 1 WHERE id = ?', [req.params.id])
+    const [rows] = await pool.query('SELECT endorsements FROM users WHERE id = ?', [req.params.id])
+    res.json({ code: 0, message: '点赞成功', count: rows[0]?.endorsements || 0 })
+  } catch (err) { next(err) }
+})
+
+// GET /api/minip/business-card/:id/qrcode - 返回名片 QR 图 (公开)
+router.get('/business-card/:id/qrcode', async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const host = req.headers.host || 'localhost'
+    const protocol = req.headers['x-forwarded-pro'] || (host.includes('localhost') ? 'http' : 'https')
+    const scanUrl = `${protocol}://${host}/minip/#/pages/business-card/index?id=${id}`
+
+    const filename = `business-card-${id}.png`
+    const filePath = path.join(bcQrDir, filename)
+    if (!fs.existsSync(filePath)) {
+      await QRCode.toFile(filePath, scanUrl, { width: 480, margin: 2, color: { dark: '#16161A', light: '#FFFFFF' } })
+    }
+    res.json({
+      code: 0,
+      data: {
+        scan_url: scanUrl,
+        image_url: `/uploads/business-cards/${filename}`
+      },
+      message: 'ok'
+    })
+  } catch (err) { next(err) }
+})
+
+// GET /api/minip/business-card/:id/poster - 名片海报图 (公开)
+router.get('/business-card/:id/poster', async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const host = req.headers.host || 'localhost'
+    const protocol = req.headers['x-forwarded-pro'] || (host.includes('localhost') ? 'http' : 'https')
+    const scanUrl = `${protocol}://${host}/minip/#/pages/business-card/index?id=${id}`
+
+    // 取名片数据
+    const [[employee]] = await pool.query(
+      `SELECT id, name, title, department, phone, email, wechat, avatar, company_name, company_phone, card_bg
+       FROM users WHERE id = ? AND status = 'active'`,
+      [id]
+    )
+    if (!employee) return res.status(404).json({ code: 404, message: '名片不存在' })
+
+    const filename = `business-card-poster-${id}.png`
+    const filePath = path.join(bcQrDir, filename)
+
+    if (!fs.existsSync(filePath)) {
+      const W = 1536, H = 768
+      const bgBuf = await posterBackground(employee.card_bg || 'blue')
+
+      const qrBuf = await QRCode.toBuffer(scanUrl, {
+        width: 320, margin: 1,
+        color: { dark: '#16161A', light: '#FFFFFF' }
+      })
+
+      let avatarBuf = null
+      const productsDir = path.join(__dirname, '../uploads/products')
+      if (employee.avatar) {
+        const aPath = employee.avatar.startsWith('/')
+          ? path.join(__dirname, '..', employee.avatar)
+          : path.join(productsDir, employee.avatar)
+        if (fs.existsSync(aPath)) {
+          // 圆角遮罩：先 resize 成 180x180，再用 SVG 圆形 mask 裁剪
+          const maskSvg = `<svg width="180" height="180"><circle cx="90" cy="90" r="90" fill="#FFFFFF"/></svg>`
+          avatarBuf = await sharp(aPath)
+            .resize(180, 180, { fit: 'cover' })
+            .composite([{
+              input: Buffer.from(maskSvg),
+              blend: 'dest-in'
+            }])
+            .png()
+            .toBuffer()
+          // 加白色边框
+          avatarBuf = await sharp({
+            create: { width: 200, height: 200, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } }
+          }).composite([
+            { input: Buffer.from('<svg width="200" height="200"><circle cx="100" cy="100" r="100" fill="#FFFFFF"/></svg>'), blend: 'over' },
+            { input: avatarBuf, top: 10, left: 10 }
+          ]).png().toBuffer()
+        }
+      }
+
+      const meta = []
+      if (employee.phone) meta.push(`📱  ${employee.phone}`)
+      if (employee.email) meta.push(`✉️  ${employee.email}`)
+      if (employee.wechat) meta.push(`💬  ${employee.wechat}`)
+      if (employee.company_phone) meta.push(`🏢  ${employee.company_phone}`)
+
+      // QR 白底圆角
+      const qrBgBuf = await sharp({
+        create: { width: 360, height: 360, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } }
+      }).composite([{
+        input: qrBuf,
+        top: 20, left: 20
+      }]).png().toBuffer()
+
+      const composites = []
+      if (avatarBuf) composites.push({ input: avatarBuf, top: 200, left: 80 })
+      composites.push({ input: Buffer.from(posterTextSvg(employee, meta)), top: 0, left: 0 })
+      composites.push({ input: qrBgBuf, top: 200, left: W - 80 - 360 })
+
+      await sharp(bgBuf)
+        .resize(W, H)
+        .composite(composites)
+        .png()
+        .toFile(filePath)
+    }
+
+    res.json({
+      code: 0,
+      data: {
+        image_url: `/uploads/business-cards/${filename}`,
+        width: 1536,
+        height: 768
+      },
+      message: 'ok'
+    })
+  } catch (err) { next(err) }
+})
+
+async function posterBackground(theme) {
+  const palettes = {
+    blue:   ['#667eea', '#764ba2'],
+    dark:   ['#232526', '#414345'],
+    gold:   ['#f5af19', '#f12711'],
+    green:  ['#11998e', '#38ef7d'],
+    purple: ['#7E53FF', '#B794F6'],
+    red:    ['#eb3349', '#f45c43']
+  }
+  const [c1, c2] = palettes[theme] || palettes.blue
+  const W = 1536, H = 768
+  return await sharp({
+    create: { width: W, height: H, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } }
+  }).composite([{
+    input: Buffer.from(`<svg width="${W}" height="${H}">
+      <defs>
+        <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="${c1}"/>
+          <stop offset="100%" stop-color="${c2}"/>
+        </linearGradient>
+        <pattern id="dots" x="0" y="0" width="36" height="36" patternUnits="userSpaceOnUse">
+          <circle cx="18" cy="18" r="1.2" fill="#FFFFFF" opacity="0.15"/>
+        </pattern>
+      </defs>
+      <rect width="${W}" height="${H}" fill="url(#g)"/>
+      <rect width="${W}" height="${H}" fill="url(#dots)"/>
+      <rect x="32" y="32" width="${W - 64}" height="${H - 64}" rx="28" fill="#FFFFFF" opacity="0.06"/>
+      <rect x="32" y="32" width="${W - 64}" height="80" rx="28" fill="#FFFFFF" opacity="0.10"/>
+    </svg>`)
+  }]).png().toBuffer()
+}
+
+function posterTextSvg(emp, meta) {
+  const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const W = 1536, H = 768
+  const lines = []
+
+  // 顶部 "DIGITAL BUSINESS CARD" + 品牌名
+  lines.push(`<text x="40" y="78" font-family="PingFang SC, sans-serif" font-size="22" font-weight="600" fill="#FFFFFF" opacity="0.9">DIGITAL BUSINESS CARD</text>`)
+  lines.push(`<text x="${W - 40}" y="78" text-anchor="end" font-family="PingFang SC, sans-serif" font-size="18" fill="#FFFFFF" opacity="0.7">${esc(emp.company_name || 'gbaw.cn')}</text>`)
+
+  // 姓名（大字）— 在头像右侧，x=300 起
+  lines.push(`<text x="300" y="285" font-family="PingFang SC, Microsoft YaHei, sans-serif" font-size="64" font-weight="700" fill="#FFFFFF">${esc(emp.name)}</text>`)
+
+  // 职位 · 部门
+  if (emp.title || emp.department) {
+    const t = `${esc(emp.title || '')}${emp.title && emp.department ? ' · ' : ''}${esc(emp.department || '')}`
+    lines.push(`<text x="300" y="335" font-family="PingFang SC, sans-serif" font-size="32" fill="#FFFFFF" opacity="0.92">${t}</text>`)
+  }
+
+  // 公司（在姓名前面空白处加一行）
+  if (emp.company_name) {
+    lines.push(`<text x="300" y="380" font-family="PingFang SC, sans-serif" font-size="22" fill="#FFFFFF" opacity="0.8">${esc(emp.company_name)}</text>`)
+  }
+
+  // 分割线
+  lines.push(`<line x1="300" y1="420" x2="1100" y2="420" stroke="#FFFFFF" stroke-width="2" opacity="0.35"/>`)
+
+  // 联系方式（左对齐，4 行）
+  let metaY = 470
+  meta.slice(0, 4).forEach((line) => {
+    lines.push(`<text x="300" y="${metaY}" font-family="PingFang SC, sans-serif" font-size="24" fill="#FFFFFF" opacity="0.92">${esc(line)}</text>`)
+    metaY += 40
+  })
+
+  // bio（简短）
+  if (emp.bio) {
+    const shortBio = emp.bio.length > 80 ? emp.bio.slice(0, 80) + '...' : emp.bio
+    lines.push(`<text x="300" y="${metaY + 10}" font-family="PingFang SC, sans-serif" font-size="20" fill="#FFFFFF" opacity="0.75">${esc(shortBio)}</text>`)
+  }
+
+  // 底部水印
+  lines.push(`<text x="40" y="${H - 40}" font-family="PingFang SC, sans-serif" font-size="18" fill="#FFFFFF" opacity="0.65">微信扫一扫 → 查看名片</text>`)
+  lines.push(`<text x="${W - 40}" y="${H - 40}" text-anchor="end" font-family="PingFang SC, sans-serif" font-size="16" fill="#FFFFFF" opacity="0.5">来自 gbaw.cn</text>`)
+
+  return `<svg width="${W}" height="${H}">${lines.join('\n')}</svg>`
+}
+
+// POST /api/minip/business-card/:id/favorite - 收藏 (auth)
+router.post('/business-card/:id/favorite', auth, async (req, res, next) => {
+  try {
+    const cardUserId = Number(req.params.id)
+    const userId = req.user.id
+    if (cardUserId === userId) return res.status(400).json({ code: 400, message: '不能收藏自己的名片' })
+    await pool.query(
+      'INSERT IGNORE INTO business_card_favorites (user_id, card_user_id) VALUES (?, ?)',
+      [userId, cardUserId]
+    )
+    res.json({ code: 0, message: '已收藏' })
+  } catch (err) { next(err) }
+})
+
+// DELETE /api/minip/business-card/:id/favorite - 取消收藏 (auth)
+router.delete('/business-card/:id/favorite', auth, async (req, res, next) => {
+  try {
+    const cardUserId = Number(req.params.id)
+    const userId = req.user.id
+    await pool.query(
+      'DELETE FROM business_card_favorites WHERE user_id = ? AND card_user_id = ?',
+      [userId, cardUserId]
+    )
+    res.json({ code: 0, message: '已取消收藏' })
+  } catch (err) { next(err) }
+})
+
+// GET /api/minip/business-card/:id/favorite - 是否已收藏 (auth)
+router.get('/business-card/:id/favorite', auth, async (req, res, next) => {
+  try {
+    const cardUserId = Number(req.params.id)
+    const userId = req.user.id
+    const [[row]] = await pool.query(
+      'SELECT id, created_at FROM business_card_favorites WHERE user_id = ? AND card_user_id = ?',
+      [userId, cardUserId]
+    )
+    res.json({
+      code: 0,
+      data: {
+        favorited: !!row,
+        created_at: row?.created_at || null
+      },
+      message: 'ok'
+    })
   } catch (err) { next(err) }
 })
 
