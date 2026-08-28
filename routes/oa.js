@@ -309,11 +309,13 @@ async function getWorkTimeWindow(userId) {
 
 router.post('/attendance/clock', async (req, res, next) => {
   try {
-    const { type, lat, lng, accuracy, device_info, ip, is_auto_clock = false } = req.body
+    const { type, lat, lng, accuracy, device_info, ip, is_auto_clock = false, clock_type = 'normal', location, remark } = req.body
     const userId = req.user.id
     const today = new Date().toISOString().slice(0, 10)
     const now = new Date()
     const timeStr = now.toTimeString().slice(0, 8)
+    // 打卡状态 (2026-08-28 钉钉模式): normal正常上班/trip出差/overtime加班/free自由打卡
+    const cType = ['normal', 'trip', 'overtime', 'free'].includes(clock_type) ? clock_type : 'normal'
     // 动态上班时间段 (多班次支持)
     const win = await getWorkTimeWindow(userId)
     const winIn = win.in, winOut = win.out
@@ -346,6 +348,12 @@ router.post('/attendance/clock', async (req, res, next) => {
       'SELECT * FROM attendance WHERE user_id = ? AND date = ?',
       [userId, today]
     )
+    // 2026-08-28 出差联动: 当天已有出差轨迹 → 打卡不判迟到/早退 (人在客户现场)
+    const [[tripToday]] = await pool.query(
+      'SELECT id FROM attendance_trip_logs WHERE user_id = ? AND trip_date = ? LIMIT 1',
+      [userId, today]
+    )
+    const onTrip = !!tripToday
 
     if (type === 'in') {
       if (existing) {
@@ -353,24 +361,36 @@ router.post('/attendance/clock', async (req, res, next) => {
       }
       // 检查是否需要考勤（只有必打卡员工才算迟到）
       // 2026-08-25 silent 模式:没勾选员工 status 锁 normal + 异常字段全 0
+      // 2026-08-28 状态模式: trip出差/free自由打卡 豁免迟到; overtime加班 迟到照判
       const [[user]] = await pool.query('SELECT require_attendance, worker_category FROM users WHERE id = ?', [userId])
       const isRequired = user && user.require_attendance === 1
       const silent = !isRequired
       const workerCategory = user?.worker_category || 'office'
-      const status = isRequired ? (timeStr > winIn ? 'late' : 'normal') : 'normal'
+      const exempt = (cType === 'trip' || cType === 'free' || onTrip)
+      const status = exempt ? 'normal' : (isRequired ? (timeStr > winIn ? 'late' : 'normal') : 'normal')
+      const lateMin = (silent || exempt || status !== 'late') ? 0 : Math.floor((new Date(`2000-01-01 ${timeStr}`) - new Date(`2000-01-01 ${winIn}`)) / 60000)
+
+      // 出差状态打卡 → 同步写一条出差轨迹 (轨迹表, 可多次)
+      if (cType === 'trip') {
+        await pool.query(
+          `INSERT INTO attendance_trip_logs (user_id, trip_date, log_time, location, gps_lat, gps_lng, gps_accuracy, device_info, ip_address, remark)
+           VALUES (?,?,?,?,?,?,?,?,?,?)`,
+          [userId, today, timeStr, location || null, lat || null, lng || null, accuracy || null, device_info || null, ip || null, remark || '出差打卡(上班状态)']
+        )
+      }
 
       await pool.query(
-        `INSERT INTO attendance (user_id, date, clock_in, status, late_minutes, early_minutes,
+        `INSERT INTO attendance (user_id, date, clock_in, status, clock_type, late_minutes, early_minutes,
          location, gps_lat, gps_lng, gps_accuracy, device_info, ip_address, is_auto_clock, abnormal_reason)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [userId, today, timeStr, status,
-         silent ? 0 : (timeStr > winIn ? Math.floor((new Date(`2000-01-01 ${timeStr}`) - new Date(`2000-01-01 ${winIn}`)) / 60000) : 0),
-         0, req.body.location || null, lat || null, lng || null, accuracy || null,
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [userId, today, timeStr, status, cType,
+         lateMin,
+         0, req.body.location || location || null, lat || null, lng || null, accuracy || null,
          device_info || null, ip || null, autoClock,
-         silent ? 'non-required: silent record (not counted in attendance stats)' : null]
+         silent ? 'non-required: silent record (not counted in attendance stats)' : (exempt ? `clock_type=${cType}: exempted from late judgement` : null)]
       )
 
-      res.json({ code: 0, data: { status, time: timeStr, is_auto_clock: autoClock, silent, worker_category: workerCategory }, message: silent ? '打卡成功(本次不计入考勤统计)' : '上班打卡成功' })
+      res.json({ code: 0, data: { status, time: timeStr, is_auto_clock: autoClock, silent, worker_category: workerCategory, clock_type: cType }, message: silent ? '打卡成功(本次不计入考勤统计)' : (cType === 'trip' ? '出差打卡成功' : (cType === 'free' ? '自由打卡成功' : (cType === 'overtime' ? '加班打卡成功' : '上班打卡成功'))) })
     } else {
       // Clock out
       if (!existing) {
@@ -382,21 +402,42 @@ router.post('/attendance/clock', async (req, res, next) => {
 
       // 检查是否需要考勤（只有必打卡员工才算早退）
       // 2026-08-25 silent 模式:没勾选员工 status 锁 normal + 早退清零
+      // 2026-08-28 状态模式: trip/free 豁免早退; overtime 不算早退且计加班时长
       const [[user]] = await pool.query('SELECT require_attendance, worker_category FROM users WHERE id = ?', [userId])
       const isRequired = user && user.require_attendance === 1
       const silent = !isRequired
       const workerCategory = user?.worker_category || 'office'
-      const status = isRequired ? (timeStr < winOut ? 'early' : existing.status) : 'normal'
+      const exemptOut = (cType === 'trip' || cType === 'free' || onTrip)
+      const isEarly = isRequired && !exemptOut && timeStr < winOut
+      const status = exemptOut ? 'normal' : (isEarly ? 'early' : existing.status)
+      const earlyMin = (silent || exemptOut || !isEarly) ? 0 : Math.floor((new Date(`2000-01-01 ${winOut}`) - new Date(`2000-01-01 ${timeStr}`)) / 60000)
+
+      // 加班时长: 下班时间超过 winOut 的部分 (仅 overtime 状态计算)
+      let otHours = 0
+      if (cType === 'overtime' && timeStr > winOut) {
+        otHours = Math.max(0, Math.floor((new Date(`2000-01-01 ${timeStr}`) - new Date(`2000-01-01 ${winOut}`)) / 60000) / 60)
+        otHours = Math.round(otHours * 100) / 100
+      }
+
+      // 出差状态下班打卡 → 同步写出差轨迹
+      if (cType === 'trip') {
+        await pool.query(
+          `INSERT INTO attendance_trip_logs (user_id, trip_date, log_time, location, gps_lat, gps_lng, gps_accuracy, device_info, ip_address, remark)
+           VALUES (?,?,?,?,?,?,?,?,?,?)`,
+          [userId, today, timeStr, location || null, lat || null, lng || null, accuracy || null, device_info || null, ip || null, remark || '出差打卡(下班状态)']
+        )
+      }
 
       await pool.query(
-        'UPDATE attendance SET clock_out = ?, status = ?, early_minutes = ?, abnormal_reason = ?, is_auto_clock = ? WHERE id = ?',
-        [timeStr, status,
-         silent ? 0 : (timeStr < winOut ? Math.floor((new Date(`2000-01-01 ${winOut}`) - new Date(`2000-01-01 ${timeStr}`)) / 60000) : 0),
-         silent ? 'non-required: silent record (not counted in attendance stats)' : null,
+        'UPDATE attendance SET clock_out = ?, status = ?, clock_type = ?, early_minutes = ?, overtime_hours = ?, abnormal_reason = ?, is_auto_clock = ? WHERE id = ?',
+        [timeStr, status, cType,
+         earlyMin,
+         otHours,
+         silent ? 'non-required: silent record (not counted in attendance stats)' : (exemptOut ? `clock_type=${cType}: exempted from early judgement` : (existing.abnormal_reason || null)),
          autoClock, existing.id]
       )
 
-      res.json({ code: 0, data: { status, time: timeStr, is_auto_clock: autoClock, silent, worker_category: workerCategory }, message: silent ? '打卡成功(本次不计入考勤统计)' : '下班打卡成功' })
+      res.json({ code: 0, data: { status, time: timeStr, is_auto_clock: autoClock, silent, worker_category: workerCategory, clock_type: cType, overtime_hours: otHours }, message: silent ? '打卡成功(本次不计入考勤统计)' : (cType === 'trip' ? '出差打卡成功' : (cType === 'free' ? '自由打卡成功' : (cType === 'overtime' ? `加班打卡成功${otHours > 0 ? `(加班${otHours}小时)` : ''}` : '下班打卡成功'))) })
     }
   } catch (err) { next(err) }
 })
@@ -419,7 +460,32 @@ router.post('/attendance/trip-clock', async (req, res, next) => {
        device_info || null, ip || null, remark || null]
     )
 
-    res.json({ code: 0, data: { time: timeStr, location: location || null }, message: '出差打卡成功' })
+    // 2026-08-28 出差→考勤联动:
+    // 1) 当天无考勤记录 → 自动补一条 normal (出差视为出勤)
+    // 2) 当天已判 late → 修正为 normal (人在客户现场不算迟到)
+    const [[att]] = await pool.query(
+      'SELECT id, status FROM attendance WHERE user_id = ? AND date = ?',
+      [userId, today]
+    )
+    let attendanceFixed = null
+    if (!att) {
+      const [[ins]] = await pool.query(
+        `INSERT INTO attendance (user_id, date, clock_in, status, late_minutes, early_minutes, location, gps_lat, gps_lng, abnormal_reason)
+         VALUES (?,?,NULL,'normal',0,0,?,?,?,'on business trip (auto-linked from trip clock)')`,
+        [userId, today, location || null, lat || null, lng || null]
+      )
+      attendanceFixed = 'created'
+    } else if (att.status === 'late') {
+      await pool.query(
+        `UPDATE attendance SET status = 'normal', late_minutes = 0,
+         abnormal_reason = CONCAT(IFNULL(abnormal_reason,''), ' | on business trip (auto-fixed from trip clock)')
+         WHERE id = ?`,
+        [att.id]
+      )
+      attendanceFixed = 'late->normal'
+    }
+
+    res.json({ code: 0, data: { time: timeStr, location: location || null, attendance_fixed: attendanceFixed }, message: '出差打卡成功' })
   } catch (err) { next(err) }
 })
 

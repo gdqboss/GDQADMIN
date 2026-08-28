@@ -827,6 +827,11 @@ export default {
     todayTripLogs: '今日出差轨迹',
     tripClockSuccess: '出差打卡成功！',
     tripClockFailed: '出差打卡失败',
+    // 打卡状态 (钉钉模式)
+    clockTypeNormal: '正常上班',
+    clockTypeTrip: '出差',
+    clockTypeOvertime: '加班',
+    clockTypeFree: '自由打卡',
     tripRecords: '出差记录',
     tripTodayCount: '今日出差人数',
     tripTotalCount: '总出差打卡',
@@ -2349,6 +2354,11 @@ export default {
     todayTripLogs: '今日出差轨迹',
     tripClockSuccess: '出差打卡成功！',
     tripClockFailed: '出差打卡失败',
+    // 打卡状态 (钉钉模式)
+    clockTypeNormal: '正常上班',
+    clockTypeTrip: '出差',
+    clockTypeOvertime: '加班',
+    clockTypeFree: '自由打卡',
     tripRecords: '出差记录',
     tripTodayCount: '今日出差人数',
     tripTotalCount: '总出差打卡',

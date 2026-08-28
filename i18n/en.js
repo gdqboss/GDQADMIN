@@ -2366,6 +2366,11 @@ export default {
     todayTripLogs: "Today's Trip Log",
     tripClockSuccess: 'Business trip clock successful!',
     tripClockFailed: 'Business trip clock failed',
+    // Clock type (DingTalk style)
+    clockTypeNormal: 'Normal',
+    clockTypeTrip: 'Trip',
+    clockTypeOvertime: 'Overtime',
+    clockTypeFree: 'Free Clock-in',
     tripRecords: 'Trip Records',
     tripTodayCount: 'Triangle Today',
     tripTotalCount: 'Total Trip Clocks',

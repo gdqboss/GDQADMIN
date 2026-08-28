@@ -2266,6 +2266,11 @@ export default {
         todayTripLogs: "Log Kerja Luar Hari Ini",
         tripClockSuccess: 'Kehadiran kerja luar berjaya!',
         tripClockFailed: 'Kehadiran kerja luar gagal',
+        // Clock type (DingTalk style)
+        clockTypeNormal: 'Normal',
+        clockTypeTrip: 'Luar',
+        clockTypeOvertime: 'Lebih masa',
+        clockTypeFree: 'Bebas',
         tripRecords: 'Rekod Kerja Luar',
         tripTodayCount: 'Bilangan Hari Ini',
         tripTotalCount: 'Jumlah Kehadiran Luar',

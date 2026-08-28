@@ -27,6 +27,20 @@
           {{ $t('oa.clickToGetLocation') }}
         </div>
 
+        <!-- 打卡状态选择 (2026-08-28 钉钉模式) -->
+        <div class="mb-4 flex justify-center gap-2">
+          <button v-for="opt in clockTypeOptions" :key="opt.value" @click="clockType = opt.value"
+            :class="[
+              'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors flex items-center gap-1',
+              clockType === opt.value
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white text-gray-600 border-gray-300'
+            ]">
+            <span class="material-symbols-outlined text-[14px]">{{ opt.icon }}</span>
+            {{ opt.label }}
+          </button>
+        </div>
+
         <!-- 打卡按钮 -->
         <div class="flex justify-center gap-8">
           <div class="flex flex-col items-center">
@@ -211,6 +225,14 @@ const loading = ref(false)
 const gpsLoading = ref(false)
 const gpsError = ref('')
 const gpsData = ref(null)
+// 2026-08-28 打卡状态 (钉钉模式): normal/trip/overtime/free
+const clockType = ref('normal')
+const clockTypeOptions = [
+  { value: 'normal', label: t('oa.clockTypeNormal'), icon: 'badge' },
+  { value: 'trip', label: t('oa.clockTypeTrip'), icon: 'flight_takeoff' },
+  { value: 'overtime', label: t('oa.clockTypeOvertime'), icon: 'schedule' },
+  { value: 'free', label: t('oa.clockTypeFree'), icon: 'lock_open' }
+]
 const records = ref({ list: [], total: 0 })
 const filters = ref({ start_date: '', end_date: '', status: '' })
 const currentTime = ref('')
@@ -268,12 +290,16 @@ function updateTime() {
 async function handleClock(type) {
   loading.value = true
   try {
-    const res = await api.post('/oa/attendance/clock', { type })
+    const payload = { type, clock_type: clockType.value }
+    // 出差/加班打卡带上位置 + 备注 (从对应输入框取)
+    if (clockType.value === 'trip' && tripRemark.value?.trim()) payload.remark = tripRemark.value.trim()
+    if (gpsData.value) payload.location = gpsData.value.address
+    const res = await api.post('/oa/attendance/clock', payload)
     if (res.code === 0) {
       await loadTodayRecord()
       await loadRecords()
       await loadMonthStats()
-      alert(t('oa.clockSuccess'))
+      alert(res.message || t('oa.clockSuccess'))
     } else {
       alert(res.message || t('oa.clockFailed'))
     }
