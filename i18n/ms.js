@@ -115,6 +115,9 @@ export default {
         memoryManagement: 'Memori',
     // Quick Actions
         qaAttendance: 'Kehadiran',
+        attendanceToday: 'Kehadiran Hari Ini',
+        scheduleCalendar: 'Kalendar Jadual',
+        attendanceRules: 'Peraturan Kehadiran',
         qaWorklog: 'Log Kerja',
         qaTask: 'My Tasks',
         qaScan: 'Jualan Imbas',

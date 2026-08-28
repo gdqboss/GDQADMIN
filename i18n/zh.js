@@ -195,6 +195,9 @@ export default {
     memoryManagement: '记忆管理',
     // 工作台快捷操作
     qaAttendance: '考勤打卡',
+    attendanceToday: '今日出勤',
+    scheduleCalendar: '排班日历',
+    attendanceRules: '出勤规则',
     qaWorklog: '工作日志',
     qaTask: '我的任务',
     qaScan: '扫码销售',

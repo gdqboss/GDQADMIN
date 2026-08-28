@@ -126,6 +126,9 @@ export default {
     memoryManagement: 'Memory Management',
     // Quick Actions
     qaAttendance: 'Attendance',
+    attendanceToday: "Today's Attendance",
+    scheduleCalendar: 'Schedule Calendar',
+    attendanceRules: 'Attendance Rules',
     qaWorklog: 'Work Log',
     qaTask: 'My Tasks',
     qaScan: 'Scan Sale',
