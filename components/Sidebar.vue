@@ -195,6 +195,10 @@ const menuGroups = computed(() => [
       { key: 'task:read', label: t('tasks.title'), to: '/tasks' },
       { key: 'work_log:read', label: t('logs.workLog'), to: '/logs/work-logs' },
       { key: 'attendance:manage', label: t('nav.qaAttendance'), to: '/oa/attendance' },
+      { key: 'attendance:today', label: t('nav.attendanceToday'), to: '/oa/attendance-today', permission: 'attendance:manage' },
+      { key: 'attendance:summary', label: t('nav.attendanceSummary'), to: '/oa/attendance-summary' },
+      { key: 'schedule:view', label: t('nav.scheduleCalendar'), to: '/oa/schedule' },
+      { key: 'attendance:rules', label: t('nav.attendanceRules'), to: '/oa/attendance-rules' },
       { key: 'approval:read', label: t('nav.approvals'), to: '/approvals' },
     ]
   },
