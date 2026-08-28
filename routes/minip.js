@@ -2490,12 +2490,53 @@ router.post('/business-card/:id/view', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
-// POST /api/minip/business-card/:id/endorse - 点赞/赞赏
+// POST /api/minip/business-card/:id/endorse - 点赞/赞赏 (2026-08-29 波哥: 一天一人一次去重)
 router.post('/business-card/:id/endorse', async (req, res, next) => {
   try {
-    await pool.query('UPDATE users SET endorsements = COALESCE(endorsements, 0) + 1 WHERE id = ?', [req.params.id])
-    const [rows] = await pool.query('SELECT endorsements FROM users WHERE id = ?', [req.params.id])
-    res.json({ code: 0, message: '点赞成功', count: rows[0]?.endorsements || 0 })
+    const { id } = req.params
+    const cardUserId = Number(id)
+
+    // 登录用户可选解析：有有效 token 则用 user_id 去重, 无/失效则按 IP (游客)
+    let userId = null
+    const hdr = req.headers.authorization || ''
+    if (hdr.startsWith('Bearer ')) {
+      try {
+        const decoded = jwt.verify(hdr.slice(7), process.env.JWT_SECRET)
+        userId = decoded.id || null
+      } catch (_) { /* token 失效 → 游客 */ }
+    }
+    const ip = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim() || null
+
+    // 查今天是否已赞过
+    let exist = false
+    if (userId) {
+      const [rows] = await pool.query(
+        'SELECT id FROM business_card_likes WHERE card_user_id=? AND user_id=? AND like_date=CURDATE()',
+        [cardUserId, userId]
+      )
+      exist = rows.length > 0
+    } else if (ip) {
+      const [rows] = await pool.query(
+        'SELECT id FROM business_card_likes WHERE card_user_id=? AND ip=? AND like_date=CURDATE()',
+        [cardUserId, ip]
+      )
+      exist = rows.length > 0
+    }
+
+    const [[u]] = await pool.query('SELECT endorsements FROM users WHERE id = ?', [cardUserId]) // 用于统一返回 count
+
+    if (exist) {
+      return res.json({ code: 0, message: '今日已点赞', count: u?.endorsements || 0, already: true })
+    }
+
+    // 新点赞: 记录 + endorsements+1
+    await pool.query(
+      'INSERT INTO business_card_likes (card_user_id, user_id, ip, like_date) VALUES (?,?,?,CURDATE())',
+      [cardUserId, userId, ip]
+    )
+    await pool.query('UPDATE users SET endorsements = COALESCE(endorsements, 0) + 1 WHERE id = ?', [cardUserId])
+    const [[u2]] = await pool.query('SELECT endorsements FROM users WHERE id = ?', [cardUserId])
+    res.json({ code: 0, message: '点赞成功', count: u2?.endorsements || 0, already: false })
   } catch (err) { next(err) }
 })
 
