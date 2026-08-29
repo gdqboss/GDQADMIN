@@ -11,15 +11,15 @@ router.get('/orders/summary', auth, requirePermission('workbuddy:read'), async (
     const [[today]] = await pool.query(`
       SELECT COUNT(*) AS cnt, COALESCE(SUM(pay_amount),0) AS amt
       FROM orders WHERE DATE(created_at) = CURDATE()
-    `).catch(() => [[{ cnt: 0, amt: 0 }]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ cnt: 0, amt: 0 }]] })
     const [[week]] = await pool.query(`
       SELECT COUNT(*) AS cnt, COALESCE(SUM(pay_amount),0) AS amt
       FROM orders WHERE YEARWEEK(created_at,1) = YEARWEEK(CURDATE(),1)
-    `).catch(() => [[{ cnt: 0, amt: 0 }]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ cnt: 0, amt: 0 }]] })
     const [[month]] = await pool.query(`
       SELECT COUNT(*) AS cnt, COALESCE(SUM(pay_amount),0) AS amt
       FROM orders WHERE DATE_FORMAT(created_at,'%Y%m') = DATE_FORMAT(CURDATE(),'%Y%m')
-    `).catch(() => [[{ cnt: 0, amt: 0 }]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ cnt: 0, amt: 0 }]] })
     res.json({
       today: { count: Number(today.cnt), amount: Number(today.amt) },
       week: { count: Number(week.cnt), amount: Number(week.amt) },
@@ -83,7 +83,7 @@ router.get('/orders/:id', auth, requirePermission('workbuddy:read'), async (req,
     const [items] = await pool.query(`
       SELECT product_name, product_spec, price, number, subtotal
       FROM order_items WHERE order_id=? ORDER BY id
-    `, [id]).catch(() => [[]])
+    `, [id]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
     res.json({
       order: {
         id: o.id, order_no: o.order_no, customer: o.member_name, phone: o.member_phone,

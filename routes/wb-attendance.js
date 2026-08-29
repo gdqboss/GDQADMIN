@@ -15,9 +15,9 @@ router.get('/attendance/summary', auth, requirePermission('workbuddy:read'), asy
         SUM(CASE WHEN status='late' OR late_minutes>0 THEN 1 ELSE 0 END) AS late,
         SUM(CASE WHEN status='early' OR early_minutes>0 THEN 1 ELSE 0 END) AS early
       FROM attendance WHERE date = CURDATE()
-    `).catch(() => [[{ total: 0, present: 0, late: 0, early: 0 }]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ total: 0, present: 0, late: 0, early: 0 }]] })
     const pend = async (tbl) => {
-      const [[r]] = await pool.query(`SELECT COUNT(*) c FROM ${tbl} WHERE status='pending'`).catch(() => [[{ c: 0 }]])
+      const [[r]] = await pool.query(`SELECT COUNT(*) c FROM ${tbl} WHERE status='pending'`).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ c: 0 }]] })
       return Number(r.c)
     }
     const [leavePending, otPending] = await Promise.all([pend('leave_records'), pend('overtime_records')])
@@ -45,19 +45,19 @@ router.get('/attendance/pending', auth, requirePermission('workbuddy:read'), asy
              u.name AS applicant, l.created_at
       FROM leave_records l LEFT JOIN users u ON u.id = l.user_id
       WHERE l.status='pending' ORDER BY l.created_at DESC LIMIT 20
-    `).catch(() => [[]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
     const [ots] = await pool.query(`
       SELECT o.id, o.start_time, o.end_time, o.hours, o.reason, o.status,
              u.name AS applicant, o.created_at
       FROM overtime_records o LEFT JOIN users u ON u.id = o.user_id
       WHERE o.status='pending' ORDER BY o.created_at DESC LIMIT 20
-    `).catch(() => [[]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
     const [att] = await pool.query(`
       SELECT a.id, a.date, a.status, u.name AS applicant,
              a.late_minutes, a.early_minutes, a.abnormal_reason, a.created_at
       FROM attendance a LEFT JOIN users u ON u.id = a.user_id
       WHERE a.status IN ('pending','absent','abnormal') ORDER BY a.date DESC LIMIT 20
-    `).catch(() => [[]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
     res.json({
       leave: (leaves||[]).map(l => ({ id: l.id, type: l.type, applicant: l.applicant, start: l.start_date, end: l.end_date, days: Number(l.days)||0, reason: l.reason, created_at: l.created_at })),
       overtime: (ots||[]).map(o => ({ id: o.id, applicant: o.applicant, start: o.start_time, end: o.end_time, hours: Number(o.hours)||0, reason: o.reason })),
@@ -77,7 +77,7 @@ router.get('/attendance/my', auth, requirePermission('workbuddy:read'), async (r
       FROM attendance
       WHERE user_id = ?
       ORDER BY date DESC, id DESC LIMIT ?
-    `, [uid, limit]).catch(() => [[]])
+    `, [uid, limit]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
     res.json({
       records: (rows||[]).map(r => ({
         id: r.id, date: r.date, scheduled_in: r.scheduled_in, scheduled_out: r.scheduled_out,

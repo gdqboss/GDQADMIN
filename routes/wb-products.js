@@ -90,7 +90,7 @@ router.get('/products/:id', auth, requirePermission('workbuddy:read'), async (re
       SELECT ws.warehouse_id, w.name AS warehouse_name, ws.quantity, ws.updated_at
       FROM warehouse_stock ws LEFT JOIN warehouses w ON w.id = ws.warehouse_id
       WHERE ws.product_id=? ORDER BY ws.quantity DESC
-    `, [id]).catch(() => [[]])
+    `, [id]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
 
     res.json({
       product: {

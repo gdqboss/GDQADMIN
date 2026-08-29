@@ -11,21 +11,21 @@ router.get('/logs/summary', auth, requirePermission('workbuddy:read'), async (re
     const [[today]] = await pool.query(`
       SELECT COUNT(*) c FROM work_logs
       WHERE submit_date = CURDATE() OR DATE(created_at) = CURDATE()
-    `).catch(() => [[{ c: 0 }]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ c: 0 }]] })
     const [[pending]] = await pool.query(`
       SELECT COUNT(*) c FROM work_logs WHERE status IN ('pending','submitted')
-    `).catch(() => [[{ c: 0 }]])
-    const [[total]] = await pool.query(`SELECT COUNT(*) c FROM work_logs`).catch(() => [[{ c: 0 }]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ c: 0 }]] })
+    const [[total]] = await pool.query(`SELECT COUNT(*) c FROM work_logs`).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ c: 0 }]] })
     const [[perUser]] = await pool.query(`
       SELECT COUNT(DISTINCT user_id) c FROM work_logs
       WHERE submit_date = CURDATE() OR DATE(created_at) = CURDATE()
-    `).catch(() => [[{ c: 0 }]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ c: 0 }]] })
     const [[noLog]] = await pool.query(`
       SELECT COUNT(*) c FROM users u
       WHERE u.user_type='staff' AND u.id NOT IN (
         SELECT user_id FROM work_logs WHERE submit_date = CURDATE() OR DATE(created_at) = CURDATE()
       )
-    `).catch(() => [[{ c: 0 }]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ c: 0 }]] })
     res.json({
       today_submitted: Number(today.c),
       today_users: Number(perUser.c),
@@ -46,7 +46,7 @@ router.get('/logs/today', auth, requirePermission('workbuddy:read'), async (req,
       LEFT JOIN users u ON u.id = w.user_id
       WHERE w.submit_date = CURDATE() OR DATE(w.created_at) = CURDATE()
       ORDER BY w.created_at DESC LIMIT 30
-    `).catch(() => [[]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
     res.json({
       logs: (rows||[]).map(l => ({
         id: l.id, author: l.author || l.author_email || null, submit_date: l.submit_date,
@@ -71,7 +71,7 @@ router.get('/logs/pending', auth, requirePermission('workbuddy:read'), async (re
       LEFT JOIN users u ON u.id = w.user_id
       WHERE w.status IN ('pending','submitted')
       ORDER BY w.created_at DESC LIMIT 30
-    `).catch(() => [[]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
     res.json({
       logs: (rows||[]).map(l => ({
         id: l.id, author: l.author || l.author_email || null, submit_date: l.submit_date,

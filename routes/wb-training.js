@@ -13,17 +13,17 @@ const KB_BRAND_FILTER_WHERE = ` title NOT LIKE '%彩美特%' AND content NOT LIK
 // GET /api/workbuddy/training/summary - AI 课堂培训学习概览
 router.get('/training/summary', auth, requirePermission('workbuddy:read'), async (req, res, next) => {
   try {
-    const [[kb]] = await pool.query(`SELECT COUNT(*) c FROM ai_class_knowledge WHERE ${KB_BRAND_FILTER_WHERE}`).catch(() => [[{ c: 0 }]])
-    const [[publicKb]] = await pool.query(`SELECT COUNT(*) c FROM ai_class_knowledge WHERE (is_public=1 OR is_public IS NULL) AND ${KB_BRAND_FILTER_WHERE}`).catch(() => [[{ c: 0 }]])
-    const [[cards]] = await pool.query(`SELECT COUNT(*) c FROM ai_class_flashcards`).catch(() => [[{ c: 0 }]])
-    const [[gaps]] = await pool.query(`SELECT COUNT(*) c FROM ai_class_knowledge_gaps`).catch(() => [[{ c: 0 }]])
+    const [[kb]] = await pool.query(`SELECT COUNT(*) c FROM ai_class_knowledge WHERE ${KB_BRAND_FILTER_WHERE}`).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ c: 0 }]] })
+    const [[publicKb]] = await pool.query(`SELECT COUNT(*) c FROM ai_class_knowledge WHERE (is_public=1 OR is_public IS NULL) AND ${KB_BRAND_FILTER_WHERE}`).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ c: 0 }]] })
+    const [[cards]] = await pool.query(`SELECT COUNT(*) c FROM ai_class_flashcards`).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ c: 0 }]] })
+    const [[gaps]] = await pool.query(`SELECT COUNT(*) c FROM ai_class_knowledge_gaps`).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ c: 0 }]] })
     const [docTypes] = await pool.query(`
       SELECT doc_type, COUNT(*) c FROM ai_class_knowledge WHERE ${KB_BRAND_FILTER_WHERE} GROUP BY doc_type ORDER BY c DESC LIMIT 8
-    `).catch(() => [[]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
     // 今日学习相关
     const [[newKb]] = await pool.query(`
       SELECT COUNT(*) c FROM ai_class_knowledge WHERE DATE(created_at) = CURDATE() AND ${KB_BRAND_FILTER_WHERE}
-    `).catch(() => [[{ c: 0 }]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ c: 0 }]] })
 
     res.json({
       knowledge_base: {
@@ -57,11 +57,11 @@ router.get('/training/kb', auth, requirePermission('workbuddy:read'), async (req
       `
       if (docType) { sql += ` AND doc_type = ?`; params.push(docType) }
       sql += ` ORDER BY id DESC LIMIT ?`; params.push(limit)
-      const [r] = await pool.query(sql, params).catch(() => [[]])
+      const [r] = await pool.query(sql, params).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
       rows = r || []
       const [[cr]] = await pool.query(`
         SELECT COUNT(*) c FROM ai_class_knowledge WHERE (title LIKE ? OR content LIKE ? OR tags LIKE ?)${KB_BRAND_FILTER}
-      `, [like, like, like]).catch(() => [[{ c: 0 }]])
+      `, [like, like, like]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ c: 0 }]] })
       count = cr.c
     } else {
       // 无关键词 → 最近新增
@@ -69,7 +69,7 @@ router.get('/training/kb', auth, requirePermission('workbuddy:read'), async (req
       const params = []
       if (docType) { sql += ` AND doc_type = ?`; params.push(docType) }
       sql += ` ORDER BY id DESC LIMIT ?`; params.push(limit)
-      rows = (await pool.query(sql, params).catch(() => [[]]))[0] || []
+      rows = (await pool.query(sql, params).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] }))[0] || []
       count = rows.length
     }
     res.json({
@@ -93,7 +93,7 @@ router.get('/training/kb/:id', auth, requirePermission('workbuddy:read'), async 
     const [[k]] = await pool.query(`
       SELECT id, title, content, doc_type, tags, is_public, created_at, updated_at
       FROM ai_class_knowledge WHERE id=?${KB_BRAND_FILTER}
-    `, [id]).catch(() => [[null]])
+    `, [id]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[null]] })
     if (!k) return res.status(404).json({ error: 'knowledge not found' })
     res.json({
       knowledge: {

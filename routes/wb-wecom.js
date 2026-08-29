@@ -18,7 +18,7 @@ router.get('/wecom/unread', auth, requirePermission('workbuddy:read'), async (re
       FROM wecom_conversations c
       ORDER BY COALESCE(c.unread,0) DESC, c.last_time DESC
       LIMIT ?
-    `, [limit]).catch(() => [[]])
+    `, [limit]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
     // 全局最近未读消息（非自己发的，按时间倒序）
     const [msgs] = await pool.query(`
       SELECT m.id, m.conversation_id, c.name AS conversation, c.type AS conv_type,
@@ -27,7 +27,7 @@ router.get('/wecom/unread', auth, requirePermission('workbuddy:read'), async (re
         LEFT JOIN wecom_conversations c ON c.id = m.conversation_id
       WHERE m.is_self = 0
       ORDER BY m.created_at DESC LIMIT ?
-    `, [limit]).catch(() => [[]])
+    `, [limit]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
 
     const unreadTotal = (convs||[]).reduce((s, c) => s + (Number(c.unread)||0) + (Number(c.pending_msgs)||0), 0)
 
@@ -59,13 +59,13 @@ router.get('/wecom/contacts', auth, requirePermission('workbuddy:read'), async (
         FROM wecom_contacts
         WHERE name LIKE ? OR position LIKE ? OR mobile LIKE ?
         ORDER BY name LIMIT ?
-      `, [like, like, like, limit]).catch(() => [[]]))[0] || []
+      `, [like, like, like, limit]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] }))[0] || []
       count = rows.length
     } else {
       rows = (await pool.query(`
         SELECT wecom_userid, name, position, mobile, email, status, synced_at
         FROM wecom_contacts ORDER BY name LIMIT ?
-      `, [limit]).catch(() => [[]]))[0] || []
+      `, [limit]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] }))[0] || []
       count = rows.length
     }
     res.json({
@@ -89,7 +89,7 @@ router.get('/wecom/conversations', auth, requirePermission('workbuddy:read'), as
              (SELECT COUNT(*) FROM wecom_messages m WHERE m.conversation_id=c.id) AS msg_count
       FROM wecom_conversations c
       ORDER BY c.last_time DESC LIMIT ?
-    `, [limit]).catch(() => [[]])
+    `, [limit]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
     res.json({
       count: (convs||[]).length,
       conversations: (convs||[]).map(c => ({
@@ -109,12 +109,12 @@ router.get('/wecom/messages/:conversationId', auth, requirePermission('workbuddy
     const limit = Math.min(Number(req.query.limit) || 20, 100)
     const [[conv]] = await pool.query(`
       SELECT id, name, type, external_id FROM wecom_conversations WHERE id=?
-    `, [convId]).catch(() => [[null]])
+    `, [convId]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[null]] })
     if (!conv) return res.status(404).json({ error: 'conversation not found' })
     const [msgs] = await pool.query(`
       SELECT id, sender, is_self, content, created_at
       FROM wecom_messages WHERE conversation_id=? ORDER BY created_at DESC LIMIT ?
-    `, [convId, limit]).catch(() => [[]])
+    `, [convId, limit]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
     res.json({
       conversation: conv,
       message_count: (msgs||[]).length,
@@ -135,7 +135,7 @@ router.post('/wecom/send', auth, requirePermission('workbuddy:write'), async (re
     let convId = Number(conversation_id) || null
     // 如果没有 conversation_id，尝试按 name 找会话，找不到则新建
     if (!convId && conversation_name) {
-      const [found] = await pool.query(`SELECT id FROM wecom_conversations WHERE name=? OR external_id=?`, [conversation_name, conversation_name]).catch(() => [[]])
+      const [found] = await pool.query(`SELECT id FROM wecom_conversations WHERE name=? OR external_id=?`, [conversation_name, conversation_name]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
       if (found && found.length > 0) {
         convId = found[0].id
       } else {

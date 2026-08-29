@@ -13,19 +13,19 @@ router.get('/finance/overview', auth, requirePermission('workbuddy:read'), async
       SELECT COALESCE(SUM(sale_price),0) AS rev
       FROM sales_orders
       WHERE status IN ('paid','completed') AND DATE(paid_at) = CURDATE()
-    `).catch(() => [[{ rev: 0 }]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ rev: 0 }]] })
     const [[month]] = await pool.query(`
       SELECT COALESCE(SUM(sale_price),0) AS rev
       FROM sales_orders
       WHERE status IN ('paid','completed') AND DATE_FORMAT(paid_at,'%Y%m') = DATE_FORMAT(CURDATE(),'%Y%m')
-    `).catch(() => [[{ rev: 0 }]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ rev: 0 }]] })
     const [[pending]] = await pool.query(`
       SELECT COALESCE(SUM(amount),0) AS amt
       FROM approvals WHERE status='pending'
-    `).catch(() => [[{ amt: 0 }]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ amt: 0 }]] })
     const [[reminder]] = await pool.query(`
       SELECT COUNT(*) AS c FROM finance_reminders WHERE status IN ('pending','unread') OR status IS NULL
-    `).catch(() => [[{ c: 0 }]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ c: 0 }]] })
 
     res.json({
       today_revenue: Number(today.rev),
@@ -45,7 +45,7 @@ router.get('/finance/reminders', auth, requirePermission('workbuddy:read'), asyn
       FROM finance_reminders
       ORDER BY status='pending' DESC, priority='high' DESC, created_at DESC
       LIMIT 30
-    `).catch(() => [[]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
     res.json({
       reminders: (rows||[]).map(r => ({
         id: r.id, type: r.reminder_type, title: r.title, content: r.content,
@@ -65,7 +65,7 @@ router.get('/reports/sales', auth, requirePermission('workbuddy:read'), async (r
       WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
       GROUP BY DATE(created_at)
       ORDER BY day
-    `).catch(() => [[]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
     res.json({
       report_type: 'sales_last_7_days',
       days: (rows||[]).map(r => ({
@@ -86,22 +86,22 @@ router.get('/finance/recent', auth, requirePermission('workbuddy:read'), async (
       SELECT id, record_no, category, category_name, amount, payee, description,
              approval_status, expense_date, created_at
       FROM expense_records ORDER BY created_at DESC LIMIT ?
-    `, [limit]).catch(() => [[]])
+    `, [limit]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
     // 收支流水（income_expense_records: type/category/summary/status）
     const [incomeExp] = await pool.query(`
       SELECT id, record_no, record_date, type, category, amount, summary, status, created_at
       FROM income_expense_records ORDER BY created_at DESC LIMIT ?
-    `, [limit]).catch(() => [[]])
+    `, [limit]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
     // 应收（accounts_receivable: customer_name/amount/transaction_date）
     const [ar] = await pool.query(`
       SELECT id, customer_name, customer_phone, amount, balance, transaction_date, created_at
       FROM accounts_receivable ORDER BY created_at DESC LIMIT ?
-    `, [Math.min(limit,5)]).catch(() => [[]])
+    `, [Math.min(limit,5)]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
     // 应付（accounts_payable: supplier_name/amount/due_date）
     const [ap] = await pool.query(`
       SELECT id, supplier_name, amount, due_date, created_at
       FROM accounts_payable ORDER BY created_at DESC LIMIT ?
-    `, [Math.min(limit,5)]).catch(() => [[]])
+    `, [Math.min(limit,5)]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
 
     const recent = [
       ...(expenses||[]).map(e => ({
@@ -143,23 +143,23 @@ router.get('/reports/daily', auth, requirePermission('workbuddy:read'), async (r
     const [[sales]] = await pool.query(`
       SELECT COUNT(*) AS orders, COALESCE(SUM(pay_amount),0) AS revenue
       FROM orders WHERE status IN ('paid','completed','shipped') AND DATE(created_at)=?
-    `, [date]).catch(() => [[{ orders: 0, revenue: 0 }]])
+    `, [date]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ orders: 0, revenue: 0 }]] })
     // 待审工作日志
     const [[logs]] = await pool.query(`
       SELECT COUNT(*) AS c FROM work_logs WHERE DATE(created_at)=?
-    `, [date]).catch(() => [[{ c: 0 }]])
+    `, [date]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ c: 0 }]] })
     // 考勤打卡
     const [[att]] = await pool.query(`
       SELECT COUNT(*) AS c FROM attendance WHERE date=?
-    `, [date]).catch(() => [[{ c: 0 }]])
+    `, [date]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ c: 0 }]] })
     // 新任务
     const [[tasks]] = await pool.query(`
       SELECT COUNT(*) AS c FROM tasks WHERE DATE(created_at)=?
-    `, [date]).catch(() => [[{ c: 0 }]])
+    `, [date]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ c: 0 }]] })
     // 新知识
     const [[kb]] = await pool.query(`
       SELECT COUNT(*) AS c FROM ai_class_knowledge WHERE DATE(created_at)=?
-    `, [date]).catch(() => [[{ c: 0 }]])
+    `, [date]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ c: 0 }]] })
 
     res.json({
       report_type: 'daily', date,
@@ -182,21 +182,21 @@ router.get('/reports/weekly', auth, requirePermission('workbuddy:read'), async (
       WHERE status IN ('paid','completed','shipped')
         AND created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
       GROUP BY DATE(created_at) ORDER BY day
-    `).catch(() => [[]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
     // 汇总
     const [[agg]] = await pool.query(`
       SELECT COUNT(*) AS orders, COALESCE(SUM(pay_amount),0) AS revenue
       FROM orders
       WHERE status IN ('paid','completed','shipped')
         AND created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-    `).catch(() => [[{ orders: 0, revenue: 0 }]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ orders: 0, revenue: 0 }]] })
     // 本周新增任务/日志
     const [[tasks]] = await pool.query(`
       SELECT COUNT(*) AS c FROM tasks WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-    `).catch(() => [[{ c: 0 }]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ c: 0 }]] })
     const [[logs]] = await pool.query(`
       SELECT COUNT(*) AS c FROM work_logs WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-    `).catch(() => [[{ c: 0 }]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[{ c: 0 }]] })
 
     res.json({
       report_type: 'weekly_last_7_days',

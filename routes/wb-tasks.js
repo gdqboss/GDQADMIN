@@ -40,7 +40,7 @@ router.get('/tasks/pending', auth, requirePermission('workbuddy:read'), async (r
       WHERE t.status IN ('pending','submitted')
       ORDER BY (t.priority='high') DESC, (t.due_date IS NULL), t.due_date ASC, t.id DESC
       LIMIT ?
-    `, [limit]).catch(() => [[]])
+    `, [limit]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
     res.json({
       tasks: (rows||[]).map(t => ({
         id: t.id, title: t.title, status: t.status, priority: t.priority,
@@ -62,7 +62,7 @@ router.get('/tasks/overdue', auth, requirePermission('workbuddy:read'), async (r
       LEFT JOIN users ua ON ua.id = t.assigned_to
       WHERE t.status IN ('pending','submitted') AND t.due_date IS NOT NULL AND t.due_date < CURDATE()
       ORDER BY t.due_date ASC LIMIT 50
-    `).catch(() => [[]])
+    `).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[]] })
     res.json({
       tasks: (rows||[]).map(t => ({
         id: t.id, title: t.title, status: t.status, priority: t.priority,
@@ -85,7 +85,7 @@ router.get('/tasks/:id', auth, requirePermission('workbuddy:read'), async (req, 
       LEFT JOIN users ua ON ua.id = t.assigned_to
       LEFT JOIN users cb ON cb.id = t.created_by
       WHERE t.id=?
-    `, [id]).catch(() => [[null]])
+    `, [id]).catch(e => { console.error('[wb] 数据查询兜底触发:', e?.message); return [[null]] })
     if (!t) return res.status(404).json({ error: 'task not found' })
     res.json({
       task: {
