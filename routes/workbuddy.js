@@ -8,8 +8,12 @@ import { readFileSync } from 'node:fs'
 import { pool } from '../db/connection.js'
 import { auth } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/rbac.js'
+import wbInventoryRouter from './wb-inventory.js'
 
 const router = Router()
+
+// 2026-08-29: Phase-1 核心业务模块 — 库存
+router.use(wbInventoryRouter)
 
 /**
  * GET /api/workbuddy/health -  ( auth)
