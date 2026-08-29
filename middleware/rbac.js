@@ -651,13 +651,22 @@ export async function hasPermission(userId, role, permission) {
 
 /**
  * 角色检查（原有功能保留）
+ * 2026-08-29: superuser role 在所有 profile 自动等同 admin (厉无害 13926977123 GBaw 登录
+ *   数据缺失根因 — 128 处 requireRole('admin') 把 superuser 拦 403)
+ *   原则: superuser 是 HK 等客户环境的最高权限代名词, 跟 SGP admin 等效
  */
 export function requireRole(...roles) {
+  // 自动把 'admin' 展开成 ['admin', 'superuser'], 调用方无感
+  const normalized = new Set()
+  for (const r of roles) {
+    normalized.add(r)
+    if (r === 'admin') normalized.add('superuser')
+  }
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ code: 401, message: '未登录' })
     }
-    if (!roles.includes(req.user.role)) {
+    if (!normalized.has(req.user.role)) {
       return res.status(403).json({ code: 403, message: '无权限访问' })
     }
     next()
