@@ -18,6 +18,7 @@ import { globalLimiter, scanLimiter, apiLimiter } from './middleware/rateLimit.j
 import { requireRole } from './middleware/rbac.js'
 import { checkPreviousCrash, installCrashCapture } from './crash-detect.js'
 import { verifySignature, decryptMessage, extractXmlField } from './services/wecom-crypto.js'
+import { isWeComConfigured, sendMessage } from './services/wecom.js'
 import { startCronJobs } from './cron.js'
 import { startFinanceReminderJobs } from './jobs/finance-reminders.js'
 import authRoutes from './routes/auth.js'
@@ -423,6 +424,38 @@ app.post('/api/wecom/callback', express.text({ type: 'text/xml' }), async (req, 
     // Handle events (approval status change, etc.) — log for now
     if (msgType === 'event' && event) {
       console.log(`[wecom] Received event: ${event} from ${fromUser}`)
+    }
+
+    // ── 个人微信互通: 企微收来的文本消息 → wechat-agent → 回复发回企微 ──
+    if (msgType === 'text' && content) {
+      try {
+        // 保证 wecom 通道已登记 (adapter 注册到 channelRegistry)
+        await wechatAgentServer.ensureMockChannel()
+        const [[ch]] = await pool.query(
+          "SELECT id FROM wechat_channels WHERE channel_key='wecom'"
+        )
+        if (!ch) {
+          await pool.query(
+            `INSERT INTO wechat_channels (channel_key, channel_type, display_name, status, remark)
+             VALUES ('wecom','wecom','企业微信通道','active','企微收发的个人微信互通消息')`
+          )
+        }
+        // 交给 agent 引擎 (openid=企微用户, 走 wecom 通道)
+        const result = await wechatAgentServer.handleIncomingMessage({
+          openid: fromUser,
+          senderName: fromUser,
+          content,
+          msgType: 'text',
+          channelKey: 'wecom'
+        })
+        // 有回复 → 发回企微 (sendMessage 已配置才发)
+        if (result?.reply && isWeComConfigured?.()) {
+          await sendMessage({ touser: fromUser, msgtype: 'text', content: result.reply })
+        }
+      } catch (agentErr) {
+        // agent 失败不阻断企微主流程 (消息已存库)
+        console.error('[wecom→agent] reply failed:', agentErr.message)
+      }
     }
 
     res.send('success')

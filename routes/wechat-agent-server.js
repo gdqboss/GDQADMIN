@@ -45,6 +45,17 @@ class MockChannelAdapter {
   }
 }
 
+// 企业微信通道实际上不在这里发(发回企微走 services/wecom.sendMessage)。
+// WeComAdapter 作为"身份象征": 标记 wecom 通道已接入, chat 类消息由 index.js 回调驱动。
+// 这里实现 send() 便于统一接口, 但真实投递由 index.js 回调逻辑负责。
+class WeComChannelAdapter {
+  constructor(key) { this.key = key || 'wecom' }
+  name() { return this.key }
+  async send(wxUserId, text) {
+    return { ok: true, channel: this.key, wxUserId, delivered: true, note: '企微通道: 回复由调方负责发回 (index.js wecom 回调)' }
+  }
+}
+
 // 通道注册表: 实例化所有启用的通道 adapter
 const channelRegistry = new Map()
 async function loadChannels() {
@@ -53,6 +64,10 @@ async function loadChannels() {
     for (const r of rows) {
       if (r.channel_type === 'mock' && !channelRegistry.has(r.channel_key)) {
         channelRegistry.set(r.channel_key, new MockChannelAdapter(r.channel_key))
+      }
+      // wecom 通道: 已登记且 active 则加载 adapter
+      if (r.channel_type === 'wecom' && !channelRegistry.has(r.channel_key)) {
+        channelRegistry.set(r.channel_key, new WeComChannelAdapter(r.channel_key))
       }
     }
   } catch (e) { /* 表可能还没建, 忽略 */ }
@@ -390,5 +405,5 @@ adminRouter.get('/stats', requirePermission(P.WECHAT_AGENT_READ), async (req, re
 // 启动时确保有 mock 通道
 ensureMockChannel().catch(() => {})
 
-// 导出两个 router (admin 带 auth, webhook 不带)
-export default { router, adminRouter }
+// 导出两个 router (admin 带 auth, webhook 不带) + handleIncomingMessage (供 index.js / 企微回调复用)
+export default { router, adminRouter, handleIncomingMessage, ensureMockChannel }
