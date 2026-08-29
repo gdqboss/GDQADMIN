@@ -9,11 +9,15 @@ import { pool } from '../db/connection.js'
 import { auth } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/rbac.js'
 import wbInventoryRouter from './wb-inventory.js'
+import wbOrdersRouter from './wb-orders.js'
+import wbProductsRouter from './wb-products.js'
 
 const router = Router()
 
-// 2026-08-29: Phase-1 核心业务模块 — 库存
+// 2026-08-29: Phase-1 核心业务模块 — 库存 / 订单 / 商品
 router.use(wbInventoryRouter)
+router.use(wbOrdersRouter)
+router.use(wbProductsRouter)
 
 /**
  * GET /api/workbuddy/health -  ( auth)
