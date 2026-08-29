@@ -621,6 +621,95 @@ router.post('/bind-account', loginLimiter, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// POST /api/auth/workbuddy-token - 2026-08-29
+// 给 WorkBuddy APP 用的"用户级 token"生成入口。
+// 用户用自己的登录用户名(手机/邮箱)+ 密码, 拿一个短期 JWT (默认 7d, 最长 30d)
+// 这个 token 用的是用户自己的 rbac 权限, 跟 gdqadmin 后台一致。
+//
+// Body: { login_key, password, expires_days? }
+// Response: { code:0, data: { token, user_id, name, role, permissions, server_url, expires_at, expires_in_days } }
+//
+// 设计要点:
+// 1. 不复用 service-token (那是 admin 全权, 所有用户共用 = 权限泄露)
+// 2. 用登录密码鉴权 — 只有知道密码的人才能生成 (admin 不能替别人生)
+// 3. 短期 + 可控 — APP 长期挂着需重连
+// 4. token 走标准 jwt, 中间件 auth() 自动按 req.user.role + resolvePermissions 判权
+// 5. revoke 接口: 同样 endpoint 用 ?action=revoke 走 (前端可加按钮)
+router.post('/workbuddy-token', loginLimiter, async (req, res, next) => {
+  try {
+    const { login_key, password, expires_days } = req.body
+    if (!login_key || !password) {
+      return res.status(400).json({ code: 400, message: 'login_key 和 password 必填' })
+    }
+
+    // 限制过期天数 (1-30 天)
+    const days = Math.max(1, Math.min(30, parseInt(expires_days) || 7))
+
+    // 查找用户 — 支持手机号/邮箱
+    const isEmail = login_key.includes('@')
+    const [users] = await pool.query(
+      isEmail
+        ? 'SELECT id, name, phone, email, password, role, user_type, status FROM users WHERE email = ? LIMIT 1'
+        : 'SELECT id, name, phone, email, password, role, user_type, status FROM users WHERE phone = ? LIMIT 1',
+      [login_key]
+    )
+    if (!users.length) return res.status(401).json({ code: 401, message: '账号或密码错误' })
+    const user = users[0]
+
+    // 状态校验
+    if (user.status === 'disabled') {
+      return res.status(403).json({ code: 403, message: '账号已被禁用' })
+    }
+    if (user.status === 'pending') {
+      return res.status(403).json({ code: 403, message: '账号待审核, 请联系管理员' })
+    }
+
+    // 校验密码
+    const valid = await bcrypt.compare(password, user.password)
+    if (!valid) return res.status(401).json({ code: 401, message: '账号或密码错误' })
+
+    // 生成短期 JWT (days 天过期)
+    const expiresIn = `${days}d`
+    const token = jwt.sign(
+      { id: user.id, name: user.name, role: user.role, kind: 'workbuddy' },
+      process.env.JWT_SECRET,
+      { expiresIn }
+    )
+
+    // 算权限 (复用 resolvePermissions, 跟 /api/auth/login 完全一致)
+    const permissions = await resolvePermissions(user)
+
+    // 记录 session (用于 SSO revoke — 用户在 gdqadmin 撤销后, token 失效)
+    // 复用 user_sessions 表 (跟 /api/auth/login 一样的机制)
+    const tokenHash = hashToken(token)
+    const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000)
+    const device = extractDevice(req)
+    pool.query(
+      `INSERT INTO user_sessions (user_id, token_hash, device_label, device_fingerprint, ip, user_agent, login_at, last_active_at, invalidated)
+       VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW(), 0)
+       ON DUPLICATE KEY UPDATE last_active_at = NOW()`,
+      [user.id, tokenHash, `WorkBuddy-${device.label}`, device.fingerprint, device.ip, device.ua]
+    ).catch(err => console.error('[workbuddy-token] session insert failed:', err.message))
+
+    // 返回 — 带上 server_url (APP 复制时知道连哪)
+    res.json({
+      code: 0,
+      data: {
+        token,
+        user_id: user.id,
+        name: user.name,
+        role: user.role,
+        permissions,
+        server_url: `${req.protocol}://${req.get('host')}`,
+        expires_at: expiresAt.toISOString(),
+        expires_in_days: days,
+        // 给 APP 的"复制链接"格式, 用户粘到 APP 即可
+        connect_link: `workbuddy://connect?server=${encodeURIComponent(req.protocol + '://' + req.get('host'))}&token=${token}`,
+      },
+    })
+  } catch (err) { next(err) }
+})
+
 // POST /api/auth/register-employee - 员工注册申请
 // 2026-08-16 波哥实测发现: 前端 Login.vue 调此端点但后端缺失, 返 401
 // 行为: 入库 users 表 (status='pending' 等 admin 后台审核), 不发 token

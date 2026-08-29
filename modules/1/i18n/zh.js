@@ -4154,4 +4154,9 @@ export default {
     hideChart: '隐藏',
     closeStore: '关闭',
   },
+  // 2026-08-29 WorkBuddy APP 连接链接
+  workbuddy: {
+    copyLink: '复制 WorkBuddy 链接',
+    copyLinkHelp: '为该用户生成 WorkBuddy APP 连接链接, 自动对齐用户自己的权限',
+  },
 }

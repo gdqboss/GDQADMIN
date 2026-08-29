@@ -3861,4 +3861,9 @@ export default {
     noComboData: 'No combo data',
     close: 'Close',
   },
+  // 2026-08-29 WorkBuddy APP connection link
+  workbuddy: {
+    copyLink: 'Copy WorkBuddy Link',
+    copyLinkHelp: 'Generate a WorkBuddy APP connection link for this user, auto-aligned with their own permissions',
+  },
 }
