@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import i18n from '../i18n/index.js'
+import { setLocale } from '../i18n/index.js'
 import { useUserStore } from '../stores/user'
 import { systemSettings } from '../stores/system'
 import api from '../services/api'
@@ -21,7 +21,7 @@ if (oldUser) {
 
 const router = useRouter()
 const userStore = useUserStore()
-const { t } = useI18n()
+const { t, locale: i18nLocale, messages: i18nMessages } = useI18n()
 
 // ─── 页面加载时：检测微信授权回调code ───
 const urlParams = new URLSearchParams(window.location.search)
@@ -55,7 +55,7 @@ if (wxCode) {
 const loginMode = ref('employee') // 'employee' | 'customer'
 
 const showRegister = ref(false)
-const phone = ref('')
+const phone = ref(localStorage.getItem('caimeite_phone') || '')
 const password = ref(localStorage.getItem('caimeite_password') || '')
 const rememberMe = ref(localStorage.getItem('caimeite_remember') === 'true')
 const showPassword = ref(false)
@@ -93,7 +93,15 @@ function openSendSms() {
 }
 
 // 员工密码登录
-async function handleLogin() {
+async function handleLogin(forceLogin) {
+  // 兼容 form submit 事件: Vue 会把 SubmitEvent 作为第一个参数传入
+  //   <form @submit.prevent="handleLogin"> → handleLogin(event) → forceLogin 是 event 对象
+  // 真实逻辑参数: 如果第一个参数是 boolean 才视为 force_login
+  // 2026-08-26 波哥铁律: 每次从 gbaw.cn/gdqadmin 入口登录都强制踢旧 session,
+  //   不再弹 "已在其他设备登录" 确认框, 直接进入系统
+  // 原因: 用户每次访问入口 URL 已经被强制看到登录页 (要求重新输密码),
+  //   输完密码就是显式的"我要登录"动作, 此时踢旧设备是用户的隐性意图, 不需要二次确认
+  if (typeof forceLogin !== 'boolean') forceLogin = true
   error.value = ''
   if (!phone.value || !password.value) {
     error.value = t('login.requiredFields')
@@ -101,7 +109,36 @@ async function handleLogin() {
   }
   loading.value = true
   try {
-    const res = await userStore.login(phone.value, password.value)
+    const res = await userStore.login(phone.value, password.value, { force_login: forceLogin })
+
+    // 2026-08-25 SSO: 同账号已在其他设备登录 → 自动踢旧 session (不再弹确认框)
+    // 2026-08-26 修改: 默认 force_login=1, 但为防御旧服务器返回, 保留 retry 一次
+    if (res.code === 409 && res.data?.needConfirm && !forceLogin) {
+      const s = res.data.activeSession || {}
+      const deviceText = s.deviceLabel || '其他设备'
+      const loginAtText = s.loginAt ? new Date(s.loginAt).toLocaleString('zh-CN') : ''
+      try {
+        const { ElMessageBox } = await import('element-plus')
+        await ElMessageBox.confirm(
+          `该账号已于 ${loginAtText} 在 ${deviceText}${s.ip ? ` (${s.ip})` : ''} 登录。\n\n` +
+          `是否强制登录？强制登录后对方将被踢下线。`,
+          '账号已在其他设备登录',
+          {
+            confirmButtonText: '强制登录',
+            cancelButtonText: '取消',
+            type: 'warning',
+            dangerouslyUseHTMLString: false
+          }
+        )
+        // 用户确认 → 重试 with force_login=1
+        return await handleLogin(true)
+      } catch {
+        // 用户取消
+        error.value = '已取消登录'
+        return
+      }
+    }
+
     if (res.code === 0) {
       if (rememberMe.value) {
         localStorage.setItem('caimeite_remember', 'true')
@@ -353,6 +390,11 @@ async function handleResetPassword() {
 }
 
 // 语言切换
+// 2026-08-06 BUG FIX: localeLabels 是 computed, vue 模板里 `langLabel(i18nLocale)` 函数参数不会自动 unref computed
+// 但 vue 的 reactive 对象 systemSettings.languages 属性访问会自动追踪 (proxy trap)
+// 之前 langLabel(localeLabels[i18nLocale.value]) 写法是错的, computed 没 .value 时访问返回 ref-like 对象
+// 正确: langLabel 应该直接读 localeLabels.value (computed.value)
+// 现在登录页 sys.languages 是 ['zh','en','ms'] 的话, localeLabels.value.zh = '中文'
 const localeCycle = computed(() => systemSettings.languages)
 const localeLabels = computed(() => {
   const labels = {}
@@ -365,13 +407,22 @@ const showLangDropdown = ref(false)
 
 async function switchLocale(lang) {
   showLangDropdown.value = false
-  if (lang === i18n.global.locale.value) return
-  localStorage.setItem('caimeite_locale', lang)
-  window.location.reload()
+  if (lang === i18nLocale.value) return
+  // 用 i18n 的 setLocale（动态 import 包 + 切 locale + 存 localStorage）
+  // 无需 reload — Vue 响应式会自动重渲染
+  await setLocale(lang)
 }
 
+// 2026-08-06 BUG FIX: langLabel 必须接受字符串, 因为 vue 模板函数参数不会自动 unref ref
+// 改: langLabel(i18nLocale) → langLabel(currentLocale) 传入字符串
+// 模板: {{ langLabel(currentLocale) }}
+const currentLocale = computed(() => i18nLocale.value || 'zh')
 function langLabel(l) {
-  return localeLabels[l] || l.toUpperCase()
+  // l 现在是字符串 (来自 currentLocale.value)
+  if (l === 'zh' || l === 'zh-HK') return '中文'
+  if (l === 'en') return 'English'
+  if (l === 'ms') return 'Bahasa'
+  return l.toUpperCase()
 }
 </script>
 
@@ -391,8 +442,8 @@ function langLabel(l) {
           <div class="absolute top-4 right-4 relative">
             <button @click="showLangDropdown = !showLangDropdown" class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-700 hover:border-primary transition-all">
               <span class="material-symbols-outlined text-[16px] sm:text-[18px]">language</span>
-              <span class="hidden sm:inline">{{ langLabel(i18n.global.locale.value) }}</span>
-              <span class="sm:hidden">{{ langLabel(i18n.global.locale.value) }}</span>
+              <span class="hidden sm:inline">{{ langLabel(currentLocale) }}</span>
+              <span class="sm:hidden">{{ langLabel(currentLocale) }}</span>
               <span v-if="localeCycle.length > 2" class="material-symbols-outlined text-[14px]">expand_more</span>
             </button>
             <div v-if="showLangDropdown" class="absolute right-0 mt-1 w-28 bg-white rounded-lg shadow-lg border z-50 py-1" @click.stop>
@@ -401,18 +452,19 @@ function langLabel(l) {
                 :key="lang"
                 @click="switchLocale(lang)"
                 class="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 transition-colors"
-                :class="lang === i18n.global.locale.value ? 'text-primary font-semibold' : 'text-text-primary'"
+                :class="lang === currentLocale ? 'text-primary font-semibold' : 'text-text-primary'"
               >
                 {{ langLabel(lang) }}
               </button>
             </div>
           </div>
 
+          <!-- 乐高积木铁律 (2026-08-24): logo / 站点名 / motto 全部从 systemSettings 读 (server_profiles) -->
           <div class="flex justify-center mb-2 sm:mb-3 md:mb-4">
-            <img src="/logo.jpg" alt="logo" class="h-36 w-36 sm:h-42 sm:w-42 md:h-48 md:w-48 object-contain rounded-lg" />
+            <img :src="systemSettings.site_logo" alt="logo" class="h-36 w-36 sm:h-42 sm:w-42 md:h-48 md:w-48 object-contain rounded-lg" @error="(e) => { e.target.src = '/logo.jpg' }" />
           </div>
-          <h1 class="text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-slate-900 mb-1">{{ $t('system.fullName') }}</h1>
-          <p class="text-xs sm:text-sm text-slate-500">{{ $t('system.motto') }}</p>
+          <h1 class="text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-slate-900 mb-1">{{ systemSettings.site_name_zh }}</h1>
+          <p class="text-xs sm:text-sm text-slate-500">{{ systemSettings.site_name_en }}</p>
         </div>
 
         <!-- 模式切换 Tabs -->

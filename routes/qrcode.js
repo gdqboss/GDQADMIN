@@ -134,11 +134,8 @@ router.put('/:id/bind', requireRole('admin', 'manager'), async (req, res, next) 
       return res.status(400).json({ code: 400, message: 'mode 必须是 single 或 batch' })
     }
 
-    // 单码模式：必须传 sku_id，且 SKU 属于该商品
-    if (mode === 'single') {
-      if (!sku_id) {
-        return res.status(400).json({ code: 400, message: '单码模式必须传 sku_id' })
-      }
+    // 单码模式：sku_id 可选（单规格商品可能没有 SKU）
+    if (mode === 'single' && sku_id) {
       const [[sku]] = await pool.query(
         'SELECT id FROM product_skus WHERE id = ? AND product_id = ?',
         [sku_id, product_id]
@@ -148,17 +145,16 @@ router.put('/:id/bind', requireRole('admin', 'manager'), async (req, res, next) 
       }
     }
 
-    // 批码模式：必须有 SKU，batch_quantity > 0
+    // 批码模式：sku_id 可选，batch_quantity > 0
     if (mode === 'batch') {
-      if (!sku_id) {
-        return res.status(400).json({ code: 400, message: '批码模式必须选 SKU' })
-      }
-      const [[sku]] = await pool.query(
-        'SELECT id FROM product_skus WHERE id = ? AND product_id = ?',
-        [sku_id, product_id]
-      )
-      if (!sku) {
-        return res.status(400).json({ code: 400, message: 'SKU不属于该商品' })
+      if (sku_id) {
+        const [[sku]] = await pool.query(
+          'SELECT id FROM product_skus WHERE id = ? AND product_id = ?',
+          [sku_id, product_id]
+        )
+        if (!sku) {
+          return res.status(400).json({ code: 400, message: 'SKU不属于该商品' })
+        }
       }
       const qty = parseInt(batch_quantity)
       if (!qty || qty < 1) {

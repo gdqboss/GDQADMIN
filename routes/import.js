@@ -524,6 +524,18 @@ router.get('/records/:id/summary', async (req, res) => {
     const topModels = byModel.slice(0, 20);
     const bottomModels = byModel.slice(-20).reverse();
 
+    // 分店×颜色×尺寸 三维透视矩阵（供「分店×COQ×尺寸」矩阵报表）
+    // 行=分店，列=颜色×尺寸组合，单元格=销量(qty) 与金额(amount)
+    const [byStoreColorSize] = await pool.query(
+      `SELECT store_code, store_name, color, size,
+              SUM(quantity) as qty, SUM(amount) as amount, COUNT(*) as item_count
+       FROM imported_excel_items
+       WHERE record_id = ? AND store_code IS NOT NULL AND store_code != ''
+             AND color IS NOT NULL AND color != '' AND size IS NOT NULL AND size != ''
+       GROUP BY store_code, store_name, color, size
+       ORDER BY store_name, color, size`, [recordId]
+    );
+
     res.json({ 
       success: true, 
       summary: { 
@@ -536,7 +548,8 @@ router.get('/records/:id/summary', async (req, res) => {
         bySize,
         byColorSize,
         topModels,
-        bottomModels
+        bottomModels,
+        byStoreColorSize
       } 
     });
   } catch (err) {

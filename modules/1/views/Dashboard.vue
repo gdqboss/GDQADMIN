@@ -94,11 +94,11 @@ const quickActions = [
   { name: () => t('dashboard.quickAttendance'), icon: 'schedule', color: 'success', route: '/oa/attendance',   permission: 'attendance:view' },
   { name: () => t('dashboard.quickWorkLog'), icon: 'description', color: 'primary', route: '/logs/work-logs', permission: 'work_log:read' },
   { name: () => t('dashboard.quickMyTasks'), icon: 'task_alt', color: 'info', route: '/tasks',              permission: 'task:read' },
-  { name: () => t('dashboard.quickScanSale'), icon: 'qr_code_scanner', color: 'warning', action: 'scan',     permission: 'quick-action-scan' },
+  { name: () => t('dashboard.quickScanSale'), icon: 'point_of_sale', color: 'warning', action: 'scan',     permission: 'quick-action-scan' },
   { name: () => t('dashboard.quickMyDuties'), icon: 'assignment', color: 'blue', route: '/oa/my-responsibility', permission: 'oa:read' },
   { name: () => t('dashboard.quickExpense'), icon: 'receipt_long', color: 'danger', route: '/oa/approvals/create?type=expense', permission: 'approval:write' },
   { name: () => t('dashboard.quickProfile'), icon: 'person', color: 'purple', route: '/profile',            permission: 'quick-action-profile' },
-  { name: () => t('dashboard.quickQrcode'), icon: 'qr_code', color: 'teal', route: '/qrcode',           permission: 'qrcode:read' },
+  { name: () => t('dashboard.quickQrcode'), icon: 'qr_code_2', color: 'teal', route: '/qrcode',           permission: 'qrcode:read' },
 ]
 
 // 按权限过滤显示的快捷操作
@@ -309,22 +309,30 @@ const confirmSale = async () => {
   }
 }
 
-// ─── Data Loading ───────────────────────────────────────────────────────────────
+// ─── Data Loading ─────────────────────────────────────────────────────────────────
+// 2026-08-26 性能优化 (波哥反馈"点开跳转慢"):
+//   1. 拆 2 段: 关键路径 (responsibilities) 拿到立刻 loading=false → 用户看到卡片
+//   2. stats 后台预取, 完成后 async 填实数, 不阻塞 UI
 const loadDashboardData = async () => {
   try {
     error.value = null
-    const respRes = await Promise.allSettled([
-      api.get('/job-responsibilities/my'),
-      api.get('/dashboard/stats'),
-      api.get('/inbound?page=1&limit=1'),
-      api.get('/outbound?page=1&limit=1'),
-      api.get('/approvals?page=1&limit=1'),
-      api.get('/tasks?page=1&limit=1'),
-    ])
 
-    if (respRes[0]?.status === 'fulfilled' && respRes[0].value.code === 0) {
-      myResponsibilities.value = respRes[0].value.data || []
+    // Phase 1 (关键路径): responsibilities 拿到立刻展示, 此时 stats 还是 0 占位
+    const resp = await api.get('/job-responsibilities/my').catch(() => null)
+    if (resp && resp.code === 0) {
+      myResponsibilities.value = resp.data || []
     }
+    // 关键路径完成 → 解除 loading, UI 立即可交互
+    loading.value = false
+
+    // Phase 2 (后台预取): stats 几个 endpoint 跑完后 async 填入
+    const respRes = await Promise.allSettled([
+      api.get('/dashboard/stats').catch(e => ({code: e.response?.data?.code ?? 0})),
+      api.get('/inbound?page=1&limit=1').catch(() => null),
+      api.get('/outbound?page=1&limit=1').catch(() => null),
+      api.get('/approvals?page=1&limit=1').catch(() => null),
+      api.get('/tasks?page=1&limit=1').catch(() => null),
+    ])
 
     // Try to parse dashboard stats
     if (respRes[1]?.status === 'fulfilled' && respRes[1].value.code === 0) {
@@ -436,7 +444,7 @@ onUnmounted(() => { stopCameraScanner() })
         <div class="bg-white rounded-lg border border-gray-100 shadow-card p-4 hover:shadow-md transition-shadow">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
-              <span class="material-symbols-outlined text-blue-500">inventory_2</span>
+              <span class="material-symbols-outlined text-blue-500">move_to_inbox</span>
             </div>
             <div>
               <p class="text-2xl font-bold text-text-primary">{{ stats.todayInbound }}</p>

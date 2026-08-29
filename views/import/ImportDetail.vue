@@ -57,6 +57,57 @@
     <!-- Charts Section -->
     <div v-if="showChart && summary" class="charts-wrap">
 
+      <!-- 分店 × COQ(颜色) × 尺寸 矩阵透视报表（对齐参考图样式） -->
+      <div class="report-section" v-if="hasMatrix">
+        <div class="matrix-report-header">
+          <h2 class="matrix-report-title">🧮 {{ $t('importDetail.matrixReport') || '分店 × 颜色 × 尺寸 销量矩阵' }} <span class="tag-global">Per Store × COQ × SIZE</span></h2>
+          <span v-if="record?.file_name" class="matrix-report-sub">{{ record.file_name }}</span>
+        </div>
+        <div class="matrix-table-wrap">
+          <table class="matrix-report-table">
+            <thead>
+              <tr>
+                <th rowspan="2" class="matrix-corner">#</th>
+                <th rowspan="2" class="matrix-corner">BRANCH</th>
+                <!-- 每个颜色一组，组内每个尺寸一列 -->
+                <th v-for="color in matrixColors" :key="'h-'+color" :colspan="matrixSizes.length" class="matrix-color-head">
+                  {{ getColorDisplay({ color }) }}
+                </th>
+                <th rowspan="2" class="matrix-corner">TOTAL</th>
+              </tr>
+              <tr>
+                <template v-for="color in matrixColors" :key="'hs-'+color">
+                  <th v-for="size in matrixSizes" :key="'hsc-'+color+'-'+size" class="matrix-size-head">{{ size }}</th>
+                </template>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(st, si) in matrixStores" :key="st.store">
+                <td class="matrix-rank">{{ si + 1 }}</td>
+                <td class="matrix-branch" :title="st.store">{{ st.store }}</td>
+                <template v-for="color in matrixColors" :key="'b-'+st.store+'-'+color">
+                  <td v-for="size in matrixSizes" :key="'bc-'+st.store+'-'+color+'-'+size" class="matrix-cell"
+                      :class="{ 'cell-empty': !cell(st, color, size) }">
+                    <span v-if="cell(st, color, size)">{{ cell(st, color, size) }}</span>
+                    <span v-else></span>
+                  </td>
+                </template>
+                <td class="matrix-total">{{ matrixRowTotal(st.store).qty }}</td>
+              </tr>
+              <tr v-if="matrixStores.length === 0">
+                <td :colspan="2 + matrixColors.length * matrixSizes.length + 1" class="empty-cell">{{ $t('importDetail.noData') }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="matrix-report-foot">
+          <span>{{ $t('importDetail.matrixStores') || '分店' }}: {{ matrixStores.length }}</span> ·
+          <span>{{ $t('importDetail.matrixColors') || '颜色' }}: {{ matrixColors.length }}</span> ·
+          <span>{{ $t('importDetail.matrixSizes') || '尺寸' }}: {{ matrixSizes.length }}</span> ·
+          <span class="cell-legend">🔍 {{ $t('importDetail.matrixHint') || '单元格 = 该分店该颜色该尺寸销量(件)' }}</span>
+        </div>
+      </div>
+
       <!-- 门店分析：独占一行 -->
       <div class="store-section">
         <div class="chart-card chart-full">
@@ -315,6 +366,89 @@ const allStores = computed(() => {
   return [...arr].sort((a, b) => Number(b.qty || 0) - Number(a.qty || 0))
 })
 
+// ========== 分店 × COQ(颜色) × 尺寸 矩阵报表 ==========
+// 从 byStoreColorSize（GROUP BY store_code,color,size）动态构建透视矩阵
+// 行=分店，列=颜色组[每个尺寸一列]，单元格=销量
+
+// 该报告实际存在的尺寸集合（按出现销量降序，如 [28,24,20]）
+const matrixSizes = computed(() => {
+  const rows = summary.value?.byStoreColorSize || []
+  const sizeMap = new Map()
+  rows.forEach(r => {
+    if (!r.size) return
+    sizeMap.set(String(r.size), (sizeMap.get(String(r.size)) || 0) + Number(r.qty || 0))
+  })
+  return [...sizeMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([size]) => size)
+})
+
+// 该报告实际存在的颜色集合（按销量降序），表头用完整色名
+const matrixColors = computed(() => {
+  const rows = summary.value?.byStoreColorSize || []
+  const colorMap = new Map()
+  rows.forEach(r => {
+    if (!r.color) return
+    const key = String(r.color).toUpperCase()
+    colorMap.set(key, (colorMap.get(key) || 0) + Number(r.qty || 0))
+  })
+  return [...colorMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([color]) => color)
+})
+
+// 分店列表（矩阵行），按该矩阵总销量降序
+const matrixStores = computed(() => {
+  const rows = summary.value?.byStoreColorSize || []
+  const storeMap = new Map()
+  rows.forEach(r => {
+    if (!r.store_code) return
+    const key = r.store_name || r.store_code
+    storeMap.set(key, (storeMap.get(key) || 0) + Number(r.qty || 0))
+  })
+  return [...storeMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([store, qty]) => ({ store, qty }))
+})
+
+// 索引表：store|color|size -> { qty, amount }（O(1) 查单元格）
+const matrixIndex = computed(() => {
+  const idx = {}
+  ;(summary.value?.byStoreColorSize || []).forEach(r => {
+    if (!r.store_code || !r.color || !r.size) return
+    const store = r.store_name || r.store_code
+    const key = `${store}||${String(r.color).toUpperCase()}||${r.size}`
+    idx[key] = { qty: Number(r.qty || 0), amount: Number(r.amount || 0) }
+  })
+  return idx
+})
+
+// 单行分店合计（qty + amount）
+function matrixRowTotal(store) {
+  const rows = summary.value?.byStoreColorSize || []
+  let qty = 0, amount = 0
+  rows.forEach(r => {
+    if ((r.store_name || r.store_code) === store) {
+      qty += Number(r.qty || 0)
+      amount += Number(r.amount || 0)
+    }
+  })
+  return { qty, amount }
+}
+
+// 取矩阵单元格销量（store × color × size → qty 件数）
+function cell(st, color, size) {
+  const key = `${st.store}||${String(color).toUpperCase()}||${size}`
+  const v = matrixIndex.value[key]
+  if (!v) return null
+  return v.qty || 0
+}
+
+// 矩阵是否为空（无分店×颜色×尺寸数据）
+const hasMatrix = computed(() => {
+  return (summary.value?.byStoreColorSize || []).length > 0
+})
+
 const expandedStore = ref(null)
 const expandedModel = ref(null)
 const modelSkus = ref([])
@@ -414,11 +548,24 @@ const COLOR_DISPLAY = {
   DBLUE: 'DARK BLUE', AGREEN: 'ARMY GREEN', BRONZE: 'BRONZE',
   NAVY: 'NAVY', BURGUNDY: 'BURGUNDY', BEIGE: 'BEIGE',
   MILITARY: 'MILITARY', KHAKI: 'KHAKI', VIOLET: 'VIOLET',
+  // SKU/描述里的常用颜色缩写 → 完整显示名（矩阵报表表头用）
+  BLK: 'BLACK', BLACK: 'BLACK',
+  GRY: 'AGRAY', GRAY: 'AGRAY', AGRAY: 'AGRAY', AGRY: 'AGRAY',
+  COFF: 'COFFEE', COFFEE: 'COFFEE',
+  BRZ: 'BRONZE', RGLD: 'ROSE GOLD', SIL: 'SILVER',
+  GRN: 'GREEN', GREEN: 'GREEN', BLU: 'BLUE', RED: 'RED', WHT: 'WHITE',
+  CHAM: 'CHAMPAGNE', CHAP: 'CHAMPAGNE', GLD: 'GOLD',
+  CGRY: 'CHARCOAL GRAY', DGRY: 'DARK GRAY', IGRY: 'IRON GRAY',
+  LGRY: 'LIGHT GRAY', SWHT: 'SOFT WHITE', IVO: 'IVORY',
+  GBLU: 'GUNMETAL BLUE', PBLU: 'PASTEL BLUE', NBLU: 'NAVY BLUE',
+  JGRN: 'JADE GREEN', DGRN: 'DARK GREEN', AGRN: 'ARMY GREEN', LGRN: 'LIGHT GREEN',
+  PNK: 'PINK', PUR: 'PURPLE', VIO: 'VIOLET', MAR: 'MAROON',
+  YELL: 'YELLOW', TUP: 'TUPLE', KHA: 'KHAKI', BLUE: 'BLUE', BROWN: 'BROWN',
 };
 
 function getColorDisplay(item) {
   if (!item.color) return null
-  return COLOR_DISPLAY[item.color] || item.color
+  return COLOR_DISPLAY[String(item.color).toUpperCase()] || item.color
 }
 
 function exportCSV() {
@@ -558,5 +705,31 @@ onMounted(() => {
 .sku-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; border: 1px solid #ebeef5; }
 .sku-thumb-placeholder { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: #f5f7fa; border-radius: 4px; font-size: 16px; }
 .sku-code { font-family: monospace; font-size: 11px; color: #409eff; overflow: hidden; text-overflow: ellipsis; }
+
+/* ========== 分店×颜色×尺寸 矩阵透视报表（对齐参考图样式） ========== */
+.matrix-report-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.matrix-report-title { margin: 0; font-size: 16px; color: #303133; }
+.matrix-report-sub { font-size: 12px; color: #909399; }
+.matrix-table-wrap { overflow-x: auto; max-height: 70vh; overflow-y: auto; border: 1px solid #dfe3e8; border-radius: 4px; }
+.matrix-report-table { border-collapse: collapse; font-size: 12px; min-width: 100%; }
+.matrix-report-table th, .matrix-report-table td {
+  border: 1px solid #dfe3e8; padding: 6px 8px; text-align: center; white-space: nowrap;
+}
+.matrix-report-table thead th {
+  background: #f5f6f8; color: #303133; font-weight: 600; font-size: 12px;
+}
+.matrix-color-head { background: #eef0f3 !important; text-transform: uppercase; letter-spacing: 0.5px; }
+.matrix-size-head { background: #fafbfc !important; font-weight: 500; color: #606266; }
+.matrix-corner { background: #e4e7ec !important; font-weight: 700; }
+.matrix-report-table tbody td { color: #303133; }
+.matrix-rank { color: #909399; width: 40px; }
+.matrix-branch { text-align: left; font-weight: 500; color: #303133; min-width: 200px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+.matrix-cell { font-family: monospace; font-weight: 500; min-width: 46px; }
+.matrix-cell.cell-empty > span { color: #c0c4cc; }
+.matrix-total { font-weight: 700; background: #f7f8fa; color: #409eff; }
+.matrix-report-table tbody tr:hover td { background: #ecf5ff; }
+.matrix-report-table tbody tr:hover td.matrix-total { background: #d9ecff; }
+.matrix-report-foot { margin-top: 10px; font-size: 12px; color: #909399; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.matrix-report-foot .cell-legend { color: #606266; }
 .sku-detail-row .qty { color: #67c23a; font-weight: 600; }
 </style>

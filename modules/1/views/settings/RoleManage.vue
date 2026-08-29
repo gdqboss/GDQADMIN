@@ -134,6 +134,54 @@ const PRESET_TEMPLATES = [
       'quick-action-responsibility', 'quick-action-expense', 'quick-action-profile',
     ],
   },
+  {
+    // 2026-08-25 波哥新增:部门负责人模板
+    // 用例: hod(部门负责人) / 团队 leader,需要管任务/日志/考勤/二维码/工地的本部门权限
+    // 注意:全部任务 tab 由 system:config 单独控制,这里不勾
+    key: 'department_head',
+    label: '部门负责人',
+    icon: '🏢',
+    description: '任务管理+工作日志+考勤+二维码+工地管理 — 部门/团队负责人',
+    color: 'warning',
+    permNames: [
+      // 任务管理 (读+写+审核,不含全公司范围)
+      'task:read', 'task:create', 'task:write', 'task:approve', 'task:delete',
+      'task:read_team',  // 团队任务视图 (本人+所有下级)
+      // 工作日志 (两套名字都勾,兼容新旧代码)
+      'work_log:read', 'work_log:write',
+      'worklog:read', 'worklog:write',
+      // OA + 考勤
+      'oa:read', 'oa:write',
+      'attendance:view',
+      // 二维码 (部门场景需要扫码查库存)
+      'qrcode:read', 'qrcode:scan',
+      // 工地管理 (本部门工地)
+      'jobsite:write', 'jobsite:delete',
+      // 工作台组件
+      'dashboard:warehouse_summary',
+      // 快捷操作（工作台首页）
+      'quick-action-attendance', 'quick-action-worklog', 'quick-action-task',
+      'quick-action-scan', 'quick-action-responsibility', 'quick-action-qrcode',
+      'quick-action-profile',
+    ],
+  },
+  {
+    // 2026-08-25 波哥新增:工人 / 班组长模板
+    // 用途:工地现场的工人,只能看自己的任务/日志/考勤
+    key: 'worker_lead',
+    label: '班组长',
+    icon: '👷',
+    description: '任务查看+工作日志+考勤打卡 — 工地班组长',
+    color: 'info',
+    permNames: [
+      'task:read',
+      'work_log:read', 'work_log:write',
+      'oa:read',
+      'attendance:view',
+      'quick-action-attendance', 'quick-action-worklog', 'quick-action-task',
+      'quick-action-responsibility', 'quick-action-profile',
+    ],
+  },
 ]
 
 // ─── Computed ──────────────────────────────────────────────────────────────────

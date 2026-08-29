@@ -27,6 +27,20 @@
           {{ $t('oa.clickToGetLocation') }}
         </div>
 
+        <!-- 打卡状态选择 (2026-08-28 钉钉模式) -->
+        <div class="mb-4 flex justify-center gap-2">
+          <button v-for="opt in clockTypeOptions" :key="opt.value" @click="clockType = opt.value"
+            :class="[
+              'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors flex items-center gap-1',
+              clockType === opt.value
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white text-gray-600 border-gray-300'
+            ]">
+            <span class="material-symbols-outlined text-[14px]">{{ opt.icon }}</span>
+            {{ opt.label }}
+          </button>
+        </div>
+
         <!-- 打卡按钮 -->
         <div class="flex justify-center gap-8">
           <div class="flex flex-col items-center">
@@ -85,6 +99,63 @@
         <div class="bg-white rounded-lg shadow p-3 text-center">
           <div class="text-xs text-gray-500">{{ $t('oa.abnormalStat') }}</div>
           <div class="text-xl font-bold text-red-500">{{ monthStats.absentDays }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 出差打卡 -->
+    <div class="p-4">
+      <div class="bg-white rounded-xl shadow-lg p-5">
+        <div class="flex items-center justify-between mb-3">
+          <div class="font-medium text-gray-800 flex items-center gap-2">
+            <span class="material-symbols-outlined text-blue-600 text-[20px]">flight_takeoff</span>
+            {{ $t('oa.tripClock') }}
+          </div>
+          <span class="text-xs text-gray-400">{{ $t('oa.tripMultipleHint') }}</span>
+        </div>
+
+        <!-- 出差打卡按钮 -->
+        <button @click="handleTripClock" :disabled="tripLoading" :class="[
+          'w-full py-3 rounded-xl text-white font-medium flex items-center justify-center gap-2 transition-transform',
+          'bg-gradient-to-r from-purple-500 to-purple-600 active:scale-[0.98] disabled:opacity-60'
+        ]">
+          <span v-if="tripLoading" class="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></span>
+          <span v-else class="material-symbols-outlined text-[20px]">add_location_alt</span>
+          {{ tripLoading ? $t('oa.tripClocking') : $t('oa.tripClockBtn') }}
+        </button>
+
+        <!-- GPS 状态 -->
+        <div v-if="tripGpsLoading" class="mt-3 text-xs text-gray-500 flex items-center gap-1">
+          <div class="animate-spin rounded-full h-3 w-3 border-2 border-purple-600 border-t-transparent"></div>
+          {{ $t('oa.locating') }}
+        </div>
+        <div v-else-if="tripGpsData" class="mt-3 text-xs text-green-600 flex items-center gap-1">
+          <span class="material-symbols-outlined text-[14px]">location_on</span>
+          {{ tripGpsData.address }}
+        </div>
+
+        <!-- 备注输入 -->
+        <div class="mt-3">
+          <input v-model="tripRemark" :placeholder="$t('oa.tripRemarkPlaceholder')" class="w-full border rounded-lg px-3 py-2 text-sm" />
+        </div>
+
+        <!-- 今日出差轨迹 -->
+        <div v-if="todayTripLogs.length" class="mt-4">
+          <div class="text-sm font-medium text-gray-700 mb-2">{{ $t('oa.todayTripLogs') }} ({{ todayTripLogs.length }})</div>
+          <div class="space-y-2">
+            <div v-for="(log, idx) in todayTripLogs" :key="log.id" class="flex items-start gap-3 border border-purple-50 bg-purple-50/40 rounded-lg p-3">
+              <div class="flex flex-col items-center pt-0.5">
+                <div class="w-2 h-2 rounded-full bg-purple-600"></div>
+                <div v-if="idx < todayTripLogs.length-1" class="w-px flex-1 bg-purple-200"></div>
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm text-gray-800"><span class="font-medium">{{ log.log_time }}</span>
+                  <span v-if="log.location" class="text-gray-500 ml-1">{{ log.location }}</span>
+                </div>
+                <div v-if="log.remark" class="text-xs text-gray-400">{{ log.remark }}</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -154,6 +225,14 @@ const loading = ref(false)
 const gpsLoading = ref(false)
 const gpsError = ref('')
 const gpsData = ref(null)
+// 2026-08-28 打卡状态 (钉钉模式): normal/trip/overtime/free
+const clockType = ref('normal')
+const clockTypeOptions = [
+  { value: 'normal', label: t('oa.clockTypeNormal'), icon: 'badge' },
+  { value: 'trip', label: t('oa.clockTypeTrip'), icon: 'flight_takeoff' },
+  { value: 'overtime', label: t('oa.clockTypeOvertime'), icon: 'schedule' },
+  { value: 'free', label: t('oa.clockTypeFree'), icon: 'lock_open' }
+]
 const records = ref({ list: [], total: 0 })
 const filters = ref({ start_date: '', end_date: '', status: '' })
 const currentTime = ref('')
@@ -164,6 +243,12 @@ const showFilter = ref(false)
 let timeInterval = null
 
 const todayRecord = ref(null)
+// 出差打卡 (可多点)
+const tripLoading = ref(false)
+const tripGpsLoading = ref(false)
+const tripGpsData = ref(null)
+const tripRemark = ref('')
+const todayTripLogs = ref([])
 
 async function loadTodayRecord() {
   try {
@@ -187,6 +272,7 @@ onMounted(() => {
   loadTodayRecord()
   loadRecords()
   loadMonthStats()
+  loadTodayTripLogs()
   updateTime()
   timeInterval = setInterval(updateTime, 1000)
 })
@@ -204,12 +290,16 @@ function updateTime() {
 async function handleClock(type) {
   loading.value = true
   try {
-    const res = await api.post('/oa/attendance/clock', { type })
+    const payload = { type, clock_type: clockType.value }
+    // 出差/加班打卡带上位置 + 备注 (从对应输入框取)
+    if (clockType.value === 'trip' && tripRemark.value?.trim()) payload.remark = tripRemark.value.trim()
+    if (gpsData.value) payload.location = gpsData.value.address
+    const res = await api.post('/oa/attendance/clock', payload)
     if (res.code === 0) {
       await loadTodayRecord()
       await loadRecords()
       await loadMonthStats()
-      alert(t('oa.clockSuccess'))
+      alert(res.message || t('oa.clockSuccess'))
     } else {
       alert(res.message || t('oa.clockFailed'))
     }
@@ -231,6 +321,60 @@ async function loadRecords() {
     showFilter.value = false
   } catch (err) {
     console.error('Failed to load records:', err)
+  }
+}
+
+// 出差打卡 (可当天多次)
+async function handleTripClock() {
+  tripLoading.value = true
+  try {
+    let lat = null, lng = null, accuracy = null, loc = null
+    try {
+      const pos = await getCurrentPosition()
+      lat = pos.lat
+      lng = pos.lng
+      accuracy = pos.accuracy
+      loc = pos.address
+      tripGpsData.value = pos
+    } catch (e) {
+      console.warn('GPS failed, continue without location', e)
+    }
+    const res = await api.post('/oa/attendance/trip-clock', {
+      lat, lng, accuracy,
+      location: loc,
+      remark: tripRemark.value || undefined
+    })
+    if (res.code === 0) {
+      tripRemark.value = ''
+      await loadTodayTripLogs()
+      alert(t('oa.tripClockSuccess'))
+    } else {
+      alert(res.message || t('oa.tripClockFailed'))
+    }
+  } catch (err) {
+    const msg = err.response?.data?.message || err.message || t('oa.tripClockFailed')
+    alert(msg)
+  } finally {
+    tripLoading.value = false
+  }
+}
+
+// 加载今日出差轨迹
+async function loadTodayTripLogs() {
+  try {
+    const res = await api.get('/oa/attendance/trip-logs')
+    if (res.code === 0) {
+      const today = new Date().toISOString().slice(0, 10)
+      // 后端返回 trip_date 是 UTC 偏移, 前端按本地今天过滤
+      const list = (res.data?.list || []).filter(l => {
+        const d = new Date(l.trip_date)
+        const localDate = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+        return localDate === today
+      })
+      todayTripLogs.value = list
+    }
+  } catch (err) {
+    console.error('Failed to load trip logs:', err)
   }
 }
 

@@ -48,8 +48,22 @@ export const useUserStore = defineStore('user', () => {
     return perms.includes(permKey)
   }
 
-  async function login(phone, password) {
-    const res = await api.post('/auth/login', { phone, password })
+  async function login(phone, password, opts = {}) {
+    let res
+    try {
+      res = await api.post('/auth/login', { phone, password, force_login: opts.force_login ? 1 : 0 })
+    } catch (err) {
+      // axios 拿到 4xx 时 axios 走 reject, 但 response body 仍在 err.response.data
+      // 这里把 err.response.data 重新包成 {code, ...} 形式给前端用
+      // 2026-08-25 SSO: 必须支持 409 (needConfirm) 不被 throw 走, 否则前端拿不到 data
+      if (err && err.code !== undefined) {
+        res = err
+      } else if (err && err.response && err.response.data) {
+        res = err.response.data
+      } else {
+        throw err
+      }
+    }
     if (res.code === 0) {
       // 优先使用后端返回的 permissions 字段（解析后的权限数组）
       const userWithPerms = {
@@ -65,11 +79,20 @@ export const useUserStore = defineStore('user', () => {
     return res
   }
 
+  // 2026-08-25 SSO: 主动清 token 时同步标记 session invalidated
   function logout() {
+    const oldToken = token.value
     user.value = null
     token.value = ''
     localStorage.removeItem('caimeite_user')
     localStorage.removeItem('caimeite_token')
+    // fire-and-forget 通知后端 invalidate session
+    if (oldToken) {
+      fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${oldToken}` }
+      }).catch(() => {})
+    }
   }
 
   async function fetchMe() {

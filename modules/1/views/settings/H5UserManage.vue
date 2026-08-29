@@ -103,6 +103,29 @@ function handleSearch() {
   fetchUsers()
 }
 
+// 2026-08-23 江小鱼 — 加删除按钮 (no3 后端 DELETE 已支持 disabled user)
+async function deleteUser(user) {
+  if (user.status !== 'disabled') {
+    alert(t('settings.deleteUserMustBeDisabled') || '请先将用户状态改为禁用,再删除')
+    return
+  }
+  if (!confirm(t('settings.confirmDeleteUser', { name: user.name, phone: user.phone }) || `确定要删除用户 ${user.name || user.phone} 吗?此操作不可恢复。`)) return
+  try {
+    const res = await fetch(`/api/h5-admin/users/${user.id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    })
+    const json = await res.json()
+    if (json.code === 0) {
+      await fetchUsers()
+    } else {
+      alert(json.message || t('settings.deleteFailed') || '删除失败')
+    }
+  } catch (err) {
+    alert(t('settings.deleteFailed') || '删除失败')
+  }
+}
+
 function statusLabel(status) {
   return status === 'active' ? t('settings.activeStatus') : t('settings.disabledStatus')
 }
@@ -195,9 +218,17 @@ function statusColor(status) {
               <td class="px-4 py-3 text-sm">
                 <button
                   @click="editUser(user)"
-                  class="text-primary hover:text-primary-hover font-medium"
+                  class="text-primary hover:text-primary-hover font-medium mr-3"
                 >
                   {{ t('common.edit') }}
+                </button>
+                <!-- 2026-08-23 江小鱼 — 加删除按钮 (后端 DELETE 已支持 disabled user) -->
+                <button
+                  v-if="user.status === 'disabled'"
+                  @click="deleteUser(user)"
+                  class="text-danger hover:text-red-700 font-medium"
+                >
+                  {{ t('common.delete') || '删除' }}
                 </button>
               </td>
             </tr>

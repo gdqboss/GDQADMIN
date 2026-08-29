@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { pool } from '../db/connection.js'
 import { checkPerm } from '../utils/permission.js'
-import { ROLES } from '../middleware/rbac.js'
+import { ROLES, PERMISSIONS, requirePermission } from '../middleware/rbac.js'
 
 const router = Router()
 
@@ -389,6 +389,94 @@ router.post('/mark-all-read', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// GET /api/tasks/team - 团队任务 (本人+所有下级+本人在派)
+// 2026-08-25 新增: hod / 团队负责人用的 tab,看到的是「团队范围」任务,不是全公司
+// 注意:必须在 /:id 之前,否则会被 :id 拦截
+router.get('/team', async (req, res, next) => {
+  try {
+    // 权限闸:无 task:read_team 直接 403
+    if (!(await checkPerm(req, 'task:read_team'))) {
+      return res.status(403).json({ code: 403, message: '无查看团队任务的权限' })
+    }
+
+    const { status, priority, page = 1, limit = 20 } = req.query
+    const offset = (page - 1) * limit
+
+    // 递归查所有下级 (含跨级)
+    const allSubIds = await collectSubordinateIds(req.user.id)
+    // team 范围 = 本人 + 所有下级 (作为接收人) + 本人指派的 (任意接收人)
+    const myAndSubIds = [req.user.id, ...allSubIds]
+    const placeholders = myAndSubIds.map(() => '?').join(',')
+
+    let whereClause = `WHERE (t.assigned_to IN (${placeholders}) OR t.assigned_by = ?)`
+    const params = [...myAndSubIds, req.user.id]
+
+    if (status && status !== 'all') {
+      whereClause += ' AND t.status = ?'
+      params.push(status)
+    }
+    if (priority && priority !== 'all') {
+      whereClause += ' AND t.priority = ?'
+      params.push(priority)
+    }
+
+    const pageSizeNum = Math.min(100, Math.max(1, parseInt(limit) || 20))
+    const offsetNum = (Math.max(1, parseInt(page) || 1) - 1) * pageSizeNum
+
+    const [rows] = await pool.query(
+      `SELECT t.*,
+              u1.name as assigned_to_name,
+              u2.name as assigned_by_name
+       FROM tasks t
+       LEFT JOIN users u1 ON t.assigned_to = u1.id
+       LEFT JOIN users u2 ON t.assigned_by = u2.id
+       ${whereClause}
+       ORDER BY
+         FIELD(t.priority, 'urgent', 'high', 'medium', 'low'),
+         t.due_date ASC,
+         t.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, pageSizeNum, offsetNum]
+    )
+
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) as total FROM tasks t ${whereClause}`,
+      params
+    )
+
+    res.json({
+      code: 0,
+      data: {
+        tasks: rows,
+        total,
+        page: parseInt(page),
+        limit: pageSizeNum
+      },
+      message: 'ok'
+    })
+  } catch (err) { next(err) }
+})
+
+// 递归收集所有下级 user_id (含跨级,通过 supervisor_id 链)
+async function collectSubordinateIds(rootUserId) {
+  const ids = new Set()
+  const queue = [rootUserId]
+  while (queue.length) {
+    const parentId = queue.shift()
+    const [rows] = await pool.query(
+      'SELECT id FROM users WHERE supervisor_id = ?',
+      [parentId]
+    )
+    for (const r of rows) {
+      if (!ids.has(r.id) && r.id !== rootUserId) {
+        ids.add(r.id)
+        queue.push(r.id)
+      }
+    }
+  }
+  return [...ids]
+}
+
 // GET /api/tasks/:id - 获取任务详情
 router.get('/:id', async (req, res, next) => {
   try {
@@ -435,7 +523,7 @@ router.get('/:id', async (req, res, next) => {
 })
 
 // POST /api/tasks - 创建任务
-router.post('/', async (req, res, next) => {
+router.post('/', requirePermission(PERMISSIONS.TASKS_CREATE), async (req, res, next) => {
   try {
     const { title, description, jobsite_id, assigned_to, due_date, priority } = req.body
 
@@ -458,17 +546,17 @@ router.post('/', async (req, res, next) => {
     }
 
     const [result] = await pool.query(
-      `INSERT INTO tasks (title, description, jobsite_id, assigned_to, assigned_by, created_by, due_date, priority, status, is_new)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1)`,
-      [title, description || null, jobsite_id || null, assigned_to, req.user.id, req.user.id, due_date || null, priority || "medium"]
-    )
+          `INSERT INTO tasks (title, description, jobsite_id, status, is_new, priority, assigned_to, assigned_by, created_by, due_date)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [title, description || null, jobsite_id || null, 'pending', 1, priority || "medium", assigned_to, req.user.id, req.user.id, due_date || null]
+        )
 
     res.json({ code: 0, data: { id: result.insertId }, message: '任务创建成功' })
   } catch (err) { next(err) }
 })
 
 // PUT /api/tasks/:id - 更新任务
-router.put('/:id', async (req, res, next) => {
+router.put('/:id', requirePermission(PERMISSIONS.TASKS_WRITE), async (req, res, next) => {
   try {
     const taskId = req.params.id
     const { title, content, assigned_to, scheduled_date, due_date, priority, status } = req.body
@@ -507,7 +595,7 @@ router.put('/:id', async (req, res, next) => {
 })
 
 // PUT /api/tasks/:id/submit - 提交任务（员工）
-router.put('/:id/submit', async (req, res, next) => {
+router.put('/:id/submit', requirePermission(PERMISSIONS.TASKS_WRITE), async (req, res, next) => {
   try {
     const taskId = req.params.id
     const { completion_notes, completion_note, attachments } = req.body
@@ -574,7 +662,7 @@ router.put('/:id/submit', async (req, res, next) => {
 })
 
 // PUT /api/tasks/:id/complete - 确认完成（上级）
-router.put('/:id/complete', async (req, res, next) => {
+router.put('/:id/complete', requirePermission(PERMISSIONS.TASKS_APPROVE), async (req, res, next) => {
   try {
     const taskId = req.params.id
     const { review_note } = req.body
@@ -653,7 +741,7 @@ router.put('/:id/reject', async (req, res, next) => {
 })
 
 // PUT /api/tasks/:id/review - 审核任务（批准或拒绝）
-router.put('/:id/review', async (req, res, next) => {
+router.put('/:id/review', requirePermission(PERMISSIONS.TASKS_APPROVE), async (req, res, next) => {
   try {
     const taskId = req.params.id
     const { action, review_notes } = req.body // action: 'approve' 或 'reject'
@@ -701,7 +789,7 @@ router.put('/:id/review', async (req, res, next) => {
 })
 
 // DELETE /api/tasks/:id - 删除任务
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', requirePermission(PERMISSIONS.TASKS_DELETE), async (req, res, next) => {
   try {
     const taskId = req.params.id
 

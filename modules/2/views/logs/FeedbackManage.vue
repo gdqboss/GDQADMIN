@@ -11,7 +11,7 @@ const { t, locale } = useI18n()
 const userStore = useUserStore()
 
 // ─── State ──────────────────────────────────────────────────────────────────────
-const isAdmin = computed(() => userStore.canAccess('feedback_admin'))
+const isAdmin = computed(() => userStore.canAccess('work_log:write'))
 const records = ref([])
 const total = ref(0)
 const loading = ref(false)

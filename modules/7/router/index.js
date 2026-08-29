@@ -164,6 +164,12 @@ const routes = [
       { path: 'tasks', name: 'TaskManage', component: lazyLoad(() => import('../views/tasks/TaskManage.vue')), meta: { title: '任务管理', permission: 'task:read' } },
       { path: 'tasks/stats', name: 'TaskStats', component: lazyLoad(() => import('../views/tasks/TaskStats.vue')), meta: { title: '任务统计', permission: 'task:stats' } },
 
+      // ── 管家工单 (2026-08-26 新建) ──────────────────────────
+      { path: 'butler-orders', name: 'ButlerOrderManage', component: lazyLoad(() => import('../views/butler-orders/ButlerOrderManage.vue')), meta: { title: '管家工单管理', permission: 'butler-orders:read' } },
+
+      // ── 资源对接 (2026-08-26 新建) ──────────────────────────
+      { path: 'resource-match', name: 'ResourceMatchManage', component: lazyLoad(() => import('../views/resource-match/ResourceMatchManage.vue')), meta: { title: '资源对接管理', permission: 'resource-match:read' } },
+
       // ── 日志 ────────────────────────────────────────────────
       { path: 'logs/work-logs', name: 'LogsWorkLogManage', component: lazyLoad(() => import('../views/logs/WorkLogManage.vue')), meta: { title: '工作日志', parent: '日志系统', permission: 'work_log:read' } },
       { path: 'logs/visit-logs', name: 'LogsVisitLogManage', component: lazyLoad(() => import('../views/logs/VisitLogManage.vue')), meta: { title: '拜访日志', parent: '日志系统', permission: 'work_log:read' } },

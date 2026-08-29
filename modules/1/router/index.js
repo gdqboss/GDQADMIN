@@ -2,6 +2,9 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 
 const MainLayout = () => import('../layouts/MainLayout.vue')
+// 2026-08-27 回退: lazyLoad 自定义 Promise wrapper 导致 vue-router 4 组件解析失败
+// (TaskManage 等 lazy chunk 渲染空 <!---->) — 回退成官方 () => import()
+// chunk 加载失败的白屏保护由 vite 自有机制 + 下方 SCSS chunk 处理承担
 const lazyLoad = (loader) => () => loader()
 
 const routes = [
@@ -116,6 +119,10 @@ const routes = [
 
       // ── AI / BI ─────────────────────────────────────────────
       { path: 'ai-classroom', name: 'AiClassroom', component: lazyLoad(() => import('../views/AiClassroom.vue')), meta: { title: 'AI 课堂', permission: 'ai-classroom' } },
+      // AI HR 招聘 (2026-08-27) - gdqadmin 后台
+      { path: 'ai-hr/reports', name: 'AiHrReportList', component: lazyLoad(() => import('../views/ai-hr/AiHrReportList.vue')), meta: { title: 'AI 招聘报告', parent: 'AI 招聘', permission: 'ai_hr:read' } },
+      { path: 'ai-hr/reports/:id', name: 'AiHrReportDetail', component: lazyLoad(() => import('../views/ai-hr/AiHrReportDetail.vue')), meta: { title: '报告详情', parent: 'AI 招聘', permission: 'ai_hr:read' } },
+      { path: 'ai-hr/job-presets', name: 'AiHrJobPresets', component: lazyLoad(() => import('../views/ai-hr/AiHrJobPresets.vue')), meta: { title: '岗位招聘配置', parent: 'AI 招聘', permission: 'ai_hr:write' } },
       { path: 'excel-analyzer', name: 'ExcelAnalyzer', component: lazyLoad(() => import('../views/bi/ExcelAnalyzer.vue')), meta: { title: 'Excel 分析器', parent: 'BI', permission: 'bi:excel' } },
       { path: 'excel-report-manage', name: 'ExcelReportManage', component: lazyLoad(() => import('../views/bi/ExcelReportManage.vue')), meta: { title: '报告管理', parent: 'BI', permission: 'bi:report' } },
       { path: 'import-records', name: 'ImportRecords', component: lazyLoad(() => import('../views/import/ImportRecords.vue')), meta: { title: '导入记录', parent: 'BI', permission: 'bi:excel' } },
@@ -126,12 +133,16 @@ const routes = [
       // ── 消息 ────────────────────────────────────────────────
       { path: 'wecom', name: 'WeCom', component: lazyLoad(() => import('../views/wecom/WeComChat.vue')), meta: { title: '企业微信', parent: '消息', permission: 'wecom:read' } },
       { path: 'kefu', name: 'Kefu', component: lazyLoad(() => import('../views/kefu/KefuChat.vue')), meta: { title: '客服消息', parent: '消息', permission: 'kefu:read' } },
+      { path: 'wechat-agent', name: 'WechatAgent', component: lazyLoad(() => import('../views/WechatAgent.vue')), meta: { title: '微信Agent服务', parent: '消息', permission: 'wechat_agent:read' } },
       { path: 'ai-automation', name: 'AiAutomation', component: lazyLoad(() => import('../views/automation/AiAutomation.vue')), meta: { title: 'AI 自动化', parent: 'OpenClaw', permission: 'ai-automation:write' } },
 
       // ── 协会中心 (SGP 是 source, 2026-07-30 波哥加 macau, 2026-08-15 江小鱼把 source 补齐)
       { path: 'association', name: 'AssociationInfo', component: lazyLoad(() => import('../views/association/info/AssociationInfo.vue')), meta: { title: '协会介绍', parent: '协会', permission: 'association-info:read' } },
       { path: 'association-announcements', name: 'AssociationAnnouncements', component: lazyLoad(() => import('../views/association/announcements/AnnouncementList.vue')), meta: { title: '信息发布', parent: '协会', permission: 'association-announcements:read' } },
       { path: 'association-activities', name: 'AssociationActivities', component: lazyLoad(() => import('../views/association/activities/ActivityList.vue')), meta: { title: '活动报名', parent: '协会', permission: 'association-activities:read' } },
+
+      // ── 入驻审核 (gbaw.cn 首页"企业入驻"板块配套, 2026-08-27) ──
+      { path: 'application-review', name: 'ApplicationReview', component: lazyLoad(() => import('../views/portal/ApplicationReviewList.vue')), meta: { title: '入驻审核', parent: '协会', permission: 'minip-applications:read' } },
       { path: 'association-cards', name: 'AssociationCards', component: lazyLoad(() => import('../views/association/cards/CardList.vue')), meta: { title: '会员名片', parent: '协会', permission: 'association-cards:read' } },
       { path: 'association-members', name: 'AssociationMembers', component: lazyLoad(() => import('../views/association/members/MemberList.vue')), meta: { title: '会员管理', parent: '协会', permission: 'association-members:read' } },
       { path: 'association-academic', name: 'AssociationAcademic', component: lazyLoad(() => import('../views/association/academic/AcademicList.vue')), meta: { title: '学术动态', parent: '协会', permission: 'association-academic:read' } },
@@ -150,6 +161,8 @@ const routes = [
       { path: 'oa/shifts', name: 'ShiftManage', component: lazyLoad(() => import('../views/oa/ShiftManage.vue')), meta: { title: '班次管理', permission: 'shift:write' } },
       { path: 'oa/schedule', name: 'ScheduleCalendar', component: lazyLoad(() => import('../views/oa/ScheduleCalendar.vue')), meta: { title: '排班日历', permission: 'schedule:write' } },
       { path: 'oa/attendance-summary', name: 'AttendanceSummary', component: lazyLoad(() => import('../views/oa/AttendanceSummary.vue')), meta: { title: '考勤统计', permission: 'attendance:view' } },
+      { path: 'oa/attendance-trip-records', name: 'TripRecords', component: lazyLoad(() => import('../views/oa/TripRecords.vue')), meta: { title: '出差记录', permission: 'attendance:view' } },
+      { path: 'oa/attendance-today', name: 'AttendanceToday', component: lazyLoad(() => import('../views/oa/AttendanceToday.vue')), meta: { title: '今日出勤', permission: 'attendance:manage' } },
       { path: 'oa/attendance-rules', name: 'AttendanceRuleManage', component: lazyLoad(() => import('../views/oa/AttendanceRuleManage.vue')), meta: { title: '出勤管理', permission: 'attendance:view' } },
       { path: 'oa/leave', name: 'LeaveManage', component: lazyLoad(() => import('../views/oa/LeaveManage.vue')), meta: { title: '请假管理', permission: 'leave:write' } },
       { path: 'oa/workflow', name: 'WorkflowDesigner', component: lazyLoad(() => import('../views/oa/WorkflowDesigner.vue')), meta: { title: '工作流管理', permission: 'workflow:write' } },
@@ -217,6 +230,14 @@ const routes = [
       { path: 'hotel/orders/:id', name: 'HotelOrderDetail', component: lazyLoad(() => import('../views/hotel/HotelOrderDetail.vue')), meta: { title: '订单详情', parent: '酒店管理', permission: 'hotel:read' } },
       { path: 'hotel/reviews', name: 'HotelReviews', component: lazyLoad(() => import('../views/hotel/ReviewList.vue')), meta: { title: '评价管理', parent: '酒店管理', permission: 'hotel:read' } },
 
+      // ── 寺庙管理 (2026-08-06 BUG FIX: macau/HK 有 Temple.vue, SGP 之前缺, 现从 macau 补回) ──────
+      { path: 'temple', name: 'Temple', component: lazyLoad(() => import('../views/Temple.vue')), meta: { title: '寺庙管理', permission: 'temple:read' } },
+
+      // ── admin 后端 寺内容管理 (2026-08-23 波哥: admin 加菜单, 内容管理 UI 后续逐表实装) ──────
+      // profile 11 海丰大道庵 (dda.gdqshop.cn) — 管理牌位/僧侣/经文/活动/供奉/相册等
+      // 当前是骨架入口页 TempleContent.vue (13 个表清单), 后续按波哥指示加 CRUD UI
+      { path: 'admin/temple', name: 'AdminTempleContent', component: lazyLoad(() => import('../views/admin/TempleContent.vue')), meta: { title: '寺内容管理', parent: '系统管理', permission: 'temple:read' } },
+
       // ── 预订单 (2026-08-06 BUG FIX: macau/HK 有 preorder, SGP 之前缺, 现从 macau 补回) ────────────
       { path: 'preorder', name: 'PreorderSummary', component: lazyLoad(() => import('../views/preorder/PreorderSummary.vue')), meta: { title: '产品预订', parent: '库存管理', permission: 'preorder:read' } },
 
@@ -235,8 +256,28 @@ const router = createRouter({
 })
 
 // Catch-all for failed chunk loads → reload page once
+// 2026-08-25 BUG FIX: 加 reload lock — 第二次再失败就停 reload + 清 token 跳 /login
+//   之前: hash chunk immutable max-age=31536000, 旧浏览器缓存的 chunk hash 与新 build 不匹配
+//         → router.onError 无限 reload → 死循环 → 白屏卡死
+let _chunkReloadCount = 0
 router.onError((err) => {
   if (err.message && err.message.includes('Failed to fetch dynamically imported module')) {
+    _chunkReloadCount++
+    if (_chunkReloadCount >= 2) {
+      console.warn('[router] chunk reload 超过 2 次, 停止 reload, 清 token 跳 /login')
+      _chunkReloadCount = 0
+      try {
+        localStorage.removeItem('caimeite_token')
+        localStorage.removeItem('caimeite_user')
+        localStorage.removeItem('caimeite_permissions')
+      } catch {}
+      if (window.location.hash !== '#/login') {
+        window.location.hash = '#/login'
+      }
+      // 强制 reload 一次让守卫生效
+      window.location.reload()
+      return
+    }
     window.location.reload()
   }
 })
@@ -259,13 +300,28 @@ router.beforeEach((to, from, next) => {
   }
 
   // 未登录引导到登录页
+  // 2026-08-26 BUG FIX: 之前 next('/login') 在 from 已经是 /login 时抛 NavigationDuplicated
+  //   → 显示 "已取消登录" 弹窗 (vue-router 4 unhandled rejection)
+  //   修法: 用 next(true) 留在当前路由, 如果当前就是 /login 则天然显示登录页
+  //         如果当前是 #/dashboard 等非 /login 路径但用户未登录, 用 redirect:true 替换而非 push
   if (to.path !== '/login' && !userStore.isLoggedIn) {
-    return next('/login')
+    return next({ path: '/login', replace: true })
   }
 
-  // 已登录访问登录页则跳转首页
+  // 2026-08-25 BUG FIX: 移除"已登录访问 /login 跳 /"
+  //   旧逻辑: if (to.path === '/login' && userStore.isLoggedIn) return next('/')
+  //   问题: gbaw.cn/gdqadmin 是登录入口, 已登录用户访问时不应该自动进系统
+  //         而应该显示登录页让用户重新输密码确认 (微信式 SSO)
+  //   修复: /login 是登录入口, 已登录用户访问时主动清 token, 让其显示登录页要求重新输密码
+  //         SSO 后端会通过 force_login=1 踢旧 session, 实现"再次输入密码登录"
   if (to.path === '/login' && userStore.isLoggedIn) {
-    return next('/')
+    // 主动清 token (不调后端, 因为是页面级 re-auth, 不是真 logout)
+    userStore.$patch({ token: '', user: null })
+    try {
+      localStorage.removeItem('caimeite_token')
+      localStorage.removeItem('caimeite_user')
+      localStorage.removeItem('caimeite_permissions')
+    } catch {}
   }
 
   // 权限检查 — 无权限时给用户友好提示（按波哥"出现就能操作"原则）

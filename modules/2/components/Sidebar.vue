@@ -31,6 +31,14 @@ async function loadServerModules() {
     const res = await api.get('/public-settings')
     if (res.code === 0 && res.data && res.data.modules) {
       serverModules.value = res.data.modules
+      // 2026-08-15 江小鱼 — 派生 'association' 标记:
+      // profile 7 (macau 中医学会) 勾选的是具体 module_key (association-academic 等),
+      // 但 sidebar group 用 'association' 单一 key 控制整组显示. 把任意 association-*
+      // 视为 association 整组可见.
+      const hasAnyAssoc = serverModules.value.some(m => m.startsWith('association-'))
+      if (hasAnyAssoc && !serverModules.value.includes('association')) {
+        serverModules.value = [...serverModules.value, 'association']
+      }
     }
   } catch { /* ignore */ }
 }
@@ -168,6 +176,17 @@ const menuGroups = computed(() => [
     children: []
   },
   {
+    key: 'ai-hr',
+    icon: 'group_add',
+    label: t('nav.aiHrRecruitment'),
+    to: '/ai-hr/reports',
+    permission: 'ai_hr:read',
+    children: [
+      { key: 'ai_hr:read', label: t('nav.aiHRReports') || '招聘报告', to: '/ai-hr/reports' },
+      { key: 'ai_hr:write', label: t('nav.aiHRJobPresets') || '岗位配置', to: '/ai-hr/job-presets' },
+    ]
+  },
+  {
     key: 'operations',
     icon: 'business',
     label: t('nav.operations'),
@@ -176,6 +195,11 @@ const menuGroups = computed(() => [
       { key: 'task:read', label: t('tasks.title'), to: '/tasks' },
       { key: 'work_log:read', label: t('logs.workLog'), to: '/logs/work-logs' },
       { key: 'attendance:manage', label: t('nav.qaAttendance'), to: '/oa/attendance' },
+      { key: 'attendance:today', label: t('nav.attendanceToday'), to: '/oa/attendance-today', permission: 'attendance:manage' },
+      { key: 'attendance:summary', label: t('nav.attendanceSummary'), to: '/oa/attendance-summary' },
+      { key: 'attendance:trip', label: t('nav.tripRecords'), to: '/oa/attendance-trip-records', permission: 'attendance:view' },
+      { key: 'schedule:view', label: t('nav.scheduleCalendar'), to: '/oa/schedule' },
+      { key: 'attendance:rules', label: t('nav.attendanceRules'), to: '/oa/attendance-rules' },
       { key: 'approval:read', label: t('nav.approvals'), to: '/approvals' },
     ]
   },
@@ -188,6 +212,7 @@ const menuGroups = computed(() => [
       { key: 'product:write', label: t('nav.products'), to: '/products' },
       { key: 'inventory:inout', label: t('nav.inout'), to: '/in-out' },
       { key: 'warehouse:write', label: t('nav.warehouses'), to: '/warehouses' },
+      { key: 'qrcode:write', label: t('nav.qrcode'), to: '/qrcode' },
       { key: 'stock:read', label: t('nav.alerts'), to: '/alerts', badge: alertCount.value },
       { key: 'transfer:read', label: t('nav.transfer'), to: '/transfer' },
       { key: 'inventory:return', label: t('nav.returnRecords'), to: '/inventory/returns' },
@@ -236,7 +261,6 @@ const menuGroups = computed(() => [
       { key: 'bi:report', label: t('nav.reportManage'), to: '/excel-report-manage' },
       { key: 'bi:excel', label: t('nav.storeSales'), to: '/store-sales' },
       { key: 'bi:excel', label: t('nav.importRecords'), to: '/import-records' },
-      { key: 'qrcode:write', label: t('nav.qrcode'), to: '/qrcode' },
       { key: 'referral:read', label: t('nav.referral'), to: '/referral' },
       { key: 'report:read', label: t('nav.reports'), to: '/reports' },
     ]
@@ -297,6 +321,28 @@ const menuGroups = computed(() => [
       { key: 'system:config', label: t('nav.serverProfiles'), to: '/settings/server-profiles' },
     ]
   },
+  // 2026-08-15 江小鱼 — SGP 是源头 — 协会后台 10 模块入口 (macau profile 7 主用)
+  // macau DB 勾选的是具体 association-* module_key (academic/activities/...),
+  // 这里用单一 'association' group 标记控制整组显示. loadServerModules 派生这条.
+  {
+    key: 'association',
+    icon: 'handshake',
+    label: '协会',
+    to: null,
+    moduleKeys: ['association'],
+    children: [
+      { key: 'association-info:read', label: '协会介绍', to: '/association' },
+      { key: 'association-announcements:read', label: '信息发布', to: '/association-announcements' },
+      { key: 'association-activities:read', label: '活动报名', to: '/association-activities' },
+      { key: 'association-cards:read', label: '会员名片', to: '/association-cards' },
+      { key: 'association-members:read', label: '会员管理', to: '/association-members' },
+      { key: 'association-academic:read', label: '学术动态', to: '/association-academic' },
+      { key: 'association-journals:read', label: '期刊管理', to: '/association-journals' },
+      { key: 'association-downloads:read', label: '资料下载', to: '/association-downloads' },
+      { key: 'association-org:read', label: '组织架构', to: '/association-org' },
+      { key: 'association-inquiries:read', label: '在线咨询', to: '/association-inquiries' },
+    ]
+  },
 ])
 
 // 路由路径 → module_key 映射（用于按服务器模块过滤）
@@ -304,6 +350,9 @@ const menuGroups = computed(() => [
 const routeToModule = {
   '/': 'dashboard',
   '/ai-classroom': 'ai-classroom',
+  '/ai-hr': 'ai-hr',
+  '/ai-hr/reports': 'ai-hr',
+  '/ai-hr/job-presets': 'ai-hr',
   '/tasks': 'tasks',
   '/logs/work-logs': 'tasks',
   '/logs/visit-logs': 'tasks',
@@ -350,6 +399,17 @@ const routeToModule = {
   '/articles': 'article',
   '/yuyue': 'yuyue',
   '/kefu': 'kefu',
+  // 2026-08-15 江小鱼 — SGP 协会 10 路由 → module_key 映射 (macau profile 7 派生显示)
+  '/association': 'association-info',
+  '/association-announcements': 'association-announcements',
+  '/association-activities': 'association-activities',
+  '/association-cards': 'association-cards',
+  '/association-members': 'association-members',
+  '/association-academic': 'association-academic',
+  '/association-journals': 'association-journals',
+  '/association-downloads': 'association-downloads',
+  '/association-org': 'association-org',
+  '/association-inquiries': 'association-inquiries',
   '/settings': 'settings',
   '/settings/users': 'users',
   '/settings/roles': 'roles',

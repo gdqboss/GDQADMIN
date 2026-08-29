@@ -126,7 +126,7 @@ router.post('/', requirePermission(PERMISSIONS.PRODUCTS_WRITE), async (req, res,
     const cleanPurchasePrice = purchase_price === '' || purchase_price === null ? null : purchase_price
     const cleanSalePrice = sale_price === '' || sale_price === null ? null : sale_price
     const cleanStock = stock === '' || stock === null ? 0 : stock
-    const cleanAlertStock = alert_stock === '' || alert_stock === null ? 0 : alert_stock
+    const cleanAlertStock = (alert_stock === '' || alert_stock === null || alert_stock === undefined) ? 0 : Number(alert_stock)
 
     const [result] = await pool.query(
       'INSERT INTO products (sku, name, category, category_id, spec, unit, supplier, purchase_price, sale_price, stock, alert_stock, image_main, images, external_links, require_qrcode, group_qr_url, group_qr_type) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
@@ -153,8 +153,11 @@ router.put('/:id', requirePermission(PERMISSIONS.PRODUCTS_WRITE), async (req, re
       if (req.body[field] !== undefined) {
         fields.push(`${field} = ?`)
         // Convert empty strings to null for numeric fields
-        if (['purchase_price', 'sale_price', 'alert_stock'].includes(field)) {
+        if (['purchase_price', 'sale_price'].includes(field)) {
           params.push(req.body[field] === '' || req.body[field] === null ? null : req.body[field])
+        } else if (field === 'alert_stock') {
+          // alert_stock NOT NULL DEFAULT 0, convert '', null or undefined to 0
+          params.push(req.body[field] === '' || req.body[field] === null || req.body[field] === undefined ? 0 : req.body[field])
         } else {
           params.push(req.body[field])
         }

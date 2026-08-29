@@ -19,7 +19,9 @@ router.get('/', async (req, res) => {
     if (!profileId || isNaN(profileId)) {
       const host = (req.headers.host || '').toLowerCase()
       if (host.includes('aippmcm') || host.includes('101.33.32.177')) {
-        profileId = 7  // macau 中医学会
+        profileId = 7  // macau 中医药学会
+      } else if (host.includes('gbaw.cn') || host.includes('hatch.gdqshop.cn') || host.includes('43.128.47.254')) {
+        profileId = 6  // 横琴港澳科技孵化器 (HK)
       } else {
         profileId = 1  // SGP 默认
       }

@@ -73,7 +73,15 @@ export default defineConfig(({ mode }) => {
             if (id.includes('pinia')) return 'vendor-pinia'
             if (id.includes('vue-router')) return 'vendor-router'
             if (id.includes('axios')) return 'vendor-axios'
-            if (id.includes('vue-i18n') || id.includes('/i18n/')) return 'vendor-i18n'
+            // 2026-08-24 BUG FIX: 拆 vue-i18n 和 /i18n/
+            //   之前: 两者强制合并到 vendor-i18n → vue-i18n 内部 extend 子模块的 hoisted const
+            //         (tt) 被排到 IIFE 调用之后 → ReferenceError: Cannot access 'tt' before initialization
+            //         (浏览器看到 #app 空, 但 curl HTML/JS 都正常)
+            //   修复: node_modules 的 vue-i18n 进 vendor-i18n, 我们 /i18n/ 源码 (zh.js / index.js 等)
+            //         让 vite 自然跟随 dynamic import 拆 chunk (zh 静态 → 主 bundle, en/ms/zh-HK 动态 → 独立 lazy chunk)
+            //   验证: 浏览器加载 mywh3.com 不再空白, vendor-i18n 不再 import /i18n/*
+            if (id.includes('vue-i18n')) return 'vendor-i18n'
+            // /i18n/ 我们的代码: 不强制, 让 vite 自然按 dynamic import 拆 (zh→主, en/ms/zh-HK→独立chunk)
             if (id.includes('@vueuse') || id.includes('echarts') || id.includes('xlsx')) return 'vendor-misc'
             return 'vendor-misc'
           }

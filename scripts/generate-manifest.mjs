@@ -69,6 +69,8 @@ const pageToModule = {
 
   // 客服
   'KefuChat':         'kefu',
+  // 微信 Agent 服务 (2026-08-29)
+  'WechatAgent':      'wechat-agent-server',
 
   // 餐饮
   'RestaurantDashboard': 'restaurant',

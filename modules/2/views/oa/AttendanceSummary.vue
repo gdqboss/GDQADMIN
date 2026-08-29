@@ -7,6 +7,12 @@
       </button>
     </div>
 
+    <!-- 提示:管理员看"今日全员"请去独立页面 -->
+    <div v-if="userStore.canAccess('attendance:manage')" class="mb-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
+      {{ $t('oa.seeTodayAllHint') }}
+      <router-link to="/oa/attendance-today" class="font-semibold underline ml-1">{{ $t('nav.attendanceToday') }} →</router-link>
+    </div>
+
     <!-- Filters -->
     <div class="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
       <div>
@@ -17,7 +23,7 @@
         <label class="block text-sm font-medium mb-1">{{ $t('common.endDate') }}</label>
         <input v-model="filters.end_date" type="date" class="w-full border rounded px-3 py-2" />
       </div>
-      <div v-if="userStore.canAccess('attendance_admin')">
+      <div v-if="userStore.canAccess('attendance:manage')">
         <label class="block text-sm font-medium mb-1">{{ $t('common.department') }}</label>
         <select v-model="filters.department" class="w-full border rounded px-3 py-2">
           <option value="">{{ $t('common.all') }}</option>
@@ -60,6 +66,9 @@
             <th class="px-4 py-3 text-left text-sm font-semibold">{{ $t('common.department') }}</th>
             <th class="px-4 py-3 text-center text-sm font-semibold">{{ $t('oa.totalDays') }}</th>
             <th class="px-4 py-3 text-center text-sm font-semibold">{{ $t('oa.normalDays') }}</th>
+            <th class="px-4 py-3 text-center text-sm font-semibold">{{ $t('oa.tripDays') }}</th>
+            <th class="px-4 py-3 text-center text-sm font-semibold">{{ $t('oa.overtimeDays') }}</th>
+            <th class="px-4 py-3 text-center text-sm font-semibold">{{ $t('oa.freeDays') }}</th>
             <th class="px-4 py-3 text-center text-sm font-semibold">{{ $t('oa.lateDays') }}</th>
             <th class="px-4 py-3 text-center text-sm font-semibold">{{ $t('oa.earlyDays') }}</th>
             <th class="px-4 py-3 text-center text-sm font-semibold">{{ $t('oa.absentDays') }}</th>
@@ -74,6 +83,18 @@
             <td class="px-4 py-3 text-sm text-center">{{ item.total_days }}</td>
             <td class="px-4 py-3 text-sm text-center">
               <span class="px-2 py-1 bg-green-100 text-green-800 rounded">{{ item.normal_days }}</span>
+            </td>
+            <td class="px-4 py-3 text-sm text-center">
+              <span v-if="item.trip_days > 0" class="px-2 py-1 bg-purple-100 text-purple-800 rounded">{{ item.trip_days }}</span>
+              <span v-else class="text-gray-400">0</span>
+            </td>
+            <td class="px-4 py-3 text-sm text-center">
+              <span v-if="item.overtime_days > 0" class="px-2 py-1 bg-indigo-100 text-indigo-800 rounded">{{ item.overtime_days }}</span>
+              <span v-else class="text-gray-400">0</span>
+            </td>
+            <td class="px-4 py-3 text-sm text-center">
+              <span v-if="item.free_days > 0" class="px-2 py-1 bg-cyan-100 text-cyan-800 rounded">{{ item.free_days }}</span>
+              <span v-else class="text-gray-400">0</span>
             </td>
             <td class="px-4 py-3 text-sm text-center">
               <span v-if="item.late_days > 0" class="px-2 py-1 bg-orange-100 text-orange-800 rounded">
@@ -162,7 +183,7 @@ async function fetchSummary() {
     const params = { ...filters.value }
 
     // If not admin, only show current user's records
-    if (!userStore.canAccess('attendance_admin')) {
+    if (!userStore.canAccess('attendance:manage')) {
       params.user_id = userStore.user?.id
     }
 
@@ -177,12 +198,15 @@ async function fetchSummary() {
 
 function exportData() {
   // Simple CSV export
-  const headers = [t('oa.exportEmployee'), t('oa.exportDepartment'), t('oa.exportTotalDays'), t('oa.exportNormal'), t('oa.exportLate'), t('oa.exportEarly'), t('oa.exportAbsent'), t('oa.exportOvertimeH'), t('oa.exportAttendanceRate')]
+  const headers = [t('oa.exportEmployee'), t('oa.exportDepartment'), t('oa.exportTotalDays'), t('oa.exportNormal'), t('oa.exportTrip'), t('oa.exportOvertime'), t('oa.exportFree'), t('oa.exportLate'), t('oa.exportEarly'), t('oa.exportAbsent'), t('oa.exportOvertimeH'), t('oa.exportAttendanceRate')]
   const rows = summary.value.map(item => [
     item.user_name,
     item.department,
     item.total_days,
     item.normal_days,
+    item.trip_days || 0,
+    item.overtime_days || 0,
+    item.free_days || 0,
     item.late_days,
     item.early_days,
     item.absent_days,

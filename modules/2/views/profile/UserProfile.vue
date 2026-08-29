@@ -21,11 +21,27 @@ const saveErr = ref('')
 const avatar = ref('')
 const lifePhotosSelected = ref([])
 
+// ===== 名片字段 (2026-08-28 JXY: 名片数据=users表, 编辑此处联动电子名片) =====
+const companyName = ref('')
+const title = ref('')
+const bio = ref('')
+const wechat = ref('')
+const companyAddress = ref('')
+const companyPhone = ref('')
+const cardBg = ref('')
+
 // 上传相关
 const uploadingAvatar = ref(false)
 
 function startEdit() {
   avatar.value = user.value.avatar || ''
+  companyName.value = user.value.company_name || ''
+  title.value = user.value.title || ''
+  bio.value = user.value.bio || ''
+  wechat.value = user.value.wechat || ''
+  companyAddress.value = user.value.company_address || ''
+  companyPhone.value = user.value.company_phone || ''
+  cardBg.value = user.value.card_bg || ''
   lifePhotosSelected.value = user.value.life_photos
     ? [...user.value.life_photos].filter(Boolean).slice(0, 9)
     : []
@@ -62,7 +78,15 @@ async function saveProfile() {
   try {
     const res = await api.put('/auth/profile', {
       avatar: avatar.value,
-      life_photos: lifePhotosSelected.value
+      life_photos: lifePhotosSelected.value,
+      // 名片字段 (2026-08-28 联动电子名片)
+      company_name: companyName.value,
+      title: title.value,
+      bio: bio.value,
+      wechat: wechat.value,
+      company_address: companyAddress.value,
+      company_phone: companyPhone.value,
+      card_bg: cardBg.value
     })
     if (res.code === 0) {
       saveMsg.value = t('profile.saveSuccess')
@@ -259,6 +283,48 @@ onMounted(() => { userStore.fetchMe() })
         </div>
       </div>
 
+      <!-- ========== 名片信息 (2026-08-28 联动电子名片) ========== -->
+      <div class="border-t pt-5 space-y-4">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-primary/70 text-lg">badge</span>
+          <h3 class="font-semibold text-gray-800">名片信息</h3>
+          <span class="text-xs text-gray-400">编辑后将在电子名片中同步展示</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm text-gray-600 mb-1.5">公司名称</label>
+            <input v-model="companyName" type="text" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/40 outline-none" placeholder="如：深圳智慧家园科技有限公司" />
+          </div>
+          <div>
+            <label class="block text-sm text-gray-600 mb-1.5">职位 / 头衔</label>
+            <input v-model="title" type="text" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/40 outline-none" placeholder="如：技术总监" />
+          </div>
+          <div>
+            <label class="block text-sm text-gray-600 mb-1.5">微信</label>
+            <input v-model="wechat" type="text" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/40 outline-none" placeholder="微信号，名片上展示" />
+          </div>
+          <div>
+            <label class="block text-sm text-gray-600 mb-1.5">公司电话</label>
+            <input v-model="companyPhone" type="text" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/40 outline-none" placeholder="公司联系电话" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm text-gray-600 mb-1.5">公司地址</label>
+          <input v-model="companyAddress" type="text" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/40 outline-none" placeholder="公司地址（名片展示）" />
+        </div>
+        <div>
+          <label class="block text-sm text-gray-600 mb-1.5">个人简介</label>
+          <textarea v-model="bio" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/40 outline-none resize-y" placeholder="个人简介，名片上展示"></textarea>
+        </div>
+        <div>
+          <label class="block text-sm text-gray-600 mb-1.5">名片背景色 <span class="text-xs text-gray-400">（十六进制色值，如 #1e3a5f）</span></label>
+          <div class="flex gap-2 items-center">
+            <input v-model="cardBg" type="text" class="w-40 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/40 outline-none" placeholder="#1e3a5f" />
+            <div class="w-10 h-10 rounded-lg border" :style="cardBg ? `background:${cardBg}` : 'background:#e5e7eb'"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- 保存/取消 -->
       <div class="flex gap-3 justify-end pt-2">
         <button @click="cancelEdit" class="px-4 py-2 text-sm rounded-lg border hover:bg-gray-50">{{ t('profile.cancel') }}</button>
@@ -274,8 +340,17 @@ onMounted(() => { userStore.fetchMe() })
         <div><span class="text-gray-500">{{ t('profile.phone') }}</span><p class="font-medium mt-0.5">{{ user.phone || '-' }}</p></div>
         <div><span class="text-gray-500">{{ t('profile.email') }}</span><p class="font-medium mt-0.5">{{ user.email || '-' }}</p></div>
         <div><span class="text-gray-500">{{ t('profile.department') }}</span><p class="font-medium mt-0.5">{{ user.department || '-' }}</p></div>
+        <div><span class="text-gray-500">职位</span><p class="font-medium mt-0.5">{{ user.title || '-' }}</p></div>
+        <div><span class="text-gray-500">公司</span><p class="font-medium mt-0.5">{{ user.company_name || '-' }}</p></div>
+        <div><span class="text-gray-500">微信</span><p class="font-medium mt-0.5">{{ user.wechat || '-' }}</p></div>
         <div><span class="text-gray-500">{{ t('profile.hireDate') }}</span><p class="font-medium mt-0.5">{{ user.hire_date || '-' }}</p></div>
         <div class="col-span-2"><span class="text-gray-500">{{ t('profile.lastLogin') }}</span><p class="font-medium mt-0.5">{{ user.last_login || '-' }}</p></div>
+      </div>
+      <div v-if="user.company_name || user.bio" class="border-t pt-4 mt-4 text-sm">
+        <div v-if="user.company_address || user.company_phone" class="text-gray-500 text-xs mb-2">
+          {{ user.company_address || '' }}<template v-if="user.company_address && user.company_phone"> · </template>{{ user.company_phone || '' }}
+        </div>
+        <p v-if="user.bio" class="text-gray-700 leading-relaxed whitespace-pre-line">{{ user.bio }}</p>
       </div>
     </div>
 

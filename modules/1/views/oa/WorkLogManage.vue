@@ -283,7 +283,7 @@ const currentFields = computed(() => {
 // ─── 加载数据 ───
 async function loadTemplates() {
   try {
-    const res = await api.get('/oa/work-log-templates')
+    const res = await api.get('/work-logs/templates')
     if (res.code === 0) {
       templates.value = res.data || []
     }
@@ -315,7 +315,7 @@ async function loadLogs() {
       size: logs.value.size,
       type: currentTab.value
     }
-    const res = await api.get('/oa/work-logs', { params })
+    const res = await api.get('/work-logs', { params })
     if (res.code === 0) {
       if (logs.value.page === 1) {
         logs.value = { ...res.data, page: 1, size: 20 }
@@ -390,7 +390,7 @@ async function submitLog() {
       recipients: formData.value.recipients
     }
 
-    const res = await api.post('/oa/work-logs', payload)
+    const res = await api.post('/work-logs', payload)
     if (res.code === 0) {
       showWriteLog.value = false
       logs.value.page = 1

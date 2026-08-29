@@ -1,7 +1,7 @@
 import express from 'express';
 import { pool } from '../db/connection.js';
 import { auth } from '../middleware/auth.js';
-import { PERMISSIONS, ROLES, requirePermission } from '../middleware/rbac.js';
+import { PERMISSIONS, ROLES, requirePermission, requireRole } from '../middleware/rbac.js';
 import { checkPerm } from '../utils/permission.js';
 
 const router = express.Router();
@@ -423,6 +423,60 @@ router.get('/', async (req, res, next) => {
     } else if (logType === 'received') {
       sql += ' AND JSON_CONTAINS(wl.recipients, ?)';
       params.push(JSON.stringify(req.user.id));
+    } else if (logType === 'subordinate') {
+      // 2026-08-26 三端统一: 下属日志查 (manager 通过部门 + job level 查下属)
+      const [[currentUser]] = await pool.query(
+        `SELECT u.*, d.manager_id, jl.level as job_level
+         FROM users u
+         LEFT JOIN departments d ON u.department_id = d.id
+         LEFT JOIN job_levels jl ON u.job_level_id = jl.id
+         WHERE u.id = ?`,
+        [req.user.id]
+      );
+
+      if (!currentUser) {
+        return res.status(403).json({ code: 403, message: '用户不存在' });
+      }
+
+      const subordinateIds = [];
+
+      // Department manager — get all users in managed depts
+      const [managedDepts] = await pool.query(
+        'SELECT id FROM departments WHERE manager_id = ?',
+        [req.user.id]
+      );
+      if (managedDepts.length > 0) {
+        const deptIds = managedDepts.map(d => d.id);
+        const [subordinates] = await pool.query(
+          'SELECT id FROM users WHERE department_id IN (?) AND id != ?',
+          [deptIds, req.user.id]
+        );
+        subordinateIds.push(...subordinates.map(s => s.id));
+      }
+
+      // Job level (higher level can see lower level)
+      if (currentUser.job_level && currentUser.job_level > 1) {
+        const [lowerLevelUsers] = await pool.query(
+          `SELECT u.id FROM users u
+           LEFT JOIN job_levels jl ON u.job_level_id = jl.id
+           WHERE jl.level < ? AND u.id != ?`,
+          [currentUser.job_level, req.user.id]
+        );
+        subordinateIds.push(...lowerLevelUsers.map(u => u.id));
+      }
+
+      if (subordinateIds.length === 0) {
+        return res.json({
+          code: 0,
+          data: { logs: [], total: 0, page: parseInt(page), limit: parseInt(limit) },
+          message: 'no subordinates'
+        });
+      }
+
+      // 去重
+      const uniqueIds = [...new Set(subordinateIds)];
+      sql += ` AND wl.user_id IN (?)`;
+      params.push(uniqueIds);
     } else if (logType === 'all') {
       // Admin can see all logs - no additional filter
     }
@@ -446,13 +500,16 @@ router.get('/', async (req, res, next) => {
     // Get total count - build a separate count query
     let countSql = `SELECT COUNT(*) as total FROM work_logs wl WHERE 1=1`;
     const countParams = [];
-    
+
     if (logType === 'mine') {
       countSql += ' AND wl.user_id = ?';
       countParams.push(req.user.id);
     } else if (logType === 'received') {
       countSql += ' AND JSON_CONTAINS(wl.recipients, ?)';
       countParams.push(JSON.stringify(req.user.id));
+    } else if (logType === 'subordinate' && Array.isArray(uniqueIds)) {
+      countSql += ` AND wl.user_id IN (?)`;
+      countParams.push(uniqueIds);
     }
     // 'all' has no additional filter
     
@@ -501,6 +558,41 @@ router.get('/', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// ==================== Labor / Minip 端专属 (2026-08-26 三端统一) ====================
+
+// GET /api/work-logs/today-summary - 今日提交统计 (供管理者 dashboard 用)
+router.get('/today-summary', async (req, res, next) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+
+    const [[summary]] = await pool.query(`
+      SELECT
+        COUNT(DISTINCT u.id) as total_employees,
+        COUNT(DISTINCT w.user_id) as submitted_count
+      FROM users u
+      LEFT JOIN work_logs w ON u.id = w.user_id AND w.submit_date = ?
+      WHERE u.status = 'active' AND u.require_worklog = 1
+    `, [today]);
+
+    res.json({ code: 0, data: summary });
+  } catch (err) { next(err); }
+});
+
+// GET /api/work-logs/my-today - 我今天的日志 (供员工端 daily check)
+router.get('/my-today', async (req, res, next) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const userId = req.user.id;
+
+    const [[log]] = await pool.query(
+      'SELECT * FROM work_logs WHERE user_id = ? AND submit_date = ?',
+      [userId, today]
+    );
+
+    res.json({ code: 0, data: log || null });
+  } catch (err) { next(err); }
 });
 
 // GET /api/work-logs/:id - Get log detail
@@ -1010,5 +1102,48 @@ router.post('/:id/forward', async (req, res, next) => {
     next(err);
   }
 });
+
+// PATCH /api/work-logs/:id/review - 审核日志 (admin/manager/director)
+router.patch('/:id/review', requireRole(ROLES.ADMIN, ROLES.MANAGER, ROLES.DIRECTOR), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status, comment } = req.body;
+
+    // 校验 status 值
+    const allowedStatus = ['approved', 'rejected', 'submitted'];
+    if (!allowedStatus.includes(status)) {
+      return res.status(400).json({
+        code: 400,
+        message: 'status 必须是 approved / rejected / submitted'
+      });
+    }
+
+    // 校验日志存在
+    const [logs] = await pool.query(
+      'SELECT id FROM work_logs WHERE id = ?',
+      [id]
+    );
+    if (logs.length === 0) {
+      return res.status(404).json({ code: 404, message: '日志不存在' });
+    }
+
+    // 更新 status + 审核信息
+    await pool.query(
+      `UPDATE work_logs
+       SET status = ?,
+           reviewer_id = ?,
+           reviewed_at = NOW(),
+           review_comment = ?
+       WHERE id = ?`,
+      [status, req.user.id, comment || null, id]
+    );
+
+    res.json({
+      code: 0,
+      message: status === 'approved' ? '已通过' : status === 'rejected' ? '已驳回' : '已重置'
+    });
+  } catch (err) { next(err); }
+});
+
 
 export default router;
