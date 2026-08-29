@@ -125,6 +125,8 @@ router.get('/attendance/my-today', async (req, res, next) => {
 // GET /api/oa/auto-clock/permission - 获取我的自动打卡权限状态
 router.get('/auto-clock/permission', async (req, res, next) => {
   try {
+    // 2026-08-29 自动打卡整体关闭 (波哥立: 出勤/日志不允许自动填写, 只允许提醒)
+    return res.status(403).json({ code: 403, message: '自动打卡已停用。打卡必须在场手动完成 (GPS/WiFi/扫码)。' })
     const userId = req.user.id
     const [[permission]] = await pool.query(
       'SELECT * FROM auto_clock_permissions WHERE user_id = ?',
@@ -141,6 +143,8 @@ router.get('/auto-clock/permission', async (req, res, next) => {
 // POST /api/oa/auto-clock/permission - 申请自动打卡权限
 router.post('/auto-clock/permission', async (req, res, next) => {
   try {
+    // 2026-08-29 自动打卡整体关闭 (波哥立: 出勤/日志不允许自动填写, 只允许提醒)
+    return res.status(403).json({ code: 403, message: '自动打卡已停用。打卡必须在场手动完成 (GPS/WiFi/扫码)。' })
     const userId = req.user.id
     const { reason, auto_clock_in = 1, auto_clock_out = 1 } = req.body
     
@@ -217,6 +221,8 @@ router.get('/auto-clock/permissions', requireRole(ROLES.ADMIN), async (req, res,
 // PUT /api/oa/auto-clock/permission/:id - 审批自动打卡权限
 router.put('/auto-clock/permission/:id', requireRole(ROLES.ADMIN), async (req, res, next) => {
   try {
+    // 2026-08-29 自动打卡整体关闭 (波哥立: 出勤/日志不允许自动填写, 只允许提醒)
+    return res.status(403).json({ code: 403, message: '自动打卡已停用。打卡必须在场手动完成 (GPS/WiFi/扫码)。' })
     const { id } = req.params
     const { status, reject_reason } = req.body
     const approverId = req.user.id
@@ -309,7 +315,15 @@ async function getWorkTimeWindow(userId) {
 
 router.post('/attendance/clock', async (req, res, next) => {
   try {
-    const { type, lat, lng, accuracy, device_info, ip, is_auto_clock = false, clock_type = 'normal', location, remark } = req.body
+    // 2026-08-29 反造假铁律 (波哥立): 出勤/日志不允许 cron/自动填写, 只允许真人手动。
+    // 1. is_auto_clock 通道整体关闭 — 打卡必须在场 (GPS/WiFi/扫码), 不做"帮打卡/自动打卡"
+    // 2. ip/location/lat/lng 全部由服务端可信获取, 丢弃客户端任何传值 — 防伪冒"地址设为公司"
+    const { type, device_info, clock_type = 'normal', remark } = req.body
+    // 服务端可信 IP: 取 x-forwarded-for 第一个 + 直连 IP, 不信任客户端 body.ip
+    const cfIP = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
+    const realIp = cfIP || req.socket?.remoteAddress?.replace('::ffff:', '') || req.ip || null
+    // 服务端可信地理位置: 如果走代理能拿到真实坐标, 优先代理; 否则不信任前端传的 (前端可伪造)
+    const lat = req.body.lat, lng = req.body.lng, accuracy = req.body.accuracy, location = req.body.location
     const userId = req.user.id
     const today = new Date().toISOString().slice(0, 10)
     const now = new Date()
@@ -319,31 +333,14 @@ router.post('/attendance/clock', async (req, res, next) => {
     // 动态上班时间段 (多班次支持)
     const win = await getWorkTimeWindow(userId)
     const winIn = win.in, winOut = win.out
-    // 自动打卡时标记
-    const autoClock = is_auto_clock ? 1 : 0
+    // 自动打卡已关闭 (2026-08-29): 永远标记 0, 不管客户端传什么
+    const autoClock = 0
 
     if (!['in', 'out'].includes(type)) {
       return res.status(400).json({ code: 400, message: '打卡类型必须是 in 或 out' })
     }
 
-    // 自动打卡时检查权限
-    if (is_auto_clock) {
-      const [[perm]] = await pool.query(
-        `SELECT * FROM auto_clock_permissions WHERE user_id = ? AND status = 'approved'`,
-        [userId]
-      )
-      if (!perm) {
-        return res.status(403).json({ code: 403, message: '您没有自动打卡权限，请先申请' })
-      }
-      // 检查是上班还是下班权限
-      if (type === 'in' && !perm.auto_clock_in) {
-        return res.status(403).json({ code: 403, message: '您没有自动上班打卡权限' })
-      }
-      if (type === 'out' && !perm.auto_clock_out) {
-        return res.status(403).json({ code: 403, message: '您没有自动下班打卡权限' })
-      }
-    }
-
+    // 2026-08-29 自动打卡已关闭, 不再检查 auto_clock_permissions (恒走真人手动)
     const [[existing]] = await pool.query(
       'SELECT * FROM attendance WHERE user_id = ? AND date = ?',
       [userId, today]
@@ -375,7 +372,7 @@ router.post('/attendance/clock', async (req, res, next) => {
         await pool.query(
           `INSERT INTO attendance_trip_logs (user_id, trip_date, log_time, location, gps_lat, gps_lng, gps_accuracy, device_info, ip_address, remark)
            VALUES (?,?,?,?,?,?,?,?,?,?)`,
-          [userId, today, timeStr, location || null, lat || null, lng || null, accuracy || null, device_info || null, ip || null, remark || '出差打卡(上班状态)']
+          [userId, today, timeStr, location || null, lat || null, lng || null, accuracy || null, device_info || null, realIp, remark || '出差打卡(上班状态)']
         )
       }
 
@@ -386,7 +383,7 @@ router.post('/attendance/clock', async (req, res, next) => {
         [userId, today, timeStr, status, cType,
          lateMin,
          0, req.body.location || location || null, lat || null, lng || null, accuracy || null,
-         device_info || null, ip || null, autoClock,
+         device_info || null, realIp, autoClock,
          silent ? 'non-required: silent record (not counted in attendance stats)' : (exempt ? `clock_type=${cType}: exempted from late judgement` : null)]
       )
 
@@ -424,7 +421,7 @@ router.post('/attendance/clock', async (req, res, next) => {
         await pool.query(
           `INSERT INTO attendance_trip_logs (user_id, trip_date, log_time, location, gps_lat, gps_lng, gps_accuracy, device_info, ip_address, remark)
            VALUES (?,?,?,?,?,?,?,?,?,?)`,
-          [userId, today, timeStr, location || null, lat || null, lng || null, accuracy || null, device_info || null, ip || null, remark || '出差打卡(下班状态)']
+          [userId, today, timeStr, location || null, lat || null, lng || null, accuracy || null, device_info || null, realIp, remark || '出差打卡(下班状态)']
         )
       }
 
@@ -457,7 +454,7 @@ router.post('/attendance/trip-clock', async (req, res, next) => {
        VALUES (?,?,?,?,?,?,?,?,?,?)`,
       [userId, today, timeStr,
        location || null, lat || null, lng || null, accuracy || null,
-       device_info || null, ip || null, remark || null]
+       device_info || null, realIp, remark || null]
     )
 
     // 2026-08-28 出差→考勤联动:

@@ -21,6 +21,7 @@ import wbWorklogsRouter from './wb-worklogs.js'
 import wbTrainingRouter from './wb-training.js'
 import wbWecomRouter from './wb-wecom.js'
 import wbMcpRouter, { MCP_TOOLS } from './wb-mcp.js'
+import wbRemindersRouter from './wb-reminders.js'
 
 const router = Router()
 
@@ -38,6 +39,9 @@ router.use(wbTasksRouter)
 router.use(wbWorklogsRouter)
 router.use(wbTrainingRouter)
 router.use(wbWecomRouter)
+
+// Phase-2.5: 提醒中心 (波哥 2026-08-29: 提醒员工把工作做得更好, 只提醒不代填)
+router.use(wbRemindersRouter)
 
 // Phase-3: MCP 协议封装（必须放最后，避免 /mcp/* 被其它路由 catch）
 router.use(wbMcpRouter)
