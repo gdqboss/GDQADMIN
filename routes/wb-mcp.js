@@ -124,7 +124,10 @@ router.post('/mcp/execute', auth, requirePermission('workbuddy:read'), async (re
         }
       }
     }
-    const url = `http://localhost:3200/api/workbuddy${path}${query.toString() ? '?' + query.toString() : ''}`
+    // 动态取当前服务端口（SGP=3200, 横琴/HK=3300, 由 pm2 PORT env 注入）
+    // 不能硬编码 3200，否则跨部署（如横琴 3300）时 MCP execute 转发失败
+    const selfPort = process.env.PORT || 3200
+    const url = `http://localhost:${selfPort}/api/workbuddy${path}${query.toString() ? '?' + query.toString() : ''}`
 
     const authHeader = req.headers['authorization']
     const resp = await fetch(url, {
