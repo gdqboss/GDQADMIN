@@ -15,10 +15,14 @@ import wbWarehouseRouter from './wb-warehouse.js'
 import wbApprovalsRouter from './wb-approvals.js'
 import wbFinanceRouter from './wb-finance.js'
 import wbActionsRouter from './wb-actions.js'
+import wbAttendanceRouter from './wb-attendance.js'
+import wbTasksRouter from './wb-tasks.js'
+import wbWorklogsRouter from './wb-worklogs.js'
 
 const router = Router()
 
 // 2026-08-29: Phase-1 核心业务模块 — 库存/订单/商品/仓库/审批/财务/AI Action
+// 2026-08-29: Phase-1.5 — 考勤/任务/日志（波哥指定重点）
 router.use(wbInventoryRouter)
 router.use(wbOrdersRouter)
 router.use(wbProductsRouter)
@@ -26,6 +30,9 @@ router.use(wbWarehouseRouter)
 router.use(wbApprovalsRouter)
 router.use(wbFinanceRouter)
 router.use(wbActionsRouter)
+router.use(wbAttendanceRouter)
+router.use(wbTasksRouter)
+router.use(wbWorklogsRouter)
 
 /**
  * GET /api/workbuddy/health -  ( auth)
