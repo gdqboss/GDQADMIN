@@ -189,17 +189,21 @@
       </div>
     </div>
 
-    <!-- 2026-08-29 WorkBuddy APP 连接链接 Modal — 用户密码 → token → 对齐权限 -->
+    <!-- 2026-08-29 v2 WorkBuddy APP 连接 — 完整说明书 (API 地址 + token + 使用步骤 + 多种复制格式) -->
     <div v-if="showWBModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @click="showWBModal = false">
-      <div class="bg-white rounded-lg p-6 max-w-lg w-full" @click.stop>
-        <h3 class="text-lg font-semibold mb-2">🔗 WorkBuddy 连接</h3>
+      <div class="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto" @click.stop>
+        <h3 class="text-lg font-semibold mb-2">🔗 WorkBuddy APP 连接包</h3>
         <p class="text-sm text-gray-600 mb-4">
-          用户 <span class="font-bold">{{ wbTargetUser?.name }}</span> ({{ wbTargetUser?.phone || wbTargetUser?.email }})
-          在 WorkBuddy APP 里粘贴下方链接, 自动连接我们的系统并对齐他自己的权限。
+          用户 <span class="font-bold">{{ wbTargetUser?.name }}</span>
+          <span class="text-gray-500">({{ wbTargetUser?.phone || wbTargetUser?.email }}, {{ wbTokenInfo?.role || wbTargetUser?.role }})</span>
         </p>
 
-        <!-- Step 1: 让用户输入自己的密码 (不知道密码的人拿不到 token) -->
-        <div v-if="!wbToken" class="space-y-3">
+        <!-- ========== Step 1: 输入密码 (尚未生成时) ========== -->
+        <div v-if="!wbToken" class="space-y-3 border-t pt-4">
+          <p class="text-sm text-gray-700">
+            <span class="font-semibold text-purple-700">第一步</span> — 输入该用户的登录密码生成连接包。
+            不知道密码 = 拿不到 token (安全设计, 防止越权代生)。
+          </p>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">登录账号 (手机/邮箱)</label>
             <input
@@ -220,15 +224,18 @@
             />
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">有效期 (天, 1-30)</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">有效期 (天, 1-3650)</label>
             <input
               v-model.number="wbExpiresDays"
               type="number"
               min="1"
-              max="30"
+              max="3650"
               class="w-full px-3 py-2 border rounded-lg"
             />
-            <p class="text-xs text-gray-500 mt-1">默认 7 天, 过期需重新生成</p>
+            <p class="text-xs text-gray-500 mt-1">
+              默认 <b>365 天 (长期)</b>. 除非管理员禁用该用户或主动撤销, 否则一直有效。
+              最大可设 3650 天 (10 年)。
+            </p>
           </div>
           <div v-if="wbError" class="text-sm text-red-600 bg-red-50 p-2 rounded">{{ wbError }}</div>
           <div class="flex gap-2 justify-end">
@@ -240,60 +247,135 @@
               :disabled="wbLoading || !wbPassword"
               class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
             >
-              {{ wbLoading ? '生成中...' : '🔐 生成链接' }}
+              {{ wbLoading ? '生成中...' : '🔐 生成连接包' }}
             </button>
           </div>
         </div>
 
-        <!-- Step 2: 显示生成的连接链接 + 复制按钮 -->
-        <div v-else class="space-y-3">
+        <!-- ========== Step 2: 完整连接包 (已生成) ========== -->
+        <div v-else class="space-y-4 border-t pt-4">
+
+          <!-- 状态条 -->
           <div class="bg-green-50 border border-green-200 rounded-lg p-3 text-sm">
-            <p class="text-green-800 font-medium mb-1">✅ 已生成</p>
+            <p class="text-green-800 font-medium mb-1">✅ 连接包已生成</p>
             <p class="text-green-700">
-              有效期 {{ wbTokenInfo.expires_in_days }} 天, 至 {{ new Date(wbTokenInfo.expires_at).toLocaleString() }}
+              有效期 <b>{{ wbTokenInfo.expires_in_days }}</b> 天, 至 <b>{{ new Date(wbTokenInfo.expires_at).toLocaleString() }}</b>
             </p>
-            <p class="text-green-700">用户权限: {{ wbTokenInfo.role }} ({{ wbTokenInfo.permissions.length }} 项)</p>
+            <p class="text-green-700">
+              权限: <b>{{ wbTokenInfo.role }}</b> 角色, <b>{{ wbTokenInfo.permissions.length }}</b> 个权限点
+            </p>
           </div>
 
+          <!-- ⭐ 方式 A: 一键复制完整说明 (人话 + 机器读, 推荐) -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">🔗 WorkBuddy 连接链接 (一键复制给 APP)</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              ⭐ 方式 A — 完整说明包 (推荐, 直接复制发给用户)
+            </label>
             <div class="flex gap-2">
-              <input
-                ref="wbLinkInputRef"
-                :value="wbTokenInfo.connect_link"
+              <textarea
+                ref="wbFullTextRef"
+                :value="wbFullText"
                 readonly
+                rows="10"
                 class="flex-1 px-3 py-2 border rounded-lg bg-gray-50 text-xs font-mono"
                 @focus="$event.target.select()"
               />
               <button
-                @click="copyWorkBuddyLink"
-                class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 whitespace-nowrap"
+                @click="copyWorkBuddyFull"
+                class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 whitespace-nowrap self-start"
               >
-                {{ wbCopied ? '✓ 已复制' : '📋 复制' }}
+                {{ wbCopiedFull ? '✓ 已复制' : '📋 复制全部' }}
               </button>
             </div>
             <p class="text-xs text-gray-500 mt-1">
-              链接格式: <code class="bg-gray-100 px-1 rounded">workbuddy://connect?server=...&amp;token=...</code><br>
-              WorkBuddy APP 打开会自动接管, 用户只需在 APP 里粘贴或扫码即可连接。
+              用户粘贴到 WorkBuddy APP 或微信对话即可, 包含 API 地址、token、使用步骤。
             </p>
           </div>
 
-          <details class="text-sm">
-            <summary class="cursor-pointer text-gray-600 hover:text-gray-800">📋 纯 token (备选)</summary>
-            <div class="mt-2 p-2 bg-gray-50 rounded text-xs font-mono break-all">{{ wbTokenInfo.token }}</div>
-            <button @click="copyWorkBuddyToken" class="mt-1 text-purple-600 hover:underline text-xs">
-              {{ wbCopiedToken ? '✓ 已复制' : '复制 token' }}
-            </button>
+          <!-- 方式 B: Deep Link (APP 已支持 workbuddy:// 协议时用) -->
+          <details class="text-sm border rounded-lg p-2">
+            <summary class="cursor-pointer font-medium text-gray-700 hover:text-gray-900">
+              方式 B — Deep Link (APP 支持 <code class="bg-gray-100 px-1 rounded">workbuddy://</code> 协议时一键连接)
+            </summary>
+            <div class="mt-2 space-y-2">
+              <div class="flex gap-2">
+                <input
+                  ref="wbLinkInputRef"
+                  :value="wbTokenInfo.connect_link"
+                  readonly
+                  class="flex-1 px-3 py-2 border rounded-lg bg-gray-50 text-xs font-mono"
+                  @focus="$event.target.select()"
+                />
+                <button
+                  @click="copyWorkBuddyLink"
+                  class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 whitespace-nowrap"
+                >
+                  {{ wbCopied ? '✓ 已复制' : '📋 复制' }}
+                </button>
+              </div>
+            </div>
           </details>
 
-          <details class="text-sm">
-            <summary class="cursor-pointer text-gray-600 hover:text-gray-800">🔑 该用户的权限 ({{ wbTokenInfo.permissions.length }} 项)</summary>
+          <!-- 方式 C: 分离的字段 (给开发者 / 自定义集成用) -->
+          <details class="text-sm border rounded-lg p-2">
+            <summary class="cursor-pointer font-medium text-gray-700 hover:text-gray-900">
+              方式 C — 分离字段 (开发者 / 自定义集成)
+            </summary>
+            <div class="mt-2 space-y-2 text-xs">
+              <div>
+                <div class="font-semibold text-gray-600">🌐 API Base URL</div>
+                <div class="flex gap-2 mt-1">
+                  <input :value="wbTokenInfo.server_url" readonly class="flex-1 px-2 py-1 border rounded bg-gray-50 font-mono" @focus="$event.target.select()" />
+                  <button @click="copyField(wbTokenInfo.server_url, 'wbCopiedUrl')" class="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 whitespace-nowrap">
+                    {{ wbCopiedUrl ? '✓' : '复制' }}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <div class="font-semibold text-gray-600">🔑 Bearer Token</div>
+                <div class="flex gap-2 mt-1">
+                  <input :value="wbTokenInfo.token" readonly class="flex-1 px-2 py-1 border rounded bg-gray-50 font-mono text-xs" @focus="$event.target.select()" />
+                  <button @click="copyWorkBuddyToken" class="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 whitespace-nowrap">
+                    {{ wbCopiedToken ? '✓' : '复制' }}
+                  </button>
+                </div>
+              </div>
+              <div class="bg-gray-50 rounded p-2 font-mono text-xs">
+                <div class="font-semibold text-gray-600 mb-1">📝 curl 示例</div>
+                <code class="block break-all">
+                  curl -H "Authorization: Bearer {{ wbTokenInfo.token.slice(0, 40) }}..." {{ wbTokenInfo.server_url }}/api/workbuddy/stats
+                </code>
+              </div>
+            </div>
+          </details>
+
+          <!-- 权限清单 -->
+          <details class="text-sm border rounded-lg p-2">
+            <summary class="cursor-pointer font-medium text-gray-700 hover:text-gray-900">
+              🔑 该用户在 WorkBuddy APP 里能做的事 ({{ wbTokenInfo.permissions.length }} 项权限)
+            </summary>
             <div class="mt-2 p-2 bg-gray-50 rounded text-xs max-h-40 overflow-y-auto">
               <span v-for="p in wbTokenInfo.permissions" :key="p" class="inline-block bg-white border rounded px-2 py-0.5 m-0.5">{{ p }}</span>
             </div>
           </details>
 
-          <div class="flex gap-2 justify-end pt-2">
+          <!-- 用户使用步骤 -->
+          <details class="text-sm border rounded-lg p-2" open>
+            <summary class="cursor-pointer font-medium text-gray-700 hover:text-gray-900">
+              📱 用户在 WorkBuddy APP 里的 3 步操作
+            </summary>
+            <ol class="mt-2 pl-5 space-y-1 text-xs text-gray-700 list-decimal">
+              <li>打开 WorkBuddy APP, 进入"连接系统"页面</li>
+              <li>把上面"方式 A"的完整说明粘贴进去 (或扫码 / Deep Link)</li>
+              <li>APP 自动识别 API 地址 + token, 开始连接 → 显示该用户能看到的数据</li>
+            </ol>
+            <p class="mt-2 text-xs text-gray-500">
+              ⚠️ token 过期前 APP 会自动提示重新生成。
+              撤销权限: 在 gdqadmin "用户管理" 把 user_sessions 里 WorkBuddy-* 设备踢下线。
+            </p>
+          </details>
+
+          <div class="flex gap-2 justify-end pt-2 border-t">
             <button @click="closeWorkBuddyModal" class="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300">
               关闭
             </button>
@@ -305,7 +387,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '../../services/api'
 
@@ -398,32 +480,101 @@ function editH5User(user) {
   alert('Edit H5 user: ' + user.phone)
 }
 
-// ==================== 2026-08-29 WorkBuddy 连接链接 ====================
+// ==================== 2026-08-29 WorkBuddy 连接包 v2 (完整说明书) ====================
 const showWBModal = ref(false)
 const wbTargetUser = ref(null)
 const wbLoginKey = ref('')
 const wbPassword = ref('')
-const wbExpiresDays = ref(7)
+const wbExpiresDays = ref(365)
 const wbLoading = ref(false)
 const wbError = ref('')
 const wbToken = ref('')
 const wbTokenInfo = ref(null)
 const wbCopied = ref(false)
 const wbCopiedToken = ref(false)
+const wbCopiedFull = ref(false)
+const wbCopiedUrl = ref(false)
 const wbLinkInputRef = ref(null)
+const wbFullTextRef = ref(null)
+
+// ⭐ 完整说明包 — 复制粘贴到 WorkBuddy APP / 微信对话都 OK
+// 既给人看 (人话说明), 也给机器读 (API_BASE / TOKEN / ENDPOINTS 块)
+const wbFullText = computed(() => {
+  if (!wbTokenInfo.value || !wbTargetUser.value) return ''
+  const info = wbTokenInfo.value
+  const user = wbTargetUser.value
+  return `━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔗 WorkBuddy APP 连接包
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+👤 用户: ${user.name}
+   账号: ${user.phone || user.email}
+   角色: ${info.role}
+   有效期: ${info.expires_in_days} 天 (${info.expires_in_days >= 365 ? '长期' : '短期'}, 至 ${new Date(info.expires_at).toLocaleString()})
+   ⏰ token 在以下情况自动失效:
+      • 管理员禁用该用户
+      • 管理员主动撤销 (踢下线)
+      • 用户修改密码
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+📡 API 配置 (机器读)
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+API_BASE_URL: ${info.server_url}
+TOKEN: ${info.token}
+AUTH_HEADER: Authorization: Bearer ${info.token}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🌐 可用 API 端点
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GET  ${info.server_url}/api/workbuddy/stats           — 总览统计 (任务/会议/未读)
+GET  ${info.server_url}/api/workbuddy/today-events   — 今日事件
+GET  ${info.server_url}/api/workbuddy/inventory/summary — 库存总览
+GET  ${info.server_url}/api/workbuddy/orders/summary — 订单统计
+GET  ${info.server_url}/api/workbuddy/approvals/pending — 待审批
+GET  ${info.server_url}/api/workbuddy/finance/overview — 财务概览
+GET  ${info.server_url}/api/workbuddy/actions/suggestions — 智能建议
+POST ${info.server_url}/api/workbuddy/chat           — AI 对话 (body: {message})
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+📱 在 WorkBuddy APP 里怎么用
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+方法 1 (推荐): 把整段粘贴到 APP "连接系统" 输入框, APP 自动识别 API_BASE_URL 和 TOKEN
+方法 2: 如果 APP 支持 workbuddy:// 协议, 用下面这个链接一键连接
+        ${info.connect_link}
+方法 3: 开发者集成 — 直接用上面的 API_BASE_URL + TOKEN 调任意端点
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔑 你在 APP 里能做的事
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${info.permissions.length} 项权限: ${info.permissions.slice(0, 10).join(', ')}${info.permissions.length > 10 ? ` ... (还有 ${info.permissions.length - 10} 项)` : ''}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+📝 curl 测试示例
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+curl -H "Authorization: Bearer ${info.token}" \\
+     "${info.server_url}/api/workbuddy/stats"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━`
+})
 
 function openWorkBuddyModal(user) {
   wbTargetUser.value = user
-  // 默认填入该用户的手机或邮箱 (placeholder)
   wbLoginKey.value = user.phone || user.email || ''
   wbPassword.value = ''
-  wbExpiresDays.value = 7
+  wbExpiresDays.value = 365
   wbLoading.value = false
   wbError.value = ''
   wbToken.value = ''
   wbTokenInfo.value = null
   wbCopied.value = false
   wbCopiedToken.value = false
+  wbCopiedFull.value = false
+  wbCopiedUrl.value = false
   showWBModal.value = true
 }
 
@@ -452,7 +603,7 @@ async function generateWorkBuddyLink() {
     if (res.code === 0 && res.data) {
       wbToken.value = res.data.token
       wbTokenInfo.value = res.data
-      wbPassword.value = ''  // 用完即清, 不留在内存
+      wbPassword.value = ''  // 用完即清
     } else {
       wbError.value = res.message || '生成失败'
     }
@@ -463,6 +614,28 @@ async function generateWorkBuddyLink() {
   }
 }
 
+// 通用复制函数 (带 flag + 2 秒自动重置)
+async function copyField(text, flagRef) {
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    if (flagRef === 'wbCopiedFull') wbCopiedFull.value = true
+    else if (flagRef === 'wbCopiedUrl') wbCopiedUrl.value = true
+    setTimeout(() => {
+      if (flagRef === 'wbCopiedFull') wbCopiedFull.value = false
+      else if (flagRef === 'wbCopiedUrl') wbCopiedUrl.value = false
+    }, 2000)
+  } catch {
+    // fallback: 选中 textarea 让用户手动 Ctrl+C
+    wbFullTextRef.value?.select?.()
+  }
+}
+
+async function copyWorkBuddyFull() {
+  await copyField(wbFullText.value, 'wbCopiedFull')
+  if (!wbCopiedFull.value) wbFullTextRef.value?.select?.()
+}
+
 async function copyWorkBuddyLink() {
   if (!wbTokenInfo.value?.connect_link) return
   try {
@@ -470,7 +643,6 @@ async function copyWorkBuddyLink() {
     wbCopied.value = true
     setTimeout(() => { wbCopied.value = false }, 2000)
   } catch {
-    // fallback: 选中 input 让用户手动 Ctrl+C
     wbLinkInputRef.value?.select?.()
   }
 }

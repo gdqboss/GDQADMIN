@@ -623,18 +623,20 @@ router.post('/bind-account', loginLimiter, async (req, res, next) => {
 
 // POST /api/auth/workbuddy-token - 2026-08-29
 // 给 WorkBuddy APP 用的"用户级 token"生成入口。
-// 用户用自己的登录用户名(手机/邮箱)+ 密码, 拿一个短期 JWT (默认 7d, 最长 30d)
+// 用户用自己的登录用户名(手机/邮箱)+ 密码, 拿一个长期 JWT
+// 默认 365 天, 最长 3650 天 (10年), 直到管理员禁用该用户或主动 revoke。
 // 这个 token 用的是用户自己的 rbac 权限, 跟 gdqadmin 后台一致。
 //
 // Body: { login_key, password, expires_days? }
 // Response: { code:0, data: { token, user_id, name, role, permissions, server_url, expires_at, expires_in_days } }
 //
-// 设计要点:
+// 设计要点 (波哥 2026-08-29 修订):
 // 1. 不复用 service-token (那是 admin 全权, 所有用户共用 = 权限泄露)
 // 2. 用登录密码鉴权 — 只有知道密码的人才能生成 (admin 不能替别人生)
-// 3. 短期 + 可控 — APP 长期挂着需重连
-// 4. token 走标准 jwt, 中间件 auth() 自动按 req.user.role + resolvePermissions 判权
-// 5. revoke 接口: 同样 endpoint 用 ?action=revoke 走 (前端可加按钮)
+// 3. **长期有效** — 默认 365 天, 直到 (a) 管理员禁用户 (b) 管理员主动 revoke (c) 改密码
+// 4. auth 中间件实时校验 users.status='active' + user_sessions.invalidated=0
+//    → 用户被禁用或 token 被踢下线 → 立即 403, 无需等 JWT 过期
+// 5. token 走标准 jwt, 中间件 auth() 自动按 req.user.role + resolvePermissions 判权
 router.post('/workbuddy-token', loginLimiter, async (req, res, next) => {
   try {
     const { login_key, password, expires_days } = req.body
@@ -642,8 +644,8 @@ router.post('/workbuddy-token', loginLimiter, async (req, res, next) => {
       return res.status(400).json({ code: 400, message: 'login_key 和 password 必填' })
     }
 
-    // 限制过期天数 (1-30 天)
-    const days = Math.max(1, Math.min(30, parseInt(expires_days) || 7))
+    // 长期有效: 默认 365 天, 范围 1-3650 天 (10年), 传 0 或负数 = 用默认
+    const days = Math.max(1, Math.min(3650, parseInt(expires_days) || 365))
 
     // 查找用户 — 支持手机号/邮箱
     const isEmail = login_key.includes('@')
