@@ -11,13 +11,17 @@ import { requirePermission } from '../middleware/rbac.js'
 import wbInventoryRouter from './wb-inventory.js'
 import wbOrdersRouter from './wb-orders.js'
 import wbProductsRouter from './wb-products.js'
+import wbWarehouseRouter from './wb-warehouse.js'
+import wbApprovalsRouter from './wb-approvals.js'
 
 const router = Router()
 
-// 2026-08-29: Phase-1 核心业务模块 — 库存 / 订单 / 商品
+// 2026-08-29: Phase-1 核心业务模块 — 库存 / 订单 / 商品 / 仓库 / 审批
 router.use(wbInventoryRouter)
 router.use(wbOrdersRouter)
 router.use(wbProductsRouter)
+router.use(wbWarehouseRouter)
+router.use(wbApprovalsRouter)
 
 /**
  * GET /api/workbuddy/health -  ( auth)
