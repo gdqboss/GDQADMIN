@@ -600,8 +600,9 @@ async function getUserPermissions(userId, role) {
     } catch (e) { /* 动态RBAC查库失败时回退到硬编码 */ }
   }
 
-  // 3. admin 角色直接全权限（不依赖数据库）
-  if (role === 'admin' || dynamicPerms.includes('admin')) {
+  // 3. admin / superuser 角色直接全权限（不依赖数据库）
+  // superuser 语义 = 超级用户(全权限), 与 admin 并列 (2026-08-29)
+  if (role === 'admin' || role === 'superuser' || dynamicPerms.includes('admin') || dynamicPerms.includes('superuser')) {
     return [...Object.values(PERMISSIONS), 'work_log:read', 'work_log:write', 'work_log_template:read', 'work_log_template:manage', 'quick_action:read', 'quick_action:write', 'quick_action:manage', 'quick_action:delete']
   }
 

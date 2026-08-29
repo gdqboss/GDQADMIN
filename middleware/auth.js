@@ -26,8 +26,9 @@ function parsePermissions(perms) {
 
 // 统一权限解析
 async function resolvePermissions(user) {
-  // 规则：admin 角色永远拥有所有权限（不论 rbac_role_permissions 表里勾没勾）
-  if (user.role === 'admin') {
+  // 规则：admin / superuser 角色永远拥有所有权限（不论 rbac_role_permissions 表里勾没勾）
+  // superuser 语义 = 超级用户(全权限), 代码在 office.js 已与 admin 并列识别 (2026-08-29)
+  if (user.role === 'admin' || user.role === 'superuser') {
     try {
       const [rows] = await pool.query('SELECT name FROM rbac_permissions')
       if (rows.length) return rows.map(r => r.name)
@@ -67,8 +68,8 @@ export function auth(req, res, next) {
     loadUserProfile(decoded.id).then(u => {
       if (u) {
         req.user.server_profile_id = u.server_profile_id || 1
-        // super_admin = role='admin' 且 profile_id=1 (主控) — 可跨客户访问
-        req.user.is_super_admin = (u.role === 'admin' && (!u.server_profile_id || u.server_profile_id === 1))
+        // super_admin = role='admin'/'superuser' 且 profile_id=1 (主控) — 可跨客户访问
+        req.user.is_super_admin = ((u.role === 'admin' || u.role === 'superuser') && (!u.server_profile_id || u.server_profile_id === 1))
       }
     })
     next()
@@ -89,7 +90,7 @@ export function authWithPerms(req, res, next) {
     loadUserProfile(decoded.id).then(u => {
       if (u) {
         req.user.server_profile_id = u.server_profile_id || 1
-        req.user.is_super_admin = (u.role === 'admin' && (!u.server_profile_id || u.server_profile_id === 1))
+        req.user.is_super_admin = ((u.role === 'admin' || u.role === 'superuser') && (!u.server_profile_id || u.server_profile_id === 1))
       }
     })
     next()
