@@ -18,6 +18,7 @@ import wbActionsRouter from './wb-actions.js'
 import wbAttendanceRouter from './wb-attendance.js'
 import wbTasksRouter from './wb-tasks.js'
 import wbWorklogsRouter from './wb-worklogs.js'
+import wbTrainingRouter from './wb-training.js'
 
 const router = Router()
 
@@ -33,6 +34,7 @@ router.use(wbActionsRouter)
 router.use(wbAttendanceRouter)
 router.use(wbTasksRouter)
 router.use(wbWorklogsRouter)
+router.use(wbTrainingRouter)
 
 /**
  * GET /api/workbuddy/health -  ( auth)

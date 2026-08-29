@@ -70,6 +70,7 @@ import bossChatRoutes from './routes/boss-chat.js'
 import aiClassRoutes from './routes/ai-class.js'
 import aiClassReactRoutes from './routes/ai-class-react.js'
 import aiClassPublicRoutes from './routes/ai-class-public.js'
+import aiClassLearningRoutes from './routes/ai-class-learning.js'
 import aiKnowledgeDomainsRoutes from './routes/ai-knowledge-domains.js'
 import laborAiAgentRoutes from './routes/labor-ai-agent.js'
 import laborAiSupervisorRoutes from './routes/labor-ai-supervisor.js'
@@ -259,6 +260,8 @@ app.use('/api/token/v1', aiTokenProxyRoutes)
 app.use('/api/ai-class/public', aiClassPublicRoutes)
 app.use('/api/ai-class', auth, aiClassRoutes)
 app.use('/api/ai-class', auth, aiClassReactRoutes)
+// AI 课堂·培训认知模块 (2026-08-29 首次挂载) - 闪卡间隔复习 + 知识缺口 + 团队看板
+app.use('/api/ai-class-learning', auth, aiClassLearningRoutes)
 // AI HR 招聘 (2026-08-27) - 公共端点不挂 auth（应聘者匿名），HR 路由内部 router.use(auth)
 app.use('/api/ai-hr', aiHrRoutes)
 // 微信 Agent 服务 (2026-08-29) - webhook 不挂 auth（外部通道回调），admin 带 auth
