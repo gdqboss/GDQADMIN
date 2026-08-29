@@ -20,7 +20,7 @@ import wbTasksRouter from './wb-tasks.js'
 import wbWorklogsRouter from './wb-worklogs.js'
 import wbTrainingRouter from './wb-training.js'
 import wbWecomRouter from './wb-wecom.js'
-import wbMcpRouter from './wb-mcp.js'
+import wbMcpRouter, { MCP_TOOLS } from './wb-mcp.js'
 
 const router = Router()
 
@@ -240,6 +240,131 @@ router.get('/task-summary', auth, requirePermission('workbuddy:read'), async (re
  * body: { text: string }
  * :  jxy_rag_kb.py  kb_search  KB, 5  + 
  */
+// 精选给 AI 决策的 function-calling 工具（从 MCP_TOOLS 里选问答高频的实时数据工具）
+// 注: GLM function calling 一次调用即可命中, 不需要全部 46 个全喂（省 token 且避免误选）
+const CHAT_TOOLS = [
+  'get_dashboard_stats','get_boss_todo_priorities','get_ai_suggestions',
+  'get_inventory_summary','get_inventory_alerts','search_inventory','get_warehouse_inventory',
+  'get_orders_summary','get_recent_orders','get_order_detail','search_orders',
+  'get_products_summary','search_products','get_product_detail',
+  'list_warehouses','get_warehouse_detail',
+  'get_pending_approvals','get_approval_history',
+  'get_finance_overview','get_finance_recent','get_finance_reminders',
+  'get_sales_report','get_daily_report','get_weekly_report',
+  'get_attendance_summary','get_attendance_pending',
+  'get_tasks_summary','get_pending_tasks','get_overdue_tasks',
+  'get_logs_summary','get_today_logs','get_pending_logs',
+  'search_training_kb','get_wecom_unread','list_wecom_conversations','list_wecom_contacts',
+]
+// 转成 GLM function calling schema
+const CHAT_TOOLS_SCHEMA = CHAT_TOOLS
+  .map(name => MCP_TOOLS.find(t => t.name === name))
+  .filter(Boolean)
+  .map(({ name, description, inputSchema }) => ({
+    type: 'function',
+    function: { name, description, parameters: inputSchema || { type: 'object', properties: {} } },
+  }))
+
+// 调用 GLM (open.bigmodel.cn), 返回完整响应 (含 tool_calls)
+async function callGlm(messages, tools) {
+  // GLM key 跨服务器兼容: 优先 server/.env 的 GLM_API_KEY / AI_APIKEY, 再 fallback SGP jxy-os/.env
+  let glmKey = process.env.GLM_API_KEY || ''
+  if (!glmKey) {
+    try {
+      for (const line of readFileSync('/root/server/.env', 'utf8').split('\n')) {
+        if (line.startsWith('GLM_API_KEY=')) { glmKey = line.split('=')[1].trim(); break }
+        if (line.startsWith('AI_APIKEY=')) { glmKey = line.split('=')[1].trim(); break }
+      }
+    } catch {}
+  }
+  if (!glmKey) {
+    try {
+      for (const line of readFileSync('/root/jxy-os/.env', 'utf8').split('\n')) {
+        if (line.startsWith('AI_APIKEY=')) { glmKey = line.split('=')[1].trim(); break }
+      }
+    } catch {}
+  }
+  if (!glmKey) return null
+  const { spawnSync } = await import('node:child_process')
+  const { writeFileSync } = await import('node:fs')
+  const body = JSON.stringify({ model: 'glm-4-flash', messages, ...(tools ? { tools, tool_choice: 'auto' } : {}), max_tokens: 600 })
+  const bodyFile = `/tmp/wb_glm_body_${Date.now()}.json`
+  writeFileSync(bodyFile, body)
+  try {
+    const out = spawnSync('curl', ['-s', '-m', '25',
+      'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+      '-H', `Authorization: Bearer ${glmKey}`,
+      '-H', 'Content-Type: application/json',
+      '--data-binary', `@${bodyFile}`],
+      { encoding: 'utf-8', timeout: 30000 })
+    return JSON.parse(out.stdout || '{}')
+  } finally {
+    spawnSync('rm', ['-f', bodyFile])
+  }
+}
+
+// Knowledge Base 检索: 查本服务器 ai_class_knowledge 表 (跨服务器可用, 不再依赖 SGP 本地文件)
+// 中文关键词提取: 中文整句无空格 → 用停用词切分提取实词 (比 n-gram 滑窗干净)
+const KB_STOP = '的了吗呢吧啊哦呀是在有和与及或这那个我你他她它请帮问想什么怎么哪些介绍一下请问现在今天当前情况看看知道了解可以已经进行了解介绍详细说是为关于对给要着过地得才'
+function extractKbKeywords(text) {
+  // 1. 英文: 按空格拆 (≥2 字母)
+  const en = text.split(/\s+/).filter(w => /^[a-zA-Z]{2,}$/.test(w))
+  // 2. 中文: 用停用词切分 → 取 ≥2 字的实词片段
+  const cjk = text
+  const segs = cjk.split(new RegExp(`[${KB_STOP}]+`)).map(s => s.trim()).filter(s => s.length >= 2)
+  // 去重 (保留顺序, 长词优先)
+  const cn = []
+  const seen = new Set()
+  for (const s of segs) {
+    for (let l = Math.min(s.length, 6); l >= 2; l--) {
+      const sub = s.slice(0, l)
+      if (!seen.has(sub)) { seen.add(sub); cn.push(sub) }
+    }
+  }
+  return [...new Set([...en, ...cn, ...segs])].slice(0, 10)
+}
+async function kbSearch(text) {
+  try {
+    const words = extractKbKeywords(text)
+    if (!words.length) return ''
+  // LIKE 检索 title + content (OR 关系, 任一命中即可)
+    const conds = words.map(w => `(title LIKE ? OR content LIKE ? OR tags LIKE ?)`)
+    const params = []
+    for (const w of words) { const like = `%${w}%`; params.push(like, like, like) }
+    // 品牌隔离铁律 (波哥 2026-08-29): 彩美特专属品牌内容只服务北京(profile 2), SGP/HK 服务器 WorkBuddy 屏蔽
+    // 通过 domain 字段: 彩美特条目 domain='factory', 非 factory 域(如孵化器)天然屏蔽; 但同 factory 域 SGP/HK 也共享,
+    // 故额外加 NOT LIKE 彩美特 过滤标签/标题, 双保险
+    const sql = `SELECT title, content, doc_type, tags, is_public FROM ai_class_knowledge
+      WHERE domain_enabled=1 AND (${conds.join(' OR ')})
+        AND title NOT LIKE '%彩美特%' AND content NOT LIKE '%彩美特%' AND tags NOT LIKE '%彩美特%'
+      ORDER BY id DESC LIMIT 5`
+    const [rows] = await pool.query(sql, params)
+    if (!rows.length) return ''
+    // 过滤后内容里仍含彩美特的行再剔除一层 (title 可能不含但 content 含)
+    const clean = rows.filter(r => !JSON.stringify(r).includes('彩美特'))
+    if (!clean.length) return ''
+    return clean.map((r, i) => `${'⭐'.repeat(Math.max(1, 3 - i))} [${r.doc_type || 'doc'}] ${r.title}\n${(r.content || '').slice(0, 300)}`).join('\n\n')
+  } catch (e) {
+    return ''
+  }
+}
+
+// 内部调用 MCP 实时数据工具（复用当前请求的 Authorization，保留权限语义）
+async function mcpFetch(toolName, args, authHeader) {
+  try {
+    const selfPort = process.env.PORT || 3200
+    const resp = await fetch(`http://localhost:${selfPort}/api/workbuddy/mcp/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(authHeader ? { Authorization: authHeader } : {}) },
+      body: JSON.stringify({ tool: toolName, args: args || {} }),
+    })
+    const json = await resp.json().catch(() => ({}))
+    return { status: resp.status, data: json.result ?? json }
+  } catch (e) {
+    return { status: 0, data: { error: e.message } }
+  }
+}
+
 router.post('/chat', auth, requirePermission('workbuddy:write'), async (req, res, next) => {
   try {
     const { text } = req.body || {}
@@ -247,51 +372,69 @@ router.post('/chat', auth, requirePermission('workbuddy:write'), async (req, res
       return res.status(400).json({ error: 'text required' })
     }
 
-    //  jxy-os  KB (Python subprocess,  sys.path )
-    const { spawnSync } = await import('node:child_process')
-    const py = spawnSync('python3', [
-      '/root/jxy-os/modules/jxy_rag_kb.py',
-      'search',
-      ...text.split(/\s+/).filter(Boolean).slice(0, 3), //  3  token  query
-    ], { encoding: 'utf-8', timeout: 8000 })
+    // ── 1. KB 检索（查本服务器 ai_class_knowledge 表, 跨服务器可用）──
+    const hits = await kbSearch(text)
 
-    const hits = py.stdout ? py.stdout.slice(0, 1500) : ''
-
-    // GLM-4-flash : KB +  LLM (2-5s);  KB raw
+    // ── 2. GLM function calling 决策: 该问题需要实时经营数据吗? ──
     let assistant = ''
     let source = 'live'
-    try {
-      let glmKey = process.env.GLM_API_KEY || ''
-      if (!glmKey) {
-        for (const line of readFileSync('/root/jxy-os/.env', 'utf8').split('\n')) {
-          if (line.startsWith('AI_APIKEY=')) { glmKey = line.split('=')[1].trim(); break }
+    let toolUsed = null
+    let mcpArgs = null
+
+    // 判断该问题是否属于"经营数据查询"类 (节省一次无谓 GLM 调用的启发式)
+    const businessKeywords = /库存|预警|订单|商品|产品|仓库|审批|待办|财务|营收|报表|日报|周报|考勤|任务|日志|团队|知识|企微|消息|回收|低库存|销售|提醒|收支|项目|人员|业绩|数据|统计|today|inventory|order|product|finance|alert|approval|task|attendance|report|stock|sales/i
+    const needsData = businessKeywords.test(text)
+
+    if (needsData) {
+      try {
+        const first = await callGlm(
+          [{ role: 'user', content: `你是 WorkBuddy 经营助手。判断用户问题是否需要实时业务数据。
+如果涉及库存/订单/商品/仓库/审批/财务/报表/考勤/任务/日志/企微 等实时数据, 选择最合适的工具调用(可多选)。
+如果问题只是知识/闲聊/公司介绍, 不要调用工具。
+用户问题: ${text}` }],
+          CHAT_TOOLS_SCHEMA,
+        )
+        const tc = first?.choices?.[0]?.message?.tool_calls
+        if (tc && tc.length) {
+          // GLM 决定要数据 → 依次调用工具拿实时数据
+          toolUsed = tc.map(x => x.function?.name).filter(Boolean)
+          const argsList = tc.map(x => {
+            try { return JSON.parse(x.function?.arguments || '{}') } catch { return {} }
+          })
+          mcpArgs = argsList
+          const toolResults = []
+          for (let i = 0; i < tc.length; i++) {
+            const r = await mcpFetch(tc[i].function.name, argsList[i], req.headers['authorization'])
+            toolResults.push({ name: tc[i].function.name, result: r.data })
+          }
+          // 把工具结果喂回 GLM 合成回答
+          const toolMsg = toolResults.map(t => `【${t.name} 返回】\n${JSON.stringify(t.result, null, 1).slice(0, 2000)}`).join('\n\n')
+          const second = await callGlm([
+            { role: 'system', content: '你是 WorkBuddy 经营助手。根据实时返回的经营数据, 用中文给出准确、简洁、对老板有用的回答。数据为空就明确说"当前暂无数据"。' },
+            { role: 'user', content: `${text}\n\n实时数据:\n${toolMsg}` },
+          ])
+          const answer = second?.choices?.[0]?.message?.content
+          if (answer && answer.trim()) {
+            assistant = answer.trim() + (hits ? `\n\n📎 知识库: ${hits.split('\u2605')[1]?.split('\n')[0] || ''}` : '')
+            source = 'live+llm+tool'
+          }
         }
-      }
-      if (glmKey) {
+      } catch { /* fall through */ }
+    }
+
+    // ── 3. 否则走原 KB 流程 ──
+    if (!assistant) {
+      // 未触发 function calling (纯 KB 问答 或 GLM 判断无需数据) → 原 KB+LLM 合成
+      try {
         const prompt = `WorkBuddy AI\n\nKB:\n${hits || ''}\n\nQ: ${text}\n\nA 200-300 char answer in the user's language.`
-        const body = JSON.stringify({ model: 'glm-4-flash', messages: [{ role: 'user', content: prompt }], max_tokens: 500 })
-        const { writeFileSync } = await import('node:fs')
-        const bodyFile = `/tmp/wb_glm_body_${Date.now()}.json`
-        writeFileSync(bodyFile, body)
-        try {
-          const out = spawnSync('curl', ['-s', '-m', '25',
-            'https://open.bigmodel.cn/api/paas/v4/chat/completions',
-            '-H', `Authorization: Bearer ${glmKey}`,
-            '-H', 'Content-Type: application/json',
-            '--data-binary', `@${bodyFile}`],
-            { encoding: 'utf-8', timeout: 30000 })
-          var data = JSON.parse(out.stdout || '{}')
-        } finally {
-          try { require('node:fs').unlinkSync && null } catch {}
-          spawnSync('rm', ['-f', bodyFile])
-        }
-        const content = data.choices?.[0]?.message?.content
+        const secondRes = await callGlm([{ role: 'user', content: prompt }])
+        const content = secondRes?.choices?.[0]?.message?.content
         if (content && content.trim()) {
           assistant = content.trim() + (hits ? `\n\n📎 来源: ${hits.split('\u2605')[1]?.split('\n')[0] || 'KB'}` : '')
           source = 'live+llm'
         }
-      }
-    } catch { /* fall through to raw KB */ }
+      } catch { /* fall through to raw KB */ }
+    }
 
     if (!assistant) {
       assistant =
@@ -306,6 +449,8 @@ router.post('/chat', auth, requirePermission('workbuddy:write'), async (req, res
       assistant,
       kb_hits_raw: hits,
       source,
+      tool_used: toolUsed,
+      mcp_args: mcpArgs,
     })
   } catch (err) {
     next(err)

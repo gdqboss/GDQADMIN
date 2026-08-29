@@ -5,19 +5,24 @@ import { requirePermission } from '../middleware/rbac.js'
 
 const router = Router()
 
+// 品牌隔离 (波哥 2026-08-29): SGP/HK 服务器屏蔽彩美特专属知识, 彩美特品牌只服务北京(profile 2)
+const KB_BRAND_FILTER = ` AND title NOT LIKE '%彩美特%' AND content NOT LIKE '%彩美特%' AND tags NOT LIKE '%彩美特%'`
+// 统计概览同样过滤
+const KB_BRAND_FILTER_WHERE = ` title NOT LIKE '%彩美特%' AND content NOT LIKE '%彩美特%' AND tags NOT LIKE '%彩美特%'`
+
 // GET /api/workbuddy/training/summary - AI 课堂培训学习概览
 router.get('/training/summary', auth, requirePermission('workbuddy:read'), async (req, res, next) => {
   try {
-    const [[kb]] = await pool.query(`SELECT COUNT(*) c FROM ai_class_knowledge`).catch(() => [[{ c: 0 }]])
-    const [[publicKb]] = await pool.query(`SELECT COUNT(*) c FROM ai_class_knowledge WHERE is_public=1 OR is_public IS NULL`).catch(() => [[{ c: 0 }]])
+    const [[kb]] = await pool.query(`SELECT COUNT(*) c FROM ai_class_knowledge WHERE ${KB_BRAND_FILTER_WHERE}`).catch(() => [[{ c: 0 }]])
+    const [[publicKb]] = await pool.query(`SELECT COUNT(*) c FROM ai_class_knowledge WHERE (is_public=1 OR is_public IS NULL) AND ${KB_BRAND_FILTER_WHERE}`).catch(() => [[{ c: 0 }]])
     const [[cards]] = await pool.query(`SELECT COUNT(*) c FROM ai_class_flashcards`).catch(() => [[{ c: 0 }]])
     const [[gaps]] = await pool.query(`SELECT COUNT(*) c FROM ai_class_knowledge_gaps`).catch(() => [[{ c: 0 }]])
     const [docTypes] = await pool.query(`
-      SELECT doc_type, COUNT(*) c FROM ai_class_knowledge GROUP BY doc_type ORDER BY c DESC LIMIT 8
+      SELECT doc_type, COUNT(*) c FROM ai_class_knowledge WHERE ${KB_BRAND_FILTER_WHERE} GROUP BY doc_type ORDER BY c DESC LIMIT 8
     `).catch(() => [[]])
     // 今日学习相关
     const [[newKb]] = await pool.query(`
-      SELECT COUNT(*) c FROM ai_class_knowledge WHERE DATE(created_at) = CURDATE()
+      SELECT COUNT(*) c FROM ai_class_knowledge WHERE DATE(created_at) = CURDATE() AND ${KB_BRAND_FILTER_WHERE}
     `).catch(() => [[{ c: 0 }]])
 
     res.json({
@@ -48,21 +53,21 @@ router.get('/training/kb', auth, requirePermission('workbuddy:read'), async (req
       let sql = `
         SELECT id, title, doc_type, tags, LEFT(content, 500) AS content_excerpt, is_public
         FROM ai_class_knowledge
-        WHERE (title LIKE ? OR content LIKE ? OR tags LIKE ?)
+        WHERE (title LIKE ? OR content LIKE ? OR tags LIKE ?)${KB_BRAND_FILTER}
       `
       if (docType) { sql += ` AND doc_type = ?`; params.push(docType) }
       sql += ` ORDER BY id DESC LIMIT ?`; params.push(limit)
       const [r] = await pool.query(sql, params).catch(() => [[]])
       rows = r || []
       const [[cr]] = await pool.query(`
-        SELECT COUNT(*) c FROM ai_class_knowledge WHERE (title LIKE ? OR content LIKE ? OR tags LIKE ?)
+        SELECT COUNT(*) c FROM ai_class_knowledge WHERE (title LIKE ? OR content LIKE ? OR tags LIKE ?)${KB_BRAND_FILTER}
       `, [like, like, like]).catch(() => [[{ c: 0 }]])
       count = cr.c
     } else {
       // 无关键词 → 最近新增
-      let sql = `SELECT id, title, doc_type, tags, LEFT(content, 500) AS content_excerpt, is_public FROM ai_class_knowledge`
+      let sql = `SELECT id, title, doc_type, tags, LEFT(content, 500) AS content_excerpt, is_public FROM ai_class_knowledge WHERE 1=1${KB_BRAND_FILTER}`
       const params = []
-      if (docType) { sql += ` WHERE doc_type = ?`; params.push(docType) }
+      if (docType) { sql += ` AND doc_type = ?`; params.push(docType) }
       sql += ` ORDER BY id DESC LIMIT ?`; params.push(limit)
       rows = (await pool.query(sql, params).catch(() => [[]]))[0] || []
       count = rows.length
@@ -87,7 +92,7 @@ router.get('/training/kb/:id', auth, requirePermission('workbuddy:read'), async 
     if (!id) return res.status(400).json({ error: 'invalid id' })
     const [[k]] = await pool.query(`
       SELECT id, title, content, doc_type, tags, is_public, created_at, updated_at
-      FROM ai_class_knowledge WHERE id=?
+      FROM ai_class_knowledge WHERE id=?${KB_BRAND_FILTER}
     `, [id]).catch(() => [[null]])
     if (!k) return res.status(404).json({ error: 'knowledge not found' })
     res.json({
