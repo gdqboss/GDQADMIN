@@ -19,6 +19,8 @@ import wbAttendanceRouter from './wb-attendance.js'
 import wbTasksRouter from './wb-tasks.js'
 import wbWorklogsRouter from './wb-worklogs.js'
 import wbTrainingRouter from './wb-training.js'
+import wbWecomRouter from './wb-wecom.js'
+import wbMcpRouter from './wb-mcp.js'
 
 const router = Router()
 
@@ -35,6 +37,10 @@ router.use(wbAttendanceRouter)
 router.use(wbTasksRouter)
 router.use(wbWorklogsRouter)
 router.use(wbTrainingRouter)
+router.use(wbWecomRouter)
+
+// Phase-3: MCP 协议封装（必须放最后，避免 /mcp/* 被其它路由 catch）
+router.use(wbMcpRouter)
 
 /**
  * GET /api/workbuddy/health -  ( auth)

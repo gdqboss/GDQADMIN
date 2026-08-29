@@ -190,4 +190,49 @@ router.get('/action/priorities', auth, requirePermission('workbuddy:read'), asyn
   } catch (err) { next(err) }
 })
 
+// POST /api/workbuddy/action/cleanup-low-stock - 低库存清理（生成补货建议）
+// body: { limit?: number, exclude_ids?: number[] }
+// 只读分析，生成补货建议清单（不直接改库存）
+router.post('/action/cleanup-low-stock', auth, requirePermission('workbuddy:write'), async (req, res, next) => {
+  try {
+    const limit = Math.min(Number(req.body?.limit) || 10, 50)
+    // 所有低于预警库存的 active 商品，算缺货量
+    const [rows] = await pool.query(`
+      SELECT id, sku, name, category, unit, stock, alert_stock, turnover_days,
+             purchase_price, sale_price, supplier
+      FROM products
+      WHERE status='active' AND alert_stock > 0 AND stock <= alert_stock
+      ORDER BY (stock - alert_stock) ASC
+      LIMIT ?
+    `, [limit])
+    // 每个缺货量 = alert_stock - stock（建议补到预警线以上）
+    const suggestions = (rows||[]).map(p => {
+      const deficit = Math.max(Number(p.alert_stock) - Number(p.stock), 0)
+      const restockQty = Number(p.alert_stock) * 2 - Number(p.stock)  // 建议补到2倍预警线
+      return {
+        product_id: p.id, sku: p.sku, name: p.name, category: p.category, unit: p.unit,
+        current_stock: Number(p.stock)||0, alert_stock: Number(p.alert_stock)||0,
+        deficit: deficit,
+        suggested_restock: Math.max(restockQty, deficit),  // 补到2倍预警线
+        est_cost: Math.round(Math.max(restockQty, deficit) * (Number(p.purchase_price)||0)),
+        turnover_days: p.turnover_days,
+        supplier: p.supplier,
+        severity: Number(p.stock) === 0 ? 'out_of_stock' : (deficit >= Number(p.alert_stock) ? 'severe' : 'low'),
+      }
+    })
+    // 缺货额汇总
+    const total_est_cost = suggestions.reduce((s, x) => s + x.est_cost, 0)
+    const out_of_stock = suggestions.filter(x => x.severity === 'out_of_stock').length
+
+    res.json({
+      action: 'cleanup-low-stock',
+      low_stock_products: suggestions.length,
+      out_of_stock_count: out_of_stock,
+      total_est_restock_cost: total_est_cost,
+      suggestions,
+      note: '此为只读补货建议，未实际修改库存。确认后可走采购/入库流程',
+    })
+  } catch (err) { next(err) }
+})
+
 export default router
