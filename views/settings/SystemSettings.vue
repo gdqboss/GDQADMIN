@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { ElCollapse, ElCollapseItem } from 'element-plus'
 import PageHeader from '../../components/PageHeader.vue'
 import StatusTag from '../../components/StatusTag.vue'
+import AgentTokensDialog from '../../components/AgentTokensDialog.vue'
 import api from '../../services/api.js'
 import { ROLES } from '../../constants/roles.js'
 import { NAV_PERMISSION_KEYS } from '../../constants/navPermission.js'
@@ -22,6 +23,17 @@ const suppliers = ref([])
 const departments = ref([])
 const jobLevels = ref([])
 const responsibilities = ref([])
+
+// ─── Agent Tokens Dialog (2026-08-31) ───────────────────────────────────────
+const showAgentTokens = ref(false)
+const agentTokensUser = ref(null)
+function openAgentTokens(u) {
+  agentTokensUser.value = u
+  showAgentTokens.value = true
+}
+function closeAgentTokens() {
+  showAgentTokens.value = false
+}
 // 获取部门名称
 function getDepartmentName(deptId) { if (!deptId) return ""; const dept = departments.value.find(d => d.id === Number(deptId)); return dept ? dept.name : ""; }
 
@@ -1139,6 +1151,10 @@ async function deleteUser(user) {
                 </td>
                 <td class="px-4 py-3 text-right whitespace-nowrap space-x-3">
                   <button @click="openEditUser(u)" class="text-primary hover:text-primary-hover text-xs font-medium">{{ $t('common.edit') }}</button>
+                  <button @click="openAgentTokens(u)" class="text-primary hover:text-primary-hover text-xs font-medium inline-flex items-center gap-1" :title="$t('agentTokens.title')">
+                    <span class="material-symbols-outlined text-[14px]">key</span>
+                    {{ $t('agentTokens.openBtn') }}
+                  </button>
                   <button @click="toggleUserStatus(u)" :class="['text-xs font-medium', u.status === 'active' ? 'text-danger hover:text-red-700' : 'text-success hover:text-green-700']">
                     {{ u.status === 'active' ? $t('settings.disable') : $t('settings.enable') }}
                   </button>
@@ -2198,6 +2214,10 @@ async function deleteUser(user) {
         </div>
       </div>
     </div>
+  </div>
+
+    <!-- ── Agent Tokens Dialog (2026-08-31) ── -->
+    <AgentTokensDialog :show="showAgentTokens" :user="agentTokensUser" @close="closeAgentTokens" />
   </div>
 </template>
 
