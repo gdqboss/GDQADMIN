@@ -31,6 +31,13 @@ const PERMISSIONS = {
   MATERIAL_PURCHASE_APPROVE: 'material_purchase:approve',
   MATERIAL_PURCHASE_DELETE: 'material_purchase:delete',
 
+  // 物料消耗/领用 (2026-08-30 新增)
+  MATERIAL_CONSUMPTION_READ: 'material_consumption:read',
+  MATERIAL_CONSUMPTION_WRITE: 'material_consumption:write',
+  MATERIAL_CONSUMPTION_APPROVE: 'material_consumption:approve',
+  MATERIAL_STOCK_READ: 'material_stock:read',
+  MATERIAL_STOCK_WRITE: 'material_stock:write',
+
   // 产品相关
   PRODUCTS_READ: 'products:read',
   PRODUCTS_WRITE: 'products:write',
@@ -199,6 +206,10 @@ const PERMISSIONS = {
   WORKBUDDY_READ:   'workbuddy:read',
   WORKBUDDY_WRITE:  'workbuddy:write',
   WORKBUDDY_DELETE: 'workbuddy:delete',
+
+  // Agent Access Tokens (2026-08-31) — admin 给员工开 API token 供外部 agent 接入
+  // 只读权限足以管理所有 CRUD 动作 (admin 角色永真, 见 auth.js resolvePermissions)
+  AGENT_ACCESS_READ: 'agent_access:read',
 
   // 管家工单 (2026-08-26) — 企业用户提单 / 管家处理 / 后台管理
   BUTLER_ORDERS_READ:   'butler-orders:read',
@@ -444,7 +455,22 @@ const PERMISSIONS = {
 
   // yuyue
   YUYUE_READ: 'yuyue:read',
-  YUYUE_WRITE: 'yuyue:write',}
+  YUYUE_WRITE: 'yuyue:write',
+
+  // material apply/approve/dispatch (2026-08-30 全端闭环)
+  MATERIAL_APPLY_READ: 'material_apply:read',
+  MATERIAL_APPLY_WRITE: 'material_apply:write',
+  MATERIAL_APPROVE_READ: 'material_approve:read',
+  MATERIAL_APPROVE_WRITE: 'material_approve:write',
+  MATERIAL_DISPATCH_READ: 'material_dispatch:read',
+  MATERIAL_DISPATCH_WRITE: 'material_dispatch:write',
+  MATERIAL_ITEM_READ: 'material_item:read',
+  MATERIAL_ITEM_WRITE: 'material_item:write',
+  MATERIAL_STOCKTAKE_READ: 'material_stocktake:read',
+  MATERIAL_STOCKTAKE_WRITE: 'material_stocktake:write',
+  MATERIAL_STOCKTAKE_APPROVE: 'material_stocktake:approve',
+  MATERIAL_QRCODE_READ: 'material_qrcode:read',
+}
 
 // 角色常量
 // ⚠️ 实际生产只用 admin/member，其它角色保留作为 ROLE_PERMISSION_MAP 兜底
@@ -484,6 +510,9 @@ const ROLE_PERMISSION_MAP = {
     PERMISSIONS.TASKS_READ, PERMISSIONS.TASKS_WRITE,
     PERMISSIONS.AFTERSALE_READ, PERMISSIONS.AFTERSALE_WRITE,
     PERMISSIONS.ALERTS_READ,
+    // 物料消耗/领用 (2026-08-30 新增) — manager 全部
+    PERMISSIONS.MATERIAL_CONSUMPTION_READ, PERMISSIONS.MATERIAL_CONSUMPTION_WRITE, PERMISSIONS.MATERIAL_CONSUMPTION_APPROVE,
+    PERMISSIONS.MATERIAL_STOCK_READ, PERMISSIONS.MATERIAL_STOCK_WRITE,
   ],
 
   // 仓库管理员：仓库/库存/盘点/二维码
@@ -496,6 +525,9 @@ const ROLE_PERMISSION_MAP = {
     PERMISSIONS.STOCKTAKE_RUN, PERMISSIONS.STOCKTAKE_REPORT,
     PERMISSIONS.REPORTS_READ,
     PERMISSIONS.ALERTS_READ, PERMISSIONS.ALERTS_WRITE,
+    // 物料消耗/领用 (2026-08-30 新增) — warehouse 只读
+    PERMISSIONS.MATERIAL_CONSUMPTION_READ,
+    PERMISSIONS.MATERIAL_STOCK_READ,
   ],
 
   // 操作员：商品管理+基础库存
@@ -534,6 +566,9 @@ const ROLE_PERMISSION_MAP = {
     PERMISSIONS.TASKS_READ,
     PERMISSIONS.ORDER_CREATE,
     PERMISSIONS.ORDER_READ_OWN,
+    // 物料消耗/领用 (2026-08-30 新增) — member 只读
+    PERMISSIONS.MATERIAL_CONSUMPTION_READ,
+    PERMISSIONS.MATERIAL_STOCK_READ,
   ],
 
   // 审核员：查看全部 + 审核
@@ -549,6 +584,17 @@ const ROLE_PERMISSION_MAP = {
     PERMISSIONS.ORDER_READ_ALL,
     PERMISSIONS.ORDER_DISPATCH,
     PERMISSIONS.ORDER_EXPORT,
+  ],
+
+  // 测试 / 体验角色（任务指定：物料消耗/领用 全部权限）
+  // 注意：不在本文件 ROLES 常量中，作为字符串兜底键，供 role=tester/experience 用户回退
+  'tester': [
+    PERMISSIONS.MATERIAL_CONSUMPTION_READ, PERMISSIONS.MATERIAL_CONSUMPTION_WRITE, PERMISSIONS.MATERIAL_CONSUMPTION_APPROVE,
+    PERMISSIONS.MATERIAL_STOCK_READ, PERMISSIONS.MATERIAL_STOCK_WRITE,
+  ],
+  'experience': [
+    PERMISSIONS.MATERIAL_CONSUMPTION_READ, PERMISSIONS.MATERIAL_CONSUMPTION_WRITE, PERMISSIONS.MATERIAL_CONSUMPTION_APPROVE,
+    PERMISSIONS.MATERIAL_STOCK_READ, PERMISSIONS.MATERIAL_STOCK_WRITE,
   ],
 }
 
