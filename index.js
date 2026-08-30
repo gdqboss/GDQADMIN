@@ -78,6 +78,7 @@ import laborAiSupervisorRoutes from './routes/labor-ai-supervisor.js'
 import healthRoutes from './routes/health.js'
 import autoOpsRoutes from './routes/auto-ops.js'
 import workbuddyRoutes from './routes/workbuddy.js'  // 2026-08-25 WorkBuddy V6 staging
+import agentAccessRoutes from './routes/agent-access.js'  // 2026-08-31 Agent 接入 token 管理
 import minipAiAssistantRoutes from './routes/minip-ai-assistant.js'
 import minipAiFinanceRoutes from './routes/minip-ai-finance.js'
 import minipAiHrRoutes from './routes/minip-ai-hr.js'
@@ -157,6 +158,9 @@ import rentalRoutes from './routes/rental.js'
 import rentalPublicRoutes from './routes/rental-public.js'
 import sidebarRoutes from './routes/sidebar.js'
 import materialPurchaseRoutes from './routes/material-purchase.js'  // 2026-08-24 物料采购
+import materialConsumptionRoutes from './routes/material-consumption.js'  // 2026-08-30 物料消耗/领用
+import materialItemsRoutes from './routes/material-items.js'  // 2026-08-30 物料实例(一物一码)
+import materialStocktakeRoutes from './routes/material-stocktake.js'  // 2026-08-30 物料盘点
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -283,6 +287,7 @@ app.use('/api/ai-assistant', auth, aiAssistantRoutes)
 app.use('/api/admin/schema', auth, adminSchemaRoutes)
 app.use('/api/kb', auth, kbRoutes)
 app.use('/api/workbuddy', workbuddyRoutes)  // 2026-08-25 WorkBuddy V6 staging - per-route auth+rbac inside (health stays public)
+app.use('/api/agent-access', auth, apiLimiter, agentAccessRoutes)  // 2026-08-31 agent 接入 token 管理 (admin only, 内部 requireRole)
 app.use('/api/scan', scanRoutes)
 // Rental 公开端点（游客可访问）—— 必须放在 inventory 的 /api catch-all 之前
 app.use('/api/rental-public', rentalPublicRoutes)
@@ -517,6 +522,9 @@ app.use('/api/products', auth, apiLimiter, productRoutes)
 app.use('/api/materials', materialRoutes)
 app.use('/api/warehouses', auth, apiLimiter, warehouseRoutes)
 app.use('/api/material-purchase', auth, apiLimiter, materialPurchaseRoutes)  // 2026-08-24 物料采购
+app.use('/api/material-consumption', auth, apiLimiter, materialConsumptionRoutes)  // 2026-08-30 物料消耗/领用
+app.use('/api/material-items', auth, apiLimiter, materialItemsRoutes)  // 2026-08-30 物料实例(一物一码)
+app.use('/api/material-stocktake', auth, apiLimiter, materialStocktakeRoutes)  // 2026-08-30 物料盘点
 app.use('/api/stock-alerts', auth, apiLimiter, alertRoutes)
 app.use('/api/approvals', auth, apiLimiter, approvalRoutes)
 app.use('/api/dashboard', auth, apiLimiter, dashboardRoutes)
