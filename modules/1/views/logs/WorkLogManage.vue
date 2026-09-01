@@ -543,14 +543,26 @@ function saveComplainants() {
 }
 
 async function saveLog() {
+  // 强制可见的错误提示: window.$message (顶层注册) + alert 三重兜底, 防止浏览器吞 alert
+  const notify = (msg, type = 'error') => {
+    try { window.$message?.[type]?.(msg) } catch (e) { console.error('[WorkLogManage logs notify]', e, msg) }
+    console[type === 'error' ? 'error' : 'log']('[WorkLogManage logs]', msg)
+    try { alert(msg) } catch (e) { console.error('[WorkLogManage logs alert-fail]', e, msg) }
+  }
+
   // Validate required fields from template
   if (selectedTemplateForCreate.value) {
     const fields = parseFields(selectedTemplateForCreate.value.fields)
     for (const field of fields) {
       if (field.required) {
         const val = formData.value.content[field.name]
-        if (!val || (typeof val === 'string' && !val.trim()) || (Array.isArray(val) && val.length === 0)) {
-          alert(`${field.label} 不能为空`)
+        // 空数组/空字符串/空对象都算空 — 原来 ![] 是 false 但 Array.isArray(val) && val.length === 0 这段被 !val 短路
+        // 改写为明确语义
+        const isEmpty = val === undefined || val === null ||
+                        (typeof val === 'string' && !val.trim()) ||
+                        (Array.isArray(val) && val.length === 0)
+        if (isEmpty) {
+          notify(`${field.label} 不能为空`)
           return
         }
       }
@@ -577,11 +589,16 @@ async function saveLog() {
     }
 
     if (res.code === 0) {
+      notify('提交成功', 'success')
       showDialog.value = false
       await fetchLogs()
     } else if (res.code === 400) {
-      alert(res.message || '保存失败')
+      notify(res.message || '保存失败')
+    } else {
+      notify(res.message || '保存失败')
     }
+  } catch (err) {
+    notify(err?.message || '网络错误, 请稍后重试')
   } finally {
     saving.value = false
   }

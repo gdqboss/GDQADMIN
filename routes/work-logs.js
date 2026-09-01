@@ -284,11 +284,63 @@ router.post('/', async (req, res, next) => {
   try {
     const { template_id, content, recipients, attachments, status = 'submitted', location, gps_lat, gps_lng, participants, date, submit_date } = req.body;
 
-    if (!template_id || !content) {
+    // Bug 2 fix: trim 后判空 (空白 '   ' 不再通过, 避免 NOT NULL 500 crash)
+    const trimmedContent = typeof content === 'string' ? content.trim() : ''
+    if (!template_id || !trimmedContent) {
       return res.status(400).json({
         code: 400,
         message: 'Template ID and content are required'
       });
+    }
+
+    // Bug 1 fix: 读模板 fields[].required 校验必填字段
+    const [tplRows] = await pool.query(
+      'SELECT id, fields FROM work_log_templates WHERE id = ?',
+      [template_id]
+    )
+    if (tplRows.length === 0) {
+      return res.status(404).json({ code: 404, message: 'Template not found' })
+    }
+    let tplFields = []
+    try {
+      tplFields = typeof tplRows[0].fields === 'string' ? JSON.parse(tplRows[0].fields) : (tplRows[0].fields || [])
+    } catch (e) { tplFields = [] }
+
+    // content 是 JSON 字符串, 解析后校验
+    let parsedContent = {}
+    try {
+      parsedContent = typeof content === 'string' ? JSON.parse(trimmedContent) : (content || {})
+    } catch (e) {
+      parsedContent = { _raw: trimmedContent }
+    }
+
+    const missing = []
+    for (const f of tplFields) {
+      if (!f.required) continue
+      const v = parsedContent[f.name]
+      // recipients/participants 类型: 也接受 _str 字符串字段 (前端 labor MyLogs 用 _text/_str input)
+      if (f.type === 'recipients' || f.type === 'participants' || f.type === 'complainants') {
+        const alt = parsedContent[f.name + '_str'] || parsedContent[f.name + '_text']
+        // Bug 4 fix: gdqadmin 端把 recipients/participants 放在顶层, 也接受顶层数组
+        const topArr = f.type === 'recipients' ? recipients : f.type === 'participants' ? participants : []
+        const hasValue = (v && (Array.isArray(v) ? v.length > 0 : true)) 
+                      || (alt && String(alt).trim() !== '')
+                      || (Array.isArray(topArr) && topArr.length > 0)
+        if (hasValue) {
+          continue
+        }
+        missing.push(f.label || f.name)
+        continue
+      }
+      if (v == null) { missing.push(f.label || f.name); continue }
+      if (typeof v === 'string' && v.trim() === '') { missing.push(f.label || f.name); continue }
+      if (Array.isArray(v) && v.length === 0) { missing.push(f.label || f.name); continue }
+    }
+    if (missing.length > 0) {
+      return res.status(400).json({
+        code: 400,
+        message: '必填字段不能为空: ' + missing.join(', ')
+      })
     }
 
     // 检查重复提交 - 5分钟内相同内容的日志

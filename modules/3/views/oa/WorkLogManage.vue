@@ -257,8 +257,8 @@ const templates = ref([])
 const selectedTemplateId = ref(null)
 const formData = ref({
   date: new Date().toISOString().split('T')[0],
-  participants: [],
-  recipients: []
+  participants: [userStore.userId],
+  recipients: [9]
 })
 const formContent = ref({})
 
@@ -342,7 +342,7 @@ function openWriteLog() {
   formData.value = {
     date: new Date().toISOString().split('T')[0],
     participants: [userStore.userId],
-    recipients: []
+    recipients: [9]
   }
   showWriteLog.value = true
 }
@@ -360,22 +360,40 @@ function onTemplateChange() {
 }
 
 async function submitLog() {
+  // 强制可见的错误提示: Element Plus $message (顶层注册) + console + alert 三重兜底
+  // 避免 iframe / WebView / 浏览器吞 alert 导致"点了提交没反应"
+  const notify = (msg, type = 'error') => {
+    try {
+      if (window.$message && typeof window.$message[type] === 'function') {
+        window.$message[type](msg)
+      }
+    } catch (e) { console.error('[WorkLogManage notify]', e, msg) }
+    if (type === 'error') console.error('[WorkLogManage]', msg)
+    try { alert(msg) } catch (e) { console.error('[WorkLogManage alert-fail]', e, msg) }
+  }
+
   if (!formData.value.date) {
-    alert('请选择日期')
+    notify('请选择日期')
     return
   }
 
   // 验证必填字段
   if (currentFields.value.length > 0) {
     for (const field of currentFields.value) {
-      if (field.required && !formContent.value[field.name]) {
-        alert(`请填写「${field.label}」`)
-        return
+      if (field.required) {
+        const v = formContent.value[field.name]
+        const isEmpty = v === undefined || v === null ||
+                       (typeof v === 'string' && !v.trim()) ||
+                       (Array.isArray(v) && v.length === 0)
+        if (isEmpty) {
+          notify(`请填写「${field.label}」`)
+          return
+        }
       }
     }
   } else {
     if (!formContent.value.title) {
-      alert('请输入标题')
+      notify('请输入标题')
       return
     }
   }
@@ -392,14 +410,15 @@ async function submitLog() {
 
     const res = await api.post('/work-logs', payload)
     if (res.code === 0) {
+      notify('提交成功', 'success')
       showWriteLog.value = false
       logs.value.page = 1
       loadLogs()
     } else {
-      alert(res.message || '提交失败')
+      notify(res.message || '提交失败')
     }
   } catch (err) {
-    alert(err.message || '提交失败')
+    notify(err.message || '提交失败')
   } finally {
     submitting.value = false
   }
@@ -453,10 +472,10 @@ function getLocation(fieldName) {
         formData.value.gps_lat = pos.coords.latitude
         formData.value.gps_lng = pos.coords.longitude
       },
-      (err) => alert('定位失败: ' + err.message)
+      (err) => { try { window.$message?.error?.('定位失败: ' + err.message) } catch {} try { alert('定位失败: ' + err.message) } catch {} console.error('[WorkLogManage geolocation]', err) }
     )
   } else {
-    alert('浏览器不支持定位')
+    try { window.$message?.error?.('浏览器不支持定位') } catch {} try { alert('浏览器不支持定位') } catch {} console.error('[WorkLogManage geolocation] unsupported')
   }
 }
 

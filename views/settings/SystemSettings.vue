@@ -1594,7 +1594,7 @@ async function deleteUser(user) {
               </div>
               <div class="ml-auto">
                 <label class="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" v-model="paymentConfig.wechat.enabled" class="sr-only peer">
+                  <input type="checkbox" v-model="paymentConfig.wechat.enabled" class="sr-only peer" />
                   <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-200 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                 </label>
               </div>
@@ -1626,7 +1626,7 @@ async function deleteUser(user) {
               </div>
               <div class="ml-auto">
                 <label class="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" v-model="paymentConfig.alipay.enabled" class="sr-only peer">
+                  <input type="checkbox" v-model="paymentConfig.alipay.enabled" class="sr-only peer" />
                   <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-200 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                 </label>
               </div>
@@ -1658,7 +1658,7 @@ async function deleteUser(user) {
               </div>
               <div class="ml-auto">
                 <label class="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" v-model="paymentConfig.paypal.enabled" class="sr-only peer">
+                  <input type="checkbox" v-model="paymentConfig.paypal.enabled" class="sr-only peer" />
                   <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-200 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                 </label>
               </div>
@@ -1839,7 +1839,6 @@ async function deleteUser(user) {
           </div>
         </div>
       </div>
-    </div>
 
     <!-- ── Department Modal ── -->
     <div v-if="showDeptModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -2214,7 +2213,6 @@ async function deleteUser(user) {
         </div>
       </div>
     </div>
-  </div>
 
     <!-- ── Agent Tokens Dialog (2026-08-31) ── -->
     <AgentTokensDialog :show="showAgentTokens" :user="agentTokensUser" @close="closeAgentTokens" />
