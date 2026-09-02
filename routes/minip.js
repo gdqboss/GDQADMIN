@@ -2789,6 +2789,57 @@ router.get('/business-card/:id/favorite', auth, async (req, res, next) => {
 // ============================================================
 router.use('/oa', auth, oaRoutes)
 
+// ============================================================
+// POST /api/minip/upload — 通用图片上传 (2026-09-03 江小鱼新建)
+//   form-data: file=@xxx.png
+//   仅 minip 登录用户 (auth 中间件)
+//   保存到 /home/ubuntu/server/uploads/business-cards/
+//   返回 { code: 0, data: { url: "/uploads/business-cards/xxx.png" } }
+//   复用 /uploads 静态服务 (index.js line 214)
+// ============================================================
+import multer from 'multer'
+const bcUploadStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, bcQrDir),
+  filename: (req, file, cb) => {
+    const ext = (path.extname(file.originalname) || '.png').toLowerCase()
+    const safe = ext.replace(/[^a-z0-9.]/g, '')
+    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${safe}`)
+  },
+})
+const bcUploadFilter = (req, file, cb) => {
+  const allowed = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
+  const ext = (path.extname(file.originalname) || '').toLowerCase()
+  if (allowed.includes(ext)) cb(null, true)
+  else cb(new Error(`不支持的格式: ${ext}`), false)
+}
+const bcUpload = multer({
+  storage: bcUploadStorage,
+  fileFilter: bcUploadFilter,
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB (与 products upload 一致)
+})
+
+router.post('/upload', auth, (req, res, next) => {
+  bcUpload.single('file')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ code: 413, message: '文件超 15MB 限制' })
+      }
+      return res.status(400).json({ code: 400, message: err.message || '上传失败' })
+    }
+    if (!req.file) return res.status(400).json({ code: 400, message: 'file 必传' })
+    const url = `/uploads/business-cards/${req.file.filename}`
+    console.log(`[minip/upload] user=${req.user?.id} file=${req.file.filename} size=${req.file.size}`)
+    res.json({
+      code: 0,
+      data: { url, filename: req.file.filename, size: req.file.size },
+      message: 'ok',
+    })
+  })
+})
+
+// ============================================================
+// 原 export 仍在下方, 此为插桩, 不破坏现有 routes
+// ============================================================
 export default router
 
 // 表结构说明（会在 server 启动时自动创建）：
