@@ -282,15 +282,51 @@ router.post('/templates/init-defaults', async (req, res, next) => {
 // POST /api/work-logs - Submit work log
 router.post('/', async (req, res, next) => {
   try {
-    const { template_id, content, recipients, attachments, status = 'submitted', location, gps_lat, gps_lng, participants, date, submit_date } = req.body;
+    let { template_id, content, recipients, recipients_str, attachments, status = 'submitted', location, gps_lat, gps_lng, participants, participants_str, date, submit_date } = req.body;
+
+    // 兼容: 前端把 "用逗号分隔的 ID 或姓名" 传成 recipients_str 字符串
+    //   parse 出数字当 user_id, 字符串当占位保留
+    // 2026-09-02 jxy: 把 HK work-logs.js 那 26 行收回 SGP, 让 SGP 成为统一 source
+    if (recipients === undefined && recipients_str) {
+      recipients = String(recipients_str)
+        .split(/[,，;；\s]+/)
+        .map(s => s.trim())
+        .filter(Boolean)
+        .map(s => {
+          const n = parseInt(s, 10)
+          return Number.isFinite(n) ? n : s
+        })
+    }
+    if (!Array.isArray(recipients)) recipients = []
+
+    if (participants === undefined && participants_str) {
+      participants = String(participants_str)
+        .split(/[,，;；\s]+/)
+        .map(s => s.trim())
+        .filter(Boolean)
+        .map(s => {
+          const n = parseInt(s, 10)
+          return Number.isFinite(n) ? n : s
+        })
+    }
+    if (!Array.isArray(participants)) participants = []
 
     // Bug 2 fix: trim 后判空 (空白 '   ' 不再通过, 避免 NOT NULL 500 crash)
-    const trimmedContent = typeof content === 'string' ? content.trim() : ''
+    // 2026-09-02 jxy: content 可能是对象 (gdqadmin 前端 formData.value.content)
+    //   之前 typeof content === 'string' ? content.trim() : ''
+    //   当 content 是对象时 trimmedContent = '' → 走到 400 必填校验
+    //   修正: 对象情况下取 JSON.stringify 后的 trimmed
+    let trimmedContent = ''
+    if (typeof content === 'string') {
+      trimmedContent = content.trim()
+    } else if (content && typeof content === 'object') {
+      trimmedContent = JSON.stringify(content).trim()
+    }
     if (!template_id || !trimmedContent) {
       return res.status(400).json({
         code: 400,
         message: 'Template ID and content are required'
-      });
+      })
     }
 
     // Bug 1 fix: 读模板 fields[].required 校验必填字段
@@ -306,12 +342,17 @@ router.post('/', async (req, res, next) => {
       tplFields = typeof tplRows[0].fields === 'string' ? JSON.parse(tplRows[0].fields) : (tplRows[0].fields || [])
     } catch (e) { tplFields = [] }
 
-    // content 是 JSON 字符串, 解析后校验
+    // content 是 JSON 字符串 / 对象, 解析后校验
+    // 2026-09-02 jxy: 兼容 content 是对象 (gdqadmin), 不要 JSON.parse('[object Object]')
     let parsedContent = {}
-    try {
-      parsedContent = typeof content === 'string' ? JSON.parse(trimmedContent) : (content || {})
-    } catch (e) {
-      parsedContent = { _raw: trimmedContent }
+    if (typeof content === 'object' && content !== null) {
+      parsedContent = content
+    } else {
+      try {
+        parsedContent = JSON.parse(trimmedContent)
+      } catch (e) {
+        parsedContent = { _raw: trimmedContent }
+      }
     }
 
     const missing = []

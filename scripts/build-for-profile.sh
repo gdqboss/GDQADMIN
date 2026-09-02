@@ -26,6 +26,10 @@ mkdir -p "$MODULE_DIR/views"
 cp -r "$SRC_DIR/views"/* "$MODULE_DIR/views/"
 # 不要 rm -rf $MODULE_DIR，保留 router/index.js（由 build-profile-router.js 生成）
 cp -r "$SRC_DIR/components" "$MODULE_DIR/"
+# 2026-09-02: 复制 shared/ (V2 page + composable 用)
+if [ -d "$SRC_DIR/shared" ]; then
+  cp -r "$SRC_DIR/shared" "$MODULE_DIR/"
+fi
 cp -r "$SRC_DIR/layouts" "$MODULE_DIR/"
 cp -r "$SRC_DIR/stores" "$MODULE_DIR/"
 cp -r "$SRC_DIR/services" "$MODULE_DIR/"

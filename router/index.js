@@ -87,6 +87,13 @@ const routes = [
       { path: 'warehouses/:id', name: 'WarehouseDetail', component: lazyLoad(() => import('../views/warehouse/WarehouseDetail.vue')), meta: { title: '仓库详情', parent: '仓库管理', permission: 'warehouse:read' } },
       { path: 'alerts', name: 'StockAlerts', component: lazyLoad(() => import('../views/alerts/StockAlerts.vue')), meta: { title: '库存预警', parent: '库存管理', permission: 'stock:read' } },
 
+      // ── 物料管理 ──────────────────────────────────────────────
+      { path: 'materials/categories', name: 'MaterialCategories', component: lazyLoad(() => import('../views/materials/MaterialCategories.vue')), meta: { title: '物料类目', parent: '库存管理', permission: 'material_purchase:read' } },
+      { path: 'materials/purchase', name: 'MaterialPurchase', component: lazyLoad(() => import('../views/materials/MaterialPurchaseList.vue')), meta: { title: '物料采购', parent: '库存管理', permission: 'material_purchase:read' } },
+      { path: 'materials/consume', name: 'MaterialConsume', component: lazyLoad(() => import('../views/materials/MaterialConsumeList.vue')), meta: { title: '物料消耗', parent: '库存管理', permission: 'material_consumption:read' } },
+      { path: 'materials/items', name: 'MaterialItems', component: lazyLoad(() => import('../views/materials/MaterialItemsList.vue')), meta: { title: '物料实例', parent: '库存管理', permission: 'material_item:read' } },
+      { path: 'materials/stocktake', name: 'MaterialStocktake', component: lazyLoad(() => import('../views/materials/MaterialStocktakeList.vue')), meta: { title: '物料盘点', parent: '库存管理', permission: 'material_stocktake:read' } },
+
       // ── 审批 ────────────────────────────────────────────────
       { path: 'approvals', name: 'Approvals', component: lazyLoad(() => import('../views/approval/ApprovalList.vue')), meta: { title: '审批列表', parent: '审批中心', permission: 'approval:read' } },
       { path: 'approvals/:id', name: 'ApprovalDetail', component: lazyLoad(() => import('../views/approval/ApprovalDetail.vue')), meta: { title: '审批详情', parent: '审批中心', permission: 'approval:read' } },
@@ -174,6 +181,7 @@ const routes = [
       // ── OA 办公 ──────────────────────────────────────────────
       { path: 'oa', name: 'OaCenter', component: lazyLoad(() => import('../views/oa/OaCenter.vue')), meta: { title: 'OA 办公', permission: 'oa:read' } },
       { path: 'oa/attendance', name: 'AttendanceManage', component: lazyLoad(() => import('../views/oa/AttendanceManage.vue')), meta: { title: '考勤管理', permission: 'attendance:view' } },
+      { path: 'oa/attendance-v2', name: 'AttendanceManageV2', component: lazyLoad(() => import('../views/oa/AttendanceManageV2.vue')), meta: { title: '考勤管理 V2', permission: 'attendance:view' } },
       { path: 'oa/my-responsibility', name: 'MyResponsibility', component: lazyLoad(() => import('../views/oa/MyResponsibility.vue')), meta: { title: '我的权责', permission: 'oa:read' } },
       { path: 'oa/approvals', name: 'OaApprovalManage', component: lazyLoad(() => import('../views/oa/ApprovalManage.vue')), meta: { title: '审批管理', permission: 'approval:write' } },
       { path: 'oa/approvals/create', name: 'ApprovalCreate', component: lazyLoad(() => import('../views/oa/ApprovalCreate.vue')), meta: { title: '发起审批', permission: 'approval:write' } },
@@ -189,10 +197,12 @@ const routes = [
 
       // ── 任务 ────────────────────────────────────────────────
       { path: 'tasks', name: 'TaskManage', component: lazyLoad(() => import('../views/tasks/TaskManage.vue')), meta: { title: '任务管理', permission: 'task:read' } },
+      { path: 'tasks-v2', name: 'TaskManageV2', component: lazyLoad(() => import('../views/tasks/TaskManageV2.vue')), meta: { title: '任务管理 V2', permission: 'task:read' } },
       { path: 'tasks/stats', name: 'TaskStats', component: lazyLoad(() => import('../views/tasks/TaskStats.vue')), meta: { title: '任务统计', permission: 'task:stats' } },
 
       // ── 日志 ────────────────────────────────────────────────
       { path: 'logs/work-logs', name: 'LogsWorkLogManage', component: lazyLoad(() => import('../views/logs/WorkLogManage.vue')), meta: { title: '工作日志', parent: '日志系统', permission: 'work_log:read' } },
+      { path: 'logs/work-logs-v2', name: 'LogsWorkLogManageV2', component: lazyLoad(() => import('../views/logs/WorkLogManageV2.vue')), meta: { title: '工作日志 V2', parent: '日志系统', permission: 'work_log:read' } },
       { path: 'logs/visit-logs', name: 'LogsVisitLogManage', component: lazyLoad(() => import('../views/logs/VisitLogManage.vue')), meta: { title: '拜访日志', parent: '日志系统', permission: 'work_log:read' } },
       { path: 'logs/share-logs', name: 'LogsShareLogManage', component: lazyLoad(() => import('../views/logs/ShareLogManage.vue')), meta: { title: '分享日志', parent: '日志系统', permission: 'work_log:read' } },
       { path: 'logs/feedback', name: 'LogsFeedbackManage', component: lazyLoad(() => import('../views/logs/FeedbackManage.vue')), meta: { title: '投诉建议', parent: '日志系统', permission: 'work_log:read' } },

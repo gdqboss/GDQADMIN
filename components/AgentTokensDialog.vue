@@ -147,8 +147,8 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import api from '../../services/api.js'
-import StatusTag from '../../components/StatusTag.vue'
+import api from '@/services/api.js'
+import StatusTag from './StatusTag.vue'
 
 const { t } = useI18n()
 
