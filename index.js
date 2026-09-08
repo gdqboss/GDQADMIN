@@ -19,7 +19,9 @@ import { requireRole } from './middleware/rbac.js'
 import { checkPreviousCrash, installCrashCapture } from './crash-detect.js'
 import { verifySignature, decryptMessage, extractXmlField } from './services/wecom-crypto.js'
 import { isWeComConfigured, sendMessage } from './services/wecom.js'
+import cron from 'node-cron'
 import { startCronJobs } from './cron.js'
+import oaFlowRoutes, { scanTimeoutRoutes } from './routes/oa-flow.js' // 2026-09-08 AutoClaw: OA 图模型流程引擎
 import { startFinanceReminderJobs } from './jobs/finance-reminders.js'
 import authRoutes from './routes/auth.js'
 import productRoutes from './routes/products.js'
@@ -539,6 +541,7 @@ app.use('/api/qrcodes', auth, apiLimiter, qrcodeRoutes)
 app.use('/api/delivery', auth, apiLimiter, deliveryRoutes)
 app.use('/api/oa', cardRoutes)
 app.use('/api/oa', auth, apiLimiter, oaRoutes)
+app.use('/api/oa/flow', auth, apiLimiter, oaFlowRoutes) // 2026-09-08 AutoClaw: OA 流程引擎
 app.use('/api/reports', auth, apiLimiter, reportRoutes)
 app.use('/api/retail-records', auth, apiLimiter, retailRoutes)
 app.use('/api/gift-approvals', auth, apiLimiter, giftApprovalRoutes)
@@ -746,6 +749,8 @@ const server = httpServer.listen(PORT, () => {
   console.log(`[CHAT]   WebSocket 已挂载: ws://localhost:${PORT}/ws/chat?token=xxx (smart-studio /xchat)`)
   startCronJobs()
   startFinanceReminderJobs()
+  // OA 流程引擎超时路由兜底（每10分钟）— 2026-09-08 AutoClaw
+  cron.schedule('*/10 * * * *', () => { scanTimeoutRoutes().catch(e => console.error('[oa-flow-cron]', e.message)) })
 })
 
 // Graceful shutdown
