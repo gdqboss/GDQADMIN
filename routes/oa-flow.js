@@ -131,11 +131,18 @@ async function resolveRole(conn, role, initiatorId, { firstOnly = false } = {}) 
   } else if (String(role).startsWith('user:')) {
     ids.push(Number(String(role).slice(5)))
   } else {
-    // 角色名: users.role 精确匹配; approve 首个, 会签/投票全员
+    // 角色名: ① users.role 精确匹配（英文角色）
     const lim = firstOnly ? 'LIMIT 1' : ''
     const [rows] = await conn.query(
       'SELECT id FROM users WHERE role = ? AND status = \'active\' ORDER BY id ' + lim, [role])
     rows.forEach(r => ids.push(r.id))
+    // ② 中文部门名（如 运营部/财务部）→ users.department 或 departments.name 匹配其成员/负责人
+    if (!ids.length) {
+      const [deptUsers] = await conn.query(
+        `SELECT u.id FROM users u LEFT JOIN departments d ON d.id = u.department_id
+         WHERE (u.department = ? OR d.name = ?) AND u.status = 'active' ORDER BY u.id ` + lim, [role, role])
+      deptUsers.forEach(r => ids.push(r.id))
+    }
   }
   return [...new Set(ids.filter(x => Number.isFinite(x)))]
 }
