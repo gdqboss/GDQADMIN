@@ -147,6 +147,25 @@ async function resolveRole(conn, role, initiatorId, { firstOnly = false } = {}) 
          WHERE (u.department = ? OR d.name = ?) AND u.status = 'active' ORDER BY u.id ` + lim, [role, role])
       deptUsers.forEach(r => ids.push(r.id))
     }
+    // ③ 部门名别名（如「总经办」→「总经理办公室」）：常见别名映射 + 去除通用后缀后的包含匹配
+    if (!ids.length) {
+      const ROLE_ALIAS = { '总经办': '总经理办公室', '总经理': '总经理办公室', 'HR': '人事部', 'hr': '人事部', '财务': '财务部', '法务': '法务部', '运营': '运营部', 'IT': 'IT部', '招商': '招商部' }
+      const aliased = ROLE_ALIAS[role]
+      if (aliased) {
+        const [aliasUsers] = await conn.query(
+          `SELECT u.id FROM users u LEFT JOIN departments d ON d.id = u.department_id
+           WHERE d.name = ? AND u.status = 'active' ORDER BY u.id ` + lim, [aliased])
+        aliasUsers.forEach(r => ids.push(r.id))
+      }
+    }
+    if (!ids.length) {
+      // 兜底：字符串包含匹配（双向）
+      const [fuzzyUsers] = await conn.query(
+        `SELECT u.id FROM users u LEFT JOIN departments d ON d.id = u.department_id
+         WHERE (d.name LIKE CONCAT('%', ?, '%') OR ? LIKE CONCAT('%', d.name, '%'))
+           AND u.status = 'active' ORDER BY u.id ` + lim, [role, role])
+      fuzzyUsers.forEach(r => ids.push(r.id))
+    }
   }
   return [...new Set(ids.filter(x => Number.isFinite(x)))]
 }
