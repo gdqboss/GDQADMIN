@@ -118,7 +118,11 @@ async function resolveRole(conn, role, initiatorId, { firstOnly = false } = {}) 
     ids.push(initiatorId)
   } else if (role === 'direct_supervisor') {
     const [[u]] = await conn.query('SELECT supervisor_id FROM users WHERE id = ?', [initiatorId])
-    if (u && u.supervisor_id) ids.push(u.supervisor_id)
+    if (u && u.supervisor_id) {
+      // FK 防护：supervisor_id 可能指向不存在/已删用户（跨库迁移数据常见）→ 校验存在且 active
+      const [[sv]] = await conn.query("SELECT id FROM users WHERE id = ? AND status = 'active'", [u.supervisor_id])
+      if (sv) ids.push(sv.id)
+    }
   } else if (role === 'dept_head') {
     // 实测(2026-09-08): SGP departments.manager_id 大多为空(12/13) → 降级 direct_supervisor（交接文档 §5.9 预案）
     // 降级前先查发起人所在部门的 manager；若 manager 是发起人本人则视为“自己审批自己”，跳过并降级
