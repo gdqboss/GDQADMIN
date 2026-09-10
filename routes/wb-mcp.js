@@ -92,6 +92,134 @@ router.get('/mcp/tools', auth, requirePermission('workbuddy:read'), (req, res) =
   })
 })
 
+// GET /api/workbuddy/openapi.json - OpenAPI 3.0 schema (给 agent 自动生成 client 用)
+// 2026-09-10 江小鱼 — 波哥指令 "WorkBuddy API 可不可以其它 agent 也可以接人"
+// 从 MCP_TOOLS 自动转 OpenAPI, 一处改同步 MCP + OpenAPI, 不另起灶.
+// 任何 agent 拿到 /openapi.json 就能用 openapi-generator 生成 Python/TS/Rust client.
+function buildOpenApiSchema() {
+  const pathMap = {}
+  for (const t of MCP_TOOLS) {
+    // 把 /:id → /{id}, 保持 OpenAPI path template 风格
+    const oaPath = t.path.replace(/:(\w+)/g, '{$1}')
+    const opId = t.name
+    const op = {
+      operationId: opId,
+      summary: t.description,
+      description: t.description,
+      tags: [t.path.split('/')[1] || 'misc'], // 业务域做 tag
+      responses: {
+        '200': { description: 'OK', content: { 'application/json': { schema: { type: 'object' } } } },
+        '400': { description: '参数错误' },
+        '401': { description: '未认证' },
+        '403': { description: '无权限' },
+        '404': { description: '资源不存在' },
+      },
+    }
+    // parameters from inputSchema.properties (required / optional)
+    const props = t.inputSchema?.properties || {}
+    const required = t.inputSchema?.required || []
+    const params = []
+    // path params
+    const pathParams = [...oaPath.matchAll(/\{(\w+)\}/g)].map(m => m[1])
+    for (const p of pathParams) {
+      params.push({
+        name: p,
+        in: 'path',
+        required: true,
+        schema: props[p] || { type: 'string' },
+        description: props[p]?.description || `path parameter ${p}`,
+      })
+    }
+    // query params (for GET)
+    if (t.method === 'GET') {
+      for (const [k, v] of Object.entries(props)) {
+        if (pathParams.includes(k)) continue
+        params.push({
+          name: k,
+          in: 'query',
+          required: required.includes(k),
+          schema: v,
+          description: v.description || `${k} parameter`,
+        })
+      }
+    }
+    if (params.length) op.parameters = params
+    // body (for POST)
+    if (t.method === 'POST') {
+      const bodyProps = {}
+      const bodyReq = []
+      for (const [k, v] of Object.entries(props)) {
+        if (pathParams.includes(k)) continue
+        bodyProps[k] = v
+        if (required.includes(k)) bodyReq.push(k)
+      }
+      op.requestBody = {
+        required: bodyReq.length > 0,
+        content: {
+          'application/json': {
+            schema: { type: 'object', properties: bodyProps, required: bodyReq },
+          },
+        },
+      }
+    }
+    // security — all routes need Bearer auth except health
+    if (!opId.includes('health')) {
+      op.security = [{ BearerAuth: [] }]
+    }
+    pathMap[`/api/workbuddy${oaPath}`] = { [t.method.toLowerCase()]: op }
+  }
+  return {
+    openapi: '3.0.3',
+    info: {
+      title: 'SmartBiz WorkBuddy API',
+      version: '1.0.0',
+      description:
+        'WorkBuddy 是 SGP / 横琴 / 多 profile SmartBiz 系统的统一 API Gateway。\n' +
+        '任何 LLM agent (Claude Code / OpenClaw / Codex / Cursor / Trae) 都能用 sbk_ token 或 JWT 接入。\n' +
+        '完整接入文档: /root/docs/WORKBUDDY-AGENT-INTEGRATION.md',
+      contact: { name: '江小鱼', url: 'https://wecom.gdqshop.cn/gdqadmin' },
+    },
+    servers: [
+      { url: 'https://wecom.gdqshop.cn/api/workbuddy', description: 'SGP 生产 (profile 1)' },
+      { url: 'https://hatch.gdqshop.cn/api/workbuddy', description: '横琴孵化器 (profile 6)' },
+    ],
+    components: {
+      securitySchemes: {
+        BearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          description:
+            'agent sbk_ token (admin 在 gdqadmin 后台创建) 或 JWT (登录用户)。' +
+            'Header: Authorization: Bearer <token>',
+        },
+      },
+    },
+    tags: [
+      { name: 'inventory', description: '库存' },
+      { name: 'orders', description: '订单' },
+      { name: 'products', description: '商品' },
+      { name: 'warehouses', description: '仓库' },
+      { name: 'approvals', description: '审批' },
+      { name: 'finance', description: '财务' },
+      { name: 'attendance', description: '考勤' },
+      { name: 'tasks', description: '任务' },
+      { name: 'logs', description: '工作日志' },
+      { name: 'training', description: 'AI 课堂 / 培训' },
+      { name: 'wecom', description: '企业微信' },
+      { name: 'reminders', description: '提醒中心' },
+      { name: 'push', description: '推送' },
+      { name: 'action', description: '快捷操作 / AI 建议' },
+    ],
+    paths: pathMap,
+  }
+}
+
+// GET /api/workbuddy/openapi.json - OpenAPI 3.0 schema 自动生成
+// 公开, 任何 agent 都能拉, 不需 auth (schema 本身不泄漏敏感信息, 端点鉴权另算)
+router.get('/openapi.json', (req, res) => {
+  res.json(buildOpenApiSchema())
+})
+
 // POST /api/workbuddy/mcp/execute - 执行一个 MCP 工具
 // body: { tool: string, args: {...} }
 // 内部转发本机对应 /api/workbuddy/* 接口 + 复用调用者 Authorization（保留权限语义）
