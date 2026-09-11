@@ -523,13 +523,37 @@ router.get('/', async (req, res, next) => {
         (SELECT COUNT(*) FROM work_log_interactions WHERE log_id = wl.id AND type = 'forward') as forward_count,
         (SELECT COUNT(*) FROM work_log_interactions WHERE log_id = wl.id AND type = 'comment') as comment_count,
         EXISTS(SELECT 1 FROM work_log_interactions WHERE log_id = wl.id AND user_id = ? AND type = 'like') as liked_by_me,
-        EXISTS(SELECT 1 FROM work_log_interactions WHERE log_id = wl.id AND user_id = ? AND type = 'dislike') as disliked_by_me
+        EXISTS(SELECT 1 FROM work_log_interactions WHERE log_id = wl.id AND user_id = ? AND type = 'dislike') as disliked_by_me,
+        -- v1.32 (2026-09-11): 已读字段 — 三端补"谁已读"显示
+        -- MariaDB 10.11 不允许 correlated subquery 内部 derived table 引用外层别名 (work_logs.id),
+        -- 改用 LEFT JOIN 子表聚合 + 顶层 LEFT JOIN my_read 双 hack
+        COALESCE(rr.reader_count, 0) as reader_count,
+        CASE WHEN my_read.user_id IS NOT NULL THEN 1 ELSE 0 END as read_by_me,
+        rr.readers_preview as readers_preview
       FROM work_logs wl
       LEFT JOIN users u ON wl.user_id = u.id
       LEFT JOIN work_log_templates wlt ON wl.template_id = wlt.id
+      LEFT JOIN (
+        SELECT
+          t.log_id,
+          COUNT(*) AS reader_count,
+          SUBSTRING_INDEX(GROUP_CONCAT(
+            CONCAT(t.user_id, '|', t.name, '|', IFNULL(t.avatar, ''), '|', t.read_at)
+            ORDER BY t.read_at DESC SEPARATOR '||'
+          ), '||', 6) AS readers_preview
+        FROM (
+          SELECT r.log_id, r.user_id, u2.name, u2.avatar, MIN(r.read_at) AS read_at
+          FROM log_reads r
+          JOIN users u2 ON u2.id = r.user_id
+          WHERE r.log_type = 'work_log'
+          GROUP BY r.log_id, r.user_id
+        ) t
+        GROUP BY t.log_id
+      ) rr ON rr.log_id = wl.id
+      LEFT JOIN log_reads my_read ON my_read.log_type = 'work_log' AND my_read.log_id = wl.id AND my_read.user_id = ?
       WHERE 1=1
     `;
-    const params = [req.user.id, req.user.id];
+    const params = [req.user.id, req.user.id, req.user.id];
 
     // [company-iso] 作用域滤网置于类型分支之前，保证参数顺序一致
     sql += __isoSql;
@@ -628,9 +652,10 @@ router.get('/', async (req, res, next) => {
     } else if (logType === 'received') {
       countSql += ' AND JSON_CONTAINS(wl.recipients, ?)';
       countParams.push(JSON.stringify(req.user.id));
-    } else if (logType === 'subordinate' && Array.isArray(uniqueIds)) {
+    } else if (logType === 'subordinate' && Array.isArray(subordinateIds) && subordinateIds.length > 0) {
+      // [bugfix 2026-09-12] 复用 subordinateIds (上面去重前的列表), 不引用可能未定义的 uniqueIds
       countSql += ` AND wl.user_id IN (?)`;
-      countParams.push(uniqueIds);
+      countParams.push([...new Set(subordinateIds)]);
     }
     // 'all' has no additional filter
 
@@ -750,12 +775,22 @@ router.get('/:id', async (req, res, next) => {
         u.avatar as creator_avatar,
         u.department as creator_department,
         wlt.name as template_name,
-        wlt.fields as template_fields
+        wlt.fields as template_fields,
+        -- v1.32 (2026-09-11): 已读字段 (LEFT JOIN 防 correlated subquery 在 MariaDB 报错)
+        COALESCE(rr.reader_count, 0) as reader_count,
+        CASE WHEN my_read.user_id IS NOT NULL THEN 1 ELSE 0 END as read_by_me
       FROM work_logs wl
       LEFT JOIN users u ON wl.user_id = u.id
       LEFT JOIN work_log_templates wlt ON wl.template_id = wlt.id
+      LEFT JOIN (
+        SELECT log_id, COUNT(*) AS reader_count
+        FROM log_reads
+        WHERE log_type = 'work_log'
+        GROUP BY log_id
+      ) rr ON rr.log_id = wl.id
+      LEFT JOIN log_reads my_read ON my_read.log_type = 'work_log' AND my_read.log_id = wl.id AND my_read.user_id = ?
       WHERE wl.id = ?`,
-      [id]
+      [req.user.id, id]
     );
 
     if (logs.length === 0) {
@@ -801,6 +836,17 @@ router.get('/:id', async (req, res, next) => {
     log.attachments = safeParse(log.attachments);
     log.participants = safeParse(log.participants || '[]');
     log.template_fields = safeParse(log.template_fields);
+
+    // v1.32 (2026-09-11): 详情拉完整已读列表 (供前端头像弹层用)
+    const [readers] = await pool.query(
+      `SELECT r.user_id, u.name, u.avatar, r.read_at
+       FROM log_reads r
+       JOIN users u ON r.user_id = u.id
+       WHERE r.log_type = 'work_log' AND r.log_id = ?
+       ORDER BY r.read_at DESC`,
+      [log.id]
+    );
+    log.readers = readers;
 
     // Get participant names
     if (log.participants.length > 0) {
@@ -910,7 +956,10 @@ router.put('/:id', async (req, res, next) => {
 });
 
 // DELETE /api/work-logs/:id - Delete log (only by creator)
-router.delete('/:id', async (req, res, next) => {
+// v1.32.3 (2026-09-12): 加 requirePermission('work_log:write') 兜底 (修复 2026-09-12 江小鱼发现的 perm 缺失)
+// 之前只 check req.user.role + ownership, 没 perm 兜底, frontend role 没勾 work_log:write 也能调 (绕过)
+// WORK_LOG_WRITE = 'work_log:write' 在 rbac_permissions 表里存在, 跟 frontend WORK_LOG_WRITE 常量一致
+router.delete('/:id', requirePermission(PERMISSIONS.WORK_LOG_WRITE), async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -961,6 +1010,8 @@ router.delete('/:id', async (req, res, next) => {
 // ==================== Interactions ====================
 
 // POST /api/work-logs/:id/read - Mark as read
+// v1.32 (2026-09-11): 改写 log_reads (跟 log-interactions.js /read 路由统一数据源)
+// 老逻辑: work_log_interactions (type='read') — 已废弃, 计数迁移
 router.post('/:id/read', async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -986,22 +1037,10 @@ router.post('/:id/read', async (req, res, next) => {
       });
     }
 
-    // Check if already marked as read
-    const [existing] = await pool.query(
-      'SELECT id FROM work_log_interactions WHERE log_id = ? AND user_id = ? AND type = ?',
-      [id, req.user.id, 'read']
-    );
-
-    if (existing.length > 0) {
-      return res.json({
-        code: 0,
-        message: 'Already marked as read'
-      });
-    }
-
+    // v1.32: 写 log_reads (UNIQUE 去重, 跟 log-interactions.js /read 一致)
     await pool.query(
-      'INSERT INTO work_log_interactions (log_id, user_id, type) VALUES (?, ?, ?)',
-      [id, req.user.id, 'read']
+      'INSERT IGNORE INTO log_reads (log_type, log_id, user_id, read_at) VALUES (?, ?, ?, NOW())',
+      ['work_log', id, req.user.id]
     );
 
     res.json({

@@ -87,6 +87,8 @@ const PERMISSIONS = {
   ATTENDANCE_VIEW: 'attendance:view',
   ATTENDANCE_MANAGE: 'attendance:manage',
   ATTENDANCE_DELETE: 'attendance:delete',
+  // 跨企业考勤查看（孵化器指定人员，政府现场办公检查作证用 2026-09-11）
+  COMPANY_ATTENDANCE_VIEW: 'company:attendance-view',
 
   // === Labor / SmartBiz 模块 (2026-07-12 新增) ===
   // 工地 (jobsites)
@@ -666,7 +668,8 @@ const PERM_ALIASES = {
   // worklog ↔ work_log (历史问题: skill 选 work_log 为 canonical)
   'worklog:read':   'work_log:read',
   'worklog:write':  'work_log:write',
-  'worklog:delete': 'work_log:delete',
+  // worklog:delete alias 到 work_log:write (work_log:delete perm 不存在, delete 视为 write 子集)
+  'worklog:delete': 'work_log:write',
   // product ↔ products (字典用复数)
   'product:read':   'products:read',
   'product:write':  'products:write',
