@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { pool } from '../db/connection.js'
 import { parsePagination } from '../utils/pagination.js'
+import { PERMISSIONS, requirePermission } from '../middleware/rbac.js'
 
 const router = Router()
 
@@ -91,7 +92,8 @@ router.get('/:id', async (req, res, next) => {
 })
 
 // PUT /api/aftersales/:id — 更新状态/指派/备注
-router.put('/:id', async (req, res, next) => {
+// v1.32.3 (2026-09-12): 加 requirePermission 兜底, 修复任意登录用户能改售后记录的 bug
+router.put('/:id', requirePermission(PERMISSIONS.AFTERSALE_WRITE), async (req, res, next) => {
   try {
     const { status, assigned_to, handler_note, priority, channel_qrcodes } = req.body
     const [[record]] = await pool.query('SELECT * FROM after_sale_records WHERE id = ?', [req.params.id])
@@ -128,7 +130,8 @@ router.put('/:id', async (req, res, next) => {
 })
 
 // DELETE /api/aftersales/:id — 删除售后记录
-router.delete('/:id', async (req, res, next) => {
+// v1.32.3 (2026-09-12): 加 requirePermission 兜底, 修复任意登录用户能删售后记录的 bug
+router.delete('/:id', requirePermission(PERMISSIONS.AFTERSALE_WRITE), async (req, res, next) => {
   try {
     const [[record]] = await pool.query('SELECT id FROM after_sale_records WHERE id = ?', [req.params.id])
     if (!record) return res.status(404).json({ code: 404, message: '记录不存在' })
@@ -156,7 +159,8 @@ router.get('/:id/messages', async (req, res, next) => {
 })
 
 // POST /api/aftersales/:id/messages — 客服回复消息
-router.post('/:id/messages', async (req, res, next) => {
+// v1.32.3 (2026-09-12): 加 requirePermission 兜底, 修复任意登录用户能回复工单的 bug
+router.post('/:id/messages', requirePermission(PERMISSIONS.AFTERSALE_WRITE), async (req, res, next) => {
   try {
     const { content } = req.body
     if (!content || !content.trim()) return res.status(400).json({ code: 400, message: '消息内容不能为空' })

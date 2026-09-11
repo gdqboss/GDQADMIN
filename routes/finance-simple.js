@@ -3,7 +3,7 @@ import { pool } from '../db/connection.js'
 import { parsePagination } from '../utils/pagination.js'
 import * as XLSX from 'xlsx'
 import { checkPerm } from '../utils/permission.js'
-import { ROLES } from '../middleware/rbac.js'
+import { PERMISSIONS, ROLES, requirePermission } from '../middleware/rbac.js'
 import {
   exportPurchaseCosts,
   exportSalesRevenues,
@@ -94,7 +94,7 @@ router.get('/purchase-costs', async (req, res, next) => {
 })
 
 // POST /api/finance-simple/purchase-costs - 创建采购成本记录
-router.post('/purchase-costs', async (req, res, next) => {
+router.post('/purchase-costs', requirePermission(PERMISSIONS.FINANCE_PURCHASE), async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
     const { supplier_id, purchase_date, product_id, quantity, unit_price, payment_method, account_id, note } = req.body
@@ -157,7 +157,7 @@ router.post('/purchase-costs', async (req, res, next) => {
 })
 
 // PUT /api/finance-simple/purchase-costs/:id - 更新采购成本记录
-router.put('/purchase-costs/:id', async (req, res, next) => {
+router.put('/purchase-costs/:id', requirePermission(PERMISSIONS.FINANCE_PURCHASE), async (req, res, next) => {
   try {
     const { supplier_id, purchase_date, product_id, quantity, unit_price, payment_method, note } = req.body
     const total_amount = quantity * unit_price
@@ -173,7 +173,7 @@ router.put('/purchase-costs/:id', async (req, res, next) => {
 })
 
 // DELETE /api/finance-simple/purchase-costs/:id - 删除采购成本记录
-router.delete('/purchase-costs/:id', async (req, res, next) => {
+router.delete('/purchase-costs/:id', requirePermission(PERMISSIONS.FINANCE_PURCHASE), async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
     const [[record]] = await conn.query('SELECT payment_status FROM purchase_costs WHERE id = ?', [req.params.id])
@@ -278,7 +278,7 @@ router.get('/sales-revenues', async (req, res, next) => {
 })
 
 // POST /api/finance-simple/sales-revenues - 创建销售收入记录
-router.post('/sales-revenues', async (req, res, next) => {
+router.post('/sales-revenues', requirePermission(PERMISSIONS.FINANCE_SALES), async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
     const { sale_date, product_id, quantity, cost_price, sale_price, store_id, customer_phone, payment_method, account_id, note } = req.body
@@ -342,7 +342,7 @@ router.post('/sales-revenues', async (req, res, next) => {
 })
 
 // PUT /api/finance-simple/sales-revenues/:id - 更新销售收入记录
-router.put('/sales-revenues/:id', async (req, res, next) => {
+router.put('/sales-revenues/:id', requirePermission(PERMISSIONS.FINANCE_SALES), async (req, res, next) => {
   try {
     const { sale_date, product_id, quantity, cost_price, sale_price, store_id, customer_phone, payment_method, note } = req.body
     const total_revenue = quantity * sale_price
@@ -360,7 +360,7 @@ router.put('/sales-revenues/:id', async (req, res, next) => {
 })
 
 // DELETE /api/finance-simple/sales-revenues/:id - 删除销售收入记录
-router.delete('/sales-revenues/:id', async (req, res, next) => {
+router.delete('/sales-revenues/:id', requirePermission(PERMISSIONS.FINANCE_SALES), async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
     const [[record]] = await conn.query('SELECT id FROM sales_revenues WHERE id = ?', [req.params.id])
@@ -462,7 +462,7 @@ router.get('/expenses', async (req, res, next) => {
 })
 
 // POST /api/finance-simple/expenses - 创建费用支出
-router.post('/expenses', async (req, res, next) => {
+router.post('/expenses', requirePermission(PERMISSIONS.FINANCE_EXPENSE), async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
     const { expense_date, category, category_name, amount, payment_method, store_id, payee, description, note } = req.body
@@ -547,7 +547,7 @@ router.post('/expenses', async (req, res, next) => {
 })
 
 // PUT /api/finance-simple/expenses/:id - 更新费用支出
-router.put('/expenses/:id', async (req, res, next) => {
+router.put('/expenses/:id', requirePermission(PERMISSIONS.FINANCE_EXPENSE), async (req, res, next) => {
   try {
     const { expense_date, category, category_name, amount, payment_method, store_id, payee, description, note } = req.body
 
@@ -571,7 +571,7 @@ router.put('/expenses/:id', async (req, res, next) => {
 })
 
 // DELETE /api/finance-simple/expenses/:id - 删除费用支出
-router.delete('/expenses/:id', async (req, res, next) => {
+router.delete('/expenses/:id', requirePermission(PERMISSIONS.FINANCE_EXPENSE), async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
     // 校验审批状态
@@ -876,7 +876,7 @@ router.get('/accounts-receivable/:customer_phone/transactions', async (req, res,
 // ============================================
 
 // POST /api/finance-simple/payments - 创建付款记录
-router.post('/payments', async (req, res, next) => {
+router.post('/payments', requirePermission(PERMISSIONS.FINANCE_PAYMENT), async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
     const { payment_date, supplier_id, amount, payment_method, account_id, note } = req.body
@@ -939,7 +939,7 @@ router.post('/payments', async (req, res, next) => {
 // ============================================
 
 // POST /api/finance-simple/receipts - 创建收款记录
-router.post('/receipts', async (req, res, next) => {
+router.post('/receipts', requirePermission(PERMISSIONS.FINANCE_RECEIPT), async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
     const { receipt_date, customer_phone, customer_name, amount, payment_method, account_id, note } = req.body
@@ -1065,7 +1065,7 @@ router.get('/payments', async (req, res, next) => {
 })
 
 // PUT /api/finance-simple/receipts/:id - 更新收款记录
-router.put('/receipts/:id', async (req, res, next) => {
+router.put('/receipts/:id', requirePermission(PERMISSIONS.FINANCE_RECEIPT), async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
     const { receipt_date, customer_phone, customer_name, amount, payment_method, account_id, note } = req.body
@@ -1091,7 +1091,7 @@ router.put('/receipts/:id', async (req, res, next) => {
 })
 
 // DELETE /api/finance-simple/receipts/:id - 删除收款记录
-router.delete('/receipts/:id', async (req, res, next) => {
+router.delete('/receipts/:id', requirePermission(PERMISSIONS.FINANCE_RECEIPT), async (req, res, next) => {
   try {
     await pool.query('DELETE FROM receipt_records WHERE id = ?', [req.params.id])
     res.json({ code: 0, message: '删除成功' })
@@ -1099,7 +1099,7 @@ router.delete('/receipts/:id', async (req, res, next) => {
 })
 
 // PUT /api/finance-simple/payments/:id - 更新付款记录
-router.put('/payments/:id', async (req, res, next) => {
+router.put('/payments/:id', requirePermission(PERMISSIONS.FINANCE_PAYMENT), async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
     const { payment_date, supplier_id, amount, payment_method, account_id, note } = req.body
@@ -1125,7 +1125,7 @@ router.put('/payments/:id', async (req, res, next) => {
 })
 
 // DELETE /api/finance-simple/payments/:id - 删除付款记录
-router.delete('/payments/:id', async (req, res, next) => {
+router.delete('/payments/:id', requirePermission(PERMISSIONS.FINANCE_PAYMENT), async (req, res, next) => {
   try {
     await pool.query('DELETE FROM payment_records WHERE id = ?', [req.params.id])
     res.json({ code: 0, message: '删除成功' })
