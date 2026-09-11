@@ -4,6 +4,7 @@ import { requirePermission } from '../middleware/rbac.js'
 import { parsePagination } from '../utils/pagination.js'
 import { requireRole, ROLES } from '../middleware/rbac.js'
 import { checkPerm } from '../utils/permission.js'
+import { getCompanyScope } from '../utils/company-scope.js'
 
 const router = Router()
 
@@ -329,6 +330,8 @@ router.post('/attendance/clock', async (req, res, next) => {
     const now = new Date()
     const timeStr = now.toTimeString().slice(0, 8)
     // 打卡状态 (2026-08-28 钉钉模式): normal正常上班/trip出差/overtime加班/free自由打卡
+    // [company-iso] 打卡记录归属打卡人企业（孵化器为 NULL）
+    const __scope = await getCompanyScope(req)
     const cType = ['normal', 'trip', 'overtime', 'free'].includes(clock_type) ? clock_type : 'normal'
     // 动态上班时间段 (多班次支持)
     const win = await getWorkTimeWindow(userId)
@@ -378,13 +381,13 @@ router.post('/attendance/clock', async (req, res, next) => {
 
       await pool.query(
         `INSERT INTO attendance (user_id, date, clock_in, status, clock_type, late_minutes, early_minutes,
-         location, gps_lat, gps_lng, gps_accuracy, device_info, ip_address, is_auto_clock, abnormal_reason)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         location, gps_lat, gps_lng, gps_accuracy, device_info, ip_address, is_auto_clock, abnormal_reason, company_id)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [userId, today, timeStr, status, cType,
          lateMin,
          0, req.body.location || location || null, lat || null, lng || null, accuracy || null,
          device_info || null, realIp, autoClock,
-         silent ? 'non-required: silent record (not counted in attendance stats)' : (exempt ? `clock_type=${cType}: exempted from late judgement` : null)]
+         silent ? 'non-required: silent record (not counted in attendance stats)' : (exempt ? `clock_type=${cType}: exempted from late judgement` : null), __scope.companyId]
       )
 
       res.json({ code: 0, data: { status, time: timeStr, is_auto_clock: autoClock, silent, worker_category: workerCategory, clock_type: cType }, message: silent ? '打卡成功(本次不计入考勤统计)' : (cType === 'trip' ? '出差打卡成功' : (cType === 'free' ? '自由打卡成功' : (cType === 'overtime' ? '加班打卡成功' : '上班打卡成功'))) })
@@ -393,9 +396,8 @@ router.post('/attendance/clock', async (req, res, next) => {
       if (!existing) {
         return res.status(400).json({ code: 400, message: '今日未打卡上班，无法打卡下班' })
       }
-      if (existing.clock_out) {
-        return res.status(400).json({ code: 400, message: '今日已打卡下班' })
-      }
+      // 2026-09-07: 下班打卡之后至第二天上班前, 允许重复打卡刷新下班时间
+      // (仅上班打卡防重复见上方 in 分支; 下班可多次覆盖)
 
       // 检查是否需要考勤（只有必打卡员工才算早退）
       // 2026-08-25 silent 模式:没勾选员工 status 锁 normal + 早退清零
@@ -464,12 +466,13 @@ router.post('/attendance/trip-clock', async (req, res, next) => {
       'SELECT id, status FROM attendance WHERE user_id = ? AND date = ?',
       [userId, today]
     )
+    const __scope = await getCompanyScope(req)
     let attendanceFixed = null
     if (!att) {
       const [[ins]] = await pool.query(
-        `INSERT INTO attendance (user_id, date, clock_in, status, late_minutes, early_minutes, location, gps_lat, gps_lng, abnormal_reason)
-         VALUES (?,?,NULL,'normal',0,0,?,?,?,'on business trip (auto-linked from trip clock)')`,
-        [userId, today, location || null, lat || null, lng || null]
+        `INSERT INTO attendance (user_id, date, clock_in, status, late_minutes, early_minutes, location, gps_lat, gps_lng, abnormal_reason, company_id)
+         VALUES (?,?,NULL,'normal',0,0,?,?,?,'on business trip (auto-linked from trip clock)',?)`,
+        [userId, today, location || null, lat || null, lng || null, __scope.companyId]
       )
       attendanceFixed = 'created'
     } else if (att.status === 'late') {
@@ -523,11 +526,39 @@ router.get('/attendance', async (req, res, next) => {
     let where = 'WHERE 1=1'
     const params = []
 
-    // 权限控制：自己可见，上级可见，超级管理员全部可见
-    if (currentUserRole === ROLES.ADMIN) {
-      // 超级管理员可以查看所有人
-      if (user_id) { where += ' AND a.user_id = ?'; params.push(user_id) }
+    // [company-iso] 企业作用域：优先于原有角色逻辑
+    const __scope = await getCompanyScope(req)
+
+    if (__scope.kind === 'company-manage') {
+      // 企业管理员：仅本企业成员考勤
+      const [cids] = await pool.query('SELECT id FROM users WHERE company_id = ? AND status = ?', [__scope.companyId, 'active'])
+      let ids = cids.map(r => r.id)
+      ids = ids.length ? ids : [-1]
+      const ph = ids.map(() => '?').join(',')
+      where = `WHERE 1=1 AND a.user_id IN (${ph})`
+      params.push(...ids)
+    } else if (__scope.kind === 'company-self') {
+      // 企业普通员工：仅本人
+      where = 'WHERE 1=1 AND a.user_id = ?'
+      params.push(currentUserId)
+    }
+
+    // 权限控制（孵化器作用域 / global 走原逻辑）
+    if (__scope.kind === 'company-manage' || __scope.kind === 'company-self') {
+      // 企业作用域已限定可见范围，跳过原有角色分支
     } else {
+      // 孵化器人员：未授权（无 company:attendance-view）只能看本孵化器（company_id IS NULL）内部考勤
+      // 超管(role=admin, checkPerm 恒真) / 被授权指定人员可跨企业查考勤（政府现场办公检查作证）
+      const __canCrossCompany = __scope.kind === 'global' || await checkPerm(req, 'company:attendance-view')
+      if (__canCrossCompany) {
+        // 授权人员/超管：可查看全部（含企业）考勤
+        if (user_id) { where += ' AND a.user_id = ?'; params.push(user_id) }
+      } else {
+        // 未授权孵化器人员：仅本孵化器 + 原有汇报链可见性
+        where += ' AND u.company_id IS NULL'
+        if (currentUserRole === ROLES.ADMIN) {
+          if (user_id) { where += ' AND a.user_id = ?'; params.push(user_id) }
+        } else {
       // 查找当前用户的所有下级（递归）
       const [subordinates] = await pool.query(`
         WITH RECURSIVE subordinate_tree AS (
@@ -553,6 +584,8 @@ router.get('/attendance', async (req, res, next) => {
         // 只能查看自己和下级的考勤
         where += ' AND a.user_id IN (?)'
         params.push(subordinateIds)
+      }
+      }
       }
     }
 
@@ -668,6 +701,8 @@ router.post('/approvals', async (req, res, next) => {
 
     const { type_code, form_data, qrcode_id, attachments, title } = req.body
     const applicantId = req.user.id
+    // [company-iso] 审批归属申请人企业（孵化器为 NULL）
+    const __scope = await getCompanyScope(req)
 
     if (!type_code || !form_data) {
       return res.status(400).json({ code: 400, message: '审批类型和表单数据必填' })
@@ -692,10 +727,10 @@ router.post('/approvals', async (req, res, next) => {
 
     // Create approval record
     const [result] = await conn.query(
-      `INSERT INTO approvals (title, type_code, applicant_id, form_data, qrcode_id, attachments, status)
-       VALUES (?,?,?,?,?,?,?)`,
+      `INSERT INTO approvals (title, type_code, applicant_id, form_data, qrcode_id, attachments, status, company_id)
+       VALUES (?,?,?,?,?,?,?,?)`,
       [finalTitle, type_code, applicantId, JSON.stringify(form_data), qrcode_id || null,
-       attachments ? JSON.stringify(attachments) : null, 'pending']
+       attachments ? JSON.stringify(attachments) : null, 'pending', __scope.companyId]
     )
 
     const approvalId = result.insertId
@@ -895,6 +930,7 @@ router.post('/approvals/:id/approve', async (req, res, next) => {
         const start = formData.start_date ? String(formData.start_date).slice(0, 10) : null
         const end = formData.end_date ? String(formData.end_date).slice(0, 10) : start
         if (start && approval.applicant_id) {
+          const [[__applCo]] = await conn.query('SELECT company_id FROM users WHERE id = ?', [approval.applicant_id])
           // 遍历出差日期区间，为每个工作日写一条 normal + clock_type=trip 考勤 (出差视为出勤)
           let cur = new Date(start)
           const last = new Date(end)
@@ -907,10 +943,10 @@ router.post('/approvals/:id/approve', async (req, res, next) => {
             )
             if (!ex) {
               await conn.query(
-                `INSERT INTO attendance (user_id, date, status, clock_type, abnormal_reason)
-                 VALUES (?,?,?,?,?)`,
+                `INSERT INTO attendance (user_id, date, status, clock_type, abnormal_reason, company_id)
+                 VALUES (?,?,?,?,?,?)`,
                 [approval.applicant_id, dateStr, 'normal', 'trip',
-                 `出差审批通过: ${dest} (免打卡)`.slice(0, 200)]
+                 `出差审批通过: ${dest} (免打卡)`.slice(0, 200), (__applCo && __applCo.company_id) || null]
               )
             }
             cur.setDate(cur.getDate() + 1)
@@ -1070,12 +1106,25 @@ router.post('/approvals/:id/withdraw', async (req, res, next) => {
 // GET /api/oa/departments - Tree structure
 router.get('/departments', async (req, res, next) => {
   try {
+    // [company-iso] 企业作用域：决定部门树可见范围
+    const __scope = await getCompanyScope(req)
+    let __deptWhere = "WHERE d.status = 'active'"
+    let __params = []
+    if (__scope.kind === 'company-manage') {
+      __deptWhere += ' AND d.company_id = ?'
+      __params.push(__scope.companyId)
+    } else if (__scope.kind === 'company-self') {
+      // 企业普通员工：不看组织架构
+      __deptWhere += ' AND 1=0'
+    }
+
     const [rows] = await pool.query(
       `SELECT d.*, u.name as manager_name
        FROM departments d
        LEFT JOIN users u ON d.manager_id = u.id
-       WHERE d.status = 'active'
-       ORDER BY d.sort_order, d.id`
+       ${__deptWhere}
+       ORDER BY d.sort_order, d.id`,
+      __params
     )
 
     // Build tree structure
@@ -1097,6 +1146,8 @@ router.get('/departments', async (req, res, next) => {
 router.post('/departments', requireRole('admin', 'manager'), async (req, res, next) => {
   try {
     const { name, parent_id, level, manager_id, sort_order } = req.body
+    // [company-iso] 部门归属创建人企业（孵化器为 NULL）
+    const __scope = await getCompanyScope(req)
 
     if (!name || name.trim() === '') {
       return res.status(400).json({ code: 400, message: '部门名称不能为空' })
@@ -1107,8 +1158,8 @@ router.post('/departments', requireRole('admin', 'manager'), async (req, res, ne
     }
 
     const [result] = await pool.query(
-      'INSERT INTO departments (name, parent_id, level, manager_id, sort_order) VALUES (?,?,?,?,?)',
-      [name, parent_id || null, level || 1, manager_id || null, sort_order || 0]
+      'INSERT INTO departments (name, parent_id, level, manager_id, sort_order, company_id) VALUES (?,?,?,?,?,?)',
+      [name, parent_id || null, level || 1, manager_id || null, sort_order || 0, __scope.companyId]
     )
 
     res.json({ code: 0, data: { id: result.insertId }, message: '部门创建成功' })
@@ -1200,6 +1251,17 @@ router.get('/employees', async (req, res, next) => {
                WHERE 1=1`
     const params = []
 
+    // [company-iso] 企业作用域：决定员工列表可见范围
+    const __scope = await getCompanyScope(req)
+    if (__scope.kind === 'company-manage') {
+      sql += ' AND u.company_id = ?'
+      params.push(__scope.companyId)
+    } else if (__scope.kind === 'company-self') {
+      // 企业普通员工：仅本人可见（员工管理对企业员工不开放）
+      sql += ' AND u.id = ?'
+      params.push(req.user.id)
+    }
+
     if (keyword) {
       sql += ' AND (u.name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)'
       params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`)
@@ -1217,7 +1279,8 @@ router.get('/employees', async (req, res, next) => {
       params.push(status)
     }
 
-    const countSql = sql.replace(/SELECT u\.id, u\.name.*FROM/, 'SELECT COUNT(*) as total FROM')
+    // count 查询：只需把 SELECT 列替换为 COUNT(*)，FROM 及之后原样保留
+    const countSql = 'SELECT COUNT(*) as total ' + sql.slice(sql.indexOf(' FROM '))
     const [[{ total }]] = await pool.query(countSql, params)
 
     sql += ' ORDER BY u.department, u.name LIMIT ? OFFSET ?'
@@ -1567,6 +1630,19 @@ router.get('/attendance/summary', async (req, res, next) => {
 
     const params = []
     const conditions = []
+
+    // [company-iso] 企业作用域：考勤汇总可见范围
+    const __scope = await getCompanyScope(req)
+    if (__scope.kind === 'company-manage') {
+      conditions.push('u.company_id = ?')
+      params.push(__scope.companyId)
+    } else if (__scope.kind === 'company-self') {
+      conditions.push('u.id = ?')
+      params.push(req.user.id)
+    } else if (!(__scope.kind === 'global') && !(await checkPerm(req, 'company:attendance-view'))) {
+      // 孵化器人员未授权（无 company:attendance-view）：仅本孵化器内部
+      conditions.push('u.company_id IS NULL')
+    }
 
     if (start_date) {
       conditions.push('a.date >= ?')
@@ -2103,6 +2179,8 @@ router.post('/overtime', async (req, res, next) => {
   try {
     const { start_time, end_time, hours, reason, jobsite_id } = req.body
     const userId = req.user.id
+    // [company-iso] 加班审批归属申请人企业（孵化器为 NULL）
+    const __scope = await getCompanyScope(req)
 
     if (!start_time || !end_time || !hours || !reason) {
       return res.status(400).json({ code: 400, message: '请填写完整的加班信息' })
@@ -2126,9 +2204,9 @@ router.post('/overtime', async (req, res, next) => {
     })
 
     const [approvalResult] = await pool.query(
-      `INSERT INTO approvals (type_code, title, applicant_id, form_data, status, current_step, created_at)
-       VALUES ('overtime', ?, ?, ?, 'pending', 1, NOW())`,
-      [`加班申请 - ${hours}小时 - ${reason.slice(0, 30)}`, userId, formData]
+      `INSERT INTO approvals (type_code, title, applicant_id, form_data, status, current_step, created_at, company_id)
+       VALUES ('overtime', ?, ?, ?, 'pending', 1, NOW(), ?)`,
+      [`加班申请 - ${hours}小时 - ${reason.slice(0, 30)}`, userId, formData, __scope.companyId]
     )
 
     const approvalId = approvalResult.insertId

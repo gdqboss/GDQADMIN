@@ -3,6 +3,7 @@ import { pool } from '../db/connection.js';
 import { auth } from '../middleware/auth.js';
 import { PERMISSIONS, ROLES, requirePermission, requireRole } from '../middleware/rbac.js';
 import { checkPerm } from '../utils/permission.js';
+import { getCompanyScope } from '../utils/company-scope.js';
 
 const router = express.Router();
 
@@ -442,8 +443,8 @@ router.post('/', async (req, res, next) => {
     }
 
     const [result] = await pool.query(
-      `INSERT INTO work_logs (user_id, template_id, submit_date, content, recipients, attachments, status, location, gps_lat, gps_lng, participants)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO work_logs (user_id, template_id, submit_date, content, recipients, attachments, status, location, gps_lat, gps_lng, participants, company_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.user.id,
         template_id,
@@ -455,7 +456,8 @@ router.post('/', async (req, res, next) => {
         location || null,
         gps_lat || null,
         gps_lng || null,
-        JSON.stringify(participants || [])
+        JSON.stringify(participants || []),
+        (await getCompanyScope(req)).companyId
       ]
     );
 
@@ -496,6 +498,7 @@ router.get('/', async (req, res, next) => {
         u.avatar as creator_avatar,
         u.department as creator_department,
         wlt.name as template_name,
+        wlt.fields as template_fields,
         (SELECT COUNT(*) FROM work_log_interactions WHERE log_id = wl.id AND type = 'like') as like_count,
         (SELECT COUNT(*) FROM work_log_interactions WHERE log_id = wl.id AND type = 'dislike') as dislike_count,
         (SELECT COUNT(*) FROM work_log_interactions WHERE log_id = wl.id AND type = 'forward') as forward_count,
@@ -633,6 +636,8 @@ router.get('/', async (req, res, next) => {
       content: safeParse(log.content),
       recipients: safeParse(log.recipients),
       attachments: safeParse(log.attachments),
+      // v16 (2026-09-04): 加 template_fields 给前端详情弹窗解析 field_xxx 用
+      template_fields: safeParse(log.template_fields),
       // 兜底：JOIN 不到时用 user_id 当显示名（修 2026-07-16 "看不出谁写的"）
       creator_name: log.creator_name || `用户#${log.user_id}`,
       creator_department: log.creator_department || ''

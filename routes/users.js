@@ -4,6 +4,7 @@ import { auth } from '../middleware/auth.js'
 import { pool } from '../db/connection.js'
 import { checkPerm } from '../utils/permission.js'
 import { ROLES } from '../middleware/rbac.js'
+import { getCompanyScope } from '../utils/company-scope.js'
 
 const router = Router()
 
@@ -157,6 +158,13 @@ router.post('/', async (req, res, next) => {
       return res.status(400).json({ code: 400, message: '该手机号已被注册' })
     }
 
+    // [company-iso] 企业写隔离：企业管理员只能新增本企业员工；企业普通员工禁止新增
+    const __scope = await getCompanyScope(req)
+    if (__scope.kind === 'company-self') {
+      return res.status(403).json({ code: 403, message: '无权新增员工' })
+    }
+    const __newUserCompanyId = __scope.kind === 'company-manage' ? __scope.companyId : null
+
     const hash = await bcrypt.hash(password, 10)
     const perms = role === 'custom' && Array.isArray(permissions) ? JSON.stringify(permissions) : null
     const autoEmail = email || `${phone}@gdqshop.cn`
@@ -170,8 +178,8 @@ router.post('/', async (req, res, next) => {
         member_level, member_label, points,
         auth_type, supplier_id, supervisor_id, responsibility_id,
         require_attendance, require_worklog,
-        permissions)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        permissions, company_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         name, autoEmail, hash, role || ROLES.OPERATOR, phone,
         employee_code || null, job_level_id || null, is_internal ? 1 : 0,
@@ -181,7 +189,7 @@ router.post('/', async (req, res, next) => {
         member_level || 1, member_label || null, points || 0,
         auth_type || 'phone', supplier_id || null, supervisor_id || null, responsibility_id || null,
         require_attendance ? 1 : 0, require_worklog ? 1 : 0,
-        perms
+        perms, __newUserCompanyId
       ]
     )
 

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { pool } from '../db/connection.js'
 import { checkPerm } from '../utils/permission.js'
 import { ROLES, PERMISSIONS, requirePermission } from '../middleware/rbac.js'
+import { getCompanyScope } from '../utils/company-scope.js'
 
 const router = Router()
 
@@ -546,9 +547,9 @@ router.post('/', requirePermission(PERMISSIONS.TASKS_CREATE), async (req, res, n
     }
 
     const [result] = await pool.query(
-          `INSERT INTO tasks (title, description, jobsite_id, status, is_new, priority, assigned_to, assigned_by, created_by, due_date)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [title, description || null, jobsite_id || null, 'pending', 1, priority || "medium", assigned_to, req.user.id, req.user.id, due_date || null]
+          `INSERT INTO tasks (title, description, jobsite_id, status, is_new, priority, assigned_to, assigned_by, created_by, due_date, company_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [title, description || null, jobsite_id || null, 'pending', 1, priority || "medium", assigned_to, req.user.id, req.user.id, due_date || null, (await getCompanyScope(req)).companyId]
         )
 
     res.json({ code: 0, data: { id: result.insertId }, message: '任务创建成功' })
