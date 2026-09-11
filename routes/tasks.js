@@ -178,6 +178,14 @@ router.get('/', async (req, res, next) => {
       where.push('(t.assigned_to = ? OR t.assigned_by = ?)')
       params.push(req.user.id, req.user.id)
     }
+    // [company-iso] 2026-09-11 读隔离：企业管理员限本企业任务；孵化器非超管看不到企业数据
+    const __scope = await getCompanyScope(req)
+    if (__scope.kind === 'company-manage') {
+      where.push('t.company_id = ?')
+      params.push(__scope.companyId)
+    } else if (__scope.kind === 'incubator') {
+      where.push('t.company_id IS NULL')
+    }
     if (status) { where.push('t.status = ?'); params.push(status) }
     if (priority) { where.push('t.priority = ?'); params.push(priority) }
     if (assigned_to) { where.push('t.assigned_to = ?'); params.push(assigned_to) }
@@ -229,6 +237,15 @@ router.get('/all', async (req, res, next) => {
 
     let whereClause = 'WHERE 1=1'
     const params = []
+
+    // [company-iso] 2026-09-11 读隔离：企业管理员限本企业；孵化器非超管仅本孵化器
+    const __scope = await getCompanyScope(req)
+    if (__scope.kind === 'company-manage') {
+      whereClause += ' AND t.company_id = ?'
+      params.push(__scope.companyId)
+    } else if (__scope.kind === 'incubator') {
+      whereClause += ' AND t.company_id IS NULL'
+    }
 
     if (status && status !== 'all') {
       whereClause += ' AND t.status = ?'
@@ -412,6 +429,15 @@ router.get('/team', async (req, res, next) => {
     let whereClause = `WHERE (t.assigned_to IN (${placeholders}) OR t.assigned_by = ?)`
     const params = [...myAndSubIds, req.user.id]
 
+    // [company-iso] 2026-09-11 读隔离：企业管理员限本企业；孵化器非超管仅本孵化器（上下级链理论同企业，此处硬闸兜底）
+    const __scope = await getCompanyScope(req)
+    if (__scope.kind === 'company-manage') {
+      whereClause += ' AND t.company_id = ?'
+      params.push(__scope.companyId)
+    } else if (__scope.kind === 'incubator') {
+      whereClause += ' AND t.company_id IS NULL'
+    }
+
     if (status && status !== 'all') {
       whereClause += ' AND t.status = ?'
       params.push(status)
@@ -505,6 +531,20 @@ router.get('/:id', async (req, res, next) => {
     const hasAccess = await canAccessTask(req.user.id, req.user.role, taskId)
     if (!hasAccess) {
       return res.status(403).json({ code: 403, message: '无权访问此任务' })
+    }
+
+    // [company-iso] 2026-09-11 读隔离：canAccessTask 对 role=admin 恒真，企业管理员可按 ID 盲看任何任务，此处补归属硬闸
+    const __scope = await getCompanyScope(req)
+    let __isoOk = true
+    if (__scope.kind === 'company-manage') {
+      __isoOk = task.company_id === __scope.companyId
+    } else if (__scope.kind === 'incubator') {
+      __isoOk = task.company_id == null
+    } else if (__scope.kind === 'company-self') {
+      __isoOk = task.assigned_to === req.user.id || task.assigned_by === req.user.id
+    }
+    if (!__isoOk) {
+      return res.status(404).json({ code: 404, message: '任务不存在' })
     }
 
     // Get attachments

@@ -487,7 +487,26 @@ router.get('/', async (req, res, next) => {
     } = req.query;
     
     // 默认类型：根据角色决定
-    const logType = type || (isAdmin ? 'all' : 'mine');
+    let logType = type || (isAdmin ? 'all' : 'mine');
+
+    // [company-iso] 2026-09-11 读隔离：企业作用域滤网（用户拍板：received 收件箱也按企业过滤）
+    const __scope = await getCompanyScope(req);
+    let __isoSql = '';
+    let __isoParam;
+    if (__scope.kind === 'company-manage') {
+      __isoSql = ' AND wl.company_id = ?';
+      __isoParam = __scope.companyId;
+    } else if (__scope.kind === 'incubator') {
+      __isoSql = ' AND wl.company_id IS NULL';
+    } else if (__scope.kind === 'company-self') {
+      // 企业普通员工：all/subordinate 降级为 mine；received 仅本企业
+      if (logType === 'all' || logType === 'subordinate') {
+        logType = 'mine';
+      } else if (logType === 'received') {
+        __isoSql = ' AND wl.company_id = ?';
+        __isoParam = __scope.companyId;
+      }
+    }
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
@@ -511,6 +530,12 @@ router.get('/', async (req, res, next) => {
       WHERE 1=1
     `;
     const params = [req.user.id, req.user.id];
+
+    // [company-iso] 作用域滤网置于类型分支之前，保证参数顺序一致
+    sql += __isoSql;
+    if (__isoParam !== undefined) {
+      params.push(__isoParam);
+    }
 
     // Filter by type
     if (logType === 'mine') {
@@ -608,7 +633,13 @@ router.get('/', async (req, res, next) => {
       countParams.push(uniqueIds);
     }
     // 'all' has no additional filter
-    
+
+    // [company-iso] 与主查询保持同一作用域滤网
+    countSql += __isoSql;
+    if (__isoParam !== undefined) {
+      countParams.push(__isoParam);
+    }
+
     if (status) {
       countSql += ' AND wl.status = ?';
       countParams.push(status);
@@ -665,14 +696,28 @@ router.get('/today-summary', async (req, res, next) => {
   try {
     const today = new Date().toISOString().slice(0, 10);
 
+    // [company-iso] 2026-09-11 读隔离：统计范围按作用域收窄
+    const __scope = await getCompanyScope(req);
+    let __isoSql = '';
+    const __params = [today];
+    if (__scope.kind === 'company-manage') {
+      __isoSql = ' AND u.company_id = ?';
+      __params.push(__scope.companyId);
+    } else if (__scope.kind === 'incubator') {
+      __isoSql = ' AND u.company_id IS NULL';
+    } else if (__scope.kind === 'company-self') {
+      __isoSql = ' AND u.id = ?';
+      __params.push(req.user.id);
+    }
+
     const [[summary]] = await pool.query(`
       SELECT
         COUNT(DISTINCT u.id) as total_employees,
         COUNT(DISTINCT w.user_id) as submitted_count
       FROM users u
       LEFT JOIN work_logs w ON u.id = w.user_id AND w.submit_date = ?
-      WHERE u.status = 'active' AND u.require_worklog = 1
-    `, [today]);
+      WHERE u.status = 'active' AND u.require_worklog = 1 ${__isoSql}
+    `, __params);
 
     res.json({ code: 0, data: summary });
   } catch (err) { next(err); }
@@ -726,9 +771,24 @@ router.get('/:id', async (req, res, next) => {
     log.creator_department = log.creator_department || '';
 
     // Check permission: creator or recipient or admin
+    // [company-iso] 2026-09-11 读隔离：原仅 role 判断，企业管理员(role=admin)可按 ID 盲读任意日志，改为作用域感知
+    // 注意 safeParse 默认值必须为数组：recipients 为 NULL 时 {} 无 .includes 会 500
     const isAdmin = [ROLES.ADMIN, ROLES.MANAGER, ROLES.DIRECTOR].includes(req.user.role);
-    const recipients = safeParse(log.recipients);
-    if (!isAdmin && log.user_id !== req.user.id && !recipients.includes(req.user.id)) {
+    const recipients = safeParse(log.recipients, []);
+    const __isPersonal = log.user_id === req.user.id || recipients.includes(req.user.id);
+    const __scope = await getCompanyScope(req);
+    let __allowed;
+    if (__scope.kind === 'global') {
+      __allowed = __isPersonal || isAdmin;
+    } else if (__scope.kind === 'incubator') {
+      __allowed = __isPersonal || (isAdmin && log.company_id == null);
+    } else if (__scope.kind === 'company-manage') {
+      __allowed = __isPersonal || log.company_id === __scope.companyId;
+    } else {
+      // company-self：仅本人相关
+      __allowed = __isPersonal;
+    }
+    if (!__allowed) {
       return res.status(403).json({
         code: 403,
         message: 'Access denied'
@@ -1085,7 +1145,7 @@ router.get('/:id/interactions', requirePermission('work_log:read'), async (req, 
 
     // Check if log exists
     const [logs] = await pool.query(
-      'SELECT id, user_id, recipients FROM work_logs WHERE id = ?',
+      'SELECT id, user_id, recipients, company_id FROM work_logs WHERE id = ?',
       [id]
     );
 
@@ -1093,6 +1153,26 @@ router.get('/:id/interactions', requirePermission('work_log:read'), async (req, 
       return res.status(404).json({
         code: 404,
         message: 'Work log not found'
+      });
+    }
+
+    // [company-iso] 2026-09-11 读隔离：互动(评论/点赞)保持"作用域内全员可见"原语义，
+    // 但跨作用域（企业↔孵化器/他企业）一律拒绝
+    const __lg = logs[0];
+    const __scope = await getCompanyScope(req);
+    let __allowed = true;
+    if (__scope.kind === 'incubator') {
+      __allowed = __lg.company_id == null;
+    } else if (__scope.kind === 'company-manage') {
+      __allowed = __lg.company_id === __scope.companyId;
+    } else if (__scope.kind === 'company-self') {
+      const __recipients = safeParse(__lg.recipients, []);
+      __allowed = __lg.user_id === req.user.id || __recipients.includes(req.user.id) || __lg.company_id === __scope.companyId;
+    }
+    if (!__allowed) {
+      return res.status(403).json({
+        code: 403,
+        message: 'Access denied'
       });
     }
 

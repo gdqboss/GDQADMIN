@@ -2,12 +2,12 @@
  * 企业作用域工具（多企业隔离 · 2026-09-11）
  *
  * 语义（用户已确认）：
- *  - 无 company_id 的用户（孵化器内部）= incubator 作用域，不注入任何过滤（零回归）
+ *  - 无 company_id + is_super_admin（role=admin/superuser）= global：孵化器超管，跨企业全量可见
+ *  - 无 company_id 的其他用户（孵化器内部）= incubator 作用域（读接口按 company_id IS NULL 过滤）
  *  - 有 company_id + 是公司管理员（company_admins 表）= company-manage：可见/管理本企业
  *  - 有 company_id + 普通员工 = company-self：仅本人相关（考勤/任务/日志只看自己的）
- *  - 有 company_id + role=admin/superuser 且 is_super_admin = global：跨企业可见（孵化器超管）
  *
- * 判定顺序：公司管理员 > 本人角色 > 兜底。
+ * 判定顺序：global（超管）> 公司管理员 > 本人角色 > 兜底。
  */
 import { pool } from '../db/connection.js'
 import { ROLES } from '../middleware/rbac.js'
@@ -28,16 +28,32 @@ export async function getCompanyScope(req) {
     } catch { /* 兜底失败视为无企业 */ }
   }
 
-  // 无企业 → 孵化器内部，不隔离
-  if (!companyId) {
-    return { kind: 'incubator', companyId: null }
+  // [company-iso] 2026-09-11 HK异步auth竞态兜底：HK auth.js 为 fire-and-forget 异步挂载
+  // profile（is_super_admin/company_id），业务 handler 可能先于挂载执行（HK 实测 C 段超管被误判
+  // incubator 即此因；SGP auth.js 为同步挂载不受影响）。公式与 HK auth.js 完全一致：
+  // role=admin 且 server_profile_id ∈ {NULL,1}。仅在 is_super_admin 未挂载时兜底，
+  // SGP（同步挂载）永不触发；HK 无论竞态输赢结果一致。
+  if (u.is_super_admin === undefined && !companyId && u.id) {
+    try {
+      const [[row]] = await pool.query('SELECT role, server_profile_id FROM users WHERE id = ?', [u.id])
+      if (row) {
+        u.is_super_admin = (row.role === 'admin' && (!row.server_profile_id || row.server_profile_id === 1))
+      }
+    } catch { /* 兜底失败维持 undefined → 走 incubator 兜底语义 */ }
   }
 
-  // 孵化器超管可跨企业（role admin/superuser 且 is_super_admin）
-  // 2026-09-11 修正：is_super_admin 在 SGP 本机对一切 role=admin 为 true（profile 恒=1），
-  // 企业内 admin 角色曾被误判 global。有企业归属者按定义不是孵化器超管。
+  // 孵化器超管可跨企业（role admin/superuser 且 is_super_admin 且无企业归属）
+  // 2026-09-11 修正(读隔离时发现)：原顺序 global 判断位于 !companyId 早退之后，恒不可达（死代码）——
+  // 孵化器超管一直被误判为 incubator。写隔离未暴露（global/incubator 的 companyId 同为 NULL，
+  // 写入行为相同），但 tasks/work-logs/office 读隔离滤网无 checkPerm 兜底，超管将看不到企业数据。
+  // 现将 global 判断提前：is_super_admin 且无企业归属 → global；企业内 admin 因 companyId≠NULL 被正确挡住。
   if (u.is_super_admin && !companyId) {
-    return { kind: 'global', companyId }
+    return { kind: 'global', companyId: null }
+  }
+
+  // 无企业 → 孵化器内部（未授权孵化器人员：读接口按 company_id IS NULL 过滤）
+  if (!companyId) {
+    return { kind: 'incubator', companyId: null }
   }
 
   // 企业管理员（独立表 company_admins，孵化器指派）

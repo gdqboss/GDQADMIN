@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { pool } from '../db/connection.js'
+import { getCompanyScope } from '../utils/company-scope.js'
 
 const router = Router()
 
@@ -27,6 +28,15 @@ router.get('/tasks', async (req, res, next) => {
       if (!['admin', 'superuser', 'hod', 'general_manager', 'team_leader'].includes(role)) {
         where += ' AND (t.assigned_to = ? OR t.assigned_by = ?)'
         params.push(req.user.id, req.user.id)
+      } else {
+        // [company-iso] 2026-09-11 读隔离：角色白名单对企业管理员(role=admin)失效，补企业作用域滤网
+        const __scope = await getCompanyScope(req)
+        if (__scope.kind === 'company-manage') {
+          where += ' AND t.company_id = ?'
+          params.push(__scope.companyId)
+        } else if (__scope.kind === 'incubator') {
+          where += ' AND t.company_id IS NULL'
+        }
       }
     }
 
