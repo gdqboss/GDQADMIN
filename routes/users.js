@@ -38,13 +38,18 @@ router.get('/', async (req, res, next) => {
       `SELECT u.id, u.name, u.email, u.role, u.phone, u.department, u.status, u.permissions,
               u.supplier_id, s.name as supplier_name, u.supervisor_id, u.responsibility_id,
               u.require_attendance, u.require_worklog,
-              COALESCE(u.department_id, d.id) as department_id,
-              d.name as department_name,
+              COALESCE(u.department_id, dn.id) as department_id,
+              COALESCE(dd.name, dn.name) as department_name,
               sup.name as supervisor_name, u.last_login, u.created_at
        FROM users u
        LEFT JOIN suppliers s ON u.supplier_id = s.id
        LEFT JOIN users sup ON u.supervisor_id = sup.id
-       LEFT JOIN departments d ON d.name = u.department OR d.id = u.department_id
+       -- [dept-fix 2026-09-11] 部门归属：department_id 为权威（dd），仅当无 id 时按名称兜底（dn）。
+       -- 原 OR JOIN 在 id 与名称指向不同部门时命中两行（脏 id 归错部门/重复行），且名称匹配不限
+       -- 企业作用域（多企业后同名部门会跨企业串）。dn 限同作用域（company_id NULL 安全等号）。
+       LEFT JOIN departments dd ON dd.id = u.department_id
+       LEFT JOIN departments dn ON u.department_id IS NULL
+             AND dn.name = u.department AND dn.company_id <=> u.company_id
        ORDER BY u.created_at DESC`
     )
 
