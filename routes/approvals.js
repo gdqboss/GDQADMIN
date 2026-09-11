@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { pool } from '../db/connection.js'
 import { parsePagination } from '../utils/pagination.js'
+import { PERMISSIONS, requirePermission } from '../middleware/rbac.js'
 
 const router = Router()
 
@@ -35,7 +36,8 @@ router.get('/:id', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
-router.post('/', async (req, res, next) => {
+// POST /api/approvals - 提交审批
+router.post('/', requirePermission(PERMISSIONS.APPROVALS_WRITE), async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
     await conn.beginTransaction()
@@ -61,7 +63,8 @@ router.post('/', async (req, res, next) => {
   finally { conn.release() }
 })
 
-router.put('/:id/approve', async (req, res, next) => {
+// PUT /api/approvals/:id/approve - 批准
+router.put('/:id/approve', requirePermission(PERMISSIONS.APPROVALS_WRITE), async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
     await conn.beginTransaction()
@@ -98,7 +101,8 @@ router.put('/:id/approve', async (req, res, next) => {
   finally { conn.release() }
 })
 
-router.put('/:id/reject', async (req, res, next) => {
+// PUT /api/approvals/:id/reject - 拒绝
+router.put('/:id/reject', requirePermission(PERMISSIONS.APPROVALS_WRITE), async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
     await conn.beginTransaction()
@@ -128,7 +132,8 @@ router.put('/:id/reject', async (req, res, next) => {
 })
 
 // DELETE /:id - 删除审批记录
-router.delete('/:id', async (req, res, next) => {
+// DELETE /api/approvals/:id - 删除审批
+router.delete('/:id', requirePermission(PERMISSIONS.APPROVALS_WRITE), async (req, res, next) => {
   try {
     const [[approval]] = await pool.query('SELECT * FROM approvals WHERE id = ?', [req.params.id])
     if (!approval) return res.status(404).json({ code: 404, message: '审批不存在' })

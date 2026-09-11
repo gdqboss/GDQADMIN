@@ -80,7 +80,8 @@ router.get('/', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
-router.put('/:id', async (req, res, next) => {
+// PUT /api/alerts/:id - 更新预警配置
+router.put('/:id', requirePermission(PERMISSIONS.ALERTS_WRITE), async (req, res, next) => {
   try {
     await pool.query('UPDATE stock_alerts SET handled = TRUE WHERE id = ?', [req.params.id])
     res.json({ code: 0, data: null, message: 'ok' })
@@ -89,7 +90,8 @@ router.put('/:id', async (req, res, next) => {
 
 // 删除已处理预警（波哥 2026-07-27 要求：清理历史记录用）
 // 安全约束：只允许删 handled=1 的，防止误删未处理预警
-router.delete('/:id', async (req, res, next) => {
+// DELETE /api/alerts/:id - 删除预警
+router.delete('/:id', requirePermission(PERMISSIONS.ALERTS_WRITE), async (req, res, next) => {
   try {
     const [result] = await pool.query(
       'DELETE FROM stock_alerts WHERE id = ? AND handled = 1',
@@ -102,7 +104,8 @@ router.delete('/:id', async (req, res, next) => {
 })
 
 // Check and generate alerts for all products
-router.post('/check', async (req, res, next) => {
+// POST /api/alerts/check - 手动触发预警检查
+router.post('/check', requirePermission(PERMISSIONS.ALERTS_WRITE), async (req, res, next) => {
   try {
     // 波哥 2026-07-26 规则：建议补 = MAX(0, alert_stock - 实时库存)
     const [products] = await pool.query('SELECT * FROM products WHERE stock <= alert_stock AND alert_stock > 0')
