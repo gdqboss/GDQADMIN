@@ -1,13 +1,14 @@
 /**
- * 企业作用域工具（多企业隔离 · 2026-09-11）
+ * 企业作用域工具（多企业隔离 · 2026-09-11，放权修订 2026-09-12）
  *
  * 语义（用户已确认）：
- *  - 无 company_id + is_super_admin（role=admin/superuser）= global：孵化器超管，跨企业全量可见
+ *  - 无 company_id + role=admin/superuser = global：平台管理员跨企业全量可见
+ *    （2026-09-12 放权：profile 不再限定 {NULL,1}，跨 profile 管理员/HK superuser 均为 global）
  *  - 无 company_id 的其他用户（孵化器内部）= incubator 作用域（读接口按 company_id IS NULL 过滤）
- *  - 有 company_id + 是公司管理员（company_admins 表）= company-manage：可见/管理本企业
+ *  - 有 company_id + 是公司管理员（company_admins 表，role=enterprise-admin）= company-manage：可见/管理本企业
  *  - 有 company_id + 普通员工 = company-self：仅本人相关（考勤/任务/日志只看自己的）
  *
- * 判定顺序：global（超管）> 公司管理员 > 本人角色 > 兜底。
+ * 判定顺序：global（平台管理员）> 公司管理员 > 本人角色 > 兜底。
  */
 import { pool } from '../db/connection.js'
 import { ROLES } from '../middleware/rbac.js'
@@ -19,20 +20,20 @@ import { ROLES } from '../middleware/rbac.js'
 export async function getCompanyScope(req) {
   const u = req.user || {}
   let companyId = u.company_id ?? null
+  let role = u.role ?? undefined
 
-  // 兼容HK异步auth：company_id 未预载（undefined）时主动查库兜底（一次 SELECT）
-  if (u.company_id === undefined && u.id) {
+  // 兜底查库（一次）：company_id 或 role 未预载时（HK 异步 auth / JWT 缺字段）
+  if ((u.company_id === undefined || role === undefined) && u.id) {
     try {
-      const [[row]] = await pool.query('SELECT company_id FROM users WHERE id = ?', [u.id])
-      if (row) companyId = row.company_id || null
-    } catch { /* 兜底失败视为无企业 */ }
+      const [[row]] = await pool.query('SELECT role, server_profile_id, company_id FROM users WHERE id = ?', [u.id])
+      if (row) {
+        if (u.company_id === undefined) companyId = row.company_id || null
+        if (role === undefined) role = row.role
+      }
+    } catch { /* 兜底失败按无企业/无角色处理 */ }
   }
 
-  // [company-iso] 2026-09-11 HK异步auth竞态兜底：HK auth.js 为 fire-and-forget 异步挂载
-  // profile（is_super_admin/company_id），业务 handler 可能先于挂载执行（HK 实测 C 段超管被误判
-  // incubator 即此因；SGP auth.js 为同步挂载不受影响）。公式与 HK auth.js 完全一致：
-  // role=admin 且 server_profile_id ∈ {NULL,1}。仅在 is_super_admin 未挂载时兜底，
-  // SGP（同步挂载）永不触发；HK 无论竞态输赢结果一致。
+  // [company-iso] 2026-09-12 is_super_admin 竞态兜底（保留，供其他依赖 req.user.is_super_admin 的调用方）
   if (u.is_super_admin === undefined && !companyId && u.id) {
     try {
       const [[row]] = await pool.query('SELECT role, server_profile_id FROM users WHERE id = ?', [u.id])
@@ -42,12 +43,12 @@ export async function getCompanyScope(req) {
     } catch { /* 兜底失败维持 undefined → 走 incubator 兜底语义 */ }
   }
 
-  // 孵化器超管可跨企业（role admin/superuser 且 is_super_admin 且无企业归属）
-  // 2026-09-11 修正(读隔离时发现)：原顺序 global 判断位于 !companyId 早退之后，恒不可达（死代码）——
-  // 孵化器超管一直被误判为 incubator。写隔离未暴露（global/incubator 的 companyId 同为 NULL，
-  // 写入行为相同），但 tasks/work-logs/office 读隔离滤网无 checkPerm 兜底，超管将看不到企业数据。
-  // 现将 global 判断提前：is_super_admin 且无企业归属 → global；企业内 admin 因 companyId≠NULL 被正确挡住。
-  if (u.is_super_admin && !companyId) {
+  // 孵化器超管可跨企业（admin/superuser 且无企业归属）
+  // 2026-09-12 放权（用户拍板）：profile 不再限定 {NULL,1} —— 跨 profile 管理员
+  // （江清波 HK profile=6、厉无害 HK=6、SGP profile=3 波哥团队账号）与 HK superuser
+  // 全部获得 global；不再依赖 auth 预载的 is_super_admin（双端公式不一致 + HK 异步竞态），
+  // 直接按查库/Token 的 role 判定。企业内账号（companyId 非空）不受影响。
+  if ((role === 'admin' || role === 'superuser') && !companyId) {
     return { kind: 'global', companyId: null }
   }
 
