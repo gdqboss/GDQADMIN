@@ -489,6 +489,8 @@ const ROLES = {
   REPAIRER: 'repairer',
   REVIEWER: 'reviewer',
   DISPATCHER: 'dispatcher',
+  // [company-iso] 2026-09-12 企业管理员专用角色：不进 admin 恒真捷径，权限走 rbac_role_permissions 显式配置
+  ENTERPRISE_ADMIN: 'enterprise-admin',
 }
 
 // 角色默认权限映射（可在数据库动态配置）

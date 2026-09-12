@@ -652,7 +652,7 @@ router.post('/attendance/:id/explain', async (req, res, next) => {
 })
 
 // PUT /api/oa/attendance/:id/approve - Approve abnormal attendance
-router.put('/attendance/:id/approve', requireRole(ROLES.ADMIN, ROLES.MANAGER), async (req, res, next) => {
+router.put('/attendance/:id/approve', requireRole(ROLES.ADMIN, ROLES.MANAGER, ROLES.ENTERPRISE_ADMIN), async (req, res, next) => {
   try {
     const { approved } = req.body
     const approverId = req.user.id
@@ -1147,7 +1147,7 @@ router.get('/departments', async (req, res, next) => {
 })
 
 // POST /api/oa/departments - Create department
-router.post('/departments', requireRole('admin', 'manager'), async (req, res, next) => {
+router.post('/departments', requireRole('admin', 'manager', ROLES.ENTERPRISE_ADMIN), async (req, res, next) => {
   try {
     const { name, parent_id, level, manager_id, sort_order } = req.body
     // [company-iso] 部门归属创建人企业（孵化器为 NULL）
@@ -1171,7 +1171,7 @@ router.post('/departments', requireRole('admin', 'manager'), async (req, res, ne
 })
 
 // PUT /api/oa/departments/:id - Update department
-router.put('/departments/:id', requireRole('admin', 'manager'), async (req, res, next) => {
+router.put('/departments/:id', requireRole('admin', 'manager', ROLES.ENTERPRISE_ADMIN), async (req, res, next) => {
   try {
     const { name, parent_id, level, manager_id, sort_order, status } = req.body
 
@@ -1207,7 +1207,7 @@ router.put('/departments/:id', requireRole('admin', 'manager'), async (req, res,
 })
 
 // DELETE /api/oa/departments/:id - Delete department
-router.delete('/departments/:id', requireRole('admin'), async (req, res, next) => {
+router.delete('/departments/:id', requireRole('admin', ROLES.ENTERPRISE_ADMIN), async (req, res, next) => {
   try {
     // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
     const __own = await assertRowCompany(req, 'departments', req.params.id)
