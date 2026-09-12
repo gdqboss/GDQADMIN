@@ -4,7 +4,7 @@ import { requirePermission } from '../middleware/rbac.js'
 import { parsePagination } from '../utils/pagination.js'
 import { requireRole, ROLES } from '../middleware/rbac.js'
 import { checkPerm } from '../utils/permission.js'
-import { getCompanyScope } from '../utils/company-scope.js'
+import { getCompanyScope, assertRowCompany } from '../utils/company-scope.js'
 
 const router = Router()
 
@@ -658,6 +658,10 @@ router.put('/attendance/:id/approve', requireRole(ROLES.ADMIN, ROLES.MANAGER), a
     const approverId = req.user.id
     const now = new Date()
 
+    // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
+    const __own = await assertRowCompany(req, 'attendance', req.params.id)
+    if (!__own.ok) return res.status(__own.status).json({ code: __own.status, message: __own.message })
+
     const [[record]] = await pool.query('SELECT * FROM attendance WHERE id = ?', [req.params.id])
     if (!record) {
       return res.status(404).json({ code: 404, message: '考勤记录不存在' })
@@ -1170,6 +1174,11 @@ router.post('/departments', requireRole('admin', 'manager'), async (req, res, ne
 router.put('/departments/:id', requireRole('admin', 'manager'), async (req, res, next) => {
   try {
     const { name, parent_id, level, manager_id, sort_order, status } = req.body
+
+    // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
+    const __own = await assertRowCompany(req, 'departments', req.params.id)
+    if (!__own.ok) return res.status(__own.status).json({ code: __own.status, message: __own.message })
+
     const updates = []
     const params = []
 
@@ -1200,6 +1209,10 @@ router.put('/departments/:id', requireRole('admin', 'manager'), async (req, res,
 // DELETE /api/oa/departments/:id - Delete department
 router.delete('/departments/:id', requireRole('admin'), async (req, res, next) => {
   try {
+    // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
+    const __own = await assertRowCompany(req, 'departments', req.params.id)
+    if (!__own.ok) return res.status(__own.status).json({ code: __own.status, message: __own.message })
+
     const [[dept]] = await pool.query('SELECT * FROM departments WHERE id = ?', [req.params.id])
 
     if (!dept) {
@@ -2008,10 +2021,14 @@ router.post('/leave', async (req, res, next) => {
       return res.status(400).json({ code: 400, message: '未设置上级，无法提交请假申请' })
     }
 
+    // [company-iso] 2026-09-12 写隔离补：请假记录注入企业归属（leave_records 本无 company_id 列，现已加列）
+    const __scopeLeave = await getCompanyScope(req)
+    const __cidLeave = __scopeLeave.kind === 'company-manage' || __scopeLeave.kind === 'company-self' ? __scopeLeave.companyId : null
+
     const [result] = await pool.query(
-      `INSERT INTO leave_records (user_id, type, start_date, end_date, days, reason, status, approver_id)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
-      [userId, type, start_date, end_date, days, reason, user.supervisor_id]
+      `INSERT INTO leave_records (user_id, company_id, type, start_date, end_date, days, reason, status, approver_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+      [userId, __cidLeave, type, start_date, end_date, days, reason, user.supervisor_id]
     )
 
     res.json({ code: 0, data: { id: result.insertId }, message: '请假申请已提交' })
@@ -2121,6 +2138,10 @@ router.put('/leave/:id/approve', async (req, res, next) => {
       return res.status(400).json({ code: 400, message: '拒绝时必须填写原因' })
     }
 
+    // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
+    const __own = await assertRowCompany(req, 'leave_records', id)
+    if (!__own.ok) return res.status(__own.status).json({ code: __own.status, message: __own.message })
+
     const [[leave]] = await pool.query('SELECT * FROM leave_records WHERE id = ?', [id])
     if (!leave) {
       return res.status(404).json({ code: 404, message: '请假记录不存在' })
@@ -2151,6 +2172,10 @@ router.delete('/leave/:id', async (req, res, next) => {
   try {
     const { id } = req.params
     const userId = req.user.id
+
+    // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
+    const __own = await assertRowCompany(req, 'leave_records', id)
+    if (!__own.ok) return res.status(__own.status).json({ code: __own.status, message: __own.message })
 
     const [[leave]] = await pool.query('SELECT * FROM leave_records WHERE id = ?', [id])
     if (!leave) {
@@ -2211,10 +2236,14 @@ router.post('/overtime', async (req, res, next) => {
 
     const approvalId = approvalResult.insertId
 
+    // [company-iso] 2026-09-12 写隔离补：加班记录注入企业归属（overtime_records 本无 company_id 列，现已加列）
+    const __scopeOt = await getCompanyScope(req)
+    const __cidOt = __scopeOt.kind === 'company-manage' || __scopeOt.kind === 'company-self' ? __scopeOt.companyId : null
+
     const [result] = await pool.query(
-      `INSERT INTO overtime_records (user_id, jobsite_id, start_time, end_time, hours, reason, status, approver_id, approval_id)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
-      [userId, jobsite_id || null, start_time, end_time, hours, reason, user.supervisor_id, approvalId]
+      `INSERT INTO overtime_records (user_id, company_id, jobsite_id, start_time, end_time, hours, reason, status, approver_id, approval_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+      [userId, __cidOt, jobsite_id || null, start_time, end_time, hours, reason, user.supervisor_id, approvalId]
     )
 
     res.json({ code: 0, data: { id: result.insertId, approval_id: approvalId }, message: '加班申请已提交' })
@@ -2279,6 +2308,10 @@ router.put('/overtime/:id/approve', async (req, res, next) => {
       return res.status(400).json({ code: 400, message: '拒绝时必须填写原因' })
     }
 
+    // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
+    const __own = await assertRowCompany(req, 'overtime_records', id)
+    if (!__own.ok) return res.status(__own.status).json({ code: __own.status, message: __own.message })
+
     const [[ot]] = await pool.query('SELECT * FROM overtime_records WHERE id = ?', [id])
     if (!ot) {
       return res.status(404).json({ code: 404, message: '加班记录不存在' })
@@ -2324,6 +2357,10 @@ router.delete('/overtime/:id', async (req, res, next) => {
   try {
     const { id } = req.params
     const userId = req.user.id
+
+    // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
+    const __own = await assertRowCompany(req, 'overtime_records', id)
+    if (!__own.ok) return res.status(__own.status).json({ code: __own.status, message: __own.message })
 
     const [[ot]] = await pool.query('SELECT * FROM overtime_records WHERE id = ?', [id])
     if (!ot) {

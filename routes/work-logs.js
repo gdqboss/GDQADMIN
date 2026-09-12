@@ -3,7 +3,7 @@ import { pool } from '../db/connection.js';
 import { auth } from '../middleware/auth.js';
 import { PERMISSIONS, ROLES, requirePermission, requireRole } from '../middleware/rbac.js';
 import { checkPerm } from '../utils/permission.js';
-import { getCompanyScope } from '../utils/company-scope.js';
+import { getCompanyScope, assertRowCompany } from '../utils/company-scope.js';
 
 const router = express.Router();
 
@@ -875,6 +875,10 @@ router.put('/:id', async (req, res, next) => {
     const { id } = req.params;
     const { content, recipients, attachments, status } = req.body;
 
+    // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
+    const __own = await assertRowCompany(req, 'work_logs', id);
+    if (!__own.ok) return res.status(__own.status).json({ code: __own.status, message: __own.message });
+
     // Check if log exists and is owned by user
     const [logs] = await pool.query(
       'SELECT user_id, status FROM work_logs WHERE id = ?',
@@ -962,6 +966,10 @@ router.put('/:id', async (req, res, next) => {
 router.delete('/:id', requirePermission(PERMISSIONS.WORK_LOG_WRITE), async (req, res, next) => {
   try {
     const { id } = req.params;
+
+    // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
+    const __own = await assertRowCompany(req, 'work_logs', id);
+    if (!__own.ok) return res.status(__own.status).json({ code: __own.status, message: __own.message });
 
     // Check if log exists and is owned by user
     const [logs] = await pool.query(
@@ -1334,6 +1342,10 @@ router.patch('/:id/review', requireRole(ROLES.ADMIN, ROLES.MANAGER, ROLES.DIRECT
         message: 'status 必须是 approved / rejected / submitted'
       });
     }
+
+    // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
+    const __own = await assertRowCompany(req, 'work_logs', id);
+    if (!__own.ok) return res.status(__own.status).json({ code: __own.status, message: __own.message });
 
     // 校验日志存在
     const [logs] = await pool.query(

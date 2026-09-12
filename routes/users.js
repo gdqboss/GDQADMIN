@@ -4,7 +4,7 @@ import { auth } from '../middleware/auth.js'
 import { pool } from '../db/connection.js'
 import { checkPerm } from '../utils/permission.js'
 import { ROLES } from '../middleware/rbac.js'
-import { getCompanyScope } from '../utils/company-scope.js'
+import { getCompanyScope, assertRowCompany } from '../utils/company-scope.js'
 
 const router = Router()
 
@@ -309,6 +309,10 @@ router.put('/:id', async (req, res, next) => {
       return res.status(400).json({ code: 400, message: '无效的用户 ID' })
     }
 
+    // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
+    const __own = await assertRowCompany(req, 'users', id)
+    if (!__own.ok) { conn.release(); return res.status(__own.status).json({ code: __own.status, message: __own.message }) }
+
     // ── 1. 字段白名单解构（只接受这 30+ 个字段，其他直接忽略，杜绝静默成功） ──
     const {
       name, role, department, department_id, status, permissions, password, phone,
@@ -503,6 +507,10 @@ router.put('/:id/approve', async (req, res, next) => {
     const userId = req.params.id
     const approverId = req.user.id
 
+    // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
+    const __own = await assertRowCompany(req, 'users', userId)
+    if (!__own.ok) return res.status(__own.status).json({ code: __own.status, message: __own.message })
+
     // 检查用户是否存在且状态为pending
     const [[user]] = await pool.query('SELECT id, status FROM users WHERE id = ?', [userId])
     if (!user) {
@@ -534,6 +542,10 @@ router.put('/:id/reject', async (req, res, next) => {
     if (!reason) {
       return res.status(400).json({ code: 400, message: '请填写拒绝原因' })
     }
+
+    // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
+    const __own = await assertRowCompany(req, 'users', userId)
+    if (!__own.ok) return res.status(__own.status).json({ code: __own.status, message: __own.message })
 
     // 检查用户是否存在且状态为pending
     const [[user]] = await pool.query('SELECT id, status FROM users WHERE id = ?', [userId])
@@ -567,6 +579,10 @@ router.delete('/:id', async (req, res, next) => {
       await conn.release()
       return res.status(403).json({ code: 403, message: '只有超级管理员可以删除用户' })
     }
+
+    // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
+    const __own = await assertRowCompany(req, 'users', userId)
+    if (!__own.ok) { conn.release(); return res.status(__own.status).json({ code: __own.status, message: __own.message }) }
 
     // 不能删除自己
     if (userId === req.user.id) {

@@ -109,4 +109,32 @@ export async function companyWhere(scope, currentUserId, alias = 'u') {
   return { sql: ` AND ${pf} = ?`, params: [currentUserId] }
 }
 
-export default { getCompanyScope, scopeUserIds, companyWhere }
+/**
+ * [company-iso] 2026-09-12 按主键写接口（PUT/DELETE/PATCH）的跨企业归属守卫
+ *
+ * 只做"归属防线"：global 放行；incubator 仅 NULL 记录；企业用户仅本企业记录。
+ * 接口原有的业务权限逻辑（本人/收件人/角色审批等）保持不变——守卫只多挡跨企业，不放松任何原规则。
+ *
+ * @param {Request} req
+ * @param {string} table 表名（调用方传固定字面量，本函数不做白名单校验）
+ * @param {number} rowId 记录主键
+ * @returns {Promise<{ok: boolean, status?: number, message?: string, row?: object, scope: object}>}
+ *   ok=true 放行；ok=false 时调用方 res.status(status).json({code, message})
+ */
+export async function assertRowCompany(req, table, rowId) {
+  const scope = await getCompanyScope(req)
+  if (scope.kind === 'global') return { ok: true, scope }
+  const [[row]] = await pool.query(`SELECT company_id AS cid FROM ${table} WHERE id = ?`, [rowId])
+  if (!row) return { ok: false, status: 404, message: '记录不存在', scope }
+  if (scope.kind === 'incubator') {
+    return row.cid == null
+      ? { ok: true, row, scope }
+      : { ok: false, status: 403, message: '无权操作该记录', scope }
+  }
+  // company-manage / company-self：仅本企业记录
+  return row.cid === scope.companyId
+    ? { ok: true, row, scope }
+    : { ok: false, status: 403, message: '无权操作该记录', scope }
+}
+
+export default { getCompanyScope, scopeUserIds, companyWhere, assertRowCompany }

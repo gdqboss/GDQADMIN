@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { pool } from '../db/connection.js'
 import { checkPerm } from '../utils/permission.js'
 import { ROLES, PERMISSIONS, requirePermission } from '../middleware/rbac.js'
-import { getCompanyScope } from '../utils/company-scope.js'
+import { getCompanyScope, assertRowCompany } from '../utils/company-scope.js'
 
 const router = Router()
 
@@ -600,7 +600,12 @@ router.post('/', requirePermission(PERMISSIONS.TASKS_CREATE), async (req, res, n
 router.put('/:id', requirePermission(PERMISSIONS.TASKS_WRITE), async (req, res, next) => {
   try {
     const taskId = req.params.id
-    const { title, content, assigned_to, scheduled_date, due_date, priority, status } = req.body
+    // [company-iso] 2026-09-12 顺带修复存量 bug：原解构漏 jobsite_id，624 行引用必 ReferenceError（任何 PUT /:id 必 500）
+    const { title, content, assigned_to, scheduled_date, due_date, priority, status, jobsite_id } = req.body
+
+    // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
+    const __own = await assertRowCompany(req, 'tasks', taskId)
+    if (!__own.ok) return res.status(__own.status).json({ code: __own.status, message: __own.message })
 
     // Check if task exists and user has permission
     const [[task]] = await pool.query('SELECT assigned_by, status FROM tasks WHERE id = ?', [taskId])
@@ -641,6 +646,10 @@ router.put('/:id/submit', requirePermission(PERMISSIONS.TASKS_WRITE), async (req
     const taskId = req.params.id
     const { completion_notes, completion_note, attachments } = req.body
     const finalNote = completion_notes || completion_note || '' // 兼容两种命名
+
+    // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
+    const __own = await assertRowCompany(req, 'tasks', taskId)
+    if (!__own.ok) return res.status(__own.status).json({ code: __own.status, message: __own.message })
 
     const [[task]] = await pool.query(
       'SELECT assigned_to, status FROM tasks WHERE id = ?',
@@ -708,6 +717,10 @@ router.put('/:id/complete', requirePermission(PERMISSIONS.TASKS_APPROVE), async 
     const taskId = req.params.id
     const { review_note } = req.body
 
+    // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
+    const __own = await assertRowCompany(req, 'tasks', taskId)
+    if (!__own.ok) return res.status(__own.status).json({ code: __own.status, message: __own.message })
+
     const [[task]] = await pool.query(
       'SELECT assigned_by, status FROM tasks WHERE id = ?',
       [taskId]
@@ -750,6 +763,10 @@ router.put('/:id/reject', async (req, res, next) => {
       return res.status(400).json({ code: 400, message: '请填写驳回原因' })
     }
 
+    // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
+    const __own = await assertRowCompany(req, 'tasks', taskId)
+    if (!__own.ok) return res.status(__own.status).json({ code: __own.status, message: __own.message })
+
     const [[task]] = await pool.query(
       'SELECT assigned_by, status FROM tasks WHERE id = ?',
       [taskId]
@@ -790,6 +807,10 @@ router.put('/:id/review', requirePermission(PERMISSIONS.TASKS_APPROVE), async (r
     if (!['approve', 'reject'].includes(action)) {
       return res.status(400).json({ code: 400, message: '无效的审核操作' })
     }
+
+    // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
+    const __own = await assertRowCompany(req, 'tasks', taskId)
+    if (!__own.ok) return res.status(__own.status).json({ code: __own.status, message: __own.message })
 
     // 检查任务是否存在且为submitted状态
     const [[task]] = await pool.query(
@@ -833,6 +854,10 @@ router.put('/:id/review', requirePermission(PERMISSIONS.TASKS_APPROVE), async (r
 router.delete('/:id', requirePermission(PERMISSIONS.TASKS_DELETE), async (req, res, next) => {
   try {
     const taskId = req.params.id
+
+    // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
+    const __own = await assertRowCompany(req, 'tasks', taskId)
+    if (!__own.ok) return res.status(__own.status).json({ code: __own.status, message: __own.message })
 
     const [[task]] = await pool.query(
       'SELECT assigned_by FROM tasks WHERE id = ?',
