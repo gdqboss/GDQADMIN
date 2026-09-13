@@ -647,16 +647,34 @@ router.post('/workbuddy-token', loginLimiter, async (req, res, next) => {
     // 长期有效: 默认 365 天, 范围 1-3650 天 (10年), 传 0 或负数 = 用默认
     const days = Math.max(1, Math.min(3650, parseInt(expires_days) || 365))
 
-    // 查找用户 — 支持手机号/邮箱
+    // 查找用户 — 2026-09-13 扩 H5: 先查 users (staff 内网), 再查 h5_users (H5 外部用户)
+    // 两个表结构平行 (id/name/phone/password/role/status) 但完全独立, 不能 JOIN
     const isEmail = login_key.includes('@')
-    const [users] = await pool.query(
-      isEmail
-        ? 'SELECT id, name, phone, email, password, role, user_type, status FROM users WHERE email = ? LIMIT 1'
-        : 'SELECT id, name, phone, email, password, role, user_type, status FROM users WHERE phone = ? LIMIT 1',
-      [login_key]
-    )
-    if (!users.length) return res.status(401).json({ code: 401, message: '账号或密码错误' })
-    const user = users[0]
+    let user = null
+    let userSource = null // 'staff' | 'h5'
+    if (isEmail) {
+      // email 字段只有 users 表有, h5_users 没 email 列
+      const [rows] = await pool.query(
+        'SELECT id, name, phone, email, password, role, user_type, status FROM users WHERE email = ? LIMIT 1',
+        [login_key]
+      )
+      if (rows.length) { user = rows[0]; userSource = 'staff' }
+    } else {
+      // phone 同时存在两张表 — 先 staff, 找不到再 h5
+      const [staffRows] = await pool.query(
+        'SELECT id, name, phone, email, password, role, user_type, status FROM users WHERE phone = ? LIMIT 1',
+        [login_key]
+      )
+      if (staffRows.length) { user = staffRows[0]; userSource = 'staff' }
+      else {
+        const [h5Rows] = await pool.query(
+          'SELECT id, name, phone, password, role, status FROM h5_users WHERE phone = ? LIMIT 1',
+          [login_key]
+        )
+        if (h5Rows.length) { user = h5Rows[0]; userSource = 'h5' }
+      }
+    }
+    if (!user) return res.status(401).json({ code: 401, message: '账号或密码错误' })
 
     // 状态校验
     if (user.status === 'disabled') {
@@ -670,10 +688,10 @@ router.post('/workbuddy-token', loginLimiter, async (req, res, next) => {
     const valid = await bcrypt.compare(password, user.password)
     if (!valid) return res.status(401).json({ code: 401, message: '账号或密码错误' })
 
-    // 生成短期 JWT (days 天过期)
+    // 生成短期 JWT (days 天过期) — 2026-09-13 加 user_source 让 middleware 知道去哪查 status
     const expiresIn = `${days}d`
     const token = jwt.sign(
-      { id: user.id, name: user.name, role: user.role, kind: 'workbuddy' },
+      { id: user.id, name: user.name, role: user.role, kind: 'workbuddy', user_source: userSource },
       process.env.JWT_SECRET,
       { expiresIn }
     )
@@ -686,8 +704,9 @@ router.post('/workbuddy-token', loginLimiter, async (req, res, next) => {
     const tokenHash = hashToken(token)
     const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000)
     const device = extractDevice(req)
+    // 2026-09-13 江小鱼 fix: user_sessions 表无 login_at 列 (只有 created_at + last_active_at), 改用 created_at NOW() 兼 INSERT ON DUPLICATE 续期
     pool.query(
-      `INSERT INTO user_sessions (user_id, token_hash, device_label, device_fingerprint, ip, user_agent, login_at, last_active_at, invalidated)
+      `INSERT INTO user_sessions (user_id, token_hash, device_label, device_fingerprint, ip, user_agent, created_at, last_active_at, invalidated)
        VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW(), 0)
        ON DUPLICATE KEY UPDATE last_active_at = NOW()`,
       [user.id, tokenHash, `WorkBuddy-${device.label}`, device.fingerprint, device.ip, device.ua]
@@ -701,6 +720,7 @@ router.post('/workbuddy-token', loginLimiter, async (req, res, next) => {
         user_id: user.id,
         name: user.name,
         role: user.role,
+        user_source: userSource, // 2026-09-13 加: 'staff' 内网 / 'h5' 外部, 方便 APP 端分流
         permissions,
         server_url: `${req.protocol}://${req.get('host')}`,
         expires_at: expiresAt.toISOString(),
