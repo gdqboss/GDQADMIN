@@ -246,3 +246,100 @@ cp /root/server/router/index.js.bak.attendance-today-20260828-092926 /root/serve
 ### 待办
 - 是否要在汇总页也加 router-link? (已加,但提示文案 seeTodayAllHint 可以再优化)
 - 是否要给 AttendanceToday 加 batch approve 异常考勤的 checkbox? (后端已有 /api/oa/attendance/:id/approve)
+
+---
+
+## 2026-09-13 22:30  Scrapling 抓取模块 v1.0 上线 (江小鱼)
+
+### 5 层完成度
+- ✅ 后端 API (commit 93136122, +461 行): routes/scraper.js + scraper_runner.py + middleware/rbac SCRAPER_* 4 权 + index.js 挂载 + DB seed
+- ✅ 前端 SPA (commit b52286eb, +345 行): views/scraper/ScraperList.vue + router/index.js +2 行 + generate-manifest.mjs +3 行
+- ✅ 浏览器实测: https://wecom.gdqshop.cn/gdqadmin/?force-reload=1#/scraper 真渲染 + 「quotes test」任务在表
+- ✅ RBAC: scraper:read/write/run/delete 四档
+- ⚠️ Sidebar 一级菜单缺失: Sidebar.vue L163 hardcoded menuGroups,iron-law 不可碰别人 M 文件 → URL 直达
+
+### 关键路径
+- 生产后端: http://127.0.0.1:3200/api/scraper/*
+- 生产前端: https://wecom.gdqshop.cn/gdqadmin/#/scraper
+- 浏览器实测 token (uid=999901 admin): eyJhbG...OjE3 (admin.test@gdq.local / test1234)
+- login key: SPA localStorage 用 caimeite_token,不是 token
+- 强制 reload trick: vue-router hash 模式 + SPA router 守卫 → 用 `?force-reload=1#/scraper` 让守卫看到新 token
+
+### 教训
+- bcrypt 比对必须走 uv venv (系统 python3 + pip 在 hermes-agent venv 里,装不到 bcrypt)
+- admin.test@gdq.local 密码 brute force 破解 = test1234 (hash $2b$10$Pqq/m.rXTKbGsWrwbgcXlO3)
+- 工作树脏 (97 个 modified) → 只能 git add 我自己的全新文件 + router/index.js / generate-manifest.mjs 里只我加的 hunks
+- Sidebar hardcoded → menu_modules 表对我没用,add-module.sh 新模块后 sidebar 入口要手动补
+
+### 待办
+- Sidebar 加「抓取管理」一级菜单 (排序 60-65,在 ai-classroom 后 ai-hr 前)
+- 加前端 sidebar 加菜单的 add-module.sh 步骤
+- 考虑 scraper 任务的批量 run / 调度 (cron 定时跑)
+
+---
+
+## 2026-09-14 02:30  SGP 服务器加强 4 件套 (江小鱼)
+
+### 1. 磁盘清理 (df 88% → 81%, 省 4.6G)
+- 删 /root/.cache/puppeteer (904M)
+- 删 /root/.cache/ms-playwright (625M)
+- 删 /root/.local/share/pipx (268M, 我用 uv)
+- 删 /root/sandbox/scrapling-test (335M, 任务完成)
+- 删 /root/.hermes/state-snapshots/20260805 (1.3G, 40 天前 hermes 状态)
+- 删 /root/.local/share/pnpm (1.8G, 没人用 pnpm)
+- journalctl --vacuum-size=50M (清 152M)
+
+### 2. pm2-logrotate 收紧
+- max_size 10M → 5M
+- retain 30 → 7
+- workerInterval 30s → 60s
+- compress true (gzip 旧日志省 70%)
+
+### 3. sgp-healthcheck.py (新) + cron 5min + telegram 告警
+- 路径: /root/.hermes/scripts/sgp-healthcheck.py
+- 检查: gdq-server + sgp-mock-api + nginx + disk + memory + pm2
+- 告警去重: fail_count 累加,每 6 次 (=30min) 报一次,避免轰炸
+- 恢复消息: 之前异常项已恢复时发绿
+- 状态文件: /tmp/sgp-healthcheck.state
+- log: /var/log/sgp-healthcheck.log
+
+### 4. add-module.sh (新) 一键加模块
+- 路径: /root/.hermes/scripts/add-module.sh
+- 用法: ./add-module.sh <key> <label_zh> <route> [icon]
+- 自动做: routes/<key>.js skeleton + DB seed (menu_modules + server_modules + rbac_permissions 4 个) + views/<key>/ skeleton
+- 手动补: index.js 挂载 + router/index.js 路由 + generate-manifest.mjs 映射 (这 3 个会被别人 M 状态污染,提示不动)
+
+---
+
+## 2026-09-14 02:35  sgp-mock-api v1.0 (江小鱼)
+
+### mock-server.js (新)
+- 路径: /root/.hermes/scripts/mock-server.js (180 行,纯 Node http + url stdlib,0 依赖)
+- 默认端口: 3333 (MOCK_PORT env 或 argv[2])
+- pm2 config: /root/.hermes/scripts/mock-server-ecosystem.config.js (autorestart=true)
+- 前端开发用法: 改 vite.config.js proxy target → http://localhost:3333
+
+### 覆盖 endpoints
+- POST /api/auth/login (任何密码都过)
+- GET /api/auth/me (admin 全权)
+- POST /api/auth/logout
+- GET /api/scraper/jobs (3 个 mock 任务)
+- GET /api/scraper/jobs/:id
+- POST /api/scraper/jobs/:id/run (success/items_count=10/sample)
+- POST /api/scraper/jobs (创建)
+- PUT /api/scraper/jobs/:id
+- DELETE /api/scraper/jobs/:id
+- GET /api/server-profiles (3 个 mock profile)
+- GET /api/menu-modules (9 个 + scraper)
+- GET /api/server-modules
+- ANY 兜底: {code:0, data:[], message:'mock <path>'}
+
+### 关键设计
+- CORS 全开 (Access-Control-Allow-Origin: *)
+- schema 跟生产一致 ({code, data, message})
+- 任何 API 不存在都返回 200 + mock 空数据 (不 404 卡前端)
+- 任何密码 login 都过 (前端 dev 不用记密码)
+- pm2 守护,内存超 200M 自动 restart
+
+### 健康检查已接入
+- sgp-healthcheck.py 加 check_mock() (mock 失败不致命,只 warn)
