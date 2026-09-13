@@ -125,6 +125,8 @@ const routes = [
       // ── 预约 ────────────────────────────────────────────────
       { path: 'yuyue', name: 'YuyueList', component: lazyLoad(() => import('../views/yuyue/YuyueList.vue')), meta: { title: '预约管理', permission: 'yuyue:read' } },
       { path: 'yuyue/:id', name: 'YuyueDetail', component: lazyLoad(() => import('../views/yuyue/YuyueDetail.vue')), meta: { title: '预约详情', permission: 'yuyue:read' } },
+      // ── Scrapling 抓取 (2026-09-13 江小鱼加) ─────────────
+      { path: 'scraper', name: 'ScraperList', component: lazyLoad(() => import('../views/scraper/ScraperList.vue')), meta: { title: '抓取管理', permission: 'scraper:read' } },
       { path: 'articles', name: 'ArticleList', component: lazyLoad(() => import('../views/articles/ArticleList.vue')), meta: { title: '文章管理', parent: '商城', permission: 'articles:read' } },
       { path: 'articles/new', name: 'ArticleNew', component: lazyLoad(() => import('../views/articles/ArticleDetail.vue')), meta: { title: '新增文章', parent: '商城', permission: 'articles:write' } },
       { path: 'articles/:id', name: 'ArticleDetail', component: lazyLoad(() => import('../views/articles/ArticleDetail.vue')), meta: { title: '文章详情', parent: '商城', permission: 'articles:read' } },

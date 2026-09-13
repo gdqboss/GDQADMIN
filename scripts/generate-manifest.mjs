@@ -186,6 +186,9 @@ const pageToModule = {
   // 文章
   'ArticleList':      'article',
   'ArticleDetail':    'article',
+
+  // Scrapling 抓取 (2026-09-13 江小鱼加)
+  'ScraperList':      'scraper',
 }
 
 // 共享chunk（每次构建都变，不能按需）
