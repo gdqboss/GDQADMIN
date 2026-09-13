@@ -142,6 +142,7 @@ import restaurantRoutes from './routes/restaurant.js'
 import hotelRoutes from './routes/hotel.js'
 import logisticsRoutes from './routes/logistics.js'
 import articleRoutes from './routes/articles.js'
+import scraperRoutes from './routes/scraper.js' // 2026-09-13 Scrapling 抓取模块
 import yuyueRoutes from './routes/yuyue.js'
 import scoreShopRoutes from './routes/score_shop.js'
 import couponRoutes from './routes/coupon.js'
@@ -513,6 +514,7 @@ app.use('/api/restaurant', auth, apiLimiter, restaurantRoutes)
 app.use('/api/hotel', auth, apiLimiter, hotelRoutes)
 app.use('/api/logistics', auth, apiLimiter, logisticsRoutes)
 app.use('/api/article', auth, apiLimiter, articleRoutes)
+app.use('/api/scraper', auth, apiLimiter, scraperRoutes) // 2026-09-13 Scrapling 抓取模块
 app.use('/api/yuyue', auth, apiLimiter, yuyueRoutes)
 app.use('/api/score-shop', auth, apiLimiter, scoreShopRoutes)
 app.use('/api/seckill', auth, apiLimiter, seckillRoutes)

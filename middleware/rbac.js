@@ -49,6 +49,12 @@ const PERMISSIONS = {
   QRCODE_DELETE: 'qrcode:delete',
   QRCODE_SCAN: 'qrcode:scan',  // 扫码查询（销售员/仓库员扫码核验商品信息）
 
+  // Scrapling 抓取 (2026-09-13 江小鱼加)
+  SCRAPER_READ:   'scraper:read',
+  SCRAPER_WRITE:  'scraper:write',
+  SCRAPER_RUN:    'scraper:run',
+  SCRAPER_DELETE: 'scraper:delete',
+
   // 库存盘点
   STOCKTAKE_RUN: 'stocktake:run',      // 执行盘点（提交盘点结果）
   STOCKTAKE_REPORT: 'stocktake:report', // 查看盘点报告
