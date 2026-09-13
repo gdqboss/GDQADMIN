@@ -450,6 +450,9 @@ router.post('/attendance/trip-clock', async (req, res, next) => {
     const today = new Date().toISOString().slice(0, 10)
     const now = new Date()
     const timeStr = now.toTimeString().slice(0, 8)
+    // 2026-09-13 江小鱼 fix: 出差打卡 500 — realIp 在 /attendance/clock 路由里是局部变量, trip-clock 路由没有声明 → ReferenceError → next(err) → 500. 跟 /attendance/clock 同样取服务端可信 IP
+    const cfIP = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
+    const realIp = cfIP || req.socket?.remoteAddress?.replace('::ffff:', '') || req.ip || null
 
     await pool.query(
       `INSERT INTO attendance_trip_logs (user_id, trip_date, log_time, location, gps_lat, gps_lng, gps_accuracy, device_info, ip_address, remark)
@@ -469,12 +472,13 @@ router.post('/attendance/trip-clock', async (req, res, next) => {
     const __scope = await getCompanyScope(req)
     let attendanceFixed = null
     if (!att) {
-      const [[ins]] = await pool.query(
+      // 2026-09-13 江小鱼 fix: pool.query(INSERT) 返回 [ResultSetHeader, fields], 不能 destructure [[ins]] 解包成 undefined. 改成 const [insertResult] = ...
+      const [insertResult] = await pool.query(
         `INSERT INTO attendance (user_id, date, clock_in, status, late_minutes, early_minutes, location, gps_lat, gps_lng, abnormal_reason, company_id)
          VALUES (?,?,NULL,'normal',0,0,?,?,?,'on business trip (auto-linked from trip clock)',?)`,
         [userId, today, location || null, lat || null, lng || null, __scope.companyId]
       )
-      attendanceFixed = 'created'
+      attendanceFixed = `created#${insertResult.insertId || 0}`
     } else if (att.status === 'late') {
       await pool.query(
         `UPDATE attendance SET status = 'normal', late_minutes = 0,
