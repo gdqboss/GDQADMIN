@@ -54,17 +54,40 @@ export async function getCurrentPosition() {
 }
 
 /**
- * 逆地理编码（简化版，返回经纬度字符串）
- * 可以接入高德地图、百度地图等API进行真实地址解析
+ * 逆地理编码 (lat,lng → 地名)
+ * 2026-09-13 江小鱼改: 用 Nominatim (OpenStreetMap 公开 API) 替代高德/腾讯 (没 key)
+ *  - 免 key, 匿名可调, 但有 1 req/s 限速
+ *  - 国内可能偶尔慢 / 失败 → fallback 返回原经纬度
+ *  - 后续哥拿到高德/腾讯 key 后, 改回 key 调用即可
  */
 async function reverseGeocode(lat, lng) {
-  // 这里可以接入地图API，例如：
-  // const response = await fetch(`https://restapi.amap.com/v3/geocode/regeo?key=YOUR_KEY&location=${lng},${lat}`)
-  // const data = await response.json()
-  // return data.regeocode.formatted_address
-
-  // 简化版：返回经纬度
-  return `${lat.toFixed(6)}, ${lng.toFixed(6)}`
+  try {
+    // Nominatim API: lat,lon (注意顺序), 中文 zh
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&accept-language=zh&addressdetails=1`
+    const res = await fetch(url, {
+      headers: { 'Accept': 'application/json' }
+    })
+    if (!res.ok) {
+      console.warn(`[reverseGeocode] Nominatim HTTP ${res.status}, fallback to lat/lng`)
+      return null
+    }
+    const data = await res.json()
+    const a = data.address || {}
+    const parts = []
+    if (a.attraction || a.amenity || a.shop || a.tourism) parts.push(a.attraction || a.amenity || a.shop || a.tourism)
+    if (a.road) parts.push(a.road)
+    if (a.suburb && a.suburb !== a.city) parts.push(a.suburb)
+    if (a.city || a.town || a.county) parts.push(a.city || a.town || a.county)
+    if (a.state) parts.push(a.state)
+    if (parts.length === 0) {
+      if (data.display_name) return data.display_name.split(',').slice(0, 3).join(',').trim()
+      return null
+    }
+    return parts.join(' ')
+  } catch (e) {
+    console.warn('[reverseGeocode] Nominatim failed:', e.message)
+    return null
+  }
 }
 
 /**
