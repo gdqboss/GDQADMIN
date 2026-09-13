@@ -158,9 +158,17 @@
                   </button>
                   <button
                     @click="editH5User(user)"
-                    class="text-blue-600 hover:underline"
+                    class="text-blue-600 hover:underline mr-2"
                   >
                     {{ t('common.edit') }}
+                  </button>
+                  <!-- 2026-09-13 江小鱼 — H5 外部用户也支持 WorkBuddy APP 连接包 (复用内网 openWorkBuddyModal, 后端按 phone 优先查 users, 找不到再查 h5_users) -->
+                  <button
+                    @click="openWorkBuddyModal(user)"
+                    class="text-purple-600 hover:underline"
+                    :title="t('workbuddy.copyLinkHelp')"
+                  >
+                    🔗 {{ t('workbuddy.copyLink') }}
                   </button>
                 </td>
               </tr>
@@ -433,7 +441,8 @@ async function loadExternalUsers() {
   try {
     const res = await api.get('/h5-admin/users')
     if (res.code === 0) {
-      externalUsers.value = res.data
+      // res.data = { list, total } — 2026-09-13 修: 之前直接赋值 = 整个对象, v-for 会失败
+      externalUsers.value = res.data.list || []
     }
   } catch (err) {
     console.error('Failed to load external users:', err)
