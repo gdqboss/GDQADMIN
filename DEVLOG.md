@@ -461,3 +461,13 @@ cp /root/server/router/index.js.bak.attendance-today-20260828-092926 /root/serve
 - 验证：SGP 真实实例四情形（见 HK DEVLOG）；`投票` 的多形式（过半数/人数/比例）经查后端本就支持，未改
 - 备份：`/root/server/routes/oa-flow.js.bak.r4cs-*`、`.bak.r4cs2-*`、`.bak.r4cs3(未建，patch3 未备份，可用 r4cs2 回滚后再打)`
 - 备注：双端 `oa-flow.js` 除 1 行注释外完全一致（历史注释差异，已确认不影响功能）；会签逻辑两端一致
+
+## 2026-09-14 · R4 投票：全票通过 / 一票否决 真的生效
+- 改了啥：`routes/oa-flow.js`
+  ① `parseThreshold`：原来只认 `majority` / 分数 `N/M` / 数字，前端能选的 `unanimous`、`veto` 会 `Number()` 成 NaN → **兜底成"多数通过"**（管理员选了"全票通过/一票否决"实际按多数跑）。现显式识别：`unanimous`/`veto` → 通过线 = 全员数；`majority` → 过半；分数/数字照旧
+  ② vote 网关：新增「一票否决」即时生效——**出现任何反对票即立刻否决**（不必等其他人投完），其余 pending 待办作废；无 `fail` 分支则整单 `rejected`。与或签「任一同意即通过」对称
+- 为啥改：待办 R4；波哥口径「多种投票形式都要支持」，而"配了不生效"正是该条要解决的"用起来的样子"
+- 影响：`majority` 与分数/数字行为不变；新增 全票通过 / 一票否决 两个规则真的可用
+- 验证：SGP 真实实例三情形（见 HK DEVLOG）
+- 备份：`/root/server/routes/oa-flow.js.bak.r4vote-*`
+- 备注：双端一致（历史仅 1 行注释差异）

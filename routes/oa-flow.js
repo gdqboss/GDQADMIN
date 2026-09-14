@@ -95,13 +95,16 @@ function evalCond(cond, value) {
   return false
 }
 
-/** 解析投票阈值：'majority'(过半) | '2/3'(分数) | 数字(绝对票数) */
+/** 解析投票阈值：'majority'(过半,缺省) | 'unanimous'(全票通过) | 'veto'(一票否决,通过线=全票) | '2/3'(分数) | 数字(绝对票数)
+ *  [vote-veto] 2026-09-14 R4：原来只认 majority / 分数 / 数字，前端给的 unanimous、veto 会 NaN → 兜底成"多数通过"，
+ *    即管理员选了"全票通过/一票否决"实际按"多数通过"跑（配了不生效）。 */
 function parseThreshold(threshold, total) {
-  if (threshold === undefined || threshold === null) return Math.floor(total / 2) + 1
-  if (threshold === 'majority') return Math.floor(total / 2) + 1
-  const frac = String(threshold).match(/^(\d+)\/(\d+)$/)
+  const t = (threshold === undefined || threshold === null) ? 'majority' : String(threshold).trim().toLowerCase()
+  if (t === 'majority') return Math.floor(total / 2) + 1
+  if (t === 'unanimous' || t === 'veto') return total
+  const frac = t.match(/^(\d+)\/(\d+)$/)
   if (frac) return Math.ceil((total * Number(frac[1])) / Number(frac[2]))
-  const n = Number(threshold)
+  const n = Number(t)
   return isNaN(n) ? Math.floor(total / 2) + 1 : n
 }
 
@@ -491,6 +494,20 @@ async function evalGate(conn, ctx, node) {
         }
       }
       return { waitGate: true }
+    }
+    // [vote-veto] 2026-09-14 R4：一票否决——出现任何反对票即立即否决，不必等其他人投完，
+    //   其余待办作废（与或签「任一同意即通过」对称；否则"一票否决"要等全员投完才生效，其他人白投）
+    const _voteRule = String(gc.threshold ?? gc.passRule ?? 'majority').trim().toLowerCase()
+    if (_voteRule === 'veto' && rows.some(r => r.status === 'completed' && r.action === 'reject')) {
+      await conn.query(
+        `UPDATE workflow_tasks SET status='cancelled', cancelled_at=?
+          WHERE instance_id=? AND node_id=? AND status='pending'`,
+        [now(), instanceId, node.id])
+      await log(conn, instanceId, { nodeId: node.id, action: 'gate_route', message: '投票「一票否决」生效，其余待办作废' })
+      const fbVeto = branches.find(b => b.cond === 'fail')
+      if (fbVeto) return { nextNodeId: branchIds(fbVeto)?.[0] ?? null }
+      await conn.query('UPDATE workflow_instances SET status=?, current_node=? WHERE id=?', ['rejected', node.id, instanceId])
+      throw new FlowError(400, 'VOTE_REJECTED', '投票一票否决，流程被拒绝')
     }
     // 全员已投
     const pending = rows.filter(r => r.status === 'pending')
