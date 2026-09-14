@@ -450,3 +450,14 @@ cp /root/server/router/index.js.bak.attendance-today-20260828-092926 /root/serve
 - 备份：`/root/server/routes/butler-orders.js.bak.r4butler-*`
 - 备注：双端 md5 一致 `8ca6af811965e5ce6c931209eeb59968`
 - 顺带发现：`butler-orders:delete` **无任何角色持有** → `DELETE` 对非管理员不可达（其"提单人可删"分支实为死代码）
+
+## 2026-09-14 · R4 会签：支持「全部同意」与「任一同意」两种模式
+- 改了啥：`routes/oa-flow.js`
+  ① **会签求值（evalGate / countersign 分支）**：读取 `gateConfig.joinType`，`'all'`（缺省，行为不变）/ `'any'`（任一同意即放行）。`any` 下：有人同意 → 立即汇聚继续，并把其余 pending 待办 `cancelled`；全部反对才整单拒
+  ② **驳回时作废其余待办**：`all` 一人驳回、`any` 全部驳回 这两条整单拒路径，都把剩余 pending 待办 `cancelled`（原来会留着一张"待我审批"的僵尸单挂在别人名下）
+  ③ **审批动作里的 reject 语义**（`POST /tasks/:id/act`）：原来写死"非 vote 任务 reject → 整单 rejected"，导致**或签下一票反对就杀整单**、其他人没机会同意 → 现对「会签网关 且 joinType='any'」的任务不杀整单，交给网关统计
+- 为啥改：待办 R4（P1）；波哥口径「会签多种形式都要支持」，且"任一同意"必须真的成立
+- 影响：既有没有 `joinType` 的流程行为**完全不变**；会签新增"任一同意"能力；被驳回/被抢先的单不再产生僵尸待办
+- 验证：SGP 真实实例四情形（见 HK DEVLOG）；`投票` 的多形式（过半数/人数/比例）经查后端本就支持，未改
+- 备份：`/root/server/routes/oa-flow.js.bak.r4cs-*`、`.bak.r4cs2-*`、`.bak.r4cs3(未建，patch3 未备份，可用 r4cs2 回滚后再打)`
+- 备注：双端 `oa-flow.js` 除 1 行注释外完全一致（历史注释差异，已确认不影响功能）；会签逻辑两端一致

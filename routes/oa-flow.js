@@ -402,7 +402,10 @@ async function evalGate(conn, ctx, node) {
   if (gt === 'countersign') {
     const participants = gc.participants || gc.parallelNodes || []
     if (!participants.length) throw new FlowError(500, 'FLOW_CONFIG', `会签网关 ${node.id} 未配置 participants`)
-    let allDone = true, anyRejected = false
+    // [countersign-joinType] 2026-09-14 R4 会签：joinType='all'（默认，全部同意才放行）
+    //   / 'any'（任一同意即放行，其余待办作废）。缺省与非法值一律按 'all'，不改变既有流程行为。
+    const joinType = String(gc.joinType || 'all').toLowerCase() === 'any' ? 'any' : 'all'
+    let allDone = true, anyRejected = false, anyApproved = false
     const rows = await currentGateTasks(conn, instanceId, node.id)
     for (const p of participants) {
       const existing = rows.find(r => r.node_name === p.name)
@@ -421,11 +424,42 @@ async function evalGate(conn, ctx, node) {
         allDone = false
       } else if (existing.status === 'pending') {
         allDone = false
-      } else if (existing.status === 'completed' && existing.action === 'reject') {
-        anyRejected = true
+      } else if (existing.status === 'completed') {
+        if (existing.action === 'reject') anyRejected = true
+        else anyApproved = true
       }
     }
+
+    // ── 或签（joinType='any'）：任一同意即放行，其余待办作废；全部驳回才整单拒 ──
+    if (joinType === 'any') {
+      if (anyApproved) {
+        await conn.query(
+          `UPDATE workflow_tasks SET status='cancelled', completed_at=?
+            WHERE instance_id=? AND node_id=? AND status='pending'`,
+          [now(), instanceId, node.id])
+        await log(conn, instanceId, { nodeId: node.id, action: 'gate_pass', message: '会签「任一同意」已满足，其余待办作废，汇聚继续' })
+        return { nextNodeId: edgesFrom(flow, node.id)[0]?.to ?? null }
+      }
+      if (!allDone) return { waitGate: true }
+      // [countersign-cancelrst] 2026-09-14 R4：结论已定（整单拒）→ 其余待办作废，
+      //   避免其他人还在"待我审批"里看到一张已经作废的单
+      await conn.query(
+        `UPDATE workflow_tasks SET status='cancelled', completed_at=?
+          WHERE instance_id=? AND node_id=? AND status='pending'`,
+        [now(), instanceId, node.id])
+      await log(conn, instanceId, { nodeId: node.id, action: 'gate_reject', message: '会签「任一同意」未获任何同意，整单拒绝' })
+      await conn.query('UPDATE workflow_instances SET status=?, current_node=? WHERE id=?', ['rejected', node.id, instanceId])
+      throw new FlowError(400, 'COUNTERSIGN_REJECTED', '会签未通过')
+    }
+
+    // ── 会签（joinType='all'，默认）：全部同意才放行；任一驳回整单拒 ──
     if (anyRejected) {
+      // [countersign-cancelrst] 2026-09-14 R4：结论已定（整单拒）→ 其余待办作废，
+      //   避免其他人还在"待我审批"里看到一张已经作废的单
+      await conn.query(
+        `UPDATE workflow_tasks SET status='cancelled', completed_at=?
+          WHERE instance_id=? AND node_id=? AND status='pending'`,
+        [now(), instanceId, node.id])
       await log(conn, instanceId, { nodeId: node.id, action: 'gate_reject', message: '会签出现驳回，整单拒绝' })
       await conn.query('UPDATE workflow_instances SET status=?, current_node=? WHERE id=?', ['rejected', node.id, instanceId])
       throw new FlowError(400, 'COUNTERSIGN_REJECTED', '会签未通过')
@@ -901,10 +935,16 @@ router.post('/tasks/:id/act', async (req, res, next) => {
       'UPDATE workflow_tasks SET status=?, action=?, comment=?, completed_at=? WHERE id=?',
       ['completed', action, comment || null, now(), task.id])
 
-    // reject 语义分两种：
+    // reject 语义分三种：
     //   vote 任务（node_type='vote'）→ 只是投反对票，不杀整单，推进投票网关统计
-    //   普通审批任务 → 整单 rejected（终态），取消其余 pending
-    if (action === 'reject' && task.node_type !== 'vote') {
+    //   或签任务（会签网关 且 joinType='any'）→ 一票反对不杀整单，交网关统计（全部反对才拒），
+    //     否则"任一同意就放行"名存实亡：一人反对就把整单杀了，其他人根本没机会同意
+    //   普通审批任务 / 会签（joinType='all'）→ 整单 rejected（终态），取消其余 pending
+    // [any-countersign-no-kill] 2026-09-14 R4
+    const _gateNode = flow ? (flow.nodes || []).find(n => n.id === task.node_id) : null
+    const _isAnyCountersign = !!(_gateNode && _gateNode.type === 'gate' && _gateNode.gateType === 'countersign'
+      && String((_gateNode.gateConfig || {}).joinType || 'all').toLowerCase() === 'any')
+    if (action === 'reject' && task.node_type !== 'vote' && !_isAnyCountersign) {
       await conn.query(`UPDATE workflow_tasks SET status='cancelled', cancelled_at=? WHERE instance_id=? AND status='pending'`, [now(), task.instance_id])
       await conn.query(`UPDATE workflow_instances SET status='rejected', current_node=? WHERE id=?`, [task.node_id, task.instance_id])
       await log(conn, task.instance_id, { taskId: task.id, nodeId: task.node_id, action: 'reject', operatorId: req.user.id, message: comment })
