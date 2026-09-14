@@ -471,3 +471,13 @@ cp /root/server/router/index.js.bak.attendance-today-20260828-092926 /root/serve
 - 验证：SGP 真实实例三情形（见 HK DEVLOG）
 - 备份：`/root/server/routes/oa-flow.js.bak.r4vote-*`
 - 备注：双端一致（历史仅 1 行注释差异）
+
+## 2026-09-14 · R4 OA 表单服务端校验（发起 / 重提）
+- 改了啥：`routes/oa-flow.js` 新增 `validateFormData(formConfig, formData)`，在 `POST /instances`（发起）与 `POST /instances/:id/resubmit`（重提）两处接入：
+  必填 / `select` 取值在 options 内 / `number|money` 为数字（money 非负）/ `text|textarea` 长度上限（1000｜20000）/ `multi` 取值在 options 内
+- **宽容原则（重要）**：只校验定义里**声明过**的字段，**不拒绝额外字段**（流程会插入 refInstanceId 等系统字段，前端也可能带 extra）；类型只判"明显错误"，不做日期/电话等格式军规 —— 避免把正常提交卡死
+- 前置风险排查：DB 里 leave / leave-recover 等定义的字段与前端种子**同源一致**（同 key、同 required）→ 加强校验不会拦下合法提交
+- 为啥改：待办 R4；以前仅靠前端拦，绕过页面直接调接口即可提交残缺申请
+- 影响：合法提交与"带额外字段"的提交不受影响；残缺/非法数据当场 400 并给出**中文原因**
+- 验证：SGP 实测 6 例（见 HK DEVLOG）
+- 备份：/root/server/routes/oa-flow.js.bak.r4fv-*

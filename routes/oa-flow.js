@@ -108,6 +108,53 @@ function parseThreshold(threshold, total) {
   return isNaN(n) ? Math.floor(total / 2) + 1 : n
 }
 
+/**
+ * [form-validate] 2026-09-14 R4：按 definition 的 form_config 做服务端校验（发起 / 重提都走）。
+ *   为什么需要：以前只靠前端拦，**绕过页面直接调接口**就能提交残缺申请，审批人收到空字段还要来回问。
+ *   宽容原则：① 只校验定义里**声明过**的字段，**不拒绝额外字段**（流程会插入 refInstanceId 等系统字段）；
+ *            ② 类型只做"明显错误"的判定，不做格式军规（避免把正常提交卡死）。
+ * @returns {string|null} null=通过；否则返回给用户看的中文原因
+ */
+function validateFormData(formConfig, formData) {
+  let fields = formConfig
+  if (!fields) return null
+  if (typeof fields === 'string') fields = safeParse(fields, null)
+  if (fields && !Array.isArray(fields) && Array.isArray(fields.fields)) fields = fields.fields
+  if (!Array.isArray(fields) || !fields.length) return null
+
+  const fd = (formData && typeof formData === 'object' && !Array.isArray(formData)) ? formData : {}
+  const isEmpty = (v) => v === undefined || v === null || v === ''
+    || (Array.isArray(v) && v.length === 0)
+
+  for (const f of fields) {
+    if (!f || !f.key) continue
+    const label = f.label || f.key
+    const v = fd[f.key]
+    if (f.required && isEmpty(v)) return `请填写「${label}」`
+    if (isEmpty(v)) continue
+    const t = String(f.type || '').toLowerCase()
+    if (t === 'number' || t === 'money') {
+      const num = (typeof v === 'number') ? v : Number(String(v).trim())
+      if (!Number.isFinite(num)) return `「${label}」必须是数字`
+      if (t === 'money' && num < 0) return `「${label}」不能为负数`
+    } else if (t === 'select') {
+      if (Array.isArray(f.options) && f.options.length && !f.options.includes(v)) {
+        return `「${label}」的取值不在可选范围内`
+      }
+    } else if (t === 'text' || t === 'textarea' || t === 'string') {
+      const cap = (t === 'textarea') ? 20000 : 1000
+      if (String(v).length > cap) return `「${label}」内容过长（上限 ${cap} 字）`
+    } else if (t === 'multi') {
+      const arr = Array.isArray(v) ? v : String(v).split(/[,，]/).map(x => x.trim()).filter(Boolean)
+      if (Array.isArray(f.options) && f.options.length) {
+        const bad = arr.find(x => !f.options.includes(x))
+        if (bad) return `「${label}」含不在可选范围内的值：${bad}`
+      }
+    }
+  }
+  return null
+}
+
 // ─────────────────────────────────────────────────────────────
 // 角色解析（交接文档 §5.9）
 //   applicant | direct_supervisor | user:123 | dept_head | 角色名
@@ -726,6 +773,10 @@ router.post('/instances', async (req, res, next) => {
       'SELECT * FROM workflow_definitions WHERE code = ? AND tenant_id = ? AND is_active = 1', [code, tenantId])
     if (!def) return res.status(404).json({ code: 404, message: `流程 ${code} 不存在或未启用` })
 
+    // [form-validate] R4：按定义声明的字段校验，绕过页面提交的残缺数据当场拦下
+    const _fverr = validateFormData(safeParse(def.form_config, null), form_data)
+    if (_fverr) return res.status(400).json({ code: 400, message: _fverr })
+
     const flow = safeParse(def.flow_config)
     if (!flow || !Array.isArray(flow.nodes)) return res.status(500).json({ code: 500, message: 'flow_config 无效' })
     const startNode = flow.nodes.find(n => n.type === 'start')
@@ -838,6 +889,10 @@ router.post('/instances/:id/resubmit', async (req, res, next) => {
       await conn.rollback()
       return res.status(403).json({ code: 403, message: '仅发起人可重提' })
     }
+    // [form-validate] R4：重提同样按定义校验（打回后重填的半成品也要挡住）
+    const [[_defRow]] = await conn.query('SELECT form_config FROM workflow_definitions WHERE id = ?', [inst.workflow_id])
+    const _fverr2 = validateFormData(safeParse(_defRow && _defRow.form_config, null), form_data)
+    if (_fverr2) { await conn.rollback(); return res.status(400).json({ code: 400, message: _fverr2 }) }
     const flow = safeParse(inst.flow_snapshot)
     const returnInfo = safeParse(inst.return_info, {})
     const policy = (flow && flow.resubmitPolicy) || 'restart'
