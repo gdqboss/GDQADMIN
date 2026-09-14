@@ -28,6 +28,8 @@
 import { Router } from 'express'
 import { pool } from '../db/connection.js'
 import { requireRole } from '../middleware/rbac.js'
+import { getBalance, consumeLeave, refundLeave, addCompByMinutes, checkQuota } from './balance-service.js'
+import { checkPerm } from '../utils/permission.js' // 2026-09-14 余额接口权限
 
 const router = Router()
 
@@ -227,7 +229,38 @@ async function runToken(conn, ctx, startNodeId) {
     if (node.type === 'end') {
       const actions = node.actions || []
       if (actions.length) {
-        await log(conn, instanceId, { nodeId, action: 'end', message: `归档动作: ${actions.join(',')}(v1 仅记录)` , details: { actions } })
+        // ── 2026-09-14 真实假期余额挂扣（前置在标记为「已归档但未扣」之前；补卡/剩余天数 clamp 见 balance-service）──
+        try {
+          const fd = ctx.formData || {}
+          const gqGate = (flow.nodes || []).find(n => n.type === 'gate' && n.gateType === 'quota')
+          const gq = (gqGate && gqGate.gateConfig) || {}
+          const typeName = fd[gq.field]; // 假种中文（年假/调休/事假/补卡）
+          const daysRaw = parseFloat(fd[gq.checkField ?? gq.field]);
+
+          // deduct_quota：请假审批通过 → 扣对应假种
+          if (actions.includes('deduct_quota')) {
+            await consumeLeave(conn, { userId: ctx.initiatorId, typeName, days: daysRaw, companyId: ctx.companyId ?? null, refId: instanceId, refDesc: 'OA请假审批通过扣减' });
+          }
+          // refund_quota：销假/作废 → 退回（假种/退回天数由表单 leaveType/refundDays 提供）
+          if (actions.includes('refund_quota')) {
+            const rt = fd.leaveType;
+            const rd = parseFloat(fd.refundDays);
+            await refundLeave(conn, { userId: ctx.initiatorId, typeName: rt, days: rd, companyId: ctx.companyId ?? null, refId: instanceId, refDesc: 'OA销假退回' });
+          }
+          // add_comp：加班转调休（items[] 中 comp==='调休累计' 的 minutes 加总；兼容单条 comp/minutes）
+          if (actions.includes('add_comp')) {
+            let totalMin = 0;
+            if (Array.isArray(fd.items)) {
+              fd.items.forEach(it => { if (it.comp === '调休累计') { const m = parseFloat(it.minutes); if (!isNaN(m) && m > 0) totalMin += m; } });
+            } else if (fd.comp === '调休累计') {
+              const m = parseFloat(fd.minutes); if (!isNaN(m) && m > 0) totalMin = m;
+            }
+            if (totalMin > 0) await addCompByMinutes(conn, { userId: ctx.initiatorId, overtimeMinutes: totalMin, companyId: ctx.companyId ?? null, refId: instanceId, refDesc: 'OA加班转调休' });
+          }
+        } catch (e) {
+          await log(conn, instanceId, { nodeId, action: 'warn', message: '余额挂扣失败: ' + e.message });
+        }
+        await log(conn, instanceId, { nodeId, action: 'end', message: `归档动作: ${actions.join(',')}` , details: { actions } })
       } else {
         await log(conn, instanceId, { nodeId, action: 'end', message: '归档' })
       }
@@ -293,18 +326,24 @@ async function evalGate(conn, ctx, node) {
     // 决策分支：
     //  A) branches 里有 balance_insufficient 分支（前端语义）：超限 → 若该分支 action=reject 且 message → 400 拦截
     //  B) 无 branches（纯 max 配置）：超限 → 400 GATE_BLOCKED(用 gc.message)
+    //  C) 2026-09-14 真实余额优先：gc.realBalance 默认开，假种命中余额账户 → 以 checkQuota 为准（不再只信静态 max）
     const insufficientBranch = branches.find(b => b.cond === 'balance_insufficient')
-    const overLimit = max !== null && !isNaN(checkVal) && checkVal > max
+    let overLimit = max !== null && !isNaN(checkVal) && checkVal > max
+    let quotaMsg = gc.message || '超出额度上限，无法提交'
+    if (gc.realBalance !== false) {
+      const q = await checkQuota(conn, { userId: ctx.initiatorId, typeName: typeVal, days: checkVal })
+      if (!q.ok && q.blocked) { overLimit = true; quotaMsg = q.message }
+    }
     if (overLimit) {
       if (insufficientBranch) {
         if (insufficientBranch.action === 'reject') {
-          await log(conn, instanceId, { nodeId: node.id, action: 'gate_block', message: insufficientBranch.message || '额度不足，无法提交', details: { field: typeVal, used: checkVal, max } })
-          return { blocked: true, message: insufficientBranch.message || '额度不足，无法提交' }
+          await log(conn, instanceId, { nodeId: node.id, action: 'gate_block', message: insufficientBranch.message || quotaMsg, details: { field: typeVal, used: checkVal, quotaMsg } })
+          return { blocked: true, message: insufficientBranch.message || quotaMsg }
         }
         // 未来可扩展 action:'route' → insufficientBranch.nextNodeId
       }
-      await log(conn, instanceId, { nodeId: node.id, action: 'gate_block', message: gc.message || '超出额度上限，无法提交', details: { field: typeVal, used: checkVal, max } })
-      return { blocked: true, message: gc.message || '超出额度上限，无法提交' }
+      await log(conn, instanceId, { nodeId: node.id, action: 'gate_block', message: quotaMsg, details: { field: typeVal, used: checkVal, quotaMsg } })
+      return { blocked: true, message: quotaMsg }
     }
     const elseB = branches.find(b => b.cond === 'else')
     const ids = branchIds(elseB)
@@ -967,5 +1006,42 @@ export async function scanTimeoutRoutes() {
     return 0
   } finally { conn.release() }
 }
+
+
+// ─────────────────────────────────────────────────────────────
+// 假期余额 · 真实账本接口（2026-09-14）
+// ─────────────────────────────────────────────────────────────
+
+// GET /api/oa/flow/balance — 我的假期余额
+router.get('/balance', async (req, res, next) => {
+  try {
+    const b = await getBalance(pool, req.user.id)
+    res.json({ code: 0, data: b })
+  } catch (err) { next(err) }
+})
+
+// POST /api/oa/flow/balance/consume — 扣减假期余额（需 oa:write）
+//   body: { type, days }   type=年假/调休/事假/补卡, days=天数(补卡=次)
+router.post('/balance/consume', async (req, res, next) => {
+  try {
+    if (!(await checkPerm(req, 'oa:write'))) return res.status(403).json({ code: 403, message: '无权限扣减余额' })
+    const { type, days } = req.body
+    const r = await consumeLeave(pool, { userId: req.user.id, typeName: type, days: Number(days), companyId: req.user.company_id ?? null })
+    if (!r.ok) return res.status(400).json({ code: 400, message: r.message })
+    res.json({ code: 0, data: { applied: r.applied } })
+  } catch (err) { next(err) }
+})
+
+// POST /api/oa/flow/balance/refund — 退回假期余额（需 oa:write）
+//   body: { type, days }
+router.post('/balance/refund', async (req, res, next) => {
+  try {
+    if (!(await checkPerm(req, 'oa:write'))) return res.status(403).json({ code: 403, message: '无权限退回余额' })
+    const { type, days } = req.body
+    const r = await refundLeave(pool, { userId: req.user.id, typeName: type, days: Number(days), companyId: req.user.company_id ?? null })
+    if (!r.ok) return res.status(400).json({ code: 400, message: r.message })
+    res.json({ code: 0, data: { added: r.added } })
+  } catch (err) { next(err) }
+})
 
 export default router

@@ -343,3 +343,85 @@ cp /root/server/router/index.js.bak.attendance-today-20260828-092926 /root/serve
 
 ### 健康检查已接入
 - sgp-healthcheck.py 加 check_mock() (mock 失败不致命,只 warn)
+
+## 2026-09-14 · 假期余额真实账本（OA 双轨后端挂扣）
+- 改了啥：新建 routes/balance-service.js（checkQuota/pullUp/consume/refund/addCompByMinutes，行锁防并发超扣，负余额 clamp）；routes/oa-flow.js 三处嫁接：①end 归档按 actions 真实挂扣（deduct_quota 扣假/refund_quota 销假退回/add_comp 加班转调休）②quota 网关改真实余额优先（realBalance 默认开）③新增 /api/oa/flow/balance GET + /consume + /refund（需 oa:write → checkPerm）
+- 建表：hq_leave_balance + hq_leave_balance_logs（每用户 annual/comp/personal/patch 余额 + 流水）
+- 为啥改：OA 假期余额此前写前端本机 storage，换机清缓存即丢，且销假不回额度，"我明明没销假额度却变了"
+- 影响：OA 审批通过/销假/加班转调休真实写库；quota 网关以真实余额为准（原只信表单 max）
+- 验证：SGP pm2 重启 + selftest 全过（consume 5→3、refund 3→4、无效假种 400、流水正确）
+
+
+## 2026-09-14 · R3-1 会议管理企业范围（跨企业越权收口）
+- 改了啥：`routes/venues.js` 的 `GET /api/venues/bookings` 原先**完全没调 `getCompanyScope`**，`company_id` 直接取自客户端 → 客户端可传别家企业 ID、或干脆不传，看到**全部企业**的会议主题/参会人/预订人。现改为服务端强制注入范围：
+  `company-manage`→本企业；`company-self`→本人；`incubator`→`company_id IS NULL`；仅 `global`（平台管理员）允许客户端 `company_id` 作筛选（只能缩小，不能扩大）。
+- 为啥改：待办 R3（P1，上线前对照真源）；属"客户端条件只能缩小不能扩大"铁律
+- 影响：企业管理员（若后续授权 `venues:read`）只能看本企业会议；平台管理员行为不变；普通用户只走 mine
+- 验证：**SGP 侧 venues 未挂载**（index.js 无该路由，`/api/venues/*` 实测 404），故实测在 HK 做
+- 备份：`/root/server/routes/venues.js.bak.r3-1-20260914-125446`
+- 备注：双端 `venues.js` 补丁后 md5 一致 `f76e1fcac3e8aee2cf9ab128d3cd427d`
+- 遗留（不属本条，待各自条目）：① `PUT /bookings/:id/status` 审批无企业范围校验；② `GET /rooms/:id/slots` 返回他人会议主题+预订人姓名（R3"会议时段最小披露"）；③ SGP `middleware/rbac.js` **缺 `VENUES_*` 常量**（仅 HK 有），SGP 若日后挂载 venues 会全员 403
+
+## 2026-09-14 · R3-2 会议信用操作范围（跨企业调分收口 + 审计 + 既有 500 修复）
+- 改了啥：`routes/venues.js`
+  ① 新增 `creditScopeAllows(scope, targetCompanyId)`：`global` 可跨企业调分；`company-manage` 仅本企业；`incubator/company-self` 一律 403。
+  ② `POST /credit/event`：落库前按**预订所属企业**校验调用者范围（原来任何有 venues:write 的人可处置任意企业的预订）。
+  ③ `POST /credit/adjust`：先解析目标归属（`target=company` 直取 `company_id`；`target=user` 查该用户 `company_id`）再校验（原来直接吃客户端传的 company_id/user_id）。
+  ④ 审计：**复用既有 `utils/audit.js`，不改表结构**（`audit_logs` 已有 old_value/new_value/user_id/table_name）→ `old_value={score,owner}`、`new_value={score,delta,action_key,source,target,target_company_id,target_user_id,request_id}`；`addCreditLog` 改为返回 insertId 以便记录 record_id。
+- **顺带修掉既有 500**：`/credit/adjust` 的 `target=company` 从来就是 500（`venue_credit_logs.user_id` 为 NOT NULL，公司级调分却传 `user_id=null`，日志原文 `ER_BAD_NULL_ERROR`）。采用**无 DDL** 方案：公司级用 `user_id=0` 哨兵常量 `CREDIT_COMPANY_LEVEL_UID`（company 汇总只按 company_id、user 汇总永不命中 0）。
+- 为啥改：待办 R3-2（P1，上线前对照真源）
+- 影响：有 `venues:write` 的企业管理员只能动本企业信用；平台管理员跨企业不变；信用与请假等无关
+- 验证：**SGP 侧 venues 未挂载**，实测在 HK 做（见 HK DEVLOG）
+- 备份：`/root/server/routes/venues.js.bak.r3-2-20260914-132030`、`.bak.r3-2fix-*`
+- 备注：双端 `venues.js` 最终 md5 一致 `048c1e479a9259db49f63bbc6a613a0f`；`utils/audit.js` 双端同源 `09b19495…`
+
+## 2026-09-14 · R3-3 会议时段最小披露
+- 改了啥：`GET /api/venues/rooms/:id/slots` 原先直接返回 `title` + `user_name`（任何登录用户都能看到别人在开什么会、谁订的）。现改为最小披露：
+  `CASE WHEN 平台管理员(global) 或 预订本人 THEN title ELSE '已占用' END`；`user_name` 对非管理员/非本人置 NULL。响应形状不变（start_time/end_time/title/user_name），消费方无感。
+- 为啥改：待办 R3（P1）；属敏感字段最小披露
+- 影响：订会议室只能看到"该时段已被占用"；管理员与本人不受影响
+- 验证：**SGP 侧 venues 未挂载**，实测在 HK 做（见 HK DEVLOG）
+- 备份：`/root/server/routes/venues.js.bak.r3-3-*`
+- 已知边界：`participants` 只存姓名字符串（无 user_id）→ 无法可靠判定"本会议相关人"，暂只放行「平台管理员 + 本人」；若需参会人可见，需改 participants 存 user_id（另立任务）
+- 暴露面：该接口**无权限守卫**（任何登录用户可调），但 minip 无调用方 + `meeting_bookings` 当时 0 行 → 「接口洞已开、数据未到」
+- 备注：双端 `venues.js` 最终 md5 一致 `dbc03db9e94c1f25b40e4d7907600d2a`
+
+## 2026-09-14 · R3-4 管家工单详情范围（同企业任意成员 → 仅管家）
+- 改了啥：`GET /api/butler-orders/:id` 的归属判断原第 4 条只比 `company_id`：
+  `|| (row.company_id != null && cid != null && row.company_id === cid)` → **同企业任意成员**都能看到别人报修的房间号与需求。
+  现改为 `sameCompanyButler = 同企业 && await canButler(me)`（`butler-orders:write` 或 admin/superuser/is_super_admin）。
+  同时把「无权限」与「不存在」**统一返回 404 `工单不存在或无权查看`**（原先分别是 403 / 404），降低用错误码差异枚举工单 ID。
+- 为啥改：待办 R3-4（P1）
+- 影响：同企业普通成员翻不到同事的工单详情；提单人、接单管家、管理员、同企业管家均不受影响；minip「工单确认页」的合法路径（提单人/管家）照常
+- 验证：SGP + HK 双端实测（见下）
+- 备份：`/root/server/routes/butler-orders.js.bak.r3-4-*`
+- 相邻未改（不属本条）：`/claim`、`DELETE /:id` 用 `requirePermission` 中间件（先于 handler），仍可能以 403/404 差异暴露存在性；`PUT /:id/cancel`、`DELETE /:id` 未做统一返回
+- 备注：双端 `butler-orders.js` 最终 md5 一致 `e7b6e368840ecb9dab8a4240bfec669f`
+
+## 2026-09-14 · R3-5 管家响应字段最小化（核销凭证按关系发放）
+- 改了啥：`routes/butler-orders.js` 的列表(`GET /`)与详情(`GET /:id`)原先都用 `SELECT *` + `decorate` 全量外发，**未接单管家拉 pool 列表就能看到别人工单的 `verify_code`**（拿到即可冒领）。
+  新增 `canSeeCredential(row, me)`（= admin / 提单人 / 接单管家）与 `dtoButler(row, typeMap, withCredential)`：
+  · `verify_code` 仅对 canSeeCredential 为真时返回；
+  · 内部审计字段 `verified_by` / `verified_at` 一律剔除。
+- **落地口径修正**：待办原文「列表不返回核销码」若一刀切会**打挂管家出示二维码**——`butler-booking` 的管家码用 **handling 列表**的 `verify_code` 拼 `BWO|id|verify_code|B`；`butler-order-list`/`enterprise-home` 也读列表的 `handle_note`。故按待办后半句「核销凭证按提单人/接单关系由受权接口提供」落地（列表/详情同一规则，逐行判定），而非无差别删字段。
+- 为啥改：待办 R3-5（P1）
+- 影响：未接单管家/同企业非接单管家拿不到核销码；提单人、接单管家（含管家码展示）、admin 不受影响
+- 验证：SGP 实测（butler 模块双端均挂载，SGP 库可自由改，故实测放 SGP）
+- 备份：`/root/server/routes/butler-orders.js.bak.r3-5-*`
+- 备注：双端 `butler-orders.js` 最终 md5 一致 `2ab1cb5632b57f52006d245cd26f9ad0`
+
+## 2026-09-14 · R3-6 工单审计（物理删除 → 软删除 + 限制 + 审计）
+- **表结构变更（本轮 R3 唯一 DDL；改前双端已 mysqldump 备份）**
+  - `hqh5_butler_services` 加 `deleted_at DATETIME NULL` / `deleted_by INT NULL` / `delete_reason VARCHAR(255) NULL`
+  - 备份：SGP `/tmp/gdq-butler-svc-20260914-145147.sql`、HK `/tmp/gdq_hk-butler-svc-20260914-145147.sql`
+- 改了啥：`routes/butler-orders.js`
+  ① `DELETE /:id` 由 `DELETE FROM ...` 改为软删除（`UPDATE ... SET deleted_at=NOW(), deleted_by=?, delete_reason=?`），支持 body 传 `reason`
+  ② 限制删除：`assigned_to` 非空 或 状态 ∈ {assigned, processing, completed} → **409**「已接单或已完成的工单不可删除，如需终止请使用取消」
+  ③ 全链路 **8 处** 补 `deleted_at IS NULL`：列表(where 初值)、详情、接单(claim)、取消(cancel)、核销码反查、核销主体
+  ④ 删除写 `utils/audit.js` → `audit_logs`：`action='DELETE'`、`table_name='hqh5_butler_services'`、`record_id`、`old_value`=原单快照、`new_value`={soft_deleted, deleted_by, delete_reason}
+  ⑤ `dtoButler` 连带屏蔽 `deleted_at/deleted_by/delete_reason`（内部字段不外发）
+- 为啥改：待办 R3-6（P1）——物理删除会破坏服务、核销、争议与 SLA 的追溯链
+- 影响：被删工单库内保留可追溯；已接单/完成工单无法被删除；已删工单在所有入口不可见
+- 验证：SGP 实测（见 HK DEVLOG 同段；本条实测在 SGP，库可自由改）
+- 备份：`/root/server/routes/butler-orders.js.bak.r3-6-*`
+- 备注：双端 `butler-orders.js` 最终 md5 一致 `4fb4bca8a9a1f903b0aa099a6ad88047`
