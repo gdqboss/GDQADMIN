@@ -202,35 +202,62 @@ router.post('/bookings', async (req, res, next) => {
       if (inPeak) return res.status(403).json({ code: 403, message: '信用等级「受限」不可预约工作日高峰时段' })
     }
 
-    // 时段重叠冲突（同场地同日，与 pending/approved 的单子比较）
-    const [conflicts] = await pool.query(
-      "SELECT id, booking_no, title, start_time, end_time FROM meeting_bookings WHERE room_id = ? AND date = ? AND status IN ('pending','approved') AND start_time < ? AND end_time > ?",
-      [room_id, date, endTime, startTime]
-    )
-    if (conflicts.length) {
-      return res.status(409).json({ code: 409, message: '该时段已被预订', data: { conflicts } })
-    }
-
-    const bookingNo = await genBookingNo()
-    const parts = Array.isArray(participants) ? JSON.stringify(participants.map(p => String(p)).slice(0, 50)) : null
+    // [booking-race] 2026-09-14 R4-3 重叠预订：对 (场地,日期) 取 MySQL 建议锁，把"查冲突 + 插入"串行化。
+    //   否则两个并发请求都可能查不到冲突、都插入 → 时段重叠（uk_room_slot 只能防"完全相同起始时刻"）。
+    //   注意：GET_LOCK 是连接级的，四步必须落在同一个连接上，否则锁无效 —— 故用 pool.getConnection()。
+    const __lockName = `venue_slot_${room_id}_${date}`
+    const conn = await pool.getConnection()
     try {
-      const [ret] = await pool.query(
-        `INSERT INTO meeting_bookings
-         (booking_no, room_id, company_id, user_id, user_name, title, date, start_time, end_time, duration_minutes, participants, remark, status)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'approved')`,
-        [bookingNo, room_id, companyId, userId, req.user.name || '', title, date, startTime, endTime, dur, parts, remark || '']
-      )
-      const [[row]] = await pool.query(
-        'SELECT id, booking_no, room_id, title, date, start_time, end_time, duration_minutes, status FROM meeting_bookings WHERE id = ?',
-        [ret.insertId]
-      )
-      res.json({ code: 0, data: { ...row, room_name: room.name }, message: 'ok' })
-    } catch (e) {
-      // 并发撞唯一键（同场地同日同起始时刻）
-      if (e && e.code === 'ER_DUP_ENTRY') {
-        return res.status(409).json({ code: 409, message: '该时段已被预订' })
+      const [[__lk]] = await conn.query('SELECT GET_LOCK(?, 5) AS ok', [__lockName])
+      if (!__lk || Number(__lk.ok) !== 1) {
+        return res.status(409).json({ code: 409, message: '系统繁忙，请稍后重试' })
       }
-      throw e
+      try {
+        // 时段重叠冲突（同场地同日，与 pending/approved 的单子比较）
+        const [conflicts] = await conn.query(
+          "SELECT id, booking_no, title, start_time, end_time FROM meeting_bookings WHERE room_id = ? AND date = ? AND status IN ('pending','approved') AND start_time < ? AND end_time > ?",
+          [room_id, date, endTime, startTime]
+        )
+        if (conflicts.length) {
+          return res.status(409).json({ code: 409, message: '该时段已被预订', data: { conflicts } })
+        }
+
+        const parts = Array.isArray(participants) ? JSON.stringify(participants.map(p => String(p)).slice(0, 50)) : null
+        // [booking-race] 2026-09-14 R4-2 编号竞争：booking_no 已加唯一索引；
+        //   撞号(uk_booking_no) → 重取重试；撞时段(uk_room_slot) → 409
+        let insId = null
+        for (let attempt = 0; attempt < 5 && insId == null; attempt++) {
+          const bookingNo = await genBookingNo()
+          try {
+            const [ret] = await conn.query(
+              `INSERT INTO meeting_bookings
+               (booking_no, room_id, company_id, user_id, user_name, title, date, start_time, end_time, duration_minutes, participants, remark, status)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'approved')`,
+              [bookingNo, room_id, companyId, userId, req.user.name || '', title, date, startTime, endTime, dur, parts, remark || '']
+            )
+            insId = ret.insertId
+          } catch (e) {
+            if (e && e.code === 'ER_DUP_ENTRY') {
+              if (String(e.message || '').includes('uk_booking_no')) continue
+              return res.status(409).json({ code: 409, message: '该时段已被预订' })
+            }
+            throw e
+          }
+        }
+        if (insId == null) {
+          return res.status(409).json({ code: 409, message: '预订号生成失败，请稍后重试' })
+        }
+
+        const [[row]] = await conn.query(
+          'SELECT id, booking_no, room_id, title, date, start_time, end_time, duration_minutes, status FROM meeting_bookings WHERE id = ?',
+          [insId]
+        )
+        res.json({ code: 0, data: { ...row, room_name: room.name }, message: 'ok' })
+      } finally {
+        try { await conn.query('SELECT RELEASE_LOCK(?)', [__lockName]) } catch (e2) { /* 释放失败不改变结果 */ }
+      }
+    } finally {
+      conn.release()
     }
   } catch (err) { next(err) }
 })
@@ -266,7 +293,15 @@ router.put('/bookings/:id/cancel', async (req, res, next) => {
     if (!['pending', 'approved'].includes(b.status)) {
       return res.status(400).json({ code: 400, message: '当前状态不可取消' })
     }
-    await pool.query("UPDATE meeting_bookings SET status = 'cancelled', cancelled_at = NOW() WHERE id = ?", [b.id])
+    // [booking-race] 2026-09-14 R4-1：条件更新——并发重复取消时只有一个请求 affectedRows=1，
+    //   只有它才写信用流水，避免同一次取消被重复扣分（原先"先读状态再更新"存在竞态）
+    const [cancelRet] = await pool.query(
+      "UPDATE meeting_bookings SET status = 'cancelled', cancelled_at = NOW() WHERE id = ? AND status IN ('pending','approved')",
+      [b.id]
+    )
+    if (!cancelRet || cancelRet.affectedRows !== 1) {
+      return res.status(409).json({ code: 409, message: '该预订已被取消或状态已变更' })
+    }
     // 信用：开始前 30 分钟内取消 = 临时取消（力度 venue_credit_rules.temp_cancel，可调）
     const minsToStart = Number(b.mins_to_start)
     if (minsToStart < 30 && minsToStart > -60) {

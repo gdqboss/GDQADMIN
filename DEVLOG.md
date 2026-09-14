@@ -425,3 +425,15 @@ cp /root/server/router/index.js.bak.attendance-today-20260828-092926 /root/serve
 - 验证：SGP 实测（见 HK DEVLOG 同段；本条实测在 SGP，库可自由改）
 - 备份：`/root/server/routes/butler-orders.js.bak.r3-6-*`
 - 备注：双端 `butler-orders.js` 最终 md5 一致 `4fb4bca8a9a1f903b0aa099a6ad88047`
+
+## 2026-09-14 · R4 会议并发三连（重叠预订 / 编号竞争 / 取消重复扣分）
+- **表结构**：`meeting_bookings` 加唯一索引 `uk_booking_no(booking_no)`（改前已 mysqldump；两表均 0 行）
+- 改了啥：`routes/venues.js`
+  ① **R4-1 取消重复扣分**：`PUT /bookings/:id/cancel` 改条件更新 `WHERE id=? AND status IN ('pending','approved')`，仅 `affectedRows===1` 才写信用流水，否则 409（原为"先读状态 → 无条件 UPDATE → 写账"，并发会重复扣分）
+  ② **R4-2 编号竞争**：插入按 `ER_DUP_ENTRY` 区分——命中 `uk_booking_no` → 重取号重试（≤5 次）；命中 `uk_room_slot` → 409 该时段已被预订
+  ③ **R4-3 重叠预订**：对 `(room_id,date)` 取 MySQL 建议锁 `GET_LOCK('venue_slot_<room>_<date>')`，把"查冲突+取号+插入"串行化。**必须 `pool.getConnection()` 贯穿全段**（`pool.query` 每次可能换连接，而 GET_LOCK 是连接级的，混用等于没锁）；`finally` 依次释放锁与连接
+- 为啥改：待办 R4（P1）；会议预订无审批环节，信用分是唯一约束，重复扣分/重叠预订直接损用户
+- 影响：并发重叠预订只成功一方；编号不再重复；并发取消只扣一次分
+- 验证：HK 真实并发实测（见 HK DEVLOG）；SGP 侧 venues 未挂载，仅同步源码
+- 备份：`/root/server/routes/venues.js.bak.r4-*`、`/tmp/gdq-meeting_bookings-20260914-152723.sql`
+- 备注：双端 `venues.js` md5 一致 `970caa9a3fa21bef48abb718d8121ffc`；`genBookingNo` 前缀用 UTC 而计数用本地 `CURDATE()` 的口径不一致 → 归 R2「日期与时区统一」
