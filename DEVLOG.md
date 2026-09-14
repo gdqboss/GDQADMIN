@@ -437,3 +437,16 @@ cp /root/server/router/index.js.bak.attendance-today-20260828-092926 /root/serve
 - 验证：HK 真实并发实测（见 HK DEVLOG）；SGP 侧 venues 未挂载，仅同步源码
 - 备份：`/root/server/routes/venues.js.bak.r4-*`、`/tmp/gdq-meeting_bookings-20260914-152723.sql`
 - 备注：双端 `venues.js` md5 一致 `970caa9a3fa21bef48abb718d8121ffc`；`genBookingNo` 前缀用 UTC 而计数用本地 `CURDATE()` 的口径不一致 → 归 R2「日期与时区统一」
+
+## 2026-09-14 · R4 管家两条（核销/取消/删除防假成功 + 接口存在性统一）
+- 改了啥：`routes/butler-orders.js`
+  ① **核销假成功**：`/verify` 的 UPDATE 后补 `affectedRows` 校验，0 行 → 重读状态 + 409（原为 UPDATE 后**无条件**回"核销成功，工单已完成"）
+  ② **取消假成功**：`/cancel` 同款补 `affectedRows`；并把 `status <> 'completed'` 收紧为白名单 `IN ('open','assigned','processing')`（否则"已取消的单再取消一次"被当成功）
+  ③ **软删**：`DELETE`（R3-6）补 `affectedRows` 校验，**审计只在真删成功时写**
+  ④ **存在性暴露**：`/claim`、`/cancel`、`DELETE` 三处「无权限」403 → **404 `工单不存在或无权操作`**；三处「不存在」的文案也统一为同一串（否则 404 的 message 差异仍可区分存在性）
+- 接单 `/claim` 原本已查 `affectedRows`，未改
+- **未做（说明理由）**：「状态、审计同事务」——`utils/audit.js` 既定语义是"审计失败**不阻塞**主流程"，改事务会推翻该语义并波及 banners/translations/theme → 建议单独拍板
+- 验证：SGP 真实并发实测（见 HK DEVLOG）
+- 备份：`/root/server/routes/butler-orders.js.bak.r4butler-*`
+- 备注：双端 md5 一致 `8ca6af811965e5ce6c931209eeb59968`
+- 顺带发现：`butler-orders:delete` **无任何角色持有** → `DELETE` 对非管理员不可达（其"提单人可删"分支实为死代码）

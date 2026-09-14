@@ -270,13 +270,13 @@ router.put('/:id/claim', requirePermission(PERMISSIONS.BUTLER_ORDERS_WRITE), asy
       'SELECT id, status, company_id FROM hqh5_butler_services WHERE id = ? AND deleted_at IS NULL',
       [req.params.id]
     )
-    if (!row) return res.status(404).json({ code: 404, message: '工单不存在' })
+    if (!row) return res.status(404).json({ code: 404, message: '工单不存在或无权操作' })
     if (row.status !== 'open') {
       return res.status(409).json({ code: 409, message: '该工单已被接单或已结束' })
     }
     const cid = await myCompanyId(me)
     if (row.company_id == null || cid == null || row.company_id !== cid) {
-      return res.status(403).json({ code: 403, message: '无权接其他企业的工单' })
+      return res.status(404).json({ code: 404, message: '工单不存在或无权操作' })
     }
 
     const [result] = await pool.query(
@@ -374,7 +374,9 @@ router.post('/verify', async (req, res, next) => {
     }
 
     const note = body.handle_note ? String(body.handle_note) : null
-    await pool.query(
+    // [butler-atomic] 2026-09-14 R4 核销假成功：仅 affectedRows=1 才算核销成功；
+    //   0 行 = 并发下状态已被改走 → 重读状态并 409，绝不假报"已完成"
+    const [vret] = await pool.query(
       `UPDATE hqh5_butler_services
           SET status = 'completed',
               completed_at = NOW(),
@@ -384,6 +386,14 @@ router.post('/verify', async (req, res, next) => {
         WHERE id = ? AND status = 'processing'`,
       [me.id, note, row.id]
     )
+    if (!vret || vret.affectedRows !== 1) {
+      const [[nowRow]] = await pool.query('SELECT status FROM hqh5_butler_services WHERE id = ?', [row.id])
+      const st = nowRow ? nowRow.status : '未知'
+      return res.status(409).json({
+        code: 409,
+        message: st === 'completed' ? '该工单已核销' : `工单状态已变更为「${st}」，核销未生效`
+      })
+    }
 
     res.json({ code: 0, message: '核销成功，工单已完成' })
   } catch (e) { next(e) }
@@ -401,9 +411,9 @@ router.put('/:id/cancel', async (req, res, next) => {
       'SELECT id, user_id, status FROM hqh5_butler_services WHERE id = ? AND deleted_at IS NULL',
       [req.params.id]
     )
-    if (!row) return res.status(404).json({ code: 404, message: '工单不存在' })
+    if (!row) return res.status(404).json({ code: 404, message: '工单不存在或无权操作' })
     if (!isAdmin(me) && row.user_id !== me.id) {
-      return res.status(403).json({ code: 403, message: '无权取消该工单' })
+      return res.status(404).json({ code: 404, message: '工单不存在或无权操作' })
     }
     if (row.status === 'completed') {
       return res.status(409).json({ code: 409, message: '已完成的工单不可取消' })
@@ -412,10 +422,17 @@ router.put('/:id/cancel', async (req, res, next) => {
       return res.status(409).json({ code: 409, message: '工单已取消' })
     }
 
-    await pool.query(
-      "UPDATE hqh5_butler_services SET status = 'cancelled' WHERE id = ? AND status <> 'completed'",
+    // [butler-atomic] R4：并发下仅一个请求 affectedRows=1；把 `<> 'completed'` 收紧为
+    //   白名单状态，避免"已取消的单再取消一次"被当成成功
+    const [cret] = await pool.query(
+      "UPDATE hqh5_butler_services SET status = 'cancelled' WHERE id = ? AND status IN ('open','assigned','processing')",
       [row.id]
     )
+    if (!cret || cret.affectedRows !== 1) {
+      const [[nowRow]] = await pool.query('SELECT status FROM hqh5_butler_services WHERE id = ?', [row.id])
+      const st = nowRow ? nowRow.status : '未知'
+      return res.status(409).json({ code: 409, message: st === 'cancelled' ? '工单已取消' : `工单状态已变更为「${st}」，取消未生效` })
+    }
     res.json({ code: 0, message: '已取消' })
   } catch (e) { next(e) }
 })
@@ -432,19 +449,23 @@ router.delete('/:id', requirePermission(PERMISSIONS.BUTLER_ORDERS_DELETE), async
       'SELECT * FROM hqh5_butler_services WHERE id = ? AND deleted_at IS NULL',
       [req.params.id]
     )
-    if (!row) return res.status(404).json({ code: 404, message: '工单不存在' })
+    if (!row) return res.status(404).json({ code: 404, message: '工单不存在或无权操作' })
     if (!isAdmin(me) && row.user_id !== me.id) {
-      return res.status(403).json({ code: 403, message: '无权删除该工单' })
+      return res.status(404).json({ code: 404, message: '工单不存在或无权操作' })
     }
     // [butler-audit] 2026-09-14 R3-6：已接单/进行中/已完成不可删除，保留服务与核销追溯
     if (row.assigned_to != null || ['assigned', 'processing', 'completed'].includes(row.status)) {
       return res.status(409).json({ code: 409, message: '已接单或已完成的工单不可删除，如需终止请使用取消' })
     }
     const dReason = reason ? String(reason).slice(0, 200) : null
-    await pool.query(
+    // [butler-atomic] R4：仅真的改到 1 行才算删除成功（并发下防重复删除/假成功）；审计只在成功时写
+    const [dret] = await pool.query(
       'UPDATE hqh5_butler_services SET deleted_at = NOW(), deleted_by = ?, delete_reason = ? WHERE id = ? AND deleted_at IS NULL',
       [me.id, dReason, row.id]
     )
+    if (!dret || dret.affectedRows !== 1) {
+      return res.status(409).json({ code: 409, message: '该工单已被删除' })
+    }
     await writeAuditLog(req, 'DELETE', 'hqh5_butler_services', row.id, row, { soft_deleted: true, deleted_by: me.id, delete_reason: dReason })
     res.json({ code: 0, message: '已删除' })
   } catch (e) { next(e) }
