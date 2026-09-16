@@ -375,8 +375,8 @@ router.get('/admin/health-check', auth, requireRole('admin', 'superuser', 'enter
     config.push({
       group: '考勤', items: [
         { label: '上班模板（新）', value: wmCount ? wmAssign.map(w => w.name + '(' + (w.target_type === 'all' ? '全员' : w.target_type === 'department' ? '部门' : '个人') + ')').join('、') : '未铺设', note: wmCount ? '模板优先于出勤规则判定；自由工时/不打卡口径不判迟到早退' : '可在「考勤与排班」里一键铺设' },
-        { label: '打卡时间（出勤规则）', value: rule ? (hhmm(rule.start_time) + ' – ' + hhmm(rule.end_time)) : '未配置（默认 09:00–18:00）', note: rule ? ('规则：' + rule.name) : '无启用中的规则' },
-        { label: '出勤规则条数 / 排班条数', value: rules.length + ' 条 / ' + shiftCount + ' 条', note: shiftCount === 0 ? '无排班时按出勤规则判定' : '有排班时优先按当天班次' },
+        { label: '打卡时间（出勤规则）', value: (wmCount && !rule) ? '由上班模板决定（见上一行）' : (rule ? (hhmm(rule.start_time) + ' – ' + hhmm(rule.end_time)) : '未配置（默认 09:00–18:00）'), note: wmCount ? ('旧出勤规则已被上班模板优先覆盖' + (rule ? ('（规则：' + rule.name + '）') : '')) : (rule ? ('规则：' + rule.name) : '无启用中的规则') },
+        { label: '出勤规则条数 / 排班条数', value: rules.length + ' 条 / ' + shiftCount + ' 条', note: shiftCount === 0 ? (wmCount ? '无排班时按上班模板判定' : '无排班时按出勤规则判定') : '有排班时优先按当天班次' },
         { label: '补卡次数上限', value: (fixDef ? (Number.isFinite(fixMax) && fixMax > 0 ? (fixMax + ' 次/月') : '不限') : '未接入该流程'), note: fixDef ? '后台系统 → 考勤管理可改' : '' }
       ]
     })
