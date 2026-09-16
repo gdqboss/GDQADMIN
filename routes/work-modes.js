@@ -11,8 +11,11 @@
 import { Router } from 'express'
 import { pool } from '../db/connection.js'
 import { requirePermission, PERMISSIONS } from '../middleware/rbac.js'
+import multer from 'multer'
+import ExcelJS from 'exceljs'
 
 const router = Router()
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } })
 
 // 本地日期（不用 toISOString：那是 UTC，东八区会差一天）
 function fmtDate(d) {
@@ -304,6 +307,229 @@ router.post('/unassign', requirePermission(PERMISSIONS.SCHEDULE_WRITE), async (r
     const [r] = await pool.query('DELETE FROM work_mode_assignments WHERE target_type = ? AND target_id = ?', [target_type, Number(target_id)])
     res.json({ code: 0, data: { removed: r.affectedRows || 0 }, message: r.affectedRows ? '已撤销该铺设（排班记录未动）' : '该目标本来就没有铺设' })
   } catch (err) { next(err) }
+})
+
+
+/* ══════════════════════════════════════════════════════════════════
+   B2：排班表模板下载 + 导入（波哥 2026-09-16：导入与下载模板成对）
+   口径：矩阵式（左列手机号 + 每列一天）；空格 = 不动作；只允许今天及以后；
+        person 按手机号匹配；班次按名称/代码匹配；两段式（先体检单再确认）
+   ══════════════════════════════════════════════════════════════════ */
+
+function cellText(v) {
+  if (v === null || v === undefined) return ''
+  if (v instanceof Date) return fmtDate(v)
+  if (typeof v === 'object') {
+    if (Array.isArray(v.richText)) return v.richText.map(t => t.text).join('')
+    if (v.text !== undefined) return String(v.text)
+    if (v.result !== undefined) return String(v.result)
+    return ''
+  }
+  return String(v).trim()
+}
+
+function normalizeDate(v) {
+  if (v instanceof Date) return fmtDate(v)
+  const s = cellText(v)
+  const m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)
+  if (m) return m[1] + '-' + String(m[2]).padStart(2, '0') + '-' + String(m[3]).padStart(2, '0')
+  return null
+}
+
+// 解析排班表工作簿 → { dates, changes, errors, unknownShifts, unknownPhones }
+async function parseScheduleWorkbook(conn, buffer) {
+  const wb = new ExcelJS.Workbook()
+  await wb.xlsx.load(buffer)
+  const ws = wb.worksheets[0]
+  if (!ws) return { dates: [], changes: [], errors: [{ row: 0, msg: '文件里没有工作表' }], unknownShifts: [], unknownPhones: [] }
+
+  const headerRow = ws.getRow(1)
+  const dateCols = []
+  let phoneCol = 0, nameCol = 0
+  for (let c = 1; c <= headerRow.cellCount; c++) {
+    const t = cellText(headerRow.getCell(c).value)
+    if (/手机|phone/i.test(t)) phoneCol = c
+    else if (/姓名|name/i.test(t)) nameCol = c
+    else { const d = normalizeDate(headerRow.getCell(c).value); if (d) dateCols.push({ col: c, date: d }) }
+  }
+  if (!phoneCol) phoneCol = 1
+  if (!dateCols.length) {
+    return { dates: [], changes: [], errors: [{ row: 1, msg: '表头里没找到日期列（需要类似 2026-09-21 的列头）' }], unknownShifts: [], unknownPhones: [] }
+  }
+
+  const [users] = await conn.query(
+    `SELECT id, name, phone FROM users WHERE status = 'active' AND phone IS NOT NULL AND phone <> ''`)
+  const phoneMap = new Map(users.map(u => [String(u.phone).trim(), u]))
+  const [shifts] = await conn.query(`SELECT id, name, code FROM shifts WHERE status = 'active'`)
+  const shiftMap = new Map()
+  shifts.forEach(s => { shiftMap.set(String(s.name).trim(), s); shiftMap.set(String(s.code).trim().toUpperCase(), s) })
+
+  const today = todayStr()
+  const errors = [], changes = []
+  const unknownShifts = new Set(), unknownPhones = new Set()
+
+  for (let r = 2; r <= ws.rowCount; r++) {
+    const row = ws.getRow(r)
+    const phone = cellText(row.getCell(phoneCol).value).replace(/[\s-]/g, '')
+    const nameTxt = nameCol ? cellText(row.getCell(nameCol).value) : ''
+    const hasAny = dateCols.some(dc => cellText(row.getCell(dc.col).value) !== '')
+    if (!phone && !hasAny) continue
+    if (/示例|填写说明|说明/.test(nameTxt)) continue          // 示例行跳过
+    if (!phone) { errors.push({ row: r, msg: '这一行没填手机号' }); continue }
+    if (/示例/.test(phone) && !phoneMap.has(phone)) { errors.push({ row: r, phone, msg: '看起来是示例行，已跳过（可删除本行）' }); continue }
+    const u = phoneMap.get(phone)
+    if (!u) { unknownPhones.add(phone); errors.push({ row: r, phone, msg: '手机号不在系统员工名单里' }); continue }
+
+    for (const dc of dateCols) {
+      const val = cellText(row.getCell(dc.col).value).trim()
+      if (!val) continue                                       // 空格 = 不动作
+      if (/^(休|休息|x|X|—|-|\/|无)$/.test(val)) continue        // 显式"休息"也视为不动作
+      const sh = shiftMap.get(val) || shiftMap.get(val.toUpperCase())
+      if (!sh) { unknownShifts.add(val); errors.push({ row: r, phone, date: dc.date, msg: '班次名「' + val + '」不存在' }); continue }
+      if (dc.date < today) { errors.push({ row: r, phone, date: dc.date, msg: '过去日期（历史保护，不会导入）' }); continue }
+      changes.push({ row: r, user_id: u.id, name: u.name, phone, date: dc.date, shift_id: sh.id, shift_name: sh.name })
+    }
+  }
+  return { dates: dateCols.map(d => d.date), changes, errors, unknownShifts: [...unknownShifts], unknownPhones: [...unknownPhones] }
+}
+
+// 标注每条是「新增」还是「覆盖」（查今天及以后已有排班）
+async function markActions(conn, changes) {
+  const byUser = new Map()
+  for (const c of changes) {
+    if (!byUser.has(c.user_id)) byUser.set(c.user_id, [])
+    byUser.get(c.user_id).push(c)
+  }
+  let toCreate = 0, toUpdate = 0
+  for (const [uid, list] of byUser) {
+    const [exist] = await conn.query(
+      `SELECT DATE_FORMAT(schedule_date, '%Y-%m-%d') AS d FROM shift_schedules
+        WHERE user_id = ? AND schedule_date >= CURDATE() AND schedule_date IN (?)`,
+      [uid, list.map(c => c.date)])
+    const ex = new Set(exist.map(x => x.d))
+    for (const c of list) {
+      if (ex.has(c.date)) { c.action = 'update'; toUpdate++ } else { c.action = 'create'; toCreate++ }
+    }
+  }
+  return { toCreate, toUpdate }
+}
+
+/* ── GET /api/oa/work-modes/schedule-template?start=&days= ── 下载排班表模板 ── */
+router.get('/schedule-template', requirePermission(PERMISSIONS.SCHEDULE_WRITE), async (req, res, next) => {
+  try {
+    const start = /^\d{4}-\d{2}-\d{2}$/.test(req.query.start || '') ? req.query.start : todayStr()
+    const days = Math.min(Math.max(Number(req.query.days) || 14, 1), 62)
+    const dates = []
+    const d0 = new Date(start + 'T00:00:00')
+    for (let i = 0; i < days; i++) {
+      const d = new Date(d0); d.setDate(d0.getDate() + i); dates.push(fmtDate(d))
+    }
+
+    const [users] = await pool.query(
+      `SELECT u.name, u.phone, d.name AS dept FROM users u LEFT JOIN departments d ON u.department_id = d.id
+        WHERE u.status = 'active' AND u.role <> 'enterprise-admin' ORDER BY u.department_id, u.id`)
+    const [shifts] = await pool.query(
+      `SELECT name, code, start_time, end_time FROM shifts WHERE status = 'active' ORDER BY id`)
+
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('排班表')
+    ws.addRow(['手机号', '姓名（仅参考）', ...dates])
+    ws.getRow(1).font = { bold: true }
+    ws.getRow(1).alignment = { horizontal: 'center' }
+    ws.getColumn(1).width = 16
+    ws.getColumn(2).width = 16
+    dates.forEach((_, i) => { ws.getColumn(3 + i).width = 12 })
+    users.forEach(u => ws.addRow([u.phone || '', u.name || '', ...dates.map(() => '')]))
+    const demo = ['18600000000', '（示例行·请删除）', ...dates.map((_, i) => i === 0 ? (shifts[0] ? shifts[0].name : '行政班') : '')]
+    ws.addRow(demo)
+    ws.getRow(ws.rowCount).font = { italic: true, color: { argb: 'FF999999' } }
+
+    const ws2 = wb.addWorksheet('填写说明')
+    const rows = [
+      ['排班表 · 填写说明（请先读我）'], [''],
+      ['1. 只填「要上班」的格子；空着的格子 = 不排班，不会改动已有排班'],
+      ['2. 格子里填「班次名称」，当前可用班次如下：'],
+      ...shifts.map(s => ['', '· ' + s.name + '（' + String(s.start_time).slice(0, 5) + '–' + String(s.end_time).slice(0, 5) + '，代码 ' + s.code + '）']),
+      [''],
+      ['3. 第一列手机号用来匹配员工，请勿修改；匹配不到的会在导入时单独列出'],
+      ['4. 只能填今天及以后的日期（历史排班受保护）'],
+      ['5. 同一人同一天已有排班时，导入会覆盖它（导入前会先给你影响清单确认）'],
+      ['6. 「姓名（仅参考）」只是给人看的，导入只认手机号'],
+      ['7. 想要"这天不上班"？留空即可（不要在格子里写"休"）'],
+    ]
+    rows.forEach(r => ws2.addRow(r))
+    ws2.getColumn(1).width = 64
+    ws2.getRow(1).font = { bold: true, size: 14 }
+
+    const buf = await wb.xlsx.writeBuffer()
+    const fn = '排班表模板_' + dates[0] + '_至_' + dates[dates.length - 1] + '.xlsx'
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', "attachment; filename=\"schedule-template.xlsx\"; filename*=UTF-8''" + encodeURIComponent(fn))
+    res.send(Buffer.from(buf))
+  } catch (err) { next(err) }
+})
+
+/* ── POST /api/oa/work-modes/import-preview ── 上传解析 → 体检单（不写库）── */
+router.post('/import-preview', requirePermission(PERMISSIONS.SCHEDULE_WRITE), upload.single('file'), async (req, res, next) => {
+  try {
+    if (!req.file || !req.file.buffer) return res.status(400).json({ code: 400, message: '请选择要导入的 xlsx 文件' })
+    const parsed = await parseScheduleWorkbook(pool, req.file.buffer)
+    const { toCreate, toUpdate } = parsed.changes.length ? await markActions(pool, parsed.changes) : { toCreate: 0, toUpdate: 0 }
+    const userCount = new Set(parsed.changes.map(c => c.user_id)).size
+    const shown = parsed.changes.slice(0, 100).map(c => ({ row: c.row, name: c.name, phone: c.phone, date: c.date, shift_name: c.shift_name, action: c.action }))
+    res.json({
+      code: 0,
+      data: {
+        file: req.file.originalname || '',
+        dates: parsed.dates,
+        summary: { cells: parsed.changes.length, users: userCount, toCreate, toUpdate, errors: parsed.errors.length },
+        changes: shown,
+        changesTotal: parsed.changes.length,
+        errors: parsed.errors.slice(0, 200),
+        errorsTotal: parsed.errors.length,
+        unknownShifts: parsed.unknownShifts,
+        unknownPhones: parsed.unknownPhones
+      },
+      message: '解析完成'
+    })
+  } catch (err) {
+    if (err && /File too large|LIMIT_FILE_SIZE/i.test(String(err.message))) return res.status(413).json({ code: 413, message: '文件太大（上限 10MB）' })
+    next(err)
+  }
+})
+
+/* ── POST /api/oa/work-modes/import-apply ── 确认后写库（重新上传同一文件，服务端重新解析）── */
+router.post('/import-apply', requirePermission(PERMISSIONS.SCHEDULE_WRITE), upload.single('file'), async (req, res, next) => {
+  const conn = await pool.getConnection()
+  try {
+    if (!req.file || !req.file.buffer) { conn.release(); return res.status(400).json({ code: 400, message: '请重新选择同一份 xlsx 文件' }) }
+    const parsed = await parseScheduleWorkbook(conn, req.file.buffer)
+    if (!parsed.changes.length) { conn.release(); return res.status(400).json({ code: 400, message: '这份文件里没有可导入的排班（' + (parsed.errors[0] ? parsed.errors[0].msg : '全是空格或都落在历史') + '）' }) }
+
+    await conn.beginTransaction()
+    let created = 0, updated = 0
+    for (const c of parsed.changes) {
+      const [r] = await conn.query(
+        `INSERT INTO shift_schedules (user_id, shift_id, schedule_date, status, attendance_required, created_by)
+         VALUES (?,?,?,'scheduled',1,?)
+         ON DUPLICATE KEY UPDATE shift_id = VALUES(shift_id), status = 'scheduled', created_by = VALUES(created_by)`,
+        [c.user_id, c.shift_id, c.date, req.user.id])
+      if (r.affectedRows === 1) created++
+      else if (r.affectedRows === 2) updated++
+      else created++
+    }
+    await conn.commit()
+    res.json({
+      code: 0,
+      data: { created, updated, skippedErrors: parsed.errors.length, users: new Set(parsed.changes.map(c => c.user_id)).size, dates: parsed.dates.length },
+      message: '导入完成：新增 ' + created + ' 条，覆盖 ' + updated + ' 条'
+    })
+  } catch (err) {
+    try { await conn.rollback() } catch (e) { /* noop */ }
+    next(err)
+  } finally {
+    conn.release()
+  }
 })
 
 export default router
