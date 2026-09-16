@@ -1,12 +1,27 @@
 import { Router } from 'express'
 import { pool } from '../db/connection.js'
-import { requirePermission } from '../middleware/rbac.js'
+import { requirePermission, PERMISSIONS } from '../middleware/rbac.js'
 import { parsePagination } from '../utils/pagination.js'
 import { requireRole, ROLES } from '../middleware/rbac.js'
 import { checkPerm } from '../utils/permission.js'
-import { getCompanyScope, assertRowCompany } from '../utils/company-scope.js'
+import { getCompanyScope, assertRowCompany, companyWhere } from '../utils/company-scope.js'
+import { exportAttendance } from '../utils/excel-export.js'
 
 const router = Router()
+
+// [shift-hours-validate] 2026-09-15 班次「时长 / 休息时长」按小时入参。原先只判必填、不判范围，
+//   误把分钟当小时填（如 480）会触发 ER_WARN_DATA_OUT_OF_RANGE → 500（用户看到"系统错误"）。
+//   现前置校验：非数字 / 负数 / 超 24 小时 → 400 + 人话提示。
+function validateShiftHours(v, label, required) {
+  if (v === undefined || v === null || v === '') {
+    return required ? label + '请按「小时」填写（0–24 的小时数）' : null
+  }
+  const n = Number(v)
+  if (!Number.isFinite(n)) return label + '必须是数字（按「小时」填写，如 8）'
+  if (n < 0) return label + '不能为负数'
+  if (n > 24) return label + '请按「小时」填写，范围 0–24（' + v + ' 看起来是分钟；8 小时应填 8）'
+  return null
+}
 
 // JSON字段解析工具函数
 function safeParse(str, defaultVal = {}) {
@@ -271,7 +286,32 @@ function fmtWorkTime(t) {
   }
   return null
 }
-// 优先级: 1) 当天排班 shift_schedules→shifts  2) 员工所属规则 attendance_rule_members→rules  3) 全局默认规则  4) 09:00/18:00 兜底
+// B1 上班模板（2026-09-16 波哥拍板）：个人 > 部门 > 全员；仅常规班制走这里（轮班靠"当天排班"那一层）
+//   返回 { in, out, clockMode, source }；没铺任何模板返回 null（回落原有的成员规则/全局默认，老数据零影响）
+async function getWorkModeWindow(userId) {
+  try {
+    const [[u]] = await pool.query('SELECT department_id FROM users WHERE id = ?', [userId])
+    const deptId = u && u.department_id ? Number(u.department_id) : 0
+    const [rows] = await pool.query(
+      `SELECT t.mode_type, t.start_time, t.end_time, t.clock_mode, t.code, a.target_type
+         FROM work_mode_assignments a
+         JOIN work_mode_templates t ON a.template_id = t.id AND t.status = 'active'
+        WHERE (a.target_type = 'user' AND a.target_id = ?)
+           OR (a.target_type = 'department' AND a.target_id = ?)
+           OR (a.target_type = 'all')
+        ORDER BY FIELD(a.target_type, 'user', 'department', 'all')`,
+      [userId, deptId]
+    )
+    for (const r of rows) {
+      if (r.mode_type !== 'regular') continue
+      const si = fmtWorkTime(r.start_time), so = fmtWorkTime(r.end_time)
+      if (!si) continue
+      return { in: si, out: so || '18:00:00', clockMode: r.clock_mode, source: 'work-mode:' + r.code + ':' + r.target_type }
+    }
+    return null
+  } catch (e) { return null }
+}
+// 优先级: 1) 当天排班 shift_schedules→shifts  1.5) 上班模板 work_mode_assignments（个人>部门>全员）  2) 员工所属规则 attendance_rule_members→rules  3) 全局默认规则  4) 09:00/18:00 兜底
 async function getWorkTimeWindow(userId) {
   const defaultIn = '09:00:00', defaultOut = '18:00:00'
   const today = new Date().toISOString().slice(0, 10)
@@ -288,6 +328,9 @@ async function getWorkTimeWindow(userId) {
       const so = fmtWorkTime(sched[0].end_time)
       if (si) return { in: si, out: so || defaultOut }
     }
+    // 1.5 上班模板（B1）：个人 > 部门 > 全员
+    const wm = await getWorkModeWindow(userId)
+    if (wm) return wm
     // 2. 员工所属出勤规则
     const [rules] = await pool.query(
       `SELECT ar.start_time, ar.end_time FROM attendance_rule_members arm
@@ -364,10 +407,13 @@ router.post('/attendance/clock', async (req, res, next) => {
       // 2026-08-28 状态模式: trip出差/free自由打卡 豁免迟到; overtime加班 迟到照判
       const [[user]] = await pool.query('SELECT require_attendance, worker_category FROM users WHERE id = ?', [userId])
       const isRequired = user && user.require_attendance === 1
-      const silent = !isRequired
+      // B1：上班模板口径为「自由工时 / 不打卡」时同样不判迟到早退（与 require_attendance=0 同效）
+      const wmSilent = (win.clockMode === 'none' || win.clockMode === 'flexible')
+      const judgeable = isRequired && !wmSilent
+      const silent = !isRequired || wmSilent
       const workerCategory = user?.worker_category || 'office'
       const exempt = (cType === 'trip' || cType === 'free' || onTrip)
-      const status = exempt ? 'normal' : (isRequired ? (timeStr > winIn ? 'late' : 'normal') : 'normal')
+      const status = exempt ? 'normal' : (judgeable ? (timeStr > winIn ? 'late' : 'normal') : 'normal')
       const lateMin = (silent || exempt || status !== 'late') ? 0 : Math.floor((new Date(`2000-01-01 ${timeStr}`) - new Date(`2000-01-01 ${winIn}`)) / 60000)
 
       // 出差状态打卡 → 同步写一条出差轨迹 (轨迹表, 可多次)
@@ -404,10 +450,13 @@ router.post('/attendance/clock', async (req, res, next) => {
       // 2026-08-28 状态模式: trip/free 豁免早退; overtime 不算早退且计加班时长
       const [[user]] = await pool.query('SELECT require_attendance, worker_category FROM users WHERE id = ?', [userId])
       const isRequired = user && user.require_attendance === 1
-      const silent = !isRequired
+      // B1：上班模板口径为「自由工时 / 不打卡」时同样不判迟到早退（与 require_attendance=0 同效）
+      const wmSilent = (win.clockMode === 'none' || win.clockMode === 'flexible')
+      const judgeable = isRequired && !wmSilent
+      const silent = !isRequired || wmSilent
       const workerCategory = user?.worker_category || 'office'
       const exemptOut = (cType === 'trip' || cType === 'free' || onTrip)
-      const isEarly = isRequired && !exemptOut && timeStr < winOut
+      const isEarly = judgeable && !exemptOut && timeStr < winOut
       const status = exemptOut ? 'normal' : (isEarly ? 'early' : existing.status)
       const earlyMin = (silent || exemptOut || !isEarly) ? 0 : Math.floor((new Date(`2000-01-01 ${winOut}`) - new Date(`2000-01-01 ${timeStr}`)) / 60000)
 
@@ -520,51 +569,60 @@ router.get('/attendance/trip-logs', async (req, res, next) => {
 })
 
 // GET /api/oa/attendance - Query attendance records
-router.get('/attendance', async (req, res, next) => {
-  try {
-    const { user_id, date, start_date, end_date, status, department } = req.query
-    const { page, size } = parsePagination(req.query)
-    const currentUserId = req.user.id
-    const currentUserRole = req.user.role
+/**
+ * 构建考勤查询的 where 与参数（作用域 + 人员/日期/状态筛选）
+ * ------------------------------------------------------------------
+ * 为什么抽出来：列表（GET /attendance）与导出（GET /attendance/export）必须是**同一套可见范围**；
+ * 各写一份必然漂移 ——「同一判断散落多处」正是本模块历史上多起 bug 的来源。
+ *
+ * 2026-09-14 修正（N5）：**company-manage（企业管理员/HR）下 user_id 原被忽略** ——
+ * 只按「本企业全员 IN (…)」过滤，HR 在下拉里选了人也会**静默返回全员**；现在可在本企业范围内指定某位员工。
+ * 指定的 user_id 不在本企业时返回空集（[-1]），不提示"此人不存在/在别家"，避免探测。
+ *
+ * 注意：`department` 参数仍**未启用**（原实现即解构未用），按部门查/导出待口径确定后再补。
+ *
+ * @returns {Promise<{where:string, params:any[]} | {deny:{code:number, message:string}}>}
+ */
+async function buildAttendanceFilter(req) {
+  const { user_id, date, start_date, end_date, status } = req.query
+  const currentUserId = req.user.id
+  const currentUserRole = req.user.role
 
-    let where = 'WHERE 1=1'
-    const params = []
+  let where = 'WHERE 1=1'
+  const params = []
 
-    // [company-iso] 企业作用域：优先于原有角色逻辑
-    const __scope = await getCompanyScope(req)
+  // [company-iso] 企业作用域：优先于原有角色逻辑
+  const __scope = await getCompanyScope(req)
 
-    if (__scope.kind === 'company-manage') {
-      // 企业管理员：仅本企业成员考勤
-      const [cids] = await pool.query('SELECT id FROM users WHERE company_id = ? AND status = ?', [__scope.companyId, 'active'])
-      let ids = cids.map(r => r.id)
-      ids = ids.length ? ids : [-1]
-      const ph = ids.map(() => '?').join(',')
-      where = `WHERE 1=1 AND a.user_id IN (${ph})`
-      params.push(...ids)
-    } else if (__scope.kind === 'company-self') {
-      // 企业普通员工：仅本人
-      where = 'WHERE 1=1 AND a.user_id = ?'
-      params.push(currentUserId)
+  if (__scope.kind === 'company-manage') {
+    // 企业管理员（HR）：限本企业在职成员；可在本企业内指定某位员工
+    const [cids] = await pool.query('SELECT id FROM users WHERE company_id = ? AND status = ?', [__scope.companyId, 'active'])
+    let ids = cids.map(r => r.id)
+    if (user_id) {
+      const wanted = parseInt(user_id, 10)
+      ids = ids.includes(wanted) ? [wanted] : [-1]
     }
-
-    // 权限控制（孵化器作用域 / global 走原逻辑）
-    if (__scope.kind === 'company-manage' || __scope.kind === 'company-self') {
-      // 企业作用域已限定可见范围，跳过原有角色分支
+    ids = ids.length ? ids : [-1]
+    const ph = ids.map(() => '?').join(',')
+    where = `WHERE 1=1 AND a.user_id IN (${ph})`
+    params.push(...ids)
+  } else if (__scope.kind === 'company-self') {
+    // 企业普通员工：仅本人
+    where = 'WHERE 1=1 AND a.user_id = ?'
+    params.push(currentUserId)
+  } else {
+    // 孵化器人员：未授权（无 company:attendance-view）只能看本孵化器（company_id IS NULL）内部考勤
+    // 超管(role=admin, checkPerm 恒真) / 被授权指定人员可跨企业查考勤（政府现场办公检查作证）
+    const __canCrossCompany = __scope.kind === 'global' || await checkPerm(req, 'company:attendance-view')
+    if (__canCrossCompany) {
+      if (user_id) { where += ' AND a.user_id = ?'; params.push(user_id) }
     } else {
-      // 孵化器人员：未授权（无 company:attendance-view）只能看本孵化器（company_id IS NULL）内部考勤
-      // 超管(role=admin, checkPerm 恒真) / 被授权指定人员可跨企业查考勤（政府现场办公检查作证）
-      const __canCrossCompany = __scope.kind === 'global' || await checkPerm(req, 'company:attendance-view')
-      if (__canCrossCompany) {
-        // 授权人员/超管：可查看全部（含企业）考勤
+      where += ' AND u.company_id IS NULL'
+      if (currentUserRole === ROLES.ADMIN) {
         if (user_id) { where += ' AND a.user_id = ?'; params.push(user_id) }
       } else {
-        // 未授权孵化器人员：仅本孵化器 + 原有汇报链可见性
-        where += ' AND u.company_id IS NULL'
-        if (currentUserRole === ROLES.ADMIN) {
-          if (user_id) { where += ' AND a.user_id = ?'; params.push(user_id) }
-        } else {
-      // 查找当前用户的所有下级（递归）
-      const [subordinates] = await pool.query(`
+        // 查找当前用户的所有下级（递归）
+        const [subordinates] = await pool.query(`
         WITH RECURSIVE subordinate_tree AS (
           SELECT id FROM users WHERE supervisor_id = ?
           UNION ALL
@@ -574,24 +632,36 @@ router.get('/attendance', async (req, res, next) => {
         SELECT id FROM subordinate_tree
       `, [currentUserId])
 
-      const subordinateIds = subordinates.map(s => s.id)
-      subordinateIds.push(currentUserId) // 包含自己
+        const subordinateIds = subordinates.map(s => s.id)
+        subordinateIds.push(currentUserId) // 包含自己
 
-      if (user_id) {
-        // 如果指定了user_id，检查是否有权限查看
-        if (!subordinateIds.includes(parseInt(user_id))) {
-          return res.status(403).json({ code: 403, message: '无权查看该用户的考勤记录' })
+        if (user_id) {
+          if (!subordinateIds.includes(parseInt(user_id))) {
+            return { deny: { code: 403, message: '无权查看该用户的考勤记录' } }
+          }
+          where += ' AND a.user_id = ?'
+          params.push(user_id)
+        } else {
+          where += ' AND a.user_id IN (?)'
+          params.push(subordinateIds)
         }
-        where += ' AND a.user_id = ?'
-        params.push(user_id)
-      } else {
-        // 只能查看自己和下级的考勤
-        where += ' AND a.user_id IN (?)'
-        params.push(subordinateIds)
-      }
-      }
       }
     }
+  }
+
+  return { where, params }
+}
+
+
+router.get('/attendance', async (req, res, next) => {
+  try {
+    const { page, size } = parsePagination(req.query)
+    // 作用域 + 筛选由 buildAttendanceFilter 统一构建（与 /attendance/export 同源，避免两套可见范围漂移）
+    const f = await buildAttendanceFilter(req)
+    if (f.deny) return res.status(f.deny.code).json({ code: f.deny.code, message: f.deny.message })
+    const { date, start_date, end_date, status } = req.query
+    let where = f.where
+    const params = f.params
 
     // 日期筛选
     if (date) {
@@ -628,6 +698,68 @@ router.get('/attendance', async (req, res, next) => {
     res.json({ code: 0, data: { list: rows, total, page, size }, message: 'ok' })
   } catch (err) { next(err) }
 })
+
+// ═══════════════════════════════════════════════════════════════════
+// GET /api/oa/attendance/export —— 导出考勤表（HR 用）
+// 作用域与列表 GET /attendance **同源**（同一个 buildAttendanceFilter）：
+//   能导出多少 = 能看多少，不存在"用导出接口绕过列表可见范围"。
+// 支持：user_id / date / start_date / end_date / status
+//   （"某月"用 start_date=YYYY-MM-01 & end_date=YYYY-MM-末 表达，与列表同一套日期口径）
+// 桌面端 views/oa/AttendanceManageV2.vue 的「导出」按钮早已在调这个地址（此前是死链），补上即通。
+// ═══════════════════════════════════════════════════════════════════
+router.get('/attendance/export', async (req, res, next) => {
+  try {
+    const f = await buildAttendanceFilter(req)
+    if (f.deny) return res.status(f.deny.code).json({ code: f.deny.code, message: f.deny.message })
+
+    const { date, start_date, end_date, status } = req.query
+    let where = f.where
+    const params = [...f.params]
+
+    // 与列表完全一致的日期口径：未给任何区间则默认最近 30 天
+    if (date) {
+      where += ' AND a.date = ?'
+      params.push(date)
+    } else if (!start_date && !end_date) {
+      const today = new Date().toISOString().slice(0, 10)
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+      where += ' AND a.date >= ? AND a.date <= ?'
+      params.push(thirtyDaysAgo, today)
+    }
+    if (start_date) { where += ' AND a.date >= ?'; params.push(start_date) }
+    if (end_date) { where += ' AND a.date <= ?'; params.push(end_date) }
+    if (status) { where += ' AND a.status = ?'; params.push(status) }
+
+    // 导出不分页，但要有上限保护：一次最多 2 万行，防误操作把进程拉爆
+    const MAX_ROWS = 20000
+    const sql = `
+      SELECT a.*, u.name as user_name, u.department, u.worker_category, u.require_attendance
+      FROM attendance a
+      LEFT JOIN users u ON a.user_id = u.id
+      ${where}
+      ORDER BY a.user_id ASC, a.date ASC, a.clock_in ASC
+      LIMIT ?
+    `
+    params.push(MAX_ROWS)
+    const [rows] = await pool.query(sql, params)
+
+    const workbook = await exportAttendance(rows, req.query)
+    const buffer = await workbook.xlsx.writeBuffer()
+
+    const span = req.query.date
+      ? req.query.date
+      : ((req.query.start_date || req.query.end_date)
+        ? `${req.query.start_date || '起'}_${req.query.end_date || '止'}`
+        : '最近30天')
+    const filename = `考勤表-${req.query.user_id ? 'user' + req.query.user_id : '全员'}-${span}.xlsx`
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`)
+    res.setHeader('X-Row-Count', String(rows.length))
+    res.send(buffer)
+  } catch (err) { next(err) }
+})
+
 
 // POST /api/oa/attendance/:id/explain - Submit abnormal reason
 router.post('/attendance/:id/explain', async (req, res, next) => {
@@ -1380,6 +1512,12 @@ router.post('/shifts', requireRole('admin', 'manager'), async (req, res, next) =
       return res.status(400).json({ code: 400, message: '班次名称、代码、时间和时长必填' })
     }
 
+    // [shift-hours-validate] 越界前置校验 → 400（原先越界触发 DB 越界 → 500）
+    const __durErr = validateShiftHours(duration, '班次时长', true)
+    if (__durErr) return res.status(400).json({ code: 400, message: __durErr })
+    const __brkErr = validateShiftHours(break_duration, '休息时长', false)
+    if (__brkErr) return res.status(400).json({ code: 400, message: __brkErr })
+
     const [result] = await pool.query(
       `INSERT INTO shifts (name, code, start_time, end_time, duration, break_duration, color, description)
        VALUES (?,?,?,?,?,?,?,?)`,
@@ -1400,8 +1538,16 @@ router.put('/shifts/:id', requireRole('admin', 'manager'), async (req, res, next
     if (name !== undefined) { updates.push('name = ?'); params.push(name) }
     if (start_time !== undefined) { updates.push('start_time = ?'); params.push(start_time) }
     if (end_time !== undefined) { updates.push('end_time = ?'); params.push(end_time) }
-    if (duration !== undefined) { updates.push('duration = ?'); params.push(duration) }
-    if (break_duration !== undefined) { updates.push('break_duration = ?'); params.push(break_duration) }
+    if (duration !== undefined) {
+      const __durErr = validateShiftHours(duration, '班次时长', true)
+      if (__durErr) return res.status(400).json({ code: 400, message: __durErr })
+      updates.push('duration = ?'); params.push(duration)
+    }
+    if (break_duration !== undefined) {
+      const __brkErr = validateShiftHours(break_duration, '休息时长', false)
+      if (__brkErr) return res.status(400).json({ code: 400, message: __brkErr })
+      updates.push('break_duration = ?'); params.push(break_duration)
+    }
     if (color !== undefined) { updates.push('color = ?'); params.push(color) }
     if (description !== undefined) { updates.push('description = ?'); params.push(description) }
     if (status !== undefined) { updates.push('status = ?'); params.push(status) }
@@ -1433,14 +1579,33 @@ router.get('/schedules', async (req, res, next) => {
                WHERE 1=1`
     const params = []
 
-    if (user_id) { sql += ' AND ss.user_id = ?'; params.push(user_id) }
+    // [sched-vis] 2026-09-15 可见范围（波哥口径）：无排班 read/write 权限的员工**只能看自己**，
+    //   即使显式传 ?user_id=<他人> 也无效；有权限者叠加企业作用域（global/incubator 不加限制，行为不变）
+    const __canSeeAll = await checkPerm(req, PERMISSIONS.SCHEDULE_READ) || await checkPerm(req, PERMISSIONS.SCHEDULE_WRITE)
+    const __effUser = __canSeeAll ? user_id : req.user.id
+    if (__effUser) { sql += ' AND ss.user_id = ?'; params.push(__effUser) }
     if (department) { sql += ' AND ss.department = ?'; params.push(department) }
     if (start_date) { sql += ' AND ss.schedule_date >= ?'; params.push(start_date) }
     if (end_date) { sql += ' AND ss.schedule_date <= ?'; params.push(end_date) }
     if (status) { sql += ' AND ss.status = ?'; params.push(status) }
 
-    const countSql = sql.replace(/SELECT ss\.\*, u\.name as user_name.*FROM/, 'SELECT COUNT(*) as total FROM')
-    const [[{ total }]] = await pool.query(countSql, params)
+    if (__canSeeAll) {
+      const __cw = await companyWhere(await getCompanyScope(req), req.user.id, 'u')
+      if (__cw.sql) { sql += __cw.sql; params.push(...__cw.params) }
+    }
+
+    // [sched-count-fix] 2026-09-15 原写法用正则把 SELECT 列换成 COUNT(*)，但 JS 正则 `.` 不跨行 →
+    //   从不命中，countSql 仍是整条 SELECT；排班表为空时 rows[0] 为 undefined → TypeError → 500。
+    //   现象：全新环境/从未排过班时「我的排班」直接 500，而不是显示空列表。
+    const whereClause = sql.slice(sql.indexOf('WHERE 1=1'))
+    const countSql = `SELECT COUNT(*) as total
+               FROM shift_schedules ss
+               LEFT JOIN users u ON ss.user_id = u.id
+               LEFT JOIN shifts s ON ss.shift_id = s.id
+               LEFT JOIN users creator ON ss.created_by = creator.id
+               ${whereClause}`
+    const [countRows] = await pool.query(countSql, params)
+    const total = (countRows && countRows[0] && countRows[0].total) || 0
 
     sql += ' ORDER BY ss.schedule_date DESC, u.name LIMIT ? OFFSET ?'
     params.push(size, (page - 1) * size)
@@ -1451,7 +1616,7 @@ router.get('/schedules', async (req, res, next) => {
 })
 
 // POST /api/oa/schedules - Create schedule (batch), supports weekdays filter
-router.post('/schedules', requireRole('admin', 'manager'), async (req, res, next) => {
+router.post('/schedules', requirePermission(PERMISSIONS.SCHEDULE_WRITE), async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
     await conn.beginTransaction()
@@ -1509,7 +1674,7 @@ router.post('/schedules', requireRole('admin', 'manager'), async (req, res, next
 })
 
 // PUT /api/oa/schedules/:id - Update schedule
-router.put('/schedules/:id', requireRole('admin', 'manager'), async (req, res, next) => {
+router.put('/schedules/:id', requirePermission(PERMISSIONS.SCHEDULE_WRITE), async (req, res, next) => {
   try {
     const { shift_id, schedule_date, status, notes } = req.body
     const updates = []
@@ -1532,13 +1697,25 @@ router.put('/schedules/:id', requireRole('admin', 'manager'), async (req, res, n
 })
 
 // DELETE /api/oa/schedules/:id - Delete schedule
-router.delete('/schedules/:id', requireRole('admin', 'manager'), async (req, res, next) => {
+router.delete('/schedules/:id', requirePermission(PERMISSIONS.SCHEDULE_WRITE), async (req, res, next) => {
   try {
     await pool.query('DELETE FROM shift_schedules WHERE id = ?', [req.params.id])
     res.json({ code: 0, data: null, message: '排班删除成功' })
   } catch (err) { next(err) }
 })
 
+// [sched-swap] 2026-09-15 换班通知（点对点写 notifications 表；通知失败不阻塞主流程）
+async function notifySwap(userId, title, content) {
+  if (!userId) return
+  try {
+    await pool.query(
+      'INSERT INTO notifications (user_id, type, title, content, created_at) VALUES (?,?,?,?,NOW())',
+      [userId, 'schedule_swap', title, content]
+    )
+  } catch (e) { /* 通知失败不阻塞主流程 */ }
+}
+
+// [sched-perm] 2026-09-15 排班增删改 / 换班审批 改为可分配权限点（原写死 admin/manager）
 // POST /api/oa/schedules/swap - Swap shifts
 router.post('/schedules/swap', async (req, res, next) => {
   const conn = await pool.getConnection()
@@ -1561,6 +1738,32 @@ router.post('/schedules/swap', async (req, res, next) => {
       return res.status(404).json({ code: 404, message: '排班记录不存在' })
     }
 
+    // [sched-swap] 2026-09-15 波哥口径：换班 = 两人互换；且员工只能申请「自己参与」的换班
+    if (String(schedule_id_a) === String(schedule_id_b)) {
+      await conn.rollback()
+      return res.status(400).json({ code: 400, message: '不能和自己换班（两条排班相同）' })
+    }
+    if (Number(scheduleA.user_id) !== Number(userId) && Number(scheduleB.user_id) !== Number(userId)) {
+      await conn.rollback()
+      return res.status(403).json({ code: 403, message: '只能对自己参与的排班发起换班' })
+    }
+    if (Number(scheduleA.user_id) === Number(scheduleB.user_id)) {
+      await conn.rollback()
+      return res.status(400).json({ code: 400, message: '换班必须是两名员工互换，不能是自己和自己' })
+    }
+    if (!['scheduled', 'confirmed'].includes(scheduleA.status) || !['scheduled', 'confirmed'].includes(scheduleB.status)) {
+      await conn.rollback()
+      return res.status(400).json({ code: 400, message: '其中一条排班已被换过或已取消，请刷新后重试' })
+    }
+    const [[__dup]] = await conn.query(
+      "SELECT id FROM shift_swaps WHERE status = 'pending' AND (schedule_id_a IN (?,?) OR schedule_id_b IN (?,?)) LIMIT 1",
+      [schedule_id_a, schedule_id_b, schedule_id_a, schedule_id_b]
+    )
+    if (__dup) {
+      await conn.rollback()
+      return res.status(400).json({ code: 400, message: '这两条排班已有待审批的换班申请' })
+    }
+
     // Create swap request
     const [result] = await conn.query(
       `INSERT INTO shift_swaps (schedule_id_a, schedule_id_b, user_id_a, user_id_b, reason, status)
@@ -1568,6 +1771,10 @@ router.post('/schedules/swap', async (req, res, next) => {
       [schedule_id_a, schedule_id_b, scheduleA.user_id, scheduleB.user_id, reason || null, 'pending']
     )
 
+    // [sched-swap] 通知对方（波哥口径：对方被动收到通知，不设“对方先点同意”这一步）
+    const [[__meRow]] = await conn.query('SELECT name FROM users WHERE id = ?', [userId])
+    const __peerId = Number(scheduleA.user_id) === Number(userId) ? scheduleB.user_id : scheduleA.user_id
+    await notifySwap(__peerId, '换班申请', ((__meRow && __meRow.name) || '有同事') + ' 发起了与你的一条排班互换，等待审批')
     await conn.commit()
     res.json({ code: 0, data: { id: result.insertId }, message: '调班申请已提交' })
   } catch (err) {
@@ -1579,7 +1786,7 @@ router.post('/schedules/swap', async (req, res, next) => {
 })
 
 // POST /api/oa/schedules/swap/:id/approve - Approve swap
-router.post('/schedules/swap/:id/approve', requireRole('admin', 'manager'), async (req, res, next) => {
+router.post('/schedules/swap/:id/approve', requirePermission(PERMISSIONS.SCHEDULE_APPROVE), async (req, res, next) => {
   const conn = await pool.getConnection()
   try {
     await conn.beginTransaction()
@@ -1614,6 +1821,9 @@ router.post('/schedules/swap/:id/approve', requireRole('admin', 'manager'), asyn
       ['approved', approverId, swapId]
     )
 
+    // [sched-swap] 通知双方（已批准）
+    await notifySwap(swap.user_id_a, '换班已通过', '你的换班申请已通过，两条排班已互换生效')
+    await notifySwap(swap.user_id_b, '换班已通过', '与你相关的换班申请已通过，两条排班已互换生效')
     await conn.commit()
     res.json({ code: 0, data: null, message: '调班已批准' })
   } catch (err) {
@@ -1622,6 +1832,129 @@ router.post('/schedules/swap/:id/approve', requireRole('admin', 'manager'), asyn
   } finally {
     conn.release()
   }
+})
+
+// [sched-swap] 2026-09-15 换班申请列表
+//   ?mine=1 → 我参与的（我发起的 / 别人指定我的）
+//   否则    → 需 schedule:approve 权限（待审列表），并叠加企业作用域
+router.get('/schedules/swaps', async (req, res, next) => {
+  try {
+    const { status, mine } = req.query
+    const { page, size } = parsePagination(req.query)
+    const me = req.user.id
+    const __canApprove = await checkPerm(req, PERMISSIONS.SCHEDULE_APPROVE)
+
+    let sql = `SELECT sw.id, sw.schedule_id_a, sw.schedule_id_b, sw.user_id_a, sw.user_id_b,
+               sw.reason, sw.status, sw.approved_by, sw.approved_at, sw.reject_reason, sw.created_at,
+               ua.name AS user_a_name, ub.name AS user_b_name,
+               sa.schedule_date AS date_a, sb.schedule_date AS date_b,
+               ca.name AS shift_a_name, ca.start_time AS shift_a_start, ca.end_time AS shift_a_end,
+               cb.name AS shift_b_name, cb.start_time AS shift_b_start, cb.end_time AS shift_b_end,
+               ap.name AS approver_name
+               FROM shift_swaps sw
+               LEFT JOIN users ua ON sw.user_id_a = ua.id
+               LEFT JOIN users ub ON sw.user_id_b = ub.id
+               LEFT JOIN shift_schedules sa ON sw.schedule_id_a = sa.id
+               LEFT JOIN shift_schedules sb ON sw.schedule_id_b = sb.id
+               LEFT JOIN shifts ca ON sa.shift_id = ca.id
+               LEFT JOIN shifts cb ON sb.shift_id = cb.id
+               LEFT JOIN users ap ON sw.approved_by = ap.id
+               WHERE 1=1`
+    const params = []
+
+    if (mine === '1' || mine === 'true') {
+      sql += ' AND (sw.user_id_a = ? OR sw.user_id_b = ?)'; params.push(me, me)
+    } else {
+      if (!__canApprove) {
+        return res.status(403).json({ code: 403, message: '无权限查看换班审批列表' })
+      }
+      const __scope = await getCompanyScope(req)
+      const cwA = await companyWhere(__scope, me, 'ua')
+      const cwB = await companyWhere(__scope, me, 'ub')
+      if (cwA.sql && cwB.sql) {
+        sql += ' AND (' + cwA.sql.replace(/^ AND /, '') + ' OR ' + cwB.sql.replace(/^ AND /, '') + ')'
+        params.push(...cwA.params, ...cwB.params)
+      }
+    }
+    if (status) { sql += ' AND sw.status = ?'; params.push(status) }
+
+    const whereClause = sql.slice(sql.indexOf('WHERE 1=1'))
+    const countSql = `SELECT COUNT(*) as total
+               FROM shift_swaps sw
+               LEFT JOIN users ua ON sw.user_id_a = ua.id
+               LEFT JOIN users ub ON sw.user_id_b = ub.id
+               ${whereClause}`
+    const [countRows] = await pool.query(countSql, params)
+    const total = (countRows && countRows[0] && countRows[0].total) || 0
+
+    sql += ' ORDER BY sw.created_at DESC, sw.id DESC LIMIT ? OFFSET ?'
+    params.push(size, (page - 1) * size)
+    const [rows] = await pool.query(sql, params)
+    res.json({ code: 0, data: { list: rows, total, page, size, can_approve: __canApprove }, message: 'ok' })
+  } catch (err) { next(err) }
+})
+
+// [sched-swap] 2026-09-15 驳回换班（管理员/班组长要能驳回，不只是通过）
+//   注：驳回理由暂不落库 —— shift_swaps 无 reject_reason 列，加列需波哥批准「非 SGP 库结构变更」
+router.post('/schedules/swap/:id/reject', requirePermission(PERMISSIONS.SCHEDULE_APPROVE), async (req, res, next) => {
+  try {
+    const swapId = req.params.id
+    const approverId = req.user.id
+    // [q3-reject-reason] 2026-09-16 波哥批：驳回理由落库（shift_swaps.reject_reason，最多 500 字）
+    const __q3reason = String((req.body && req.body.reason) || '').trim().slice(0, 500) || null
+    const [[swap]] = await pool.query('SELECT * FROM shift_swaps WHERE id = ?', [swapId])
+    if (!swap) return res.status(404).json({ code: 404, message: '调班记录不存在' })
+    if (swap.status !== 'pending') return res.status(400).json({ code: 400, message: '该调班申请已处理' })
+    const [r] = await pool.query(
+      "UPDATE shift_swaps SET status = 'rejected', approved_by = ?, approved_at = CURRENT_TIMESTAMP, reject_reason = ? WHERE id = ? AND status = 'pending'",
+      [approverId, __q3reason, swapId]
+    )
+    if (!r.affectedRows) return res.status(409).json({ code: 409, message: '该调班申请已被处理，请刷新' })
+    const __q3msg = __q3reason ? ('未通过原因：' + __q3reason) : '未填写原因'
+    await notifySwap(swap.user_id_a, '换班未通过', '你的换班申请未通过，排班保持不变。' + __q3msg)
+    await notifySwap(swap.user_id_b, '换班未通过', '与你相关的换班申请未通过，排班保持不变。' + __q3msg)
+    res.json({ code: 0, data: null, message: '调班已驳回' })
+  } catch (err) { next(err) }
+})
+
+// [sched-swap] 2026-09-15 「选人后看对方那一周的班」
+//   波哥口径：员工平时看不到任何同事的排班，只有**选定某个同事的那一刻**才看得到他「那一周」的班。
+//   故此处强约束：必须带 start_date/end_date、跨度 ≤ 31 天、目标必须与我在同一企业；
+//   返回字段脱敏（不含 notes / created_by / attendance_required）。
+router.get('/schedules/colleague', async (req, res, next) => {
+  try {
+    const { user_id, start_date, end_date } = req.query
+    if (!user_id || !start_date || !end_date) {
+      return res.status(400).json({ code: 400, message: '请指定同事与日期范围' })
+    }
+    const __d1 = new Date(String(start_date) + 'T00:00:00')
+    const __d2 = new Date(String(end_date) + 'T00:00:00')
+    if (isNaN(__d1.getTime()) || isNaN(__d2.getTime())) {
+      return res.status(400).json({ code: 400, message: '日期格式应为 YYYY-MM-DD' })
+    }
+    const __span = Math.round((__d2 - __d1) / 86400000) + 1
+    if (__span < 1 || __span > 31) {
+      return res.status(400).json({ code: 400, message: '只能查看 31 天以内的排班' })
+    }
+    const __scope = await getCompanyScope(req)
+    const [[__tgt]] = await pool.query('SELECT id, name, company_id FROM users WHERE id = ?', [user_id])
+    if (!__tgt) return res.status(404).json({ code: 404, message: '员工不存在' })
+    if (__scope.kind !== 'global' && __scope.kind !== 'incubator') {
+      if ((__tgt.company_id || null) !== (__scope.companyId || null)) {
+        return res.status(403).json({ code: 403, message: '只能查看本企业同事的排班' })
+      }
+    }
+    const [rows] = await pool.query(
+      `SELECT ss.id, ss.user_id, ss.shift_id, ss.schedule_date, ss.status,
+              s.name AS shift_name, s.start_time, s.end_time, s.color
+         FROM shift_schedules ss
+         LEFT JOIN shifts s ON ss.shift_id = s.id
+        WHERE ss.user_id = ? AND ss.schedule_date >= ? AND ss.schedule_date <= ?
+        ORDER BY ss.schedule_date LIMIT 60`,
+      [user_id, start_date, end_date]
+    )
+    res.json({ code: 0, data: { user: { id: __tgt.id, name: __tgt.name }, list: rows }, message: 'ok' })
+  } catch (err) { next(err) }
 })
 
 // GET /api/oa/attendance/summary - Attendance summary
@@ -1861,12 +2194,31 @@ router.get('/workflow-instances', async (req, res, next) => {
                WHERE 1=1`
     const params = []
 
+    // [q5-vis] 2026-09-16 口径：员工只能看到跟自己有关的审批（我发起的 或 我是处理人的）。
+    //   管理侧（admin/superuser 或持有 oa:read/oa:write 的角色，含客户后台流程设计器）保持全量视野。
+    const __q5role = String(req.user?.role || '')
+    const __q5oversight = ['admin', 'superuser', 'enterprise-admin'].includes(__q5role) ||
+      await checkPerm(req, 'oa:read') || await checkPerm(req, 'oa:write')
+    if (!__q5oversight) {
+      sql += " AND (wi.initiator_id = ? OR EXISTS (SELECT 1 FROM workflow_tasks wt WHERE wt.instance_id = wi.id AND wt.assignee_id = ?))"
+      params.push(req.user.id, req.user.id)
+    }
+
     if (workflow_code) { sql += ' AND wi.workflow_code = ?'; params.push(workflow_code) }
     if (status) { sql += ' AND wi.status = ?'; params.push(status) }
     if (initiator_id) { sql += ' AND wi.initiator_id = ?'; params.push(initiator_id) }
 
-    const countSql = sql.replace(/SELECT wi\.\*, u\.name as initiator_name.*FROM/, 'SELECT COUNT(*) as total FROM')
-    const [[{ total }]] = await pool.query(countSql, params)
+    // [wf-count-fix] 2026-09-15 原写法用正则把 SELECT 列换成 COUNT(*)，但 JS 正则 `.` 不跨行 →
+    //   从不命中，countSql 仍是整条 SELECT；表为空或筛选无匹配时 rows[0] 为 undefined → TypeError → 500。
+    //   现象：全新环境 / 无匹配数据时列表直接 500，而不是显示空列表。照排班 [sched-count-fix] 修法。
+    const whereClause = sql.slice(sql.indexOf('WHERE 1=1'))
+    const countSql = `SELECT COUNT(*) as total
+               FROM workflow_instances wi
+               LEFT JOIN users u ON wi.initiator_id = u.id
+               LEFT JOIN workflow_definitions wd ON wi.workflow_id = wd.id
+               ${whereClause}`
+    const [countRows] = await pool.query(countSql, params)
+    const total = (countRows && countRows[0] && countRows[0].total) || 0
 
     sql += ' ORDER BY wi.started_at DESC LIMIT ? OFFSET ?'
     params.push(size, (page - 1) * size)

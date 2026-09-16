@@ -34,6 +34,7 @@ import dashboardRoutes from './routes/dashboard.js'
 import homeRoutes from './routes/home.js'
 import qrcodeRoutes from './routes/qrcode.js'
 import oaRoutes from './routes/oa.js'
+import workModeRoutes from './routes/work-modes.js'
 import reportRoutes from './routes/reports.js'
 import bannersRoutes from './routes/banners.js'
 import themeRoutes from './routes/theme.js'
@@ -543,6 +544,7 @@ app.use('/api/qrcodes', auth, apiLimiter, qrcodeRoutes)
 app.use('/api/delivery', auth, apiLimiter, deliveryRoutes)
 app.use('/api/oa', cardRoutes)
 app.use('/api/oa', auth, apiLimiter, oaRoutes)
+app.use('/api/oa/work-modes', auth, apiLimiter, workModeRoutes)
 app.use('/api/oa/flow', auth, apiLimiter, oaFlowRoutes) // 2026-09-08 AutoClaw: OA 流程引擎
 app.use('/api/reports', auth, apiLimiter, reportRoutes)
 app.use('/api/retail-records', auth, apiLimiter, retailRoutes)

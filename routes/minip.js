@@ -4,7 +4,10 @@ import { pool } from '../db/connection.js'
 import { auth } from '../middleware/auth.js'
 import { requireRole, requirePermission, PERMISSIONS, ROLES } from '../middleware/rbac.js'
 import { checkPerm } from '../utils/permission.js'
+import { collectSubordinateIds } from '../utils/subordinates.js' // [task-team] 2026-09-15
 import oaRoutes from './oa.js'
+import { auditFlowDefinition } from './oa-flow.js' // [health-check]
+import { JOB_TENANT as JOB_TENANT_MINIP } from './oa-flow.js'
 import { listTabsForUser as listDbTabs } from './minip-tabbar-config.js'
 import QRCode from 'qrcode'
 import sharp from 'sharp'
@@ -74,7 +77,7 @@ router.get('/news', async (req, res, next) => {
 router.get('/news/:id', async (req, res, next) => {
   try {
     const [rows] = await pool.query(
-      'SELECT id, title, summary, content, cover_image, author, published_at FROM articles WHERE id = ? AND status = "published"',
+      'SELECT id, title, summary, content, cover_image, author, category, published_at, created_at FROM articles WHERE id = ? AND status = "published"',
       [req.params.id]
     )
     if (!rows.length) return res.status(404).json({ code: 404, message: '新闻不存在' })
@@ -264,6 +267,178 @@ router.delete('/admin/modules/:id', auth, requireRole('admin'), async (req, res,
   try {
     await pool.query('DELETE FROM minip_modules WHERE id = ?', [req.params.id])
     res.json({ code: 0, message: '删除成功' })
+  } catch (err) { next(err) }
+})
+
+// GET /api/minip/admin/health-check [health-check] 2026-09-15
+//   后台系统「系统体检」：配置总览（当前生效值）+ 问题清单（没配/配错），只读。
+//   判定与发起/审批同一套（引擎 auditFlowDefinition），所以报"会卡住"就是真的会 400。
+router.get('/admin/health-check', auth, requireRole('admin', 'superuser', 'enterprise-admin'), async (req, res, next) => {
+  // mysql2 对 JSON 列会直接返回对象、对 TEXT 返回字符串 → 两种都要吃（踩过：只写 JSON.parse 会把上限读成"不限"）
+  const parseJson = (v, dft) => { if (v == null) return dft; if (typeof v === 'object') return v; try { return JSON.parse(v) } catch (e) { return dft } }
+  try {
+    const items = []
+    const config = []
+    // [g4-count] 根因角色的展示名（flow_config 里的 role 是"角色名或部门名"，这里给常见英文键配中文）
+    //            配词典只影响显示；没命中的原样显示 raw key，方便直接去流程配置里改
+    const OA_ROLE_LABELS = {
+      applicant: '发起人', direct_supervisor: '直属上级', dept_head: '部门负责人',
+      hr: '人事', finance: '财务', gm: '总经理', committee: '审批委员会',
+      director: '总监', cashier: '出纳', invest_director: '投资总监',
+      dd_team: '尽调团队', risk: '风控', bd_manager: '商务经理',
+      manager: '经理', admin: '管理员'
+    }
+    // [g4-count] 按「主根因角色」归组（一条问题只归 roles[0]，与排查脚本口径一致）
+    const roleGroups = []
+    const roleIndex = {}
+
+    // ── 1) 流程定义逐个体检 ──
+    const [defs] = await pool.query(
+      "SELECT code, name, category, flow_config, is_active FROM workflow_definitions WHERE tenant_id = ? ORDER BY category, code",
+      [JOB_TENANT_MINIP()])
+    const active = defs.filter(d => Number(d.is_active) !== 0)
+    let auditFailed = 0
+    for (const d of active) {
+      try {
+        const r = await auditFlowDefinition(pool, d)
+        for (const it of r.issues) {
+          const rec = Object.assign({ scope: '流程定义', flowCode: r.code, flowName: r.name, flowCategory: r.category }, it)
+          items.push(rec)
+          const rcRole = rec.role || ''   // [g4-count]
+          if (rcRole) {
+            if (!roleIndex[rcRole]) {
+              roleIndex[rcRole] = { role: rcRole, label: OA_ROLE_LABELS[rcRole] || rcRole, error: 0, warn: 0, info: 0, total: 0 }
+              roleGroups.push(roleIndex[rcRole])
+            }
+            const g = roleIndex[rcRole]
+            g.total++
+            if (rec.level === 'error') g.error++
+            else if (rec.level === 'warn') g.warn++
+            else g.info++
+          }
+        }
+      } catch (e) { auditFailed++ }
+    }
+
+    // ── 2) 组织：上级覆盖 ──
+    const [[u1]] = await pool.query("SELECT COUNT(*) AS c FROM users WHERE status = 'active'")
+    const [[u2]] = await pool.query("SELECT COUNT(*) AS c FROM users WHERE status = 'active' AND (supervisor_id IS NULL OR supervisor_id = 0)")
+    const [[co]] = await pool.query('SELECT COUNT(*) AS c FROM companies')
+    const staffTotal = Number(u1.c) || 0
+    const noSup = Number(u2.c) || 0
+    const companyCount = Number(co.c) || 0
+
+    if (noSup > 0) {
+      items.push({
+        scope: '组织', level: 'warn',
+        title: noSup + ' 名在职员工没有设置「直属上级」',
+        detail: '用「直属上级」审批的流程（请假、补卡…），这些人发起时会提示"找不到处理人"而被拦下；他们提交时指定审批人可以正常走。',
+        hint: '后台系统 → 组织管理 → 给这些员工设置上级（推荐）；或让员工提交时自行指定审批人'
+      })
+    }
+    if (companyCount === 0) {
+      items.push({ scope: '组织', level: 'error', title: '还没有企业（公司）数据', detail: '入驻企业列表为空，企业相关功能与统计都无法使用。', hint: '后台系统 → 企业管理 → 新增/审核入驻企业' })
+    }
+
+    // ── 3) 考勤：出勤规则 / 打卡时间 / 补卡上限 ──
+    const [rules] = await pool.query("SELECT id, name, weekdays, start_time, end_time FROM attendance_rules WHERE status = 'active' ORDER BY id")
+    // B1：上班模板（新机制）——体检要同时反映，否则会出现"体检说没规则、实际按模板判"的前后不一
+    const [wmAssign] = await pool.query(
+      `SELECT t.name, t.mode_type, t.start_time, t.end_time, t.clock_mode, a.target_type,
+              COUNT(*) OVER (PARTITION BY t.id) AS assign_cnt
+         FROM work_mode_assignments a
+         JOIN work_mode_templates t ON a.template_id = t.id AND t.status = 'active'
+        ORDER BY t.sort_order`)
+    const wmCount = wmAssign.length
+    const [[sc]] = await pool.query('SELECT COUNT(*) AS c FROM shift_schedules')
+    const shiftCount = Number(sc.c) || 0
+    const rule = rules[0] || null
+    const hhmm = (t) => (t ? String(t).slice(0, 5) : '')
+    if (!rules.length && wmCount === 0) {
+      items.push({
+        scope: '考勤', level: 'warn', title: '没有启用中的出勤规则',
+        detail: '打卡的迟到/早退判定会退回到默认时间（09:00–18:00），与实际作息可能不符。',
+        hint: '后台系统 → 考勤管理（或考勤规则页）新增一条启用中的出勤规则'
+      })
+    }
+    const fixDef = active.find(d => d.code === 'attend-fix')
+    const fixPolicy = fixDef ? (parseJson(fixDef.flow_config, {}) || {}).policy || {} : null
+    const fixMax = fixPolicy ? Number(fixPolicy.fixMaxPerMonth) : null
+    if (fixDef && (!Number.isFinite(fixMax) || fixMax <= 0)) {
+      items.push({
+        scope: '考勤', level: 'info', title: '补卡次数没有限制',
+        detail: '当前每月补卡次数不限（上限 0）。若担心被滥用，可以设一个上限。',
+        hint: '后台系统 → 考勤管理 → 补卡次数上限（0 = 不限）'
+      })
+    }
+
+    config.push({
+      group: '考勤', items: [
+        { label: '上班模板（新）', value: wmCount ? wmAssign.map(w => w.name + '(' + (w.target_type === 'all' ? '全员' : w.target_type === 'department' ? '部门' : '个人') + ')').join('、') : '未铺设', note: wmCount ? '模板优先于出勤规则判定；自由工时/不打卡口径不判迟到早退' : '可在「考勤与排班」里一键铺设' },
+        { label: '打卡时间（出勤规则）', value: rule ? (hhmm(rule.start_time) + ' – ' + hhmm(rule.end_time)) : '未配置（默认 09:00–18:00）', note: rule ? ('规则：' + rule.name) : '无启用中的规则' },
+        { label: '出勤规则条数 / 排班条数', value: rules.length + ' 条 / ' + shiftCount + ' 条', note: shiftCount === 0 ? '无排班时按出勤规则判定' : '有排班时优先按当天班次' },
+        { label: '补卡次数上限', value: (fixDef ? (Number.isFinite(fixMax) && fixMax > 0 ? (fixMax + ' 次/月') : '不限') : '未接入该流程'), note: fixDef ? '后台系统 → 考勤管理可改' : '' }
+      ]
+    })
+
+    // ── 4) 会议：场地 / 信用规则 / 高峰时段 ──
+    const [[vr]] = await pool.query("SELECT COUNT(*) AS c FROM venue_rooms WHERE status = 'available'")
+    const [[vcr]] = await pool.query('SELECT COUNT(*) AS c FROM venue_credit_rules')
+    const [[peak]] = await pool.query("SELECT cfg_value FROM venue_configs WHERE cfg_key = 'peak_windows' LIMIT 1")
+    const roomCount = Number(vr.c) || 0
+    if (roomCount === 0) {
+      items.push({ scope: '会议', level: 'error', title: '没有可用场地/会议室', detail: '会议预订页会没有可选空间，员工订不了会。', hint: '配置 venue_rooms（场地/房型）并在后台开启' })
+    }
+    if (Number(vcr.c) === 0) {
+      items.push({ scope: '会议', level: 'warn', title: '没有会议室信用规则', detail: '违约扣分与门槛（信用分等级限制）不会生效。', hint: '配置 venue_credit_rules' })
+    }
+    config.push({
+      group: '会议', items: [
+        { label: '可用场地/会议室', value: roomCount + ' 个', note: '' },
+        { label: '信用规则', value: Number(vcr.c) + ' 条', note: roomCount && Number(vcr.c) === 0 ? '缺失' : '' },
+        { label: '高峰时段', value: peak ? '已配置' : '未配置', note: peak ? String(peak.cfg_value).slice(0, 80) : '高峰期限制等级不可约' }
+      ]
+    })
+
+    // ── 5) 审批与组织总览 ──
+    const hrCount = active.filter(d => d.category === 'hr').length
+    config.push({
+      group: '审批流程', items: [
+        { label: '启用中的流程', value: active.length + ' 条', note: '共 ' + defs.length + ' 条（含停用）' },
+        { label: '人事类流程', value: hrCount + ' 条', note: '含请假/加班/补卡等' },
+        { label: '体检结果', value: items.filter(i => i.level === 'error').length + ' 项会卡住 / ' + items.filter(i => i.level === 'warn').length + ' 项警告', note: (auditFailed ? (auditFailed + ' 条定义体检失败 · ') : '') + '涉及 ' + roleGroups.length + ' 个角色' }   // [g4-count]
+      ]
+    })
+    config.push({
+      group: '组织', items: [
+        { label: '入驻企业', value: companyCount + ' 家', note: '' },
+        { label: '在职员工', value: staffTotal + ' 人', note: '' },
+        { label: '未设上级', value: noSup + ' 人', note: noSup ? '影响"直属上级"审批的流程' : '' }
+      ]
+    })
+
+    // ── 6) 未接入的能力（不是配错，如实列出）──
+    items.push({
+      scope: '系统', level: 'info', title: '后台概览有两项暂无接口',
+      detail: '「今日访客」「本月活动」没有数据接口，概览里显示「—」。',
+      hint: '门禁/活动模块就绪后再接；在此之前不显示假数字'
+    })
+    config.push({
+      group: '系统', items: [
+        { label: '后台概览缺接口项', value: '今日访客 / 本月活动', note: '显示「—」，不写死数字' },
+        { label: '后台卡片未开放', value: '审批 / 任务、内容管理', note: '仍为建设中' }
+      ]
+    })
+
+    const summary = {
+      error: items.filter(i => i.level === 'error').length,
+      warn: items.filter(i => i.level === 'warn').length,
+      info: items.filter(i => i.level === 'info').length,
+      definitionsChecked: active.length,
+      roles: roleGroups.length,   // [g4-count] 双口径之一：涉及多少个根因角色（另一个是 error/warn/info = 按项）
+      checkedAt: new Date().toISOString()
+    }
+    res.json({ code: 0, data: { summary, config, items, roleGroups } })   // [g4-count]
   } catch (err) { next(err) }
 })
 
@@ -1308,6 +1483,21 @@ router.get('/office/tasks', auth, async (req, res, next) => {
       // 普通员工不能看 all, 退回 assigned
       where += ' AND (t.assigned_to = ? OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ?))'
       params.push(userId, userId)
+    } else if (scope === 'team') { // [task-team] 2026-09-15：此前没有这个分支 → 落进 else 不加过滤 = 任何登录用户可看全部任务
+      if (isAdmin) {
+        // 管理员：与 all 同口径（不加 user 过滤）
+      } else if (await checkPerm(req, 'task:read_team')) {
+        // 主管/有"查看团队任务"权限：我 + 我全部下属（作为接收人）+ 我指派的（任意接收人）
+        const subIds = await collectSubordinateIds(pool, userId)
+        const ids = [userId, ...subIds]
+        const ph = ids.map(() => '?').join(',')
+        where += ` AND (t.assigned_to IN (${ph}) OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id IN (${ph})) OR t.assigned_by = ?)`
+        params.push(...ids, ...ids, userId)
+      } else {
+        // 普通员工：退回"分配给我的"，与 scope=all 的既有降级口径一致（不让 tab 变成 403 死路）
+        where += ' AND (t.assigned_to = ? OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ?))'
+        params.push(userId, userId)
+      }
     } else if (scope === 'mine' && isAdmin) {
       where += ' AND t.assigned_by = ?'
       params.push(userId)
@@ -1321,6 +1511,7 @@ router.get('/office/tasks', auth, async (req, res, next) => {
     }
     const [rows] = await pool.query(
       `SELECT t.id, t.title, t.description, t.status, t.priority, t.due_date, t.created_at, t.assigned_to, t.assigned_by,
+              t.completion_note, t.review_note, t.submitted_at, t.reviewed_at, t.is_new,   -- [task-team] 前端详情面板要用
               u.name as assignee_name, b.name as assigner_name,
               COALESCE((SELECT GROUP_CONCAT(x.name SEPARATOR '、') FROM task_assignees ta2 JOIN users x ON ta2.user_id = x.id WHERE ta2.task_id = t.id), '') AS extra_assignee_names
        FROM tasks t
@@ -1400,14 +1591,38 @@ router.post('/office/tasks', auth, async (req, res, next) => {
 router.put('/office/tasks/:id', auth, async (req, res, next) => {
   try {
     const userId = req.user.id
+    const isAdmin = req.user.role === 'admin'
     const taskId = Number(req.params.id)
-    const { status, completion_note, title, description, priority, due_date } = req.body
+    const { status, completion_note, title, description, priority, due_date, assigned_to } = req.body
     const [[task]] = await pool.query('SELECT * FROM tasks WHERE id = ?', [taskId])
     if (!task) return res.status(404).json({ code: 404, message: '任务不存在' })
     // 权限: 主负责人 / 创建者 / 附加负责人 均可操作
     const [[rel]] = await pool.query('SELECT 1 FROM task_assignees WHERE task_id = ? AND user_id = ?', [taskId, userId])
     if (task.assigned_to !== userId && task.assigned_by !== userId && !rel) {
       return res.status(403).json({ code: 403, message: '无权操作此任务' })
+    }
+    // R5-4 (2026-09-14) 指派变更（可选）：与 POST 完全同一套归一化与「只能派给自己或下属」校验，
+    // 避免"创建时管得严、编辑时能偷着派"。targets=null 表示本次不动指派。
+    let targets = null
+    if (assigned_to !== undefined) {
+      targets = Array.isArray(assigned_to)
+        ? assigned_to.map(String).filter(v => /^\d+$/.test(v)).map(Number)
+        : ((Number.isInteger(Number(assigned_to)) && Number(assigned_to) > 0) ? [Number(assigned_to)] : [])
+      targets = [...new Set(targets)]
+      if (!targets.length) return res.status(400).json({ code: 400, message: '指派对象无效' })
+      if (!isAdmin) {
+        const [[sub]] = await pool.query(
+          `WITH RECURSIVE subordinate_tree AS (
+            SELECT id, supervisor_id FROM users WHERE supervisor_id = ?
+            UNION ALL
+            SELECT u.id, u.supervisor_id FROM users u
+            INNER JOIN subordinate_tree st ON u.supervisor_id = st.id
+          ) SELECT COUNT(*) AS cnt FROM subordinate_tree WHERE id IN (?)`,
+          [userId, targets]
+        )
+        const okCnt = (sub?.cnt || 0) + (targets.includes(userId) ? 1 : 0)
+        if (okCnt < targets.length) return res.status(403).json({ code: 403, message: '只能派给自己或下属' })
+      }
     }
     const updates= []
     const params= []
@@ -1417,10 +1632,33 @@ router.put('/office/tasks/:id', auth, async (req, res, next) => {
     if (description !== undefined) { updates.push('description = ?'); params.push(description) }
     if (priority) { updates.push('priority = ?'); params.push(priority) }
     if (due_date !== undefined) { updates.push('due_date = ?'); params.push(due_date) }
-    if (!updates.length) return res.json({ code: 0, message: 'no changes' })
-    params.push(taskId)
-    await pool.query(`UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`, params)
-    res.json({ code: 0, message: 'ok' })
+    if (!updates.length && !targets) return res.json({ code: 0, message: 'no changes' })
+    // 字段改动与指派重建同事务：不会出现"主负责人换了、附加负责人还是旧的"
+    const conn = await pool.getConnection()
+    try {
+      await conn.beginTransaction()
+      if (updates.length) {
+        await conn.query(`UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`, [...params, taskId])
+      }
+      if (targets) {
+        await conn.query('UPDATE tasks SET assigned_to = ? WHERE id = ?', [targets[0], taskId])
+        await conn.query('DELETE FROM task_assignees WHERE task_id = ?', [taskId])
+        const extra = targets.slice(1)
+        if (extra.length) {
+          await conn.query(
+            `INSERT IGNORE INTO task_assignees (task_id, user_id) VALUES ${extra.map(() => '(?, ?)').join(',')}`,
+            extra.flatMap(uid => [taskId, uid])
+          )
+        }
+      }
+      await conn.commit()
+      res.json({ code: 0, message: 'ok' })
+    } catch (e) {
+      await conn.rollback().catch(() => {})
+      throw e
+    } finally {
+      conn.release()
+    }
   } catch (err) { next(err) }
 })
 
@@ -1586,6 +1824,59 @@ router.put('/office/tasks/:id/review', auth, async (req, res, next) => {
     res.json({ code: 0, data: { id: Number(taskId), status: newStatus }, message: newStatus === 'completed' ? '任务已通过' : '任务已驳回' })
   } catch (err) { next(err) }
 })
+// GET /api/minip/office/tasks/:id - 任务详情（R5-4 2026-09-14 新增）
+//   task-form 编辑模式读它回填表单。原先两端都没有这个路由 → 编辑页必然加载失败，
+//   且失败后空表单可提交 → 会把原任务的描述/截止/优先级覆盖成空。
+//   注意：必须定义在 /office/tasks/stats、/unread-count、/team 之后，否则 ':id' 会把它们吞掉。
+//   归属口径与 PUT 一致；无权限与不存在统一返回 404（不给 403/404 差异枚举 id）。
+router.get('/office/tasks/:id', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.id
+    const taskId = Number(req.params.id)
+    if (!Number.isFinite(taskId)) return res.status(404).json({ code: 404, message: '任务不存在' })
+    const [[task]] = await pool.query(
+      `SELECT t.id, t.title, t.description, t.status, t.priority,
+              DATE_FORMAT(t.due_date, '%Y-%m-%d') AS due_date,
+              t.assigned_to, t.assigned_by, t.created_at,
+              u.name AS assignee_name, b.name AS assigner_name
+         FROM tasks t
+         LEFT JOIN users u ON t.assigned_to = u.id
+         LEFT JOIN users b ON t.assigned_by = b.id
+        WHERE t.id = ?`,
+      [taskId]
+    )
+    if (!task) return res.status(404).json({ code: 404, message: '任务不存在' })
+    const [[rel]] = await pool.query('SELECT 1 FROM task_assignees WHERE task_id = ? AND user_id = ?', [taskId, userId])
+    const isAdmin = req.user.role === 'admin'
+    if (!isAdmin && task.assigned_to !== userId && task.assigned_by !== userId && !rel) {
+      return res.status(404).json({ code: 404, message: '任务不存在' })
+    }
+    // 附加负责人：给前端回填用（列表接口只给名字，编辑需要 id）
+    const [extras] = await pool.query(
+      `SELECT ta.user_id, u.name FROM task_assignees ta LEFT JOIN users u ON ta.user_id = u.id WHERE ta.task_id = ?`,
+      [taskId]
+    )
+    res.json({
+      code: 0,
+      data: {
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        priority: task.priority,
+        due_date: task.due_date || null,
+        assigned_to: task.assigned_to,
+        assigned_by: task.assigned_by,
+        assignee_name: task.assignee_name || null,
+        assigner_name: task.assigner_name || null,
+        created_at: task.created_at,
+        extra_assignee_ids: extras.map(e => e.user_id),
+        extra_assignee_names: extras.map(e => e.name).filter(Boolean).join('、')
+      }
+    })
+  } catch (err) { next(err) }
+})
+
 // 波哥原话: "把这个内容融合到 hatch.gdqshop.cn/minip"
 // 这些 routes 是占位实现, 让前端不报错. 完整业务逻辑后续迭代.
 // ════════════════════════════════════════════════════════════════════════
@@ -1617,52 +1908,161 @@ router.post('/butler/tickets', auth, async (req, res) => {
   })
 })
 
-// GET /api/minip/notifications/unread - 未读通知 (mock)
-router.get('/notifications/unread', auth, async (req, res) => {
-  return res.json({
-    code: 0,
-    data: {
-      count: 2,
-      latest: {
-        id: 1,
-        title: '2026 横琴湾区创新中心揭牌仪式即将举行',
-        created_at: new Date().toISOString()
-      }
+// GET /api/minip/notifications/unread - 未读通知（2026-09-15 江小鱼：由 mock 改真查）
+// 背景：写入早已是真的（入驻通过 / 报销批准），但读取一直是 mock（不查表）+ 前端无入口
+//       → 通知"只写不读"，等于白写。这里补上真实读取链路。
+router.get('/notifications/unread', auth, async (req, res, next) => {
+  try {
+    const [[{ cnt }]] = await pool.query(
+      'SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0',
+      [req.user.id]
+    )
+    const [rows] = await pool.query(
+      `SELECT id, type, title, content, article_id, is_read, created_at
+         FROM notifications
+        WHERE user_id = ? AND is_read = 0
+        ORDER BY created_at DESC, id DESC
+        LIMIT 20`,
+      [req.user.id]
+    )
+    res.json({ code: 0, data: { count: Number(cnt) || 0, list: rows, latest: rows[0] || null } })
+  } catch (err) { next(err) }
+})
+
+// GET /api/minip/notifications/history - 通知历史（2026-09-15 由 mock 改真查；含已读）
+router.get('/notifications/history', auth, async (req, res, next) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 100, 200)
+    const [rows] = await pool.query(
+      `SELECT id, type, title, content, article_id, is_read, read_at, created_at
+         FROM notifications
+        WHERE user_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?`,
+      [req.user.id, limit]
+    )
+    res.json({ code: 0, data: { list: rows } })
+  } catch (err) { next(err) }
+})
+
+// POST /api/minip/notifications/read-all - 全部标记已读（必须在 /:id/read 之前不冲突：段数不同）
+router.post('/notifications/read-all', auth, async (req, res, next) => {
+  try {
+    const [r] = await pool.query(
+      'UPDATE notifications SET is_read = 1, read_at = NOW() WHERE user_id = ? AND is_read = 0',
+      [req.user.id]
+    )
+    res.json({ code: 0, data: { affected: r.affectedRows || 0 }, message: 'ok' })
+  } catch (err) { next(err) }
+})
+
+// POST /api/minip/notifications/:id/read - 标记单条已读（只能标自己的）
+router.post('/notifications/:id/read', auth, async (req, res, next) => {
+  try {
+    const [r] = await pool.query(
+      'UPDATE notifications SET is_read = 1, read_at = NOW() WHERE id = ? AND user_id = ? AND is_read = 0',
+      [req.params.id, req.user.id]
+    )
+    res.json({ code: 0, data: { affected: r.affectedRows || 0 }, message: 'ok' })
+  } catch (err) { next(err) }
+})
+
+// POST /api/minip/notifications/send - 发送通知（2026-09-15 江小鱼：由 mock 改真）
+// 之前：只 console.log，返回的 recipient_count 是编的（all→128）
+// 现在：**真的落库、真的返回接收人数**
+//   落库口径 = 点对点 fan-out 进 `notifications` 表（每收件人一行）。
+//   【2026-09-15 更正】这里原先写"不用广播型 `hqh5_notifications`…"，实查后发现该说法不准确：
+//   广播模型**早已归档为死代码** —— 仅存在于 `routes/_archived_hqh5-20260912/hqh5.js`，
+//   两端 index.js 零引用（未挂载），`hqh5_notifications` / `hqh5_notification_reads` 各 0 行，桌面后台无通知页。
+//   所以并不存在"两套模型并存"，本接口只是选了 `notifications` 这张表而已。
+// 目标：`target_type='all'` → 全部在职用户；`'company'` → `target_ids` 各企业的在职用户。
+router.post('/notifications/send', auth, requireRole('admin'), async (req, res, next) => {
+  try {
+    const { title, content, target_type, target_ids, article_id } = req.body || {}
+    const t = String(title || '').trim()
+    const c = String(content || '').trim()
+    if (!t) return res.status(400).json({ code: 400, message: '请填写通知标题' })
+    if (t.length > 200) return res.status(400).json({ code: 400, message: '标题不能超过 200 字' })
+    if (!c) return res.status(400).json({ code: 400, message: '请填写通知内容' })
+
+    // 关联文章（选填，2026-09-15 江小鱼）：通知可指向一篇文章，收件人点通知直接进正文。
+    // 只允许关联「已发布」：详情页走公开通道 /api/minip/news/:id，该通道只认 status='published'，
+    // 关联草稿等于点了跳 404。
+    let aid = null
+    if (article_id !== undefined && article_id !== null && String(article_id).trim() !== '') {
+      const n = parseInt(article_id, 10)
+      if (!(n > 0)) return res.status(400).json({ code: 400, message: '关联文章 ID 不合法' })
+      const [ar] = await pool.query(
+        `SELECT id FROM articles WHERE id = ? AND status = 'published'`,
+        [n]
+      )
+      if (!ar.length) return res.status(400).json({ code: 400, message: '关联的文章不存在或未发布' })
+      aid = n
     }
-  })
-})
 
-// GET /api/minip/notifications/history - 通知历史 (mock)
-router.get('/notifications/history', auth, async (req, res) => {
-  return res.json({
-    code: 0,
-    data: { list: [] }
-  })
-})
-
-// POST /api/minip/notifications/send - 发送通知 (mock, 仅记录日志)
-router.post('/notifications/send', auth, requireRole('admin'), async (req, res) => {
-  console.log('[notification] send:', req.body)
-  return res.json({
-    code: 0,
-    message: '通知已发送',
-    data: { recipient_count: req.body.target_type === 'all' ? 128 : (req.body.target_ids?.length || 0) }
-  })
-})
-
-// GET /api/minip/enterprise/list - 企业列表 (mock, 给通知推送用)
-router.get('/enterprise/list', auth, async (req, res) => {
-  return res.json({
-    code: 0,
-    data: {
-      list: [
-        { id: 1, name: 'AI 科技有限公司' },
-        { id: 2, name: '横琴湾创生物医药' },
-        { id: 3, name: '湾区新能源研发' },
-        { id: 4, name: '澳门青年跨境电商' }
-      ]
+    let ids = []
+    if (target_type === 'company') {
+      const arr = Array.isArray(target_ids) ? target_ids.map((x) => parseInt(x, 10)).filter((x) => x > 0) : []
+      if (!arr.length) return res.status(400).json({ code: 400, message: '请选择推送对象' })
+      const ph = arr.map(() => '?').join(',')
+      const [rows] = await pool.query(
+        `SELECT id FROM users WHERE company_id IN (${ph}) AND status = 'active' ORDER BY id`,
+        arr
+      )
+      ids = rows.map((r) => r.id)
+    } else {
+      const [rows] = await pool.query(`SELECT id FROM users WHERE status = 'active' ORDER BY id`)
+      ids = rows.map((r) => r.id)
     }
-  })
+    if (!ids.length) return res.json({ code: 0, data: { recipient_count: 0 }, message: '没有可接收的用户' })
+
+    const MAX = 5000
+    if (ids.length > MAX) ids = ids.slice(0, MAX)
+    const values = ids.map(() => '(?, ?, ?, ?, ?, NOW())').join(', ')
+    const params = []
+    for (const uid of ids) params.push(uid, 'admin_broadcast', t, c, aid)
+    await pool.query(
+      `INSERT INTO notifications (user_id, type, title, content, article_id, created_at) VALUES ${values}`,
+      params
+    )
+    res.json({ code: 0, data: { recipient_count: ids.length }, message: '已发送' })
+  } catch (err) { next(err) }
+})
+
+// GET /api/minip/notifications/sent - 已发送通知记录（管理端，2026-09-15 江小鱼新增）
+// 为什么需要：send 是**点对点 fan-out**（每个收件人一行）——运营发 1 条给 128 人 = 表里 128 行。
+//   直接列会「一条通知刷 N 行」，看不出「我到底发过哪几次」。
+//   → 按 (title, created_at) 秒级聚合，还原成「一次发送 = 一条记录」。
+//   秒级够用：同一次 send 是同一条 INSERT 语句，created_at 完全相同；不同次发送不可能同秒同标题。
+// recipient_count = 实际送达人数；read_count = 其中已读人数。
+router.get('/notifications/sent', auth, requireRole('admin'), async (req, res, next) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 50, 200)
+    const [rows] = await pool.query(
+      `SELECT MIN(id) AS id, title, MAX(content) AS content, MAX(article_id) AS article_id,
+              created_at,
+              COUNT(*) AS recipient_count,
+              COUNT(CASE WHEN is_read = 1 THEN 1 END) AS read_count
+         FROM notifications
+        WHERE type = 'admin_broadcast'
+        GROUP BY title, created_at
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?`,
+      [limit]
+    )
+    res.json({ code: 0, data: { list: rows } })
+  } catch (err) { next(err) }
+})
+
+// GET /api/minip/enterprise/list - 企业列表（2026-09-15 江小鱼：由 mock 改真）
+// 用途：「通知推送」页的**推送对象**要从这里选（原前端是自己敲企业名、后端返回写死假数据）。
+router.get('/enterprise/list', auth, async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, name, short_name, status FROM companies WHERE status = 'active' ORDER BY id`
+    )
+    res.json({ code: 0, data: { list: rows } })
+  } catch (err) { next(err) }
 })
 
 // GET /api/minip/rental/credit-score - 信用分 (mock)
@@ -2275,6 +2675,29 @@ router.delete('/me/addresses/:id', auth, async (req, res, next) => {
 })
 
 // --- 订单 (minip 专属) ---
+// [orders] 2026-09-15 · 订单接口辅助（解析 / 状态机 / 缺表判断）
+const parseOrderItems = (v) => {
+  if (Array.isArray(v)) return v
+  if (!v) return []
+  try { const a = JSON.parse(v); return Array.isArray(a) ? a : [] } catch (e) { return [] }
+}
+const ORDER_STATUS_CN = {
+  pending: '待付款', awaiting_payment: '待付款', paid: '待发货', awaiting_ship: '待发货',
+  shipped: '待收货', in_transit: '待收货', received: '待评价', completed_review_pending: '待评价',
+  completed: '已完成', cancelled: '已取消', refunded: '已退款'
+}
+// 用户自己能做的：只有"待付款 → 取消"。其余（发货/收货/完成）由平台/后续环节驱动
+const ORDER_USER_TRANSITIONS = { pending: ['cancelled'], awaiting_payment: ['cancelled'] }
+// 管理端可推进的合法流转（避免随手把已取消的单改成已完成）
+const ORDER_ADMIN_TRANSITIONS = {
+  pending: ['paid', 'cancelled'], awaiting_payment: ['paid', 'cancelled'],
+  paid: ['shipped', 'cancelled'], awaiting_ship: ['shipped', 'cancelled'],
+  shipped: ['received'], in_transit: ['received'],
+  received: ['completed'], completed_review_pending: ['completed'],
+  completed: [], cancelled: [], refunded: []
+}
+const isMissingTable = (e) => e && (e.code === 'ER_NO_SUCH_TABLE' || /doesn't exist|Unknown table/i.test(e.message || ''))
+
 router.get('/me/orders', auth, async (req, res, next) => {
   try {
     const userId = req.user.id
@@ -2311,8 +2734,26 @@ router.get('/me/orders', auth, async (req, res, next) => {
        ${isAdmin ? '' : 'WHERE o.user_id = ?'}`,
       isAdmin ? [] : [userId]
     )
-    res.json({ code: 0, data: { list: rows, stats } })
-  } catch (err) { next(err) }
+    res.json({ code: 0, data: { list: rows.map(r => Object.assign({}, r, { items: parseOrderItems(r.items), statusText: ORDER_STATUS_CN[r.status] || r.status })), stats, enabled: true } })
+  } catch (err) {
+    // 环境没建 minip_orders（生产曾因缺表 500）→ 如实返回"未启用"，而不是 500
+    if (isMissingTable(err)) return res.json({ code: 0, data: { list: [], stats: {}, enabled: false, note: '当前环境未启用商城订单' } })
+    next(err)
+  }
+})
+
+// [orders] 订单详情：本人或 admin；不存在/非本人统一 404
+router.get('/me/orders/:id', auth, async (req, res, next) => {
+  try {
+    const isAdmin = req.user.role === 'admin'
+    const [rows] = await pool.query('SELECT * FROM minip_orders WHERE id = ?', [req.params.id])
+    const o = rows[0]
+    if (!o || (!isAdmin && o.user_id !== req.user.id)) return res.status(404).json({ code: 404, message: '订单不存在' })
+    res.json({ code: 0, data: Object.assign({}, o, { items: parseOrderItems(o.items), statusText: ORDER_STATUS_CN[o.status] || o.status }) })
+  } catch (err) {
+    if (isMissingTable(err)) return res.status(404).json({ code: 404, message: '当前环境未启用商城订单' })
+    next(err)
+  }
 })
 
 router.post('/me/orders', auth, async (req, res, next) => {
@@ -2331,9 +2772,21 @@ router.post('/me/orders', auth, async (req, res, next) => {
 
 router.put('/me/orders/:id/status', auth, async (req, res, next) => {
   try {
+    // [orders] 2026-09-15：此前这里**没有任何归属与状态校验** —— 任何登录用户能改任何订单的状态。
+    //   现在：本人只能「待付款 → 取消」；admin 按合法流转推进。
     const { status } = req.body
+    if (!status) return res.status(400).json({ code: 400, message: 'status 必填' })
+    const isAdmin = req.user.role === 'admin'
+    const [rows] = await pool.query('SELECT id, user_id, status FROM minip_orders WHERE id = ?', [req.params.id])
+    const o = rows[0]
+    if (!o) return res.status(404).json({ code: 404, message: '订单不存在' })
+    if (!isAdmin && Number(o.user_id) !== Number(req.user.id)) return res.status(404).json({ code: 404, message: '订单不存在' })
+    const allowed = isAdmin ? (ORDER_ADMIN_TRANSITIONS[o.status] || []) : (ORDER_USER_TRANSITIONS[o.status] || [])
+    if (allowed.indexOf(String(status)) < 0) {
+      return res.status(400).json({ code: 400, message: '订单当前状态（' + (ORDER_STATUS_CN[o.status] || o.status) + '）不能改为「' + (ORDER_STATUS_CN[status] || status) + '」' })
+    }
     await pool.query('UPDATE minip_orders SET status = ?, updated_at = NOW() WHERE id = ?', [status, req.params.id])
-    res.json({ code: 0, message: '状态更新成功' })
+    res.json({ code: 0, message: '状态更新成功', data: { id: Number(req.params.id), status } })
   } catch (err) { next(err) }
 })
 
