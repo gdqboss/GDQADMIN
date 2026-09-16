@@ -17,7 +17,7 @@ router.get('/', auth, async (req, res, next) => {
     if (keyword) { where += ' AND (name LIKE ? OR label LIKE ?)'; params.push(`%${keyword}%`, `%${keyword}%`) }
 
     const [rows] = await pool.query(
-      `SELECT * FROM rbac_permissions WHERE ${where} ORDER BY category, id`,
+      `SELECT * FROM rbac_permissions WHERE hidden=0 AND ${where} ORDER BY category, id`,
       params
     )
 
@@ -32,7 +32,7 @@ router.get('/', auth, async (req, res, next) => {
 router.get('/categories', auth, async (req, res, next) => {
   try {
     const [rows] = await pool.query(
-      `SELECT category, COUNT(*) as count FROM rbac_permissions GROUP BY category ORDER BY category`
+      `SELECT category, COUNT(*) as count FROM rbac_permissions WHERE hidden=0 GROUP BY category ORDER BY category`
     )
     res.json({ code: 0, data: rows })
   } catch (err) { next(err) }
