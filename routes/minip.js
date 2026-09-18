@@ -5,6 +5,7 @@ import { auth } from '../middleware/auth.js'
 import { requireRole, requirePermission, PERMISSIONS, ROLES } from '../middleware/rbac.js'
 import { checkPerm } from '../utils/permission.js'
 import { collectSubordinateIds } from '../utils/subordinates.js' // [task-team] 2026-09-15
+import { getCompanyScope } from '../utils/company-scope.js' // [r6fix-b2] 2026-09-17 企业名单按角色收敛
 import oaRoutes from './oa.js'
 import { auditFlowDefinition } from './oa-flow.js' // [health-check]
 import { JOB_TENANT as JOB_TENANT_MINIP } from './oa-flow.js'
@@ -342,7 +343,7 @@ router.get('/admin/health-check', auth, requireRole('admin', 'superuser', 'enter
 
     // ── 3) 考勤：出勤规则 / 打卡时间 / 补卡上限 ──
     const [rules] = await pool.query("SELECT id, name, weekdays, start_time, end_time FROM attendance_rules WHERE status = 'active' ORDER BY id")
-    // B1：上班模板（新机制）——体检要同时反映，否则会出现"体检说没规则、实际按模板判"的前后不一
+    // B1：班次（新机制；原称「上班模板」，2026-09-18 术语统一为「班次」）——体检要同时反映，否则会出现"体检说没规则、实际按模板判"的前后不一
     const [wmAssign] = await pool.query(
       `SELECT t.name, t.mode_type, t.start_time, t.end_time, t.clock_mode, a.target_type,
               COUNT(*) OVER (PARTITION BY t.id) AS assign_cnt
@@ -372,11 +373,29 @@ router.get('/admin/health-check', auth, requireRole('admin', 'superuser', 'enter
       })
     }
 
+    // [r7-health] 2026-09-18：打卡时间**直接写具体时刻**、多班次逐个列（波哥口径："你就不能直接明确写？"）
+    //   值优先取班次（班次优先于出勤规则，与判定链第 1 层一致）；自由工时/不打卡的班次没有时刻 → 跳过，不硬编。
+    const wmTimes = []
+    const wmSeen = {}
+    for (const w of wmAssign) {
+      const t0 = hhmm(w.start_time), t1 = hhmm(w.end_time)
+      if (!t0 || !t1) continue
+      const k = w.name + '|' + t0 + '|' + t1
+      if (wmSeen[k]) continue
+      wmSeen[k] = 1
+      wmTimes.push(w.name + ' ' + t0 + '–' + t1)
+    }
+    const clockValue = wmTimes.length
+      ? wmTimes.join(' / ')
+      : (rule ? (hhmm(rule.start_time) + ' – ' + hhmm(rule.end_time)) : '未配置（默认 09:00–18:00）')
+    const clockNote = wmTimes.length
+      ? '按班次逐个列出（班次优先于出勤规则）'
+      : (wmCount ? '班次未设上下班时刻（自由工时/不打卡）' : (rule ? ('规则：' + rule.name) : '无启用中的规则'))
     config.push({
       group: '考勤', items: [
-        { label: '上班模板（新）', value: wmCount ? wmAssign.map(w => w.name + '(' + (w.target_type === 'all' ? '全员' : w.target_type === 'department' ? '部门' : '个人') + ')').join('、') : '未铺设', note: wmCount ? '模板优先于出勤规则判定；自由工时/不打卡口径不判迟到早退' : '可在「考勤与排班」里一键铺设' },
-        { label: '打卡时间（出勤规则）', value: (wmCount && !rule) ? '由上班模板决定（见上一行）' : (rule ? (hhmm(rule.start_time) + ' – ' + hhmm(rule.end_time)) : '未配置（默认 09:00–18:00）'), note: wmCount ? ('旧出勤规则已被上班模板优先覆盖' + (rule ? ('（规则：' + rule.name + '）') : '')) : (rule ? ('规则：' + rule.name) : '无启用中的规则') },
-        { label: '出勤规则条数 / 排班条数', value: rules.length + ' 条 / ' + shiftCount + ' 条', note: shiftCount === 0 ? (wmCount ? '无排班时按上班模板判定' : '无排班时按出勤规则判定') : '有排班时优先按当天班次' },
+        { label: '班次（新）', value: wmCount ? wmAssign.map(w => w.name + '(' + (w.target_type === 'all' ? '全员' : w.target_type === 'department' ? '部门' : '个人') + ')').join('、') : '未铺设', note: wmCount ? '班次优先于出勤规则判定；自由工时/不打卡口径不判迟到早退' : '可在「考勤与排班」里一键铺设' },
+        { label: '打卡时间', value: clockValue, note: clockNote },
+        { label: '出勤规则条数 / 排班条数', value: rules.length + ' 条 / ' + shiftCount + ' 条', note: shiftCount === 0 ? (wmCount ? '无排班时按班次判定' : '无排班时按出勤规则判定') : '有排班时优先按当天班次' },
         { label: '补卡次数上限', value: (fixDef ? (Number.isFinite(fixMax) && fixMax > 0 ? (fixMax + ' 次/月') : '不限') : '未接入该流程'), note: fixDef ? '后台系统 → 考勤管理可改' : '' }
       ]
     })
@@ -409,28 +428,33 @@ router.get('/admin/health-check', auth, requireRole('admin', 'superuser', 'enter
         { label: '体检结果', value: items.filter(i => i.level === 'error').length + ' 项会卡住 / ' + items.filter(i => i.level === 'warn').length + ' 项警告', note: (auditFailed ? (auditFailed + ' 条定义体检失败 · ') : '') + '涉及 ' + roleGroups.length + ' 个角色' }   // [g4-count]
       ]
     })
-    config.push({
-      group: '组织', items: [
-        { label: '入驻企业', value: companyCount + ' 家', note: '' },
-        { label: '在职员工', value: staffTotal + ' 人', note: '' },
-        { label: '未设上级', value: noSup + ' 人', note: noSup ? '影响"直属上级"审批的流程' : '' }
-      ]
-    })
+    // [r7-health] 2026-09-18：企业视角首页要「本企业员工数」——按请求者企业归属计数
+    //   平台管理员（无企业归属）→ 不显示这行，避免拿全站数字冒充本企业（原前端因此写着"待接入"）。
+    // [r7-health-2] 2026-09-18：企业归属**不隐式依赖 auth 已挂 company_id**（口径同 utils/company-scope.js 的兜底）
+    let __myCompanyId = (req.user && req.user.company_id != null) ? Number(req.user.company_id) : null
+    if (__myCompanyId == null && req.user && req.user.id) {
+      const [[__me]] = await pool.query('SELECT company_id FROM users WHERE id = ?', [req.user.id])
+      __myCompanyId = (__me && __me.company_id != null) ? Number(__me.company_id) : null
+    }
+    let companyStaff = null
+    if (__myCompanyId != null) {
+      const [[cs]] = await pool.query("SELECT COUNT(*) AS c FROM users WHERE status = 'active' AND company_id = ?", [__myCompanyId])
+      companyStaff = Number(cs.c) || 0
+    }
+    const orgItems = [
+      { label: '入驻企业', value: companyCount + ' 家', note: '' },
+      { label: '在职员工', value: staffTotal + ' 人', note: '' },
+      { label: '未设上级', value: noSup + ' 人', note: noSup ? '影响"直属上级"审批的流程' : '' }
+    ]
+    if (companyStaff != null) orgItems.unshift({ label: '本企业在职员工', value: companyStaff + ' 人', note: '按你的企业归属统计' })
+    config.push({ group: '组织', items: orgItems })
 
-    // ── 6) 未接入的能力（不是配错，如实列出）──
-    items.push({
-      scope: '系统', level: 'info', title: '后台概览有两项暂无接口',
-      detail: '「今日访客」「本月活动」没有数据接口，概览里显示「—」。',
-      hint: '门禁/活动模块就绪后再接；在此之前不显示假数字'
-    })
-    config.push({
-      group: '系统', items: [
-        { label: '后台概览缺接口项', value: '今日访客 / 本月活动', note: '显示「—」，不写死数字' },
-        { label: '后台卡片未开放', value: '审批 / 任务、内容管理', note: '仍为建设中' }
-      ]
-    })
+    // ── 6) [r7-health] 2026-09-18：原「系统」组两条提示**已删除**（体检门槛=每句都真，宁可不留）──
+    //   ①「后台概览缺接口项 = 今日访客 / 本月活动」→ 该需求已作废（产品口径 2026-09-16：压根不需要这两个数据）
+    //   ②「后台卡片未开放 = 审批 / 任务、内容管理」→ H1/H2 上线后**早已开放**，原文案与事实相反（在说假话）
 
     const summary = {
+      companyStaff,   // [r7-health] 企业视角首页「本企业员工 N 人」；平台管理员为 null（前端显示「—」）
       error: items.filter(i => i.level === 'error').length,
       warn: items.filter(i => i.level === 'warn').length,
       info: items.filter(i => i.level === 'info').length,
@@ -1106,10 +1130,19 @@ router.get('/office/users/candidates', auth, async (req, res, next) => {
     const userId = req.user.id
     const userRole = req.user.role
     const isBroad = ['admin', 'superadmin', 'manager', 'director'].includes(userRole)
+    // [r6fix-f4] 2026-09-17：① 候选名单加**企业作用域过滤**（此前是全表 LIMIT 300 → 跨企业泄露，同 B-2 同款问题）；
+    //   ② 新增 ?all=1：任务派单要"全员可选"（开放工单：谁都能给谁派），此时不做"下属"收敛、直接给作用域内全员。
+    const __scC = await getCompanyScope(req)
+    const wantAll = req.query.all === '1'
+    let __uWhere = "status='active'"
+    const __uArgs = []
+    if (__scC.kind === 'incubator') { __uWhere += ' AND company_id IS NULL' }
+    else if (__scC.kind !== 'global') { __uWhere += ' AND company_id = ?'; __uArgs.push(__scC.companyId) }
+    const __allSql = `SELECT id, name, avatar, department, role, supervisor_id FROM users WHERE ${__uWhere} ORDER BY name LIMIT 300`
     let list = []
-    if (isBroad) {
-      // 管理角色: 直接返回全部 active 用户 (对齐 gdqadmin 任务指派可全选)
-      const [all] = await pool.query(`SELECT id, name, avatar, department, role, supervisor_id FROM users WHERE status='active' ORDER BY name LIMIT 300`)
+    if (isBroad || wantAll) {
+      // 管理角色 / 任务派单（all=1）: 直接返回作用域内全部 active 用户
+      const [all] = await pool.query(__allSql, __uArgs)
       list = all || []
     } else {
       try {
@@ -1127,7 +1160,7 @@ router.get('/office/users/candidates', auth, async (req, res, next) => {
     }
     const [[me]] = await pool.query('SELECT id, name, avatar, department, role, supervisor_id FROM users WHERE id = ?', [userId])
     if (list.length === 0) {
-      const [all] = await pool.query(`SELECT id, name, avatar, department, role, supervisor_id FROM users WHERE status='active' ORDER BY name LIMIT 300`)
+      const [all] = await pool.query(__allSql, __uArgs)
       list = all || []
     }
     res.json({ code: 0, data: me ? [{ ...me, is_self: true }, ...list] : list, message: 'ok' })
@@ -1472,21 +1505,34 @@ router.get('/office/tasks', auth, async (req, res, next) => {
     const offset = (Number(page) - 1) * Number(pageSize)
     let where = 'WHERE 1=1'
     const params = []
-    if (scope === 'mine' && !isAdmin) {
+    // ── [r6fix-f4] 2026-09-17（波哥口径）：任务 = **开放工单** ──
+    //   方向自由（老板⇄主管⇄员工互派），但**可见性按企业隔离**（避免跨租户泄露，同 B-2）。
+    //   四档语义：
+    //     mine / assigned —— 与原来一致（我创建的 / 分配给我的）
+    //     team            —— 我 + 我的下属（作为接收人）+ 我指派的（需 task:read_team 权限）
+    //     all             —— **本企业工单池 + 我相关**（我派的 / 派给我的 / 我是附加负责人）
+    //                        平台方（global）看全部；企业用户只看本企业；孵化器内部人员看 company_id IS NULL
+    const __scF4 = await getCompanyScope(req)
+    // [r6fix-f4-fix] 2026-09-17：**不要只信 scope.companyId** —— auth 预载的公司字段为 null 时
+    //   getCompanyScope 会回落 incubator（companyId=null），于是 "t.company_id = null" 永不匹配 → 池子查空。
+    //   这里直接按用户真实归属取一次，作为企业维度的唯一依据。
+    let __myCid = (__scF4.kind === 'company-manage' || __scF4.kind === 'company-self') ? __scF4.companyId : null
+    if (__myCid == null && !(await checkPerm(req, 'system:config'))) {
+      const [[__meRow]] = await pool.query('SELECT company_id FROM users WHERE id = ?', [userId])
+      __myCid = (__meRow && __meRow.company_id != null) ? __meRow.company_id : null
+    }
+    const __isPlatform = __scF4.kind === 'global' || (await checkPerm(req, 'system:config'))
+    const __mineCond = '(t.assigned_to = ? OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ?))'
+    const __relCond = `(t.assigned_by = ? OR ${__mineCond})`
+    const pushMe = (k) => { for (let i = 0; i < k; i++) params.push(userId) }
+    if (scope === 'mine') {
       where += ' AND t.assigned_by = ?'
       params.push(userId)
-    } else if (scope === 'assigned' && !isAdmin) {
-      // 分配给我 = 主负责人 或 附加负责人(task_assignees)
-      where += ' AND (t.assigned_to = ? OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ?))'
-      params.push(userId, userId)
-    } else if (scope === 'all' && !isAdmin) {
-      // 普通员工不能看 all, 退回 assigned
-      where += ' AND (t.assigned_to = ? OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ?))'
-      params.push(userId, userId)
-    } else if (scope === 'team') { // [task-team] 2026-09-15：此前没有这个分支 → 落进 else 不加过滤 = 任何登录用户可看全部任务
-      if (isAdmin) {
-        // 管理员：与 all 同口径（不加 user 过滤）
-      } else if (await checkPerm(req, 'task:read_team')) {
+    } else if (scope === 'assigned') {
+      where += ' AND ' + __mineCond
+      pushMe(2)
+    } else if (scope === 'team') {
+      if (await checkPerm(req, 'task:read_team')) {
         // 主管/有"查看团队任务"权限：我 + 我全部下属（作为接收人）+ 我指派的（任意接收人）
         const subIds = await collectSubordinateIds(pool, userId)
         const ids = [userId, ...subIds]
@@ -1494,23 +1540,32 @@ router.get('/office/tasks', auth, async (req, res, next) => {
         where += ` AND (t.assigned_to IN (${ph}) OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id IN (${ph})) OR t.assigned_by = ?)`
         params.push(...ids, ...ids, userId)
       } else {
-        // 普通员工：退回"分配给我的"，与 scope=all 的既有降级口径一致（不让 tab 变成 403 死路）
-        where += ' AND (t.assigned_to = ? OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ?))'
-        params.push(userId, userId)
+        // 无团队权限：退回"分配给我的"（不让 tab 变成死路）
+        where += ' AND ' + __mineCond
+        pushMe(2)
       }
-    } else if (scope === 'mine' && isAdmin) {
-      where += ' AND t.assigned_by = ?'
-      params.push(userId)
-    } else if (scope === 'assigned' && isAdmin) {
-      where += ' AND (t.assigned_to = ? OR EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = ?))'
-      params.push(userId, userId)
-    } // scope='all' 且 isAdmin: 不加 user 过滤
+    } else {
+      // all（含未知 scope 兜底）：工单池 + 我相关
+      if (__isPlatform) {
+        // 平台方（孵化器管理员）：不限制
+      } else if (__myCid == null) {
+        // 无企业归属（孵化器内部人员）：看平台侧池子（company_id IS NULL）+ 我相关
+        where += ` AND (t.company_id IS NULL OR ${__relCond})`
+        pushMe(3)
+      } else {
+        // 企业用户：只看本企业池子 + 我相关（跨企业派给我的单我也能看到）
+        where += ` AND (t.company_id = ? OR ${__relCond})`
+        params.push(__myCid)
+        pushMe(3)
+      }
+    }
     if (status) {
       where += ' AND t.status = ?'
       params.push(status)
     }
     const [rows] = await pool.query(
       `SELECT t.id, t.title, t.description, t.status, t.priority, t.due_date, t.created_at, t.assigned_to, t.assigned_by,
+              t.company_id,   -- [r6fix-f4-fix] 归属企业（隔离口径可核对）
               t.completion_note, t.review_note, t.submitted_at, t.reviewed_at, t.is_new,   -- [task-team] 前端详情面板要用
               u.name as assignee_name, b.name as assigner_name,
               COALESCE((SELECT GROUP_CONCAT(x.name SEPARATOR '、') FROM task_assignees ta2 JOIN users x ON ta2.user_id = x.id WHERE ta2.task_id = t.id), '') AS extra_assignee_names
@@ -1543,28 +1598,25 @@ router.post('/office/tasks', auth, async (req, res, next) => {
       : ((Number.isInteger(Number(assigned_to)) && Number(assigned_to) > 0) ? [Number(assigned_to)] : [userId])
     targetsRaw = [...new Set(targetsRaw)]  // 去重
     if (!targetsRaw.length) targetsRaw = [userId]
-    if (!isAdmin) {
-      // 普通员工: 每个目标都必须是自己或下属
-      const [[sub]] = await pool.query(
-        `WITH RECURSIVE subordinate_tree AS (
-          SELECT id, supervisor_id FROM users WHERE supervisor_id = ?
-          UNION ALL
-          SELECT u.id, u.supervisor_id FROM users u
-          INNER JOIN subordinate_tree st ON u.supervisor_id = st.id
-        ) SELECT COUNT(*) AS cnt FROM subordinate_tree WHERE id IN (?)`,
-        [userId, targetsRaw]
-      )
-      const okCnt = (sub?.cnt || 0) + (targetsRaw.includes(userId) ? 1 : 0)
-      if (okCnt < targetsRaw.length) return res.status(403).json({ code: 403, message: '只能派给自己或下属' })
-    }
+    // [r6fix-f4] 2026-09-17：**取消"只能派给自己或下属"** —— 任务是开放工单：
+    //   老板可以给主管派、主管也可以反向给老板派、员工之间同理；跨企业（平台方↔入驻企业）也允许。
+    //   防滥用靠"可见性隔离"（本企业池 + 我相关），不靠限制派的动作。
     // 插入任务(主负责人) + 附加负责人
     const conn = await pool.getConnection()
     try {
       await conn.beginTransaction()
+      // [r6fix-f4] 任务归属企业：按创建者所在**真实企业**（孵化器人员记为 NULL = 平台侧任务）
+      //   [r6fix-f4-fix] 直接查真实 company_id —— 不依赖 token 预载（预载为 null 会把企业任务错记成平台侧）
+      const __scF4c = await getCompanyScope(req)
+      let __taskCid = (__scF4c.kind === 'company-manage' || __scF4c.kind === 'company-self') ? __scF4c.companyId : null
+      if (__taskCid == null) {
+        const [[__meC]] = await conn.query('SELECT company_id FROM users WHERE id = ?', [userId])
+        __taskCid = (__meC && __meC.company_id != null) ? __meC.company_id : null
+      }
       const [r] = await conn.query(
-        `INSERT INTO tasks (title, description, priority, status, assigned_to, created_by, assigned_by, due_date, is_new)
-         VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, 1)`,
-        [title, description || null, priority, targetsRaw[0], userId, userId, due_date || null]
+        `INSERT INTO tasks (title, description, priority, status, assigned_to, created_by, assigned_by, due_date, is_new, company_id)
+         VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, 1, ?)`,
+        [title, description || null, priority, targetsRaw[0], userId, userId, due_date || null, __taskCid]
       )
       const extra = targetsRaw.slice(1)
       if (extra.length) {
@@ -2054,14 +2106,50 @@ router.get('/notifications/sent', auth, requireRole('admin'), async (req, res, n
   } catch (err) { next(err) }
 })
 
+// GET /api/minip/permissions/me —— 我的权限点（[r6fix-b4-perms] 2026-09-17）
+//   为什么需要：前端要"按权限决定入口显隐"（波哥口径），就必须能问后端"我有哪些权限"，
+//   而不是在前端写死角色名单。admin/superuser 语义与 checkPerm 一致（admin 天然全权限）。
+router.get('/permissions/me', auth, async (req, res, next) => {
+  try {
+    if (req.user.role === 'admin') {
+      const [rows] = await pool.query('SELECT name FROM rbac_permissions')
+      return res.json({ code: 0, data: { role: 'admin', is_super: true, permissions: rows.map(r => r.name) } })
+    }
+    const perms = new Set()
+    if (req.user.permissions) {
+      try { (JSON.parse(req.user.permissions) || []).forEach(p => perms.add(p)) } catch (e) { /* 个人权限 JSON 坏 → 忽略 */ }
+    }
+    const [rp] = await pool.query(
+      `SELECT p.name FROM rbac_permissions p
+       JOIN rbac_role_permissions rp ON p.id = rp.permission_id
+       JOIN rbac_roles r ON r.id = rp.role_id
+       WHERE r.name = ?`, [req.user.role])
+    rp.forEach(r => perms.add(r.name))
+    res.json({ code: 0, data: { role: req.user.role, is_super: req.user.role === 'superuser', permissions: [...perms] } })
+  } catch (err) { next(err) }
+})
+
 // GET /api/minip/enterprise/list - 企业列表（2026-09-15 江小鱼：由 mock 改真）
 // 用途：「通知推送」页的**推送对象**要从这里选（原前端是自己敲企业名、后端返回写死假数据）。
 router.get('/enterprise/list', auth, async (req, res, next) => {
   try {
-    const [rows] = await pool.query(
-      `SELECT id, name, short_name, status FROM companies WHERE status = 'active' ORDER BY id`
-    )
-    res.json({ code: 0, data: { list: rows } })
+    // [r6fix-b2] 2026-09-17：企业名单按角色收敛（此前任何登录用户 → 全量企业名 = 租户泄露）。
+    //   admin/superuser（global）= 全量；enterprise-admin（company-manage）= 仅本企业；其余 403。
+    const __scope = await getCompanyScope(req)
+    if (__scope.kind === 'global') {
+      const [rows] = await pool.query(
+        `SELECT id, name, short_name, status FROM companies WHERE status = 'active' ORDER BY id`
+      )
+      return res.json({ code: 0, data: { list: rows } })
+    }
+    if (__scope.kind === 'company-manage' && __scope.companyId != null) {
+      const [rows] = await pool.query(
+        `SELECT id, name, short_name, status FROM companies WHERE status = 'active' AND id = ? ORDER BY id`,
+        [__scope.companyId]
+      )
+      return res.json({ code: 0, data: { list: rows } })
+    }
+    return res.status(403).json({ code: 403, message: '无权查看企业名单' })
   } catch (err) { next(err) }
 })
 
@@ -2816,7 +2904,7 @@ router.get('/business-card/me', auth, async (req, res, next) => {
   try {
     const [[employee]] = await pool.query(
       `SELECT id, name, email, phone, role, department, avatar, images, title, bio, bio_en, wechat,
-              card_bg, company_name, company_name_en, company_address, company_address_en, company_phone,
+              card_bg, card_layout, company_name, company_name_en, company_address, company_address_en, company_phone,
               status, created_at, employee_code, card_views, endorsements
        FROM users WHERE id = ? AND status = 'active'`,
       [req.user.id]
@@ -2844,7 +2932,7 @@ router.get('/business-card/me', auth, async (req, res, next) => {
 router.put('/business-card/me', auth, async (req, res, next) => {
   try {
     const userId = req.user.id
-    const { avatar, images, title, bio, bio_en, wechat, email, card_bg, company_name, company_name_en, company_address, company_address_en, company_phone } = req.body
+    const { avatar, images, title, bio, bio_en, wechat, email, card_bg, card_layout, company_name, company_name_en, company_address, company_address_en, company_phone } = req.body
 
     const updates = []
     const params = []
@@ -2866,6 +2954,11 @@ router.put('/business-card/me', auth, async (req, res, next) => {
     add('wechat', wechat)
     add('email', email)
     add('card_bg', card_bg)
+    if (card_layout !== undefined) {
+      // 名片布局持久化（2026-09-18 D4 缺口修复）：对象存 JSON 串，前端 applyLayout 兼容字符串/对象
+      updates.push('card_layout = ?')
+      params.push(card_layout && typeof card_layout === 'object' ? JSON.stringify(card_layout) : (card_layout || null))
+    }
     add('company_name', company_name)
     add('company_name_en', company_name_en)
     add('company_address', company_address)
@@ -2880,7 +2973,7 @@ router.put('/business-card/me', auth, async (req, res, next) => {
     // 返回更新后的数据
     const [[row]] = await pool.query(
       `SELECT id, name, email, phone, role, department, avatar, images, title, bio, bio_en, wechat,
-              card_bg, company_name, company_name_en, company_address, company_address_en, company_phone,
+              card_bg, card_layout, company_name, company_name_en, company_address, company_address_en, company_phone,
               card_views, endorsements FROM users WHERE id = ?`,
       [userId]
     )
@@ -2911,7 +3004,7 @@ router.get('/business-card/:id', async (req, res, next) => {
     const { id } = req.params
     const [[employee]] = await pool.query(
       `SELECT id, name, email, phone, role, department, avatar, images, title, bio, bio_en, wechat,
-              card_bg, company_name, company_name_en, company_address, company_address_en, company_phone,
+              card_bg, card_layout, company_name, company_name_en, company_address, company_address_en, company_phone,
               status, created_at, employee_code, card_views, endorsements
        FROM users WHERE id = ? AND status = 'active'`,
       [id]

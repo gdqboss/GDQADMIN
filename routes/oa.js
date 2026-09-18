@@ -9,6 +9,9 @@ import { exportAttendance } from '../utils/excel-export.js'
 
 const router = Router()
 
+// 北京时区日期串（YYYY-MM-DD）：日期口径统一由服务器保证，不依赖进程 TZ / 设备 TZ（isofix 2026-09-18）
+const dstr = (d = new Date()) => new Date(d.getTime() + 8 * 3600000).toISOString().slice(0, 10)
+
 // [r6fix-b4] 2026-09-17：组织管理权限点（org:read / org:write / org:delete）
 //   原则（波哥口径）：**能不能做这件事，只看"有没有这个权限"，不看"他是谁"**。
 //   原实现写死 requireRole('admin','manager','enterprise-admin') —— 想给主管/人事开权限必须改代码。
@@ -56,7 +59,7 @@ function safeParse(str, defaultVal = {}) {
 router.get('/dashboard', async (req, res, next) => {
   try {
     const userId = req.user.id
-    const today = new Date().toISOString().slice(0, 10)
+    const today = dstr()
 
     // Get today's attendance
     const [[att]] = await pool.query(
@@ -82,7 +85,7 @@ router.get('/dashboard', async (req, res, next) => {
     )
 
     // Get work logs count (this month)
-    const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10)
+    const firstDayOfMonth = dstr(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
     const [[{ work_logs }]] = await pool.query(
       'SELECT COUNT(*) as work_logs FROM work_logs WHERE user_id = ? AND submit_date >= ?',
       [userId, firstDayOfMonth]
@@ -113,7 +116,7 @@ router.get('/dashboard', async (req, res, next) => {
 // GET /api/oa/attendance/today-summary - Today's attendance summary (for managers)
 router.get('/attendance/today-summary', async (req, res, next) => {
   try {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = dstr()
 
     // 应打卡 = require_attendance=1的员工
     // 实打卡 = 当天所有打了卡的（包括自由打卡的）
@@ -137,7 +140,7 @@ router.get('/attendance/today-summary', async (req, res, next) => {
 
 router.get('/attendance/my-today', async (req, res, next) => {
   try {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = dstr()
     const userId = req.user.id
 
     const [[record]] = await pool.query(
@@ -329,7 +332,7 @@ async function getWorkModeWindow(userId) {
 // 优先级: 1) 当天排班 shift_schedules→shifts  1.5) 上班模板 work_mode_assignments（个人>部门>全员）  2) 员工所属规则 attendance_rule_members→rules  3) 全局默认规则  4) 09:00/18:00 兜底
 async function getWorkTimeWindow(userId) {
   const defaultIn = '09:00:00', defaultOut = '18:00:00'
-  const today = new Date().toISOString().slice(0, 10)
+  const today = dstr()
   try {
     // 1. 当天排班
     const [sched] = await pool.query(
@@ -384,7 +387,7 @@ router.post('/attendance/clock', async (req, res, next) => {
     // 服务端可信地理位置: 如果走代理能拿到真实坐标, 优先代理; 否则不信任前端传的 (前端可伪造)
     const lat = req.body.lat, lng = req.body.lng, accuracy = req.body.accuracy, location = req.body.location
     const userId = req.user.id
-    const today = new Date().toISOString().slice(0, 10)
+    const today = dstr()
     const now = new Date()
     const timeStr = now.toTimeString().slice(0, 8)
     // 打卡状态 (2026-08-28 钉钉模式): normal正常上班/trip出差/overtime加班/free自由打卡
@@ -511,7 +514,7 @@ router.post('/attendance/trip-clock', async (req, res, next) => {
   try {
     const { lat, lng, accuracy, device_info, ip, location, remark } = req.body
     const userId = req.user.id
-    const today = new Date().toISOString().slice(0, 10)
+    const today = dstr()
     const now = new Date()
     const timeStr = now.toTimeString().slice(0, 8)
     // 2026-09-13 江小鱼 fix: 出差打卡 500 — realIp 在 /attendance/clock 路由里是局部变量, trip-clock 路由没有声明 → ReferenceError → next(err) → 500. 跟 /attendance/clock 同样取服务端可信 IP
@@ -690,8 +693,8 @@ router.get('/attendance', async (req, res, next) => {
     } else {
       // 如果没有指定日期范围，默认查询最近30天
       if (!start_date && !end_date) {
-        const today = new Date().toISOString().slice(0, 10)
-        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+        const today = dstr()
+        const thirtyDaysAgo = dstr(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
         where += ' AND a.date >= ? AND a.date <= ?'
         params.push(thirtyDaysAgo, today)
       }
@@ -741,8 +744,8 @@ router.get('/attendance/export', async (req, res, next) => {
       where += ' AND a.date = ?'
       params.push(date)
     } else if (!start_date && !end_date) {
-      const today = new Date().toISOString().slice(0, 10)
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+      const today = dstr()
+      const thirtyDaysAgo = dstr(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
       where += ' AND a.date >= ? AND a.date <= ?'
       params.push(thirtyDaysAgo, today)
     }
@@ -1095,7 +1098,7 @@ router.post('/approvals/:id/approve', async (req, res, next) => {
           let cur = new Date(start)
           const last = new Date(end)
           while (cur <= last) {
-            const dateStr = cur.toISOString().slice(0, 10)
+            const dateStr = dstr(cur)
             // 已存在则跳过，不覆盖真实打卡
             const [[ex]] = await conn.query(
               'SELECT id FROM attendance WHERE user_id = ? AND date = ?',
@@ -2847,7 +2850,7 @@ router.put('/overtime/:id/approve', async (req, res, next) => {
     }
 
     if (action === 'approve') {
-      const otDate = new Date(ot.start_time).toISOString().slice(0, 10)
+      const otDate = dstr(new Date(ot.start_time))
       await pool.query(
         `UPDATE attendance SET overtime_hours = COALESCE(overtime_hours, 0) + ? WHERE user_id = ? AND date = ?`,
         [ot.hours, ot.user_id, otDate]
