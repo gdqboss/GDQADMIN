@@ -78,6 +78,7 @@ import aiClassLearningRoutes from './routes/ai-class-learning.js'
 import aiKnowledgeDomainsRoutes from './routes/ai-knowledge-domains.js'
 import laborAiAgentRoutes from './routes/labor-ai-agent.js'
 import laborAiSupervisorRoutes from './routes/labor-ai-supervisor.js'
+import agentMemoryRoutes from './routes/agent-memory.js'  // 2026-09-18 全员 AI 数据中心 MVP
 import healthRoutes from './routes/health.js'
 import autoOpsRoutes from './routes/auto-ops.js'
 import workbuddyRoutes from './routes/workbuddy.js'  // 2026-08-25 WorkBuddy V6 staging
@@ -278,6 +279,8 @@ app.use('/api/wechat-agent', wechatAgentServer.router)
 app.use('/api/wechat-agent/admin', wechatAgentServer.adminRouter)
 app.use('/api/labor-ai-agent', auth, laborAiAgentRoutes)
 app.use('/api/labor-ai-supervisor', auth, laborAiSupervisorRoutes)
+// 全员 AI 数据中心 (2026-09-18 MVP, 波哥立)
+app.use('/api/agent-memory', auth, agentMemoryRoutes)
 app.use('/api/system-health', auth, healthRoutes)
 app.use('/api/auto-ops', auth, autoOpsRoutes)
 app.use('/api/minip-ai', auth, minipAiAssistantRoutes)
@@ -646,6 +649,10 @@ app.use('/api/users', auth, apiLimiter, (req, res, next) => {
   const openPaths = ['/roles', '/subordinates', '/list']
   if (openPaths.includes(req.path) && req.method === 'GET') {
     return next() // Allow all authenticated users
+  }
+  // [f13-useradmin] 企业管理员可「新增本企业员工」（用户路由 POST / 内已按 company-manage 强制归属本企业 + 防提权钳制）
+  if (req.method === 'POST' && (req.path === '/' || req.path === '')) {
+    return requireRole('admin', 'superuser', 'enterprise-admin')(req, res, next)
   }
   return requireRole('admin')(req, res, next) // Require admin for other endpoints
 }, userRoutes)
