@@ -9,6 +9,21 @@ import { exportAttendance } from '../utils/excel-export.js'
 
 const router = Router()
 
+// [r6fix-b4] 2026-09-17：组织管理权限点（org:read / org:write / org:delete）
+//   原则（波哥口径）：**能不能做这件事，只看"有没有这个权限"，不看"他是谁"**。
+//   原实现写死 requireRole('admin','manager','enterprise-admin') —— 想给主管/人事开权限必须改代码。
+//   现在走权限点：在 gdqadmin 后台给任意角色勾上 org:write 即可，代码零改动。
+//   （读接口 /departments、/positions 不挂此守卫：它们是 OA 表单的部门/岗位数据源，普通员工填单时也要用）
+const ORG_PERM_MSG = { 'org:read': '查看组织架构', 'org:write': '维护组织架构（建/改部门与岗位）', 'org:delete': '删除部门/岗位' }
+const requireOrgPerm = (perm) => async (req, res, next) => {
+  try {
+    if (!(await checkPerm(req, perm))) {
+      return res.status(403).json({ code: 403, message: '无权限：' + (ORG_PERM_MSG[perm] || perm) })
+    }
+    next()
+  } catch (e) { next(e) }
+}
+
 // [shift-hours-validate] 2026-09-15 班次「时长 / 休息时长」按小时入参。原先只判必填、不判范围，
 //   误把分钟当小时填（如 480）会触发 ER_WARN_DATA_OUT_OF_RANGE → 500（用户看到"系统错误"）。
 //   现前置校验：非数字 / 负数 / 超 24 小时 → 400 + 人话提示。
@@ -126,7 +141,7 @@ router.get('/attendance/my-today', async (req, res, next) => {
     const userId = req.user.id
 
     const [[record]] = await pool.query(
-      'SELECT * FROM attendance WHERE user_id = ? AND date = ?',
+      "SELECT *, DATE_FORMAT(date, '%Y-%m-%d') AS date FROM attendance WHERE user_id = ? AND date = ?",
       [userId, today]
     )
 
@@ -607,6 +622,11 @@ async function buildAttendanceFilter(req) {
     where = `WHERE 1=1 AND a.user_id IN (${ph})`
     params.push(...ids)
   } else if (__scope.kind === 'company-self') {
+    // [r6fix-b3] 2026-09-17：企管身份却得到 company-self = 作用域错位（不在 company_admins），
+    // 返回明确错误而非空集 —— 以前页面只显示"这个月没有考勤记录"，把无权限伪装成无数据
+    if (currentUserRole === 'enterprise-admin') {
+      return { deny: { code: 403, message: '你的企业管理员身份未生效（缺少 company_admins 登记），请联系孵化器管理员处理' } }
+    }
     // 企业普通员工：仅本人
     where = 'WHERE 1=1 AND a.user_id = ?'
     params.push(currentUserId)
@@ -682,7 +702,7 @@ router.get('/attendance', async (req, res, next) => {
     if (status) { where += ' AND a.status = ?'; params.push(status) }
 
     const sql = `
-      SELECT a.*, u.name as user_name, u.department, u.worker_category, u.require_attendance
+      SELECT a.*, DATE_FORMAT(a.date, '%Y-%m-%d') AS date, u.name as user_name, u.department, u.worker_category, u.require_attendance
       FROM attendance a
       LEFT JOIN users u ON a.user_id = u.id
       ${where}
@@ -733,7 +753,7 @@ router.get('/attendance/export', async (req, res, next) => {
     // 导出不分页，但要有上限保护：一次最多 2 万行，防误操作把进程拉爆
     const MAX_ROWS = 20000
     const sql = `
-      SELECT a.*, u.name as user_name, u.department, u.worker_category, u.require_attendance
+      SELECT a.*, DATE_FORMAT(a.date, '%Y-%m-%d') AS date, u.name as user_name, u.department, u.worker_category, u.require_attendance
       FROM attendance a
       LEFT JOIN users u ON a.user_id = u.id
       ${where}
@@ -1243,6 +1263,89 @@ router.post('/approvals/:id/withdraw', async (req, res, next) => {
 // ORGANIZATION MODULE
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// ── [r6fix-d4] 2026-09-17：岗位 positions CRUD —— D-4/F-1 拍板数据源 = positions 表 ──
+// 前端 org-manage 契约：GET → [{id,name,department_id,member_ids:[]}]；POST {name,department_id[,member_ids]}；
+// PUT /:id 接受 {name|department_id|member_ids|sort_order}；DELETE /:id（被审批流程引用时拒绝）。
+// member_ids = user_id JSON 数组（一人可兼多岗）。企业作用域/归属守卫与 departments 同款。
+router.get('/positions', async (req, res, next) => {
+  try {
+    const __scope = await getCompanyScope(req)
+    let __where = "WHERE p.status = 'active'"
+    let __params = []
+    if (__scope.kind === 'company-manage') {
+      __where += ' AND p.company_id = ?'
+      __params.push(__scope.companyId)
+    } else if (__scope.kind === 'company-self') {
+      __where += ' AND 1=0'
+    }
+    const [rows] = await pool.query(
+      `SELECT p.id, p.name, p.department_id, p.member_ids, p.sort_order
+       FROM positions p ${__where} ORDER BY p.sort_order, p.id`, __params)
+    const data = rows.map(r => {
+      let ids = []
+      try { ids = JSON.parse(r.member_ids || '[]') } catch (e) { ids = [] }
+      if (!Array.isArray(ids)) ids = []
+      return { id: r.id, name: r.name, department_id: r.department_id, member_ids: ids }
+    })
+    res.json({ code: 0, data, message: 'ok' })
+  } catch (err) { next(err) }
+})
+
+router.post('/positions', requireOrgPerm('org:write'), async (req, res, next) => {
+  try {
+    const { name, department_id, member_ids, sort_order } = req.body
+    if (!name || String(name).trim() === '') {
+      return res.status(400).json({ code: 400, message: '岗位名称不能为空' })
+    }
+    const __scope = await getCompanyScope(req)
+    await pool.query(
+      'INSERT INTO positions (name, department_id, member_ids, sort_order, company_id) VALUES (?,?,?,?,?)',
+      [String(name).trim(), department_id || null,
+       JSON.stringify(Array.isArray(member_ids) ? member_ids : []),
+       sort_order || 0, __scope.companyId])
+    res.json({ code: 0, data: null, message: '岗位创建成功' })
+  } catch (err) { next(err) }
+})
+
+router.put('/positions/:id', requireOrgPerm('org:write'), async (req, res, next) => {
+  try {
+    const __own = await assertRowCompany(req, 'positions', req.params.id)
+    if (!__own.ok) return res.status(__own.status).json({ code: __own.status, message: __own.message })
+    const { name, department_id, member_ids, sort_order, status } = req.body
+    const updates = []
+    const params = []
+    if (name !== undefined) { updates.push('name = ?'); params.push(String(name).trim()) }
+    if (department_id !== undefined) { updates.push('department_id = ?'); params.push(department_id || null) }
+    if (member_ids !== undefined) { updates.push('member_ids = ?'); params.push(JSON.stringify(Array.isArray(member_ids) ? member_ids : [])) }
+    if (sort_order !== undefined) { updates.push('sort_order = ?'); params.push(sort_order) }
+    if (status !== undefined) { updates.push('status = ?'); params.push(status) }
+    if (updates.length === 0) {
+      return res.status(400).json({ code: 400, message: '没有需要更新的字段' })
+    }
+    params.push(req.params.id)
+    await pool.query(`UPDATE positions SET ${updates.join(', ')} WHERE id = ?`, params)
+    res.json({ code: 0, data: null, message: '岗位更新成功' })
+  } catch (err) { next(err) }
+})
+
+router.delete('/positions/:id', requireOrgPerm('org:delete'), async (req, res, next) => {
+  try {
+    const __own = await assertRowCompany(req, 'positions', req.params.id)
+    if (!__own.ok) return res.status(__own.status).json({ code: __own.status, message: __own.message })
+    const [[pos]] = await pool.query('SELECT id, name FROM positions WHERE id = ?', [req.params.id])
+    if (!pos) return res.status(404).json({ code: 404, message: '岗位不存在' })
+    // 前端删除确认的承诺：被审批流程选为审批人（position:<岗位名>）的岗位不允许删除
+    const [refs] = await pool.query(
+      'SELECT COUNT(*) AS c FROM workflow_definitions WHERE is_active = 1 AND flow_config LIKE ?',
+      ['%"position:' + pos.name + '"%'])
+    if (refs[0].c > 0) {
+      return res.status(409).json({ code: 409, message: '该岗位正在被审批流程使用，请先在流程里改掉这个审批人再删除' })
+    }
+    await pool.query("UPDATE positions SET status = 'inactive' WHERE id = ?", [req.params.id])
+    res.json({ code: 0, data: null, message: '岗位已删除' })
+  } catch (err) { next(err) }
+})
+
 // GET /api/oa/departments - Tree structure
 router.get('/departments', async (req, res, next) => {
   try {
@@ -1283,7 +1386,7 @@ router.get('/departments', async (req, res, next) => {
 })
 
 // POST /api/oa/departments - Create department
-router.post('/departments', requireRole('admin', 'manager', ROLES.ENTERPRISE_ADMIN), async (req, res, next) => {
+router.post('/departments', requireOrgPerm('org:write'), async (req, res, next) => {
   try {
     const { name, parent_id, level, manager_id, sort_order } = req.body
     // [company-iso] 部门归属创建人企业（孵化器为 NULL）
@@ -1307,7 +1410,7 @@ router.post('/departments', requireRole('admin', 'manager', ROLES.ENTERPRISE_ADM
 })
 
 // PUT /api/oa/departments/:id - Update department
-router.put('/departments/:id', requireRole('admin', 'manager', ROLES.ENTERPRISE_ADMIN), async (req, res, next) => {
+router.put('/departments/:id', requireOrgPerm('org:write'), async (req, res, next) => {
   try {
     const { name, parent_id, level, manager_id, sort_order, status } = req.body
 
@@ -1343,7 +1446,7 @@ router.put('/departments/:id', requireRole('admin', 'manager', ROLES.ENTERPRISE_
 })
 
 // DELETE /api/oa/departments/:id - Delete department
-router.delete('/departments/:id', requireRole('admin', ROLES.ENTERPRISE_ADMIN), async (req, res, next) => {
+router.delete('/departments/:id', requireOrgPerm('org:delete'), async (req, res, next) => {
   try {
     // [company-iso] 2026-09-12 归属守卫：跨企业改/删拒绝
     const __own = await assertRowCompany(req, 'departments', req.params.id)
@@ -1810,10 +1913,13 @@ router.post('/schedules/swap/:id/approve', requirePermission(PERMISSIONS.SCHEDUL
     const [[scheduleA]] = await conn.query('SELECT * FROM shift_schedules WHERE id = ?', [swap.schedule_id_a])
     const [[scheduleB]] = await conn.query('SELECT * FROM shift_schedules WHERE id = ?', [swap.schedule_id_b])
 
-    await conn.query('UPDATE shift_schedules SET shift_id = ?, status = ? WHERE id = ?',
-      [scheduleB.shift_id, 'swapped', swap.schedule_id_a])
-    await conn.query('UPDATE shift_schedules SET shift_id = ?, status = ? WHERE id = ?',
-      [scheduleA.shift_id, 'swapped', swap.schedule_id_b])
+    // [r6fix-a3] 2026-09-17：换班 = 两人互换（波哥口径，申请注释同口径）—— 同时换班次**和人**。
+    //   以前只换 shift_id 不动 user_id：两条排班的人与日期纹丝不动 → "假成功"（R5-003：
+    //   swap 15/16 approved 但 schedules 10087-10090 的 user_id 与发起前完全一致）。事务由本路由包住。
+    await conn.query('UPDATE shift_schedules SET shift_id = ?, user_id = ?, status = ? WHERE id = ?',
+      [scheduleB.shift_id, swap.user_id_b, 'swapped', swap.schedule_id_a])
+    await conn.query('UPDATE shift_schedules SET shift_id = ?, user_id = ?, status = ? WHERE id = ?',
+      [scheduleA.shift_id, swap.user_id_a, 'swapped', swap.schedule_id_b])
 
     // Update swap status
     await conn.query(
@@ -2203,6 +2309,24 @@ router.get('/workflow-instances', async (req, res, next) => {
       sql += " AND (wi.initiator_id = ? OR EXISTS (SELECT 1 FROM workflow_tasks wt WHERE wt.instance_id = wi.id AND wt.assignee_id = ?))"
       params.push(req.user.id, req.user.id)
     }
+    // [a-iso-1] 2026-09-18 审批列表企业隔离（对齐 F4 任务批次口径，波哥 2026-09-18 拍板）：
+    //   workflow_instances 无 company_id → 按发起人所在企业（initiator_id → users.company_id）收窄。
+    //   company-manage（企管）→ 本企业审批单；incubator（孵化器非超管）→ 仅平台发起（发起人无企业）；
+    //   global（平台管理员）→ 不限。此处在 whereClause 生成前追加 → count 与列表一次生效。
+    {
+      const __scA = await getCompanyScope(req)
+      if (__scA.kind === 'company-manage') {
+        sql += ' AND EXISTS (SELECT 1 FROM users u_ciso WHERE u_ciso.id = wi.initiator_id AND u_ciso.company_id = ?)'
+        params.push(__scA.companyId)
+      } else if (__scA.kind === 'incubator') {
+        sql += ' AND EXISTS (SELECT 1 FROM users u_ciso WHERE u_ciso.id = wi.initiator_id AND u_ciso.company_id IS NULL)'
+      } else if (__scA.kind === 'company-self') {
+        // [a-iso-1b] 2026-09-18 补刀：普通员工（recon 实证全部角色持 oa 权限 → [q5-vis] oversight 通道对几乎
+        //   所有人成立）→ 必须在这里兜底收窄，只看自己发起或自己处理的，对齐 F4 mine-filter 口径。
+        sql += ' AND (wi.initiator_id = ? OR EXISTS (SELECT 1 FROM workflow_tasks wt_ciso WHERE wt_ciso.instance_id = wi.id AND wt_ciso.assignee_id = ?))'
+        params.push(req.user.id, req.user.id)
+      }
+    }
 
     if (workflow_code) { sql += ' AND wi.workflow_code = ?'; params.push(workflow_code) }
     if (status) { sql += ' AND wi.status = ?'; params.push(status) }
@@ -2242,6 +2366,32 @@ router.get('/workflow-instances/:id', async (req, res, next) => {
 
     if (!instance) {
       return res.status(404).json({ code: 404, message: '工作流实例不存在' })
+    }
+
+    // [a-iso-2] 2026-09-18 审批详情补守卫（此前零守卫 = 任何登录用户可看任意审批单）：
+    //   放行面 = ①平台管理员/global ②企管看本企业发起的 ③孵化器非超管看平台发起的
+    //            ④我是发起人 ⑤我是处理人（审批人必须能看到要审的单）。
+    {
+      const __scD = await getCompanyScope(req)
+      const [[__relD]] = await pool.query(
+        'SELECT COUNT(*) AS t FROM workflow_tasks WHERE instance_id = ? AND assignee_id = ?',
+        [instance.id, req.user.id])
+      const __isMine = Number(instance.initiator_id) === Number(req.user.id) || Number(__relD && __relD.t || 0) > 0
+      let __okD = __scD.kind === 'global' || __isMine
+      if (!__okD) {
+        if (__scD.kind === 'company-manage') {
+          const [[__ownD]] = await pool.query(
+            'SELECT company_id FROM users WHERE id = ? LIMIT 1', [instance.initiator_id])
+          __okD = __ownD && Number(__ownD.company_id) === Number(__scD.companyId)
+        } else if (__scD.kind === 'incubator') {
+          const [[__ownD]] = await pool.query(
+            'SELECT company_id FROM users WHERE id = ? LIMIT 1', [instance.initiator_id])
+          __okD = __ownD && __ownD.company_id == null
+        }
+      }
+      if (!__okD) {
+        return res.status(403).json({ code: 403, message: '无权查看该审批单' })
+      }
     }
 
     // Get tasks
