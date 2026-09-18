@@ -4,6 +4,15 @@ import { checkPerm } from '../utils/permission.js'
 import { ROLES, PERMISSIONS, requirePermission } from '../middleware/rbac.js'
 import { getCompanyScope, assertRowCompany } from '../utils/company-scope.js'
 
+
+// 2026-09-13 P0: DATE 字段统一输出本地 YYYY-MM-DD（mysql2 默认把 DATE 转 Date 对象，JSON 序列化成 UTC ISO，前端会显示 T 格式）
+const fmtDate = (v) => {
+  if (!v) return v
+  if (typeof v === 'string') return String(v).slice(0, 10)
+  const d = new Date(v)
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+}
+
 const router = Router()
 
 // Helper function to check if user can access task
@@ -12,6 +21,7 @@ async function canAccessTask(userId, userRole, taskId) {
     'SELECT assigned_to, assigned_by FROM tasks WHERE id = ?',
     [taskId]
   )
+	if (task && task.due_date) task.due_date = fmtDate(task.due_date)
   if (!task) return false
 
   // Admin can access all tasks
@@ -81,6 +91,7 @@ router.get('/my', async (req, res, next) => {
        LIMIT ? OFFSET ?`,
       [...params, parseInt(limit), parseInt(offset)]
     )
+	if (Array.isArray(rows)) rows.forEach(r => { if (r.due_date) r.due_date = fmtDate(r.due_date) })
 
     const [[{ total }]] = await pool.query(
       `SELECT COUNT(*) as total FROM tasks t ${whereClause}`,
@@ -134,6 +145,7 @@ router.get('/assigned', async (req, res, next) => {
        LIMIT ? OFFSET ?`,
       [...params, parseInt(limit), parseInt(offset)]
     )
+	if (Array.isArray(rows)) rows.forEach(r => { if (r.due_date) r.due_date = fmtDate(r.due_date) })
 
     const [[{ total }]] = await pool.query(
       `SELECT COUNT(*) as total FROM tasks t ${whereClause}`,
@@ -212,6 +224,7 @@ router.get('/', async (req, res, next) => {
        LIMIT ? OFFSET ?`,
       [...params, pageSizeNum, offset]
     )
+	if (Array.isArray(rows)) rows.forEach(r => { if (r.due_date) r.due_date = fmtDate(r.due_date) })
     res.json({ code: 0, data: { list: rows, total, page: pageNum, size: pageSizeNum } })
   } catch (err) { next(err) }
 })
@@ -298,6 +311,7 @@ router.get('/all', async (req, res, next) => {
        LIMIT ? OFFSET ?`,
       [...params, parseInt(limit), parseInt(offset)]
     )
+	if (Array.isArray(rows)) rows.forEach(r => { if (r.due_date) r.due_date = fmtDate(r.due_date) })
 
     const [[{ total }]] = await pool.query(
       `SELECT COUNT(*) as total FROM tasks t ${whereClause}`,
@@ -465,6 +479,7 @@ router.get('/team', async (req, res, next) => {
        LIMIT ? OFFSET ?`,
       [...params, pageSizeNum, offsetNum]
     )
+	if (Array.isArray(rows)) rows.forEach(r => { if (r.due_date) r.due_date = fmtDate(r.due_date) })
 
     const [[{ total }]] = await pool.query(
       `SELECT COUNT(*) as total FROM tasks t ${whereClause}`,
@@ -494,6 +509,7 @@ async function collectSubordinateIds(rootUserId) {
       'SELECT id FROM users WHERE supervisor_id = ?',
       [parentId]
     )
+	if (Array.isArray(rows)) rows.forEach(r => { if (r.due_date) r.due_date = fmtDate(r.due_date) })
     for (const r of rows) {
       if (!ids.has(r.id) && r.id !== rootUserId) {
         ids.add(r.id)
@@ -522,6 +538,7 @@ router.get('/:id', async (req, res, next) => {
        WHERE t.id = ?`,
       [taskId]
     )
+	if (task && task.due_date) task.due_date = fmtDate(task.due_date)
 
     if (!task) {
       return res.status(404).json({ code: 404, message: '任务不存在' })
@@ -655,6 +672,7 @@ router.put('/:id/submit', requirePermission(PERMISSIONS.TASKS_WRITE), async (req
       'SELECT assigned_to, status FROM tasks WHERE id = ?',
       [taskId]
     )
+	if (task && task.due_date) task.due_date = fmtDate(task.due_date)
 
     if (!task) {
       return res.status(404).json({ code: 404, message: '任务不存在' })
@@ -725,6 +743,7 @@ router.put('/:id/complete', requirePermission(PERMISSIONS.TASKS_APPROVE), async 
       'SELECT assigned_by, status FROM tasks WHERE id = ?',
       [taskId]
     )
+	if (task && task.due_date) task.due_date = fmtDate(task.due_date)
 
     if (!task) {
       return res.status(404).json({ code: 404, message: '任务不存在' })
@@ -744,10 +763,44 @@ router.put('/:id/complete', requirePermission(PERMISSIONS.TASKS_APPROVE), async 
       `UPDATE tasks
        SET status = 'completed',
            review_note = ?,
-           completed_at = NOW()
+           reviewed_at = NOW(),
+           updated_at = NOW()
        WHERE id = ?`,
       [review_note || null, taskId]
     )
+
+    // [agent-memory hook 2026-09-18] 任务完成 → 自动累积员工智慧
+    // 写入 memory_events (best-effort, 不影响主流程)
+    // 字段以 db/migration-agent-memory-mvp-20260918.sql 的 schema 为准
+    try {
+      const [[taskRow]] = await pool.query(
+        'SELECT id, title, description, assigned_to, assigned_by, priority FROM tasks WHERE id = ?',
+        [taskId]
+      )
+      if (taskRow) {
+        const eventData = {
+          title: taskRow.title,
+          description: taskRow.description || '',
+          review_note: review_note || '',
+          priority: taskRow.priority,
+          completed_by: req.user.id,
+        }
+        await pool.query(`
+          INSERT INTO memory_events
+            (user_id, source, source_ref_id, event_type, event_data,
+             ai_score, occurred_at)
+          VALUES (?, 'task', ?, 'task_completed', ?,
+                  ?, NOW())
+        `, [
+          taskRow.assigned_to,
+          taskId,
+          JSON.stringify(eventData),
+          taskRow.priority === 'high' ? 0.80 : 0.50,
+        ])
+      }
+    } catch (hookErr) {
+      console.error('[agent-memory task_complete hook fail]', hookErr.message)
+    }
 
     res.json({ code: 0, data: null, message: '任务已确认完成' })
   } catch (err) { next(err) }
@@ -771,6 +824,7 @@ router.put('/:id/reject', async (req, res, next) => {
       'SELECT assigned_by, status FROM tasks WHERE id = ?',
       [taskId]
     )
+	if (task && task.due_date) task.due_date = fmtDate(task.due_date)
 
     if (!task) {
       return res.status(404).json({ code: 404, message: '任务不存在' })
@@ -817,6 +871,7 @@ router.put('/:id/review', requirePermission(PERMISSIONS.TASKS_APPROVE), async (r
       'SELECT * FROM tasks WHERE id = ?',
       [taskId]
     )
+	if (task && task.due_date) task.due_date = fmtDate(task.due_date)
 
     if (!task) {
       return res.status(404).json({ code: 404, message: '任务不存在' })
@@ -863,6 +918,7 @@ router.delete('/:id', requirePermission(PERMISSIONS.TASKS_DELETE), async (req, r
       'SELECT assigned_by FROM tasks WHERE id = ?',
       [taskId]
     )
+	if (task && task.due_date) task.due_date = fmtDate(task.due_date)
 
     if (!task) {
       return res.status(404).json({ code: 404, message: '任务不存在' })

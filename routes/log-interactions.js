@@ -318,7 +318,36 @@ router.post('/like', auth, async (req, res, next) => {
       await pool.query(
         'INSERT INTO work_log_likes (user_id, target_type, target_id) VALUES (?, ?, ?)',
         [req.user.id, target_type, target_id]
-      );
+      )
+
+      // [agent-memory hook 2026-09-18] 日志被点赞 → 自动累积被点赞者思维财富
+      // 仅在点赞 work_log 类型时记录 (target_id 是日志作者)
+      try {
+        if (target_type === 'work_log') {
+          const [[logRow]] = await pool.query(
+            'SELECT user_id, CAST(today_work AS CHAR) AS today_work, CAST(content AS CHAR) AS content FROM work_logs WHERE id = ? LIMIT 1',
+            [target_id]
+          )
+          if (logRow) {
+            await pool.query(`
+              INSERT INTO memory_events
+                (user_id, source, source_ref_id, event_type, event_data, ai_score, occurred_at)
+              VALUES (?, 'work_log', ?, 'log_liked', ?, 0.85, NOW())
+            `, [
+              logRow.user_id,
+              target_id,
+              JSON.stringify({
+                title: String(logRow.today_work || logRow.content || '').substring(0, 80),
+                content_preview: String(logRow.content || logRow.today_work || '').substring(0, 100),
+                liked_by: req.user.id,
+              }),
+            ])
+          }
+        }
+      } catch (hookErr) {
+        console.error('[agent-memory log_liked hook fail]', hookErr.message)
+      }
+
       res.json({ code: 0, action: 'liked' });
     }
   } catch (err) { next(err); }

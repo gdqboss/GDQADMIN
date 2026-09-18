@@ -605,6 +605,29 @@ async function handleChat(req, res, next) {
       savedSessionId = `la-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     }
 
+    // [agent-memory hook 2026-09-18] 员工跟 AI 交流 → 自动累积优秀问答
+    // 阈值: 用户提问长度 > 20 字符 且 AI 回复长度 > 50 字符 (过滤闲聊)
+    try {
+      if (message && message.length > 20 && result.text && result.text.length > 50) {
+        await pool.query(`
+          INSERT INTO memory_events
+            (user_id, source, source_ref_id, event_type, event_data, ai_score, occurred_at)
+          VALUES (?, 'agent_chat', ?, 'agent_chat', ?, 0.70, NOW())
+        `, [
+          req.user.id,
+          Date.now(),
+          JSON.stringify({
+            session_id: savedSessionId,
+            question_preview: message.substring(0, 200),
+            answer_preview: result.text.substring(0, 200),
+            elapsed_ms: elapsedMs,
+          }),
+        ])
+      }
+    } catch (hookErr) {
+      console.error('[agent-memory chat hook fail]', hookErr.message)
+    }
+
     res.json({
       code: 0,
       data: {

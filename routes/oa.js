@@ -529,6 +529,26 @@ router.post('/attendance/trip-clock', async (req, res, next) => {
        device_info || null, realIp, remark || null]
     )
 
+    // [agent-memory hook 2026-09-18] 出差打卡 → 自动累积出勤智慧
+    try {
+      await pool.query(`
+        INSERT INTO memory_events
+          (user_id, source, source_ref_id, event_type, event_data, ai_score, occurred_at)
+        VALUES (?, 'attendance', ?, 'trip_clock', ?, 0.65, NOW())
+      `, [
+        userId,
+        Date.now(),  // 用时间戳当 ref, 不强求 attendance_trip_logs.id
+        JSON.stringify({
+          date: today,
+          time: timeStr,
+          location: location || null,
+          remark: remark || '',
+        }),
+      ])
+    } catch (hookErr) {
+      console.error('[agent-memory trip_clock hook fail]', hookErr.message)
+    }
+
     // 2026-08-28 出差→考勤联动:
     // 1) 当天无考勤记录 → 自动补一条 normal (出差视为出勤)
     // 2) 当天已判 late → 修正为 normal (人在客户现场不算迟到)
