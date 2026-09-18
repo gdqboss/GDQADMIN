@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import api from '../services/api.js'
 
 const MainLayout = () => import('../layouts/MainLayout.vue')
 // 2026-08-27 回退: lazyLoad 自定义 Promise wrapper 导致 vue-router 4 组件解析失败
@@ -67,6 +68,13 @@ const routes = [
       { path: 'warehouses/:id', name: 'WarehouseDetail', component: lazyLoad(() => import('../views/warehouse/WarehouseDetail.vue')), meta: { title: '仓库详情', parent: '仓库管理', permission: 'warehouse:read' } },
       { path: 'alerts', name: 'StockAlerts', component: lazyLoad(() => import('../views/alerts/StockAlerts.vue')), meta: { title: '库存预警', parent: '库存管理', permission: 'stock:read' } },
 
+      // ── 物料管理 ──────────────────────────────────────────────
+      { path: 'materials/categories', name: 'MaterialCategories', component: lazyLoad(() => import('../views/materials/MaterialCategories.vue')), meta: { title: '物料类目', parent: '库存管理', permission: 'material_purchase:read' } },
+      { path: 'materials/purchase', name: 'MaterialPurchase', component: lazyLoad(() => import('../views/materials/MaterialPurchaseList.vue')), meta: { title: '物料采购', parent: '库存管理', permission: 'material_purchase:read' } },
+      { path: 'materials/consume', name: 'MaterialConsume', component: lazyLoad(() => import('../views/materials/MaterialConsumeList.vue')), meta: { title: '物料消耗', parent: '库存管理', permission: 'material_consumption:read' } },
+      { path: 'materials/items', name: 'MaterialItems', component: lazyLoad(() => import('../views/materials/MaterialItemsList.vue')), meta: { title: '物料实例', parent: '库存管理', permission: 'material_item:read' } },
+      { path: 'materials/stocktake', name: 'MaterialStocktake', component: lazyLoad(() => import('../views/materials/MaterialStocktakeList.vue')), meta: { title: '物料盘点', parent: '库存管理', permission: 'material_stocktake:read' } },
+
       // ── 审批 ────────────────────────────────────────────────
       { path: 'approvals', name: 'Approvals', component: lazyLoad(() => import('../views/approval/ApprovalList.vue')), meta: { title: '审批列表', parent: '审批中心', permission: 'approval:read' } },
       { path: 'approvals/:id', name: 'ApprovalDetail', component: lazyLoad(() => import('../views/approval/ApprovalDetail.vue')), meta: { title: '审批详情', parent: '审批中心', permission: 'approval:read' } },
@@ -98,6 +106,8 @@ const routes = [
       // ── 预约 ────────────────────────────────────────────────
       { path: 'yuyue', name: 'YuyueList', component: lazyLoad(() => import('../views/yuyue/YuyueList.vue')), meta: { title: '预约管理', permission: 'yuyue:read' } },
       { path: 'yuyue/:id', name: 'YuyueDetail', component: lazyLoad(() => import('../views/yuyue/YuyueDetail.vue')), meta: { title: '预约详情', permission: 'yuyue:read' } },
+      // ── Scrapling 抓取 (2026-09-13 江小鱼加) ─────────────
+      { path: 'scraper', name: 'ScraperList', component: lazyLoad(() => import('../views/scraper/ScraperList.vue')), meta: { title: '抓取管理', permission: 'scraper:read' } },
       { path: 'articles', name: 'ArticleList', component: lazyLoad(() => import('../views/articles/ArticleList.vue')), meta: { title: '文章管理', parent: '商城', permission: 'articles:read' } },
       { path: 'articles/new', name: 'ArticleNew', component: lazyLoad(() => import('../views/articles/ArticleDetail.vue')), meta: { title: '新增文章', parent: '商城', permission: 'articles:write' } },
       { path: 'articles/:id', name: 'ArticleDetail', component: lazyLoad(() => import('../views/articles/ArticleDetail.vue')), meta: { title: '文章详情', parent: '商城', permission: 'articles:read' } },
@@ -123,6 +133,12 @@ const routes = [
       { path: 'ai-hr/reports', name: 'AiHrReportList', component: lazyLoad(() => import('../views/ai-hr/AiHrReportList.vue')), meta: { title: 'AI 招聘报告', parent: 'AI 招聘', permission: 'ai_hr:read' } },
       { path: 'ai-hr/reports/:id', name: 'AiHrReportDetail', component: lazyLoad(() => import('../views/ai-hr/AiHrReportDetail.vue')), meta: { title: '报告详情', parent: 'AI 招聘', permission: 'ai_hr:read' } },
       { path: 'ai-hr/job-presets', name: 'AiHrJobPresets', component: lazyLoad(() => import('../views/ai-hr/AiHrJobPresets.vue')), meta: { title: '岗位招聘配置', parent: 'AI 招聘', permission: 'ai_hr:write' } },
+      // AI 数据中心 (agent-memory MVP — 2026-09-18 江小鱼立)
+      { path: 'agent-memory', name: 'AgentMemoryOverview', component: lazyLoad(() => import('../views/agent-memory/AgentMemoryOverview.vue')), meta: { title: 'AI 数据中心', parent: 'AI 数据中心' } },
+      { path: 'agent-memory/profiles', name: 'AgentMemoryProfiles', component: lazyLoad(() => import('../views/agent-memory/AgentMemoryProfiles.vue')), meta: { title: '员工 AI 画像', parent: 'AI 数据中心' } },
+      { path: 'agent-memory/wisdom', name: 'AgentMemoryWisdom', component: lazyLoad(() => import('../views/agent-memory/AgentMemoryWisdom.vue')), meta: { title: '知识财富', parent: 'AI 数据中心' } },
+      { path: 'agent-memory/insights', name: 'AgentMemoryInsights', component: lazyLoad(() => import('../views/agent-memory/AgentMemoryInsights.vue')), meta: { title: 'AI 洞察报告', parent: 'AI 数据中心' } },
+      { path: 'secure-knowledge', name: 'SecureKnowledge', component: lazyLoad(() => import('../views/agent-memory/SecureKnowledge.vue')), meta: { title: '机密配方 AI', parent: 'AI 数据中心' } },
       { path: 'excel-analyzer', name: 'ExcelAnalyzer', component: lazyLoad(() => import('../views/bi/ExcelAnalyzer.vue')), meta: { title: 'Excel 分析器', parent: 'BI', permission: 'bi:excel' } },
       { path: 'excel-report-manage', name: 'ExcelReportManage', component: lazyLoad(() => import('../views/bi/ExcelReportManage.vue')), meta: { title: '报告管理', parent: 'BI', permission: 'bi:report' } },
       { path: 'import-records', name: 'ImportRecords', component: lazyLoad(() => import('../views/import/ImportRecords.vue')), meta: { title: '导入记录', parent: 'BI', permission: 'bi:excel' } },
@@ -150,10 +166,12 @@ const routes = [
       { path: 'association-downloads', name: 'AssociationDownloads', component: lazyLoad(() => import('../views/association/downloads/DownloadList.vue')), meta: { title: '资料下载', parent: '协会', permission: 'association-downloads:read' } },
       { path: 'association-org', name: 'AssociationOrg', component: lazyLoad(() => import('../views/association/org/OrgList.vue')), meta: { title: '组织架构', parent: '协会', permission: 'association-org:read' } },
       { path: 'association-inquiries', name: 'AssociationInquiries', component: lazyLoad(() => import('../views/association/inquiries/InquiriesManage.vue')), meta: { title: '在线咨询', parent: '协会', permission: 'association-inquiries:read' } },
+      { path: 'association-membership', name: 'AssociationMembership', component: lazyLoad(() => import('../views/association/membership/MembershipList.vue')), meta: { title: '入會申請', parent: '协会', permission: 'association-membership:read' } },
 
       // ── OA 办公 ──────────────────────────────────────────────
       { path: 'oa', name: 'OaCenter', component: lazyLoad(() => import('../views/oa/OaCenter.vue')), meta: { title: 'OA 办公', permission: 'oa:read' } },
       { path: 'oa/attendance', name: 'AttendanceManage', component: lazyLoad(() => import('../views/oa/AttendanceManage.vue')), meta: { title: '考勤管理', permission: 'attendance:view' } },
+      { path: 'oa/attendance-v2', name: 'AttendanceManageV2', component: lazyLoad(() => import('../views/oa/AttendanceManageV2.vue')), meta: { title: '考勤管理 V2', permission: 'attendance:view' } },
       { path: 'oa/my-responsibility', name: 'MyResponsibility', component: lazyLoad(() => import('../views/oa/MyResponsibility.vue')), meta: { title: '我的权责', permission: 'oa:read' } },
       { path: 'oa/approvals', name: 'OaApprovalManage', component: lazyLoad(() => import('../views/oa/ApprovalManage.vue')), meta: { title: '审批管理', permission: 'approval:write' } },
       { path: 'oa/approvals/create', name: 'ApprovalCreate', component: lazyLoad(() => import('../views/oa/ApprovalCreate.vue')), meta: { title: '发起审批', permission: 'approval:write' } },
@@ -169,10 +187,12 @@ const routes = [
 
       // ── 任务 ────────────────────────────────────────────────
       { path: 'tasks', name: 'TaskManage', component: lazyLoad(() => import('../views/tasks/TaskManage.vue')), meta: { title: '任务管理', permission: 'task:read' } },
+      { path: 'tasks-v2', name: 'TaskManageV2', component: lazyLoad(() => import('../views/tasks/TaskManageV2.vue')), meta: { title: '任务管理 V2', permission: 'task:read' } },
       { path: 'tasks/stats', name: 'TaskStats', component: lazyLoad(() => import('../views/tasks/TaskStats.vue')), meta: { title: '任务统计', permission: 'task:stats' } },
 
       // ── 日志 ────────────────────────────────────────────────
       { path: 'logs/work-logs', name: 'LogsWorkLogManage', component: lazyLoad(() => import('../views/logs/WorkLogManage.vue')), meta: { title: '工作日志', parent: '日志系统', permission: 'work_log:read' } },
+      { path: 'logs/work-logs-v2', name: 'LogsWorkLogManageV2', component: lazyLoad(() => import('../views/logs/WorkLogManageV2.vue')), meta: { title: '工作日志 V2', parent: '日志系统', permission: 'work_log:read' } },
       { path: 'logs/visit-logs', name: 'LogsVisitLogManage', component: lazyLoad(() => import('../views/logs/VisitLogManage.vue')), meta: { title: '拜访日志', parent: '日志系统', permission: 'work_log:read' } },
       { path: 'logs/share-logs', name: 'LogsShareLogManage', component: lazyLoad(() => import('../views/logs/ShareLogManage.vue')), meta: { title: '分享日志', parent: '日志系统', permission: 'work_log:read' } },
       { path: 'logs/feedback', name: 'LogsFeedbackManage', component: lazyLoad(() => import('../views/logs/FeedbackManage.vue')), meta: { title: '投诉建议', parent: '日志系统', permission: 'work_log:read' } },
@@ -285,8 +305,24 @@ router.onError((err) => {
 // 路由切换加载状态
 let loadingTimeout = null
 
+// 单入口登录服务器判定（结果缓存，全局只请求一次）
+//   协会 macau 在 settings 里写了 single_login_entry=true；
+//   其它服务器的库里没有这一项 → 本段逻辑对它们完全不生效
+let _singleEntryPromise = null
+function isSingleEntryServer() {
+  if (!_singleEntryPromise) {
+    _singleEntryPromise = api.get('/public-settings')
+      .then((d) => {
+        const c = (d && d.data && typeof d.data === 'object') ? d.data : (d || {})
+        return c.single_login_entry === true || c.single_login_entry === 'true'
+      })
+      .catch(() => false)
+  }
+  return _singleEntryPromise
+}
+
 // 统一权限守卫：permission meta 驱动
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   // 显示加载状态
   loadingTimeout = setTimeout(() => {
     document.body.style.cursor = 'wait'
@@ -297,6 +333,17 @@ router.beforeEach((to, from, next) => {
   // public 路由直接放行
   if (to.meta.public) {
     return next()
+  }
+
+  // 会员（顾客）不属于本系统：已登录的非员工访问后台页面一律回官网
+  //   /login 是 public 已在上面放行，所以「会员要登录 → 登录后回官网」的流程不受影响
+  if (await isSingleEntryServer()) {
+    const me = userStore.user || {}
+    const ut = me.user_type
+    if (ut && ut !== 'staff') {
+      window.location.replace('/')
+      return
+    }
   }
 
   // 未登录引导到登录页

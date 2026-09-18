@@ -5,6 +5,7 @@ import { useUserStore } from '../stores/user'
 import { useWecomStore } from '../stores/wecom'
 import { useI18n } from 'vue-i18n'
 import { ROLES } from '../constants/roles.js'
+import { systemSettings } from '../stores/system'
 import api, { menuApi } from '../services/api.js'
 
 const emit = defineEmits(['close'])
@@ -13,6 +14,18 @@ const router = useRouter()
 const userStore = useUserStore()
 const wecomStore = useWecomStore()
 const { t } = useI18n()
+
+// 左上角品牌名：协会独立站（settings.single_login_entry=true，如 macau）取 server_profiles
+// 的站点名，避免显示语言包里硬编码的「智能商業系統」；其它服务器维持原行为
+const brandName = computed(() => (systemSettings.brand_from_profile && systemSettings.site_name)
+  ? systemSettings.site_name
+  : t('system.name'))
+const brandInitial = computed(() => (systemSettings.brand_from_profile && systemSettings.site_name)
+  ? String(systemSettings.site_name).trim().charAt(0)
+  : t('system.logoInitial'))
+// 角标：优先用 server_profiles.site_logo（协会印章），加载失败或未配置则回落到文字
+const logoFailed = ref(false)
+const brandLogo = computed(() => (systemSettings.brand_from_profile ? systemSettings.site_logo : ''))
 
 // 库存预警数量
 const alertCount = ref(0)
@@ -105,7 +118,7 @@ onMounted(async () => {
 // 路由变化时：自动展开对应的一级菜单（二级菜单激活时）
 watch(() => route.path, (path) => {
   if (!path) return
-  for (const group of menuGroups.value) {
+  for (const group of filteredGroups.value) {
     if (!group.children || group.children.length === 0) continue
     const hasActiveChild = group.children.some(child => {
       if (!child.to) return false
@@ -122,7 +135,7 @@ onMounted(() => {
   // 初始化时自动展开对应的一级菜单
   const path = route.path
   if (path) {
-    for (const group of menuGroups.value) {
+    for (const group of filteredGroups.value) {
       if (!group.children || group.children.length === 0) continue
       const hasActiveChild = group.children.some(child => {
         if (!child.to) return false
@@ -187,6 +200,20 @@ const menuGroups = computed(() => [
     ]
   },
   {
+    // AI 数据中心 (agent-memory MVP — 2026-09-18 江小鱼立)
+    key: 'agent-memory',
+    icon: 'hub',
+    label: 'AI 数据中心',
+    to: '/agent-memory',
+    children: [
+      { key: 'agent-memory:overview', label: '总览', to: '/agent-memory' },
+      { key: 'agent-memory:profiles', label: '员工 AI 画像', to: '/agent-memory/profiles' },
+      { key: 'agent-memory:wisdom', label: '知识财富', to: '/agent-memory/wisdom' },
+      { key: 'agent-memory:insights', label: 'AI 洞察报告', to: '/agent-memory/insights' },
+      { key: 'secure-knowledge', label: '机密配方 AI', to: '/secure-knowledge' },
+    ]
+  },
+  {
     key: 'operations',
     icon: 'business',
     label: t('nav.operations'),
@@ -216,6 +243,11 @@ const menuGroups = computed(() => [
       { key: 'stock:read', label: t('nav.alerts'), to: '/alerts', badge: alertCount.value },
       { key: 'transfer:read', label: t('nav.transfer'), to: '/transfer' },
       { key: 'inventory:return', label: t('nav.returnRecords'), to: '/inventory/returns' },
+      { key: 'material_purchase:read', label: t('nav.materialPurchase'), to: '/materials/purchase' },
+      { key: 'material_consumption:read', label: t('nav.materialConsume'), to: '/materials/consume' },
+      { key: 'material_purchase:read', label: t('nav.materialCategories'), to: '/materials/categories' },
+      { key: 'material_item:read', label: t('nav.materialItems'), to: '/materials/items' },
+      { key: 'material_stocktake:read', label: t('nav.materialStocktake'), to: '/materials/stocktake' },
     ]
   },
   {
@@ -309,6 +341,30 @@ const menuGroups = computed(() => [
       { key: 'kefu:read', label: '客服消息', to: '/kefu' },
     ]
   },
+  // 2026-08-15 江小鱼 — SGP 是源头 — 协会后台 10 模块入口 (macau profile 7 主用)
+  // macau DB 勾选的是具体 association-* module_key (academic/activities/...),
+  // 这里用单一 'association' group 标记控制整组显示. loadServerModules 派生这条.
+  // 2026-09-08 江小鱼: 移到 mall 之后、system 之前. 业务模块群 (运营/库存/财务/增长/商城/协会) → 系统管理
+  {
+    key: 'association',
+    icon: 'handshake',
+    label: '協會',
+    to: null,
+    moduleKeys: ['association'],
+    children: [
+      { key: 'association-info:read', label: '協會介紹', to: '/association' },
+      { key: 'association-announcements:read', label: '信息發佈', to: '/association-announcements' },
+      { key: 'association-activities:read', label: '活動報名', to: '/association-activities' },
+      { key: 'association-cards:read', label: '會員名片', to: '/association-cards' },
+      { key: 'association-members:read', label: '會員管理', to: '/association-members' },
+      { key: 'association-academic:read', label: '學術動態', to: '/association-academic' },
+      { key: 'association-journals:read', label: '期刊管理', to: '/association-journals' },
+      { key: 'association-downloads:read', label: '資料下載', to: '/association-downloads' },
+      { key: 'association-org:read', label: '組織架構', to: '/association-org' },
+      { key: 'association-inquiries:read', label: '在線咨詢', to: '/association-inquiries' },
+      { key: 'association-membership:read', label: '入會申請', to: '/association-membership' },
+    ]
+  },
   {
     key: 'system',
     icon: 'settings',
@@ -321,28 +377,6 @@ const menuGroups = computed(() => [
       { key: 'system:config', label: t('nav.serverProfiles'), to: '/settings/server-profiles' },
     ]
   },
-  // 2026-08-15 江小鱼 — SGP 是源头 — 协会后台 10 模块入口 (macau profile 7 主用)
-  // macau DB 勾选的是具体 association-* module_key (academic/activities/...),
-  // 这里用单一 'association' group 标记控制整组显示. loadServerModules 派生这条.
-  {
-    key: 'association',
-    icon: 'handshake',
-    label: '协会',
-    to: null,
-    moduleKeys: ['association'],
-    children: [
-      { key: 'association-info:read', label: '协会介绍', to: '/association' },
-      { key: 'association-announcements:read', label: '信息发布', to: '/association-announcements' },
-      { key: 'association-activities:read', label: '活动报名', to: '/association-activities' },
-      { key: 'association-cards:read', label: '会员名片', to: '/association-cards' },
-      { key: 'association-members:read', label: '会员管理', to: '/association-members' },
-      { key: 'association-academic:read', label: '学术动态', to: '/association-academic' },
-      { key: 'association-journals:read', label: '期刊管理', to: '/association-journals' },
-      { key: 'association-downloads:read', label: '资料下载', to: '/association-downloads' },
-      { key: 'association-org:read', label: '组织架构', to: '/association-org' },
-      { key: 'association-inquiries:read', label: '在线咨询', to: '/association-inquiries' },
-    ]
-  },
 ])
 
 // 路由路径 → module_key 映射（用于按服务器模块过滤）
@@ -353,6 +387,12 @@ const routeToModule = {
   '/ai-hr': 'ai-hr',
   '/ai-hr/reports': 'ai-hr',
   '/ai-hr/job-presets': 'ai-hr',
+  // AI 数据中心 (agent-memory MVP — 2026-09-18 江小鱼立)
+  '/agent-memory': 'agent-memory',
+  '/agent-memory/profiles': 'agent-memory',
+  '/agent-memory/wisdom': 'agent-memory',
+  '/agent-memory/insights': 'agent-memory',
+  '/secure-knowledge': 'agent-memory',
   '/tasks': 'tasks',
   '/logs/work-logs': 'tasks',
   '/logs/visit-logs': 'tasks',
@@ -410,6 +450,7 @@ const routeToModule = {
   '/association-downloads': 'association-downloads',
   '/association-org': 'association-org',
   '/association-inquiries': 'association-inquiries',
+  '/association-membership': 'association-membership',
   '/settings': 'settings',
   '/settings/users': 'users',
   '/settings/roles': 'roles',
@@ -418,7 +459,7 @@ const routeToModule = {
 
 // 过滤后的菜单分组
 const filteredGroups = computed(() => {
-  return menuGroups.value
+  const list = menuGroups.value
     .map(group => {
       // 工作台：登录用户都可见
       if (group.key === 'dashboard') {
@@ -455,6 +496,35 @@ const filteredGroups = computed(() => {
       return { ...group, children: filteredChildren }
     })
     .filter(Boolean)
+
+  // 协会独立站（macau）：把与协会无关的通用分组统一收进一个【默认折叠】的「工作管理」
+  //   只保留 工作台 / 協會 / 系統管理 在一级；其余（AI课堂、运营、库存、财务、销售、
+  //   伙伴、增长、餐饮、酒店、商城…）全部并到「工作管理」下，客户真要用再逐个接出来
+  //   门控 systemSettings.brand_from_profile（= settings.single_login_entry，只写在 macau 库）
+  if (!systemSettings.brand_from_profile) return list
+
+  const KEEP = ['dashboard', 'association', 'system']
+  const keep = {}
+  const merged = []
+  for (const g of list) {
+    if (KEEP.includes(g.key)) { keep[g.key] = g; continue }
+    if (g.children && g.children.length) merged.push(...g.children)
+    else merged.push({ key: g.key, label: g.label, to: g.to, icon: g.icon, badge: g.badge })
+  }
+  // 去重：多个分组里有重复路由（如 /qrcode），以先出现者为准
+  const seen = new Set()
+  const children = []
+  for (const c of merged) {
+    if (!c.to || seen.has(c.to)) continue
+    seen.add(c.to)
+    children.push({ ...c, key: c.to })
+  }
+  const out = []
+  if (keep.dashboard) out.push(keep.dashboard)
+  if (keep.association) out.push(keep.association)
+  if (children.length) out.push({ key: 'work-manage', icon: 'work', label: '工作管理', to: null, children })
+  if (keep.system) out.push(keep.system)
+  return out
 })
 
 // 检查一级分组是否有任何子菜单激活（用于高亮父级）
@@ -489,8 +559,14 @@ function handleLogout() {
   <aside class="w-64 bg-sidebar text-white flex flex-col shrink-0 h-screen">
     <!-- Logo -->
     <div class="h-14 sm:h-16 flex items-center gap-2 sm:gap-3 px-4 sm:px-6 bg-sidebar-header">
-      <div class="size-7 sm:size-8 rounded bg-primary flex items-center justify-center text-white font-bold text-lg sm:text-xl">{{ t('system.logoInitial') }}</div>
-      <h1 class="text-base sm:text-lg font-bold tracking-wide truncate">{{ t('system.name') }}</h1>
+      <div
+        class="size-7 sm:size-8 rounded flex items-center justify-center font-bold text-lg sm:text-xl overflow-hidden shrink-0"
+        :class="(brandLogo && !logoFailed) ? 'bg-white p-0.5 shadow-sm' : 'bg-primary text-white'"
+      >
+        <img v-if="brandLogo && !logoFailed" :src="brandLogo" alt="" class="w-full h-full object-contain" @error="logoFailed = true">
+        <template v-else>{{ brandInitial }}</template>
+      </div>
+      <h1 class="text-base sm:text-lg font-bold tracking-wide truncate">{{ brandName }}</h1>
       <button @click="$emit('close')" class="lg:hidden ml-auto text-gray-400 hover:text-white">
         <span class="material-symbols-outlined text-[20px]">close</span>
       </button>
