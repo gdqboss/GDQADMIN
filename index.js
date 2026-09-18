@@ -78,6 +78,8 @@ import aiClassLearningRoutes from './routes/ai-class-learning.js'
 import aiKnowledgeDomainsRoutes from './routes/ai-knowledge-domains.js'
 import laborAiAgentRoutes from './routes/labor-ai-agent.js'
 import laborAiSupervisorRoutes from './routes/labor-ai-supervisor.js'
+import officeRoutes from './routes/office.js'  // 2026-09-18 HK 同步回 SGP: minip task-list 用, 之前未 mount 导致 404
+import venuesRoutes from './routes/venues.js'   // 2026-09-18 HK 同步回 SGP: 会议系列 M2
 import agentMemoryRoutes from './routes/agent-memory.js'  // 2026-09-18 全员 AI 数据中心 MVP
 import secureKnowledgeRoutes from './routes/secure-knowledge.js'  // 2026-09-18 机密配方 + AI 创新
 import healthRoutes from './routes/health.js'
@@ -140,6 +142,8 @@ import rbacRoleRoutes from './routes/rbac/roles.js'
 import rbacUserRoleRoutes from './routes/rbac/userRoles.js'
 import serverProfilesRoutes from './routes/server-profiles.js'
 import serverEndpointsRoutes from './routes/server-endpoints.js'
+import companiesRoutes from './routes/companies.js'  // 2026-09-18 HK 同步回 SGP: 跨 profile 管理员放权
+import articlePublicRoutes from './routes/articles-public.js'  // 2026-09-18 HK 同步回 SGP: 公开文章 API
 import collageRoutes from './routes/collage.js'
 import restaurantRoutes from './routes/restaurant.js'
 import hotelRoutes from './routes/hotel.js'
@@ -520,6 +524,20 @@ app.use('/api/pay', payRoutes)
 app.use('/api/restaurant', auth, apiLimiter, restaurantRoutes)
 app.use('/api/hotel', auth, apiLimiter, hotelRoutes)
 app.use('/api/logistics', auth, apiLimiter, logisticsRoutes)
+
+// 公开只读: 已发布文章 (湾创首页 banner/资讯, 免鉴权, 游客可见) — 2026-09-18 HK 同步回 SGP
+app.get('/api/article/public', async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      "SELECT id, title, category, summary, cover_image, created_at FROM articles WHERE status='published' ORDER BY created_at DESC LIMIT 10"
+    )
+    res.json({ code: 0, data: { list: rows, total: rows.length, page: 1, size: 10 }, message: 'ok' })
+  } catch (e) {
+    res.status(500).json({ code: 500, message: '文章加载失败' })
+  }
+})
+
+app.use('/api/articles-public', articlePublicRoutes)
 app.use('/api/article', auth, apiLimiter, articleRoutes)
 app.use('/api/scraper', auth, apiLimiter, scraperRoutes) // 2026-09-13 Scrapling 抓取模块
 app.use('/api/yuyue', auth, apiLimiter, yuyueRoutes)
@@ -689,6 +707,8 @@ app.use('/api/feedback', feedbackRoutes) // Mixed auth (some public, some protec
 // 注释原因: returns.js 路由字段与 return_records 表结构不匹配，导致补货 500
 // inventory.js L406 app.use('/api', inventoryRoutes) 内的 /returns 路由接管
 app.use('/api/tasks', auth, apiLimiter, tasksRoutes)
+app.use('/api/office', auth, apiLimiter, officeRoutes)  // 2026-09-18 HK 同步回 SGP
+app.use('/api/venues', auth, apiLimiter, venuesRoutes)   // 2026-09-18 HK 同步回 SGP
 app.use('/api/minip', apiLimiter, minipRoutes)
 app.use('/api/minip', apiLimiter, minipTabbarConfigRoutes)  // tabbar-config + admin CRUD
 app.use('/api/butler-orders', auth, apiLimiter, butlerOrdersRoutes)   // 2026-08-26 企业管家工单
@@ -710,6 +730,7 @@ app.use('/api/labor-hr', auth, apiLimiter, laborHrRoutes)
 app.use('/api/labor-appeals', auth, apiLimiter, laborAppealsRoutes)
 app.use('/api/server-profiles', auth, apiLimiter, requireRole('admin'), serverProfilesRoutes)
 app.use('/api/server-endpoints', auth, apiLimiter, requireRole('admin'), serverEndpointsRoutes)
+app.use('/api/companies', auth, apiLimiter, requireRole('admin'), companiesRoutes)  // 2026-09-18 HK 同步回 SGP
 // inventory.js L406 app.use('/api', inventoryRoutes) 内的 /returns 路由接管
 // 2026-07-22 加 skip: /api/temple/* 路径必须穿透,否则会被 catch-all 的 auth 拦截
 app.use('/api', (req, res, next) => {
